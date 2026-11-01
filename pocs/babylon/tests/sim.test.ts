@@ -10,7 +10,7 @@ import { GerstnerWater, WAVE_PRESETS, type CurrentZone } from "../src/sim/water.
 import type { PhysicsWorld } from "../src/sim/world.ts";
 import { buildWorld, RAMP, groundHeight, fromFrame, ROAD_SAMPLES, LOT, YARD, lotDistance, RIVER, RIVER_CURRENT, riverCenterX } from "../src/sim/world.ts";
 import { STATION, stationObstacles, fuelBayState, parkedStall } from "../src/sim/station.ts";
-import { pierBerth, pierBerthState, tieToPier, buoyState, tieToBuoy, BUOYS, BuoyField, CANYON_END, CHANNEL_MARKERS } from "../src/sim/mooring.ts";
+import { pierBerth, pierBerthState, tieToPier, buoyState, tieToBuoy, BUOYS, BuoyField, CANYON_END, CHANNEL_MARKERS, berthStartPose } from "../src/sim/mooring.ts";
 import { buildTrailer, trailerLoadState, attachWinch } from "../src/sim/trailer.ts";
 import { TowRig, TOW_SPECS } from "../src/sim/towVehicle.ts";
 import { emptyInput, type VehicleInput } from "../src/gameplay/vehicleInput.ts";
@@ -847,6 +847,29 @@ for (const [label, thr] of [["baixa", 0.25], ["alta", 1]] as const) {
     run(b, water, 25, { ...emptyInput(), gear: "F", throttle: 1 }, w, () => { const tip = b.lowerUnitTip(); minClear = Math.min(minClear, tip.y - groundHeight(tip.x, tip.z)); });
     check("partida", `${P.kind}: saindo a toda do ponto de partida, folga do pé ao fundo (m)`, minClear, 0.2, 5, "m", 2);
     check("partida", `${P.kind}: saindo a toda, sem avaria`, (b.engineDamage + b.hullDamage) * 100, 0, 0, "%", 0);
+  }
+}
+
+// ---------- Largada amarrada na vaga do píer (embarque) ----------
+{
+  const w = buildWorld();
+  for (const P of [SPEEDBOAT, DINGHY]) {
+    const water = mkWater(0.35);
+    const s = berthStartPose(w.pier, P);
+    check("embarque", `${P.kind}: profundidade na vaga do píer (m)`, -groundHeight(s.pos.x, s.pos.z), 1.5, 3.0, "m", 2);
+    const b = new Speedboat(P, v3(s.pos.x, s.pos.y, s.pos.z), s.heading);
+    b.occupants = (Object.keys(P.seats) as Occupant["seat"][]).map((seat) => ({ seat, mass: PERSON_KG })); // lotado
+    tieToPier(b, w.pier, s.side);
+    check("embarque", `${P.kind}: largada já na posição da vaga`, pierBerthState(b, w.pier).ok ? 1 : 0, 1, 1, "", 0);
+    run(b, water, 30, { ...emptyInput(), gear: "N" }, w);
+    check("embarque", `${P.kind}: lotado e amarrado 30 s, deslocamento (m)`, Math.hypot(b.pos.x - s.pos.x, b.pos.z - s.pos.z), 0, 0.6, "m", 2);
+    check("embarque", `${P.kind}: lotado e amarrado 30 s, sem avaria`, (b.engineDamage + b.hullDamage) * 100, 0, 0, "%", 0);
+    // solta as amarras e sai a toda (paralelo ao píer): não pega no fundo nem no píer
+    b.mooringLines = [];
+    let minClear = 9;
+    run(b, water, 20, { ...emptyInput(), gear: "F", throttle: 1 }, w, () => { const tip = b.lowerUnitTip(); minClear = Math.min(minClear, tip.y - groundHeight(tip.x, tip.z)); });
+    check("embarque", `${P.kind}: saindo a toda da vaga, folga do pé ao fundo (m)`, minClear, 0.2, 5, "m", 2);
+    check("embarque", `${P.kind}: saindo a toda da vaga, sem avaria`, (b.engineDamage + b.hullDamage) * 100, 0, 0, "%", 0);
   }
 }
 

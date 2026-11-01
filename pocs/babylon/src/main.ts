@@ -20,7 +20,7 @@ import { buildRamp, buildTrailerMesh, buildTowVehicle, type WheelNode } from "./
 import { buildRoadAndLot, buildStation } from "./presentation/station.ts";
 import { buildFleet } from "./presentation/fleet.ts";
 import { buildMoorings, Ropes } from "./presentation/mooring.ts";
-import { pierBerthState, tieToPier, BuoyField, CANYON_END } from "./sim/mooring.ts";
+import { pierBerthState, tieToPier, BuoyField, CANYON_END, berthStartPose, pierWaitSpots } from "./sim/mooring.ts";
 import { STATION, stationObstacles, fuelBayState, parkedStall } from "./sim/station.ts";
 import { WakeField, WaterWithWake } from "./sim/wake.ts";
 import { v3 } from "./sim/math.ts";
@@ -37,7 +37,7 @@ import { BoatCamera } from "./presentation/cameras.ts";
 import { Hud } from "./presentation/hud.ts";
 import { EngineAudio } from "./presentation/audio.ts";
 
-const BUILD = "poc-babylon 0.30.0";
+const BUILD = "poc-babylon 0.31.0";
 /** Escala visual da rotação da hélice (proporcional ao RPM, abaixo do limite estroboscópico). */
 const PROP_VISUAL_SCALE = 0.12;
 
@@ -143,6 +143,7 @@ const boot = async () => {
   const world = buildWorld();
   const water = new GerstnerWater({ waves: WAVE_PRESETS.lago, groundHeight: world.groundHeight, currents: [RIVER_CURRENT] });
   const spawnPos = () => v3(world.spawn.x, 0.25, world.spawn.z);
+  const waitSpots = pierWaitSpots(world.pier);
   // a física enxerga a água + as marolas da esteira (o barco sente a esteira ao cruzá-la)
   const wakeField = new WakeField();
   const physWater = new WaterWithWake(water, wakeField);
@@ -268,10 +269,11 @@ const boot = async () => {
     occIdx = (i + V.presets.length) % V.presets.length;
     const pr = V.presets[occIdx];
     if (V.boat.capsized) { hud.showToast("Com o barco virado não dá — R para recomeçar"); return; }
+    // quem não embarca fica em pé no píer, ao lado da vaga, esperando (ver o laço das pessoas no quadro)
     V.boat.occupants = pr.seats.map((seat) => ({ seat, mass: PERSON_KG }));
-    for (const [seat, p] of Object.entries(V.pax)) for (const m of p.meshes) m.setEnabled(pr.seats.includes(seat as SeatId));
     hud.setOccupants(`${pr.seats.length} · ${pr.label}`);
-    if (toast) hud.showToast(`Ocupantes: ${pr.label} (+${pr.seats.length * PERSON_KG} kg)`);
+    const waiting = Object.keys(V.pax).length + 1 - pr.seats.length;
+    if (toast) hud.showToast(`Embarcaram: ${pr.label} (${pr.seats.length * PERSON_KG} kg a bordo)${waiting ? ` — ${waiting} ${waiting > 1 ? "ficam" : "fica"} no píer` : ""}`);
   };
   document.getElementById("h-occ")!.addEventListener("click", () => input.pushAction("occupants"));
 
@@ -461,8 +463,8 @@ const boot = async () => {
       ? "<kbd>E</kbd>/<kbd>Q</kbd> trim manual (sem acelerar): pino 1 · 2 · 3 → <kbd>E</kbd> de novo levanta o motor (tilt)"
       : "<kbd>E</kbd> trim + (proa sobe) · <kbd>Q</kbd> trim − (proa desce)";
     document.getElementById("help-occ")!.innerHTML = isBote
-      ? "<kbd>O</kbd> ocupantes (1 · 1 no meio · 1 na popa · 3) — mudam o peso e o equilíbrio"
-      : "<kbd>O</kbd> ocupantes (1 · carona · 2 na popa · 4) — mudam o peso e o equilíbrio";
+      ? "<kbd>O</kbd> embarque (1 · 1 no meio · 1 na popa · 3) — só atracado na vaga do píer, onde as pessoas esperam; muda o peso e o equilíbrio"
+      : "<kbd>O</kbd> embarque (1 · carona · 2 na popa · 4) — só atracado na vaga do píer, onde as pessoas esperam; muda o peso e o equilíbrio";
     document.getElementById("help-ign")!.innerHTML = isBote
       ? "<kbd>P</kbd> puxa a corda / desliga (partida só em <b>N</b>) · <kbd>Esc</kbd> pausa"
       : "<kbd>P</kbd> liga/desliga o motor (partida só em <b>N</b>) · <kbd>Esc</kbd> pausa";
@@ -487,7 +489,10 @@ const boot = async () => {
     strapT = 0; moorArmed = true; moorWhere = ""; buoyField.reset(); manualBoat = false;
     if (carOnly) leaveCar(false);
     input.setGear("N"); wakeField.reset();
-    b.reset(spawnPos(), world.spawn.heading);
+    // largada amarrada na vaga do píer: é onde os passageiros esperam para embarcar
+    const bs = berthStartPose(world.pier, V.P);
+    b.reset(v3(bs.pos.x, bs.pos.y, bs.pos.z), bs.heading);
+    tieToPier(b, world.pier, bs.side); moorWhere = "píer";
     b.repair();
     b.engine = mode === "game" ? "running" : "off";
     b.systems.fuelL = START_FUEL[V.kind];
@@ -519,7 +524,7 @@ const boot = async () => {
     resetBoat(false);
     V.boat.engine = "running";
     cam.resetOrbit();
-    hud.showToast(`${V.kind === "bote" ? "Bote de apoio AR-3" : "Lancha AR-6"} — o combustível não dá até o fim do cânion (largada): abasteça no posto (estrada da rampa)`);
+    hud.showToast(`${V.kind === "bote" ? "Bote de apoio AR-3" : "Lancha AR-6"} atracado na vaga do píer — O escolhe quantos embarcam, M solta as amarras. O combustível não dá até o fim do cânion: abasteça no posto`);
   };
   for (const c of cards) c.addEventListener("click", () => {
     const k = c.dataset.kind as VesselKind;
@@ -562,7 +567,10 @@ const boot = async () => {
       hud.showToast("Abastecendo…");
       return;
     }
-    if (driving && a === "occupants") { hud.showToast("Com o barco na carretinha não dá para trocar a lotação"); return; }
+    if (a === "occupants" && !(boat.mooringLines.length && moorWhere === "píer")) {
+      hud.showToast(driving ? "Com o barco na carretinha não dá para trocar a lotação" : "Embarque e desembarque só no píer: atraque na vaga (as pessoas esperam lá) e aperte O");
+      return;
+    }
     if (a === "car") {
       if (carOnly) leaveCar();
       else if (driving) hud.showToast("Você já está no veículo");
@@ -588,7 +596,8 @@ const boot = async () => {
       // treino: reposiciona o barco 14 m atrás da carretinha, de proa para a rampa, motor ligado em N
       resetBoat(false);
       const tr = V.trailer;
-      boat.reset(v3(tr.cx + 0.3, 0.25, tr.zRear + 14), Math.PI);
+      boat.reset(v3(tr.cx + 0.3, 0.25, tr.zRear + 14), Math.PI); // (reset solta as amarras do píer)
+      moorWhere = "";
       boat.engine = "running";
       snap(curPos, curRot); snap(prevPos, prevRot);
       cam.resetOrbit();
@@ -686,12 +695,14 @@ const boot = async () => {
     vis.engine.rotationQuaternion = qTilt.multiply(qSteer);
     V.helm.update(dtReal, T, input.state, P.maxSteerLow * 180 / Math.PI);
 
-    // pessoas: sentadas nos bancos ou boiando com o colete (barco virado)
+    // pessoas: sentadas nos bancos, em pé na água com o colete (barco virado) ou em pé no píer esperando
     const persons: [SeatId, Pilot][] = [["helm", V.pilot], ...(Object.entries(V.pax) as [SeatId, Pilot][])];
+    let spot = 0;
     for (const [seat, person] of persons) {
       const sw = boat.swimmers.find((s) => s.seat === seat);
       if (sw) person.float(new Vector3(sw.pos.x, sw.pos.y, sw.pos.z), sw.yaw, simTime + (seat.length * 0.7), sw.swim);
-      else if (person.group.parent !== vis.root) person.board(vis.root);
+      else if (boat.occupants.some((o) => o.seat === seat)) { if (person.group.parent !== vis.root) person.board(vis.root); }
+      else if (!boat.capsized) { const w = waitSpots[spot++ % waitSpots.length]; person.stand(new Vector3(w.x, w.y, w.z), w.yaw, simTime + spot * 1.7); }
     }
     const pilotAboard = !boat.swimmers.some((s) => s.seat === "helm");
     if (V.dinghy) V.dinghy.pilotAboard = pilotAboard;
@@ -771,7 +782,7 @@ const boot = async () => {
       else if (driving) K.push(["I", "desacoplar carretinha", "couple"], ["W", "frente", null], ["S", "freio / ré", null], ["A D", "direção", null], ["E Q", "motor (tilt)", null], ["P", T.engine === "running" ? "desligar motor" : V.kind === "bote" ? "corda" : "ligar motor", "ignition"], ["U", "COMANDO ao barco", "unhitch"], ["R", "píer", "reset"]);
       else if (T.capsized || boat.swimmers.length) K.push(["R", "recomeçar no píer", "reset"]);
       else if (carOnly) K.push(["W", "frente", null], ["S", "freio / ré", null], ["A D", "direção", null], ["I", V.rig.coupled ? "desacoplar carretinha" : "ACOPLAR carretinha", "couple"], ["U", "VOLTAR ao barco", "unhitch"], ["B", "buzina", "horn"], ["R", "píer", "reset"]);
-      else if (boat.mooringLines.length) K.push(["M", "SOLTAR as amarras", "moor"], ["K", "ir para o carro", "car"], ["P", T.engine === "running" ? "desligar motor" : V.kind === "bote" ? "corda" : "ligar motor", "ignition"], ["C", "câmera", "camera"]);
+      else if (boat.mooringLines.length) K.push(["M", "SOLTAR as amarras", "moor"], ...(moorWhere === "píer" ? [["O", "embarque", "occupants"] as [string, string, Action]] : []), ["K", "ir para o carro", "car"], ["P", T.engine === "running" ? "desligar motor" : V.kind === "bote" ? "corda" : "ligar motor", "ignition"], ["C", "câmera", "camera"]);
       else if (boat.winchStrap) K.push(["U", trailerInWater() ? "SOLTAR a cinta" : "comando ao carro", "unhitch"], ["P", T.engine === "running" ? "desligar motor" : V.kind === "bote" ? "corda" : "ligar motor", "ignition"], ["E Q", "motor (tilt)", null]);
       else if (ld.near) K.push(["E", V.kind === "lancha" ? "levantar o motor" : "pino / tilt", null], ["W S", "marcha / acelerar", null], ["A D", "direção", null], ["T", "recomeçar a rampa", "ramp"]);
       else K.push(["T", "rampa e carretinha", "ramp"], ["P", V.kind === "bote" ? "corda (partida)" : "liga/desliga", "ignition"], ["C", "câmera", "camera"], ["H", "ajuda", "help"]);

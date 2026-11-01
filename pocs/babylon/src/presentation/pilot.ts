@@ -46,6 +46,8 @@ export interface Pilot {
   update(leftHand: Vector3, rightHand: Vector3): void;
   /** na água: centro do colete em `pos` (mundo), virada para `yaw`; `swim` 0..1 = esforço de nado (braçadas) */
   float(pos: Vector3, yaw: number, t: number, swim?: number): void;
+  /** em pé no píer: pés em `pos` (mundo), virada para `yaw`, braços soltos */
+  stand(pos: Vector3, yaw: number, t: number): void;
   /** de volta ao banco */
   board(root: TransformNode): void;
 }
@@ -114,17 +116,29 @@ export const buildPerson = (scene: Scene, root: TransformNode, o: PersonOpts): P
   const shades = add(MeshBuilder.CreateBox(k + "Glasses", { width: 0.17, height: 0.035, depth: 0.012 }, scene), glasses);
   shades.position.copyFrom(headC.add(new Vector3(0, 0.02, 0.098)));
 
-  // ---- pernas (sentado: coxa para frente, canela para baixo) ----
-  for (const s of [-1, 1]) {
-    const hip = new Vector3(X + s * 0.1, FLOOR + 0.5, -0.24 + DZ);
-    const knee = new Vector3(X + s * 0.12, FLOOR + 0.52, 0.16 + DZ);
-    const ankle = new Vector3(X + s * 0.13, FLOOR + 0.09, 0.27 + DZ);
-    setLimb(add(MeshBuilder.CreateCylinder(k + "Thigh", { height: 1, diameterTop: 0.12, diameterBottom: 0.15, tessellation: 12 }, scene), shorts), knee, hip);
-    add(MeshBuilder.CreateSphere(k + "Knee", { diameter: 0.115, segments: 10 }, scene), skin).position.copyFrom(knee);
-    setLimb(add(MeshBuilder.CreateCylinder(k + "Shin", { height: 1, diameterTop: 0.105, diameterBottom: 0.075, tessellation: 12 }, scene), skin), knee, ankle);
-    const foot = add(MeshBuilder.CreateCapsule(k + "Shoe", { radius: 0.045, height: 0.25, orientation: new Vector3(0, 0, 1) }, scene), shoe);
-    foot.position.copyFrom(ankle.add(new Vector3(0, -0.04, 0.07)));
-  }
+  // ---- pernas: sentado (coxa para frente, canela para baixo) ou em pé (retas; na água, batendo as pernas) ----
+  const legs = [-1, 1].map((s) => ({
+    s,
+    thigh: add(MeshBuilder.CreateCylinder(k + "Thigh", { height: 1, diameterTop: 0.12, diameterBottom: 0.15, tessellation: 12 }, scene), shorts),
+    knee: add(MeshBuilder.CreateSphere(k + "Knee", { diameter: 0.115, segments: 10 }, scene), skin),
+    shin: add(MeshBuilder.CreateCylinder(k + "Shin", { height: 1, diameterTop: 0.105, diameterBottom: 0.075, tessellation: 12 }, scene), skin),
+    foot: add(MeshBuilder.CreateCapsule(k + "Shoe", { radius: 0.045, height: 0.25, orientation: new Vector3(0, 0, 1) }, scene), shoe),
+  }));
+  const SOLE = FLOOR - 0.465; // sola do pé em pé (local)
+  /** stand: 0 = sentado, 1 = em pé; kick: amplitude da pernada (m), ph: fase */
+  const setLegs = (stand: number, kick = 0, ph = 0) => {
+    for (const L of legs) {
+      const s = L.s, kk = kick * Math.sin(ph + (s > 0 ? Math.PI : 0));
+      const hip = new Vector3(X + s * 0.1, FLOOR + 0.5, -0.24 + DZ - 0.03 * stand);
+      const knee = Vector3.Lerp(new Vector3(X + s * 0.12, FLOOR + 0.52, 0.16 + DZ), new Vector3(X + s * 0.11, FLOOR + 0.06, -0.24 + DZ + 0.6 * kk), stand);
+      const ankle = Vector3.Lerp(new Vector3(X + s * 0.13, FLOOR + 0.09, 0.27 + DZ), new Vector3(X + s * 0.11, FLOOR - 0.38, -0.3 + DZ + kk), stand);
+      setLimb(L.thigh, knee, hip);
+      L.knee.position.copyFrom(knee);
+      setLimb(L.shin, knee, ankle);
+      L.foot.position.copyFrom(ankle.add(new Vector3(0, -0.04, 0.07)));
+    }
+  };
+  setLegs(0);
 
   // ---- braços (IK) ----
   const upper: Mesh[] = [], fore: Mesh[] = [], elbowM: Mesh[] = [], hand: Mesh[] = [], sleeve: Mesh[] = [];
@@ -147,10 +161,11 @@ export const buildPerson = (scene: Scene, root: TransformNode, o: PersonOpts): P
     group,
     float(pos: Vector3, yaw: number, t: number, swim = 0) {
       if (group.parent) group.parent = null;
-      // parada: postura "HELP" do colete (reclinada ~30°, pernas encolhidas — a pose sentada serve);
-      // nadando: corpo mais deitado para a frente, rolando um pouco a cada braçada
+      // parada: em pé na água (o colete segura a cabeça fora), pernas retas batendo devagar;
+      // nadando: corpo inclina para a frente, pernada mais forte e um pouco de rolamento a cada braçada
       const stroke = t * 3.2;
-      Quaternion.FromEulerAnglesToRef(-0.5 + 0.75 * swim + 0.05 * Math.sin(t * 1.3), yaw, 0.04 * Math.sin(t * 0.9) + 0.12 * swim * Math.sin(stroke), q);
+      setLegs(1, 0.07 + 0.13 * swim, t * (2.4 + 3 * swim));
+      Quaternion.FromEulerAnglesToRef(0.04 + 1.05 * swim + 0.05 * Math.sin(t * 1.3), yaw, 0.04 * Math.sin(t * 0.9) + 0.12 * swim * Math.sin(stroke), q);
       group.rotationQuaternion = q;
       const off = anchor.applyRotationQuaternion(q);
       group.position.copyFrom(pos.subtract(off));
@@ -164,7 +179,17 @@ export const buildPerson = (scene: Scene, root: TransformNode, o: PersonOpts): P
       };
       api.update(arm(-1, 0), arm(1, Math.PI));
     },
+    stand(pos: Vector3, yaw: number, t: number) {
+      if (group.parent) group.parent = null;
+      setLegs(1);
+      Quaternion.FromEulerAnglesToRef(0, yaw + 0.06 * Math.sin(t * 0.4), 0, q);
+      group.rotationQuaternion = q;
+      group.position.copyFrom(pos.subtract(new Vector3(X, SOLE, -0.27 + DZ).applyRotationQuaternion(q)));
+      const sw = 0.02 * Math.sin(t * 1.1);
+      api.update(new Vector3(X - 0.25, FLOOR + 0.46 + sw, -0.25 + DZ), new Vector3(X + 0.25, FLOOR + 0.46 - sw, -0.25 + DZ));
+    },
     board(root2: TransformNode) {
+      setLegs(0);
       group.parent = root2;
       group.position.setAll(0);
       group.rotationQuaternion = Quaternion.Identity();

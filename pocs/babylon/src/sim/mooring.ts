@@ -3,6 +3,7 @@
 // física do barco (Speedboat.mooringLines) — o barco fica preso mas ainda balança com ondas e correnteza.
 
 import type { Speedboat } from "./boat.ts";
+import type { SpeedboatParams } from "./params.ts";
 import { type PierLayout, RIVER, riverCenterX } from "./world.ts";
 import { clamp, rotateInv, type Vec3 } from "./math.ts";
 
@@ -39,6 +40,21 @@ export const pierBerthState = (b: Speedboat, pier: PierLayout): BerthState => {
   const r = b.right;
   const side = r.x < 0 ? 1 : -1;  // +1: o píer está do lado de boreste do barco
   return { near, ok: near && why === "", why, side };
+};
+
+/**
+ * Largada na vaga do píer: proa para o norte, costado de bombordo a ~25 cm do píer (o píer fica a −X).
+ * É ali que os passageiros esperam para embarcar (a lotação só muda com o barco atracado na vaga).
+ */
+export const berthStartPose = (pier: PierLayout, P: SpeedboatParams): { pos: Vec3; heading: number; side: number } => {
+  const B = pierBerth(pier);
+  return { pos: { x: B.edgeX + P.beam / 2 + 0.25, y: 0.25, z: B.z }, heading: 0, side: -1 };
+};
+
+/** Pontos do píer onde os passageiros esperam em pé (mundo), ao lado da vaga, virados para o barco. */
+export const pierWaitSpots = (pier: PierLayout): { x: number; y: number; z: number; yaw: number }[] => {
+  const B = pierBerth(pier);
+  return [0, 1, 2, 3].map((i) => ({ x: B.edgeX - 0.75 - (i % 2) * 0.55, y: B.deckY, z: B.z + [2.4, 1.5, -1.5, -2.4][i], yaw: Math.PI / 2 }));
 };
 
 /** Amarra na vaga do píer: cabo de proa e de popa até os cunhos do píer (folga de ~10 cm). */
