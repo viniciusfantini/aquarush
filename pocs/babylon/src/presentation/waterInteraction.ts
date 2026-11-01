@@ -112,12 +112,16 @@ export class WaterInteraction {
   updateTelltale(nozzle: Vector3, dir: Vector3, rpm: number, boatVel: Vector3): void {
     const ps = this.telltale;
     ps.emitter = nozzle;
-    const v = 1.5 + rpm / 2600; // m/s — a pressão da bomba sobe com o RPM
+    // bomba d'água acionada pelo virabrequim: em lenta é um fio fraco que cai perto do capô;
+    // a pressão (e o alcance) sobe com o RPM
+    const r = Math.min(Math.max((rpm - 750) / 5050, 0), 1);
+    const v = 0.35 + 1.25 * r; // m/s
     const d = dir.normalize();
     ps.direction1 = d.scale(v).add(new Vector3(0, 0.05, 0)).add(boatVel);
     ps.direction2 = d.scale(v * 1.06).add(new Vector3(0, 0.12, 0)).add(boatVel);
     ps.minEmitPower = ps.maxEmitPower = 1;
-    ps.emitRate = rpm > 300 ? 320 + rpm * 0.06 : 0;
+    ps.emitRate = rpm > 300 ? 110 + 230 * r : 0;
+    ps.minSize = 0.014 + 0.01 * r; ps.maxSize = 0.026 + 0.016 * r;
   }
 
   update(dt: number, boat: Speedboat, water: GerstnerWater): void {

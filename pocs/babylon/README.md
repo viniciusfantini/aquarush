@@ -66,7 +66,7 @@ A lancha é um **corpo rígido 6DOF** (massa de 1200 kg, tensor de inércia diag
   - **fervura de cavitação e ventilação** na popa.
 - **Hélice:** a velocidade visual é **proporcional ao RPM do motor** (escala fixa de 0,12: 750 rpm = 0,75 volta/s e 5300 rpm = 5,2 voltas/s, medido no navegador). A rotação real (até ~48 voltas/s) causaria efeito estroboscópico a 60 FPS. Disco de borrão suave acima de 1200 rpm da hélice; bolhas, névoa e spray extra quando cavita ou ventila; aviso piscante no HUD e chiado no áudio.
 - A água não aparece dentro do cockpit (tampa só de profundidade).
-- **Esguicho de refrigeração (tell-tale):** bico no capô inferior (boreste) com jato contínuo de gotas; a velocidade e a vazão sobem com o RPM (bomba d'água). O jato herda a velocidade da lancha.
+- **Esguicho de refrigeração (tell-tale):** bico no capô inferior (boreste) com jato de gotas: em lenta é um fio fraco que cai rente ao capô (0,35 m/s); a velocidade (até 1,6 m/s), a vazão e a espessura sobem com o RPM (bomba d'água). O jato herda a velocidade da lancha.
 
 ## Áudio (v0.4): motor de popa 4 tempos, 4 cilindros (~60 hp)
 

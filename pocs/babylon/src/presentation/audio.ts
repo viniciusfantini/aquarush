@@ -213,7 +213,7 @@ export class EngineAudio {
     // água, esguicho, cavitação
     this.waterGain.gain.setTargetAtTime(m * Math.min(st.speed / 22, 1) * 0.11, t, 0.15);
     this.waterFilter.frequency.setTargetAtTime(400 + st.speed * 40, t, 0.2);
-    this.telltaleGain.gain.setTargetAtTime(m * (0.012 + 0.01 * r) * (st.cockpit ? 0.5 : 1), t, 0.2);
+    this.telltaleGain.gain.setTargetAtTime(m * (0.004 + 0.009 * r) * (st.cockpit ? 0.5 : 1), t, 0.2);
     this.cavGain.gain.setTargetAtTime(m * Math.min(st.boil, 1) * 0.14 * (0.3 + load), t, 0.05);
     this.cavLfo.frequency.setTargetAtTime(20 + rpm / 120, t, 0.1);
   }
