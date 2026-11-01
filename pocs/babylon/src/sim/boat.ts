@@ -138,6 +138,8 @@ export class Speedboat {
   winchStrap: { anchor: Vec3; local: Vec3; length: number } | null = null;
   /** cabos de amarração (vaga do píer: proa e popa; poita: proa) */
   mooringLines: { anchor: Vec3; local: Vec3; length: number }[] = [];
+  /** forças externas (mundo) para o próximo passo — ex.: reação da boia da poita empurrada pelo casco */
+  externalForces: { p: Vec3; f: Vec3 }[] = [];
   private cavitation = 0;
   private propRpmState = 0;
   private immersion = 1;
@@ -257,6 +259,8 @@ export class Speedboat {
     this.F = v3();
     this.T = v3();
     if (this.debugEnabled) this.debugForces = [];
+    for (const ef of this.externalForces) this.addForceAt(ef.f, ef.p, "contact");
+    this.externalForces = [];
 
     const fwd = this.forward, up = this.up, right = this.right;
     const pitch = Math.asin(clamp(fwd.y, -1, 1));

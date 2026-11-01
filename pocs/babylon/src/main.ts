@@ -19,14 +19,14 @@ import { TowRig, TOW_SPECS, type Pose } from "./sim/towVehicle.ts";
 import { buildRamp, buildTrailerMesh, buildTowVehicle } from "./presentation/ramp.ts";
 import { buildRoadAndLot, buildStation } from "./presentation/station.ts";
 import { buildMoorings, Ropes } from "./presentation/mooring.ts";
-import { pierBerthState, tieToPier, buoyState, tieToBuoy } from "./sim/mooring.ts";
-import { STATION, stationObstacles, fuelBayState } from "./sim/station.ts";
+import { pierBerthState, tieToPier, BuoyField } from "./sim/mooring.ts";
+import { STATION, stationObstacles, fuelBayState, parkedStall } from "./sim/station.ts";
 import { WakeField, WaterWithWake } from "./sim/wake.ts";
 import { v3 } from "./sim/math.ts";
 import { emptyInput } from "./gameplay/vehicleInput.ts";
 import { InputManager, attachTouchControls, type Action } from "./platform/input.ts";
 import { WaterVisual } from "./presentation/waterMaterial.ts";
-import { buildTerrain, buildRocks, buildTrees, buildPier } from "./presentation/environment.ts";
+import { buildTerrain, buildTrees, buildPier } from "./presentation/environment.ts";
 import { buildBoat, setNavLights, type BoatVisual } from "./presentation/boatMesh.ts";
 import { buildHelm, toRootLocal } from "./presentation/helm.ts";
 import { buildPilot, buildPassenger, type Pilot } from "./presentation/pilot.ts";
@@ -36,7 +36,7 @@ import { BoatCamera } from "./presentation/cameras.ts";
 import { Hud } from "./presentation/hud.ts";
 import { EngineAudio } from "./presentation/audio.ts";
 
-const BUILD = "poc-babylon 0.22.0";
+const BUILD = "poc-babylon 0.23.0";
 /** Escala visual da rotação da hélice (proporcional ao RPM, abaixo do limite estroboscópico). */
 const PROP_VISUAL_SCALE = 0.12;
 
@@ -141,12 +141,12 @@ const boot = async () => {
 
   // ---------------- cena ----------------
   const terrain = buildTerrain(scene, { terrainSubdiv: cfg.quality.terrainSubdiv, trees: cfg.quality.trees });
-  const rocks = buildRocks(scene, world.rockList);
   const trees = buildTrees(scene, cfg.quality.trees);
   const pierMeshes = buildPier(scene, world.pier);
   const buoys = pierMeshes.filter((m) => m.name === "buoy");
   const moorVis = buildMoorings(scene, world.pier);
   const ropes = new Ropes(scene);
+  const buoyField = new BuoyField(); // poitas com física (boia + corrente; o casco as afasta)
   const rampMeshes = [...buildRamp(scene), ...buildRoadAndLot(scene, cfg.quality.terrainSubdiv)];
   const stationMeshes = buildStation(scene);
 
@@ -213,7 +213,7 @@ const boot = async () => {
   let depth = null;
   if (cfg.quality.depthEffects) {
     depth = scene.enableDepthRenderer(cam.cam, false, true);
-    const list: Mesh[] = [terrain, rocks, ...pierMeshes, ...staticExtras, ...allBoatMeshes];
+    const list: Mesh[] = [terrain, ...pierMeshes, ...staticExtras, ...allBoatMeshes];
     depth.getDepthMap().renderList = list;
   }
 
@@ -223,7 +223,7 @@ const boot = async () => {
   });
   waterVis.sunDir = sunDir;
   waterVis.fogDensity = scene.fogDensity;
-  const reflList: AbstractMesh[] = [skybox, terrain, rocks, trees, ...pierMeshes, ...staticExtras, ...allBoatMeshes];
+  const reflList: AbstractMesh[] = [skybox, terrain, trees, ...pierMeshes, ...staticExtras, ...allBoatMeshes];
   waterVis.setReflectionList(reflList);
 
   if (cfg.quality.shadows > 0) {
@@ -300,6 +300,15 @@ const boot = async () => {
   let lastDamage = 0;
   // amarração (vaga do píer / poitas): amarra sozinho na posição certa; M solta; só rearma longe do ponto
   let moorArmed = true, moorWhere = "";
+  // no carro com o barco amarrado (píer/poita): o barco continua na física; o comando vai para o veículo
+  let carOnly = false, lastStall2 = -1;
+  const enterCar = () => {
+    carOnly = true; setPeopleVisible(false);
+    if (cam.mode === "cockpit") { cam.toggle(); hud.setCamera(cam.mode); setCockpitHead(false); }
+    cam.resetOrbit();
+    hud.showToast(`Barco amarrado. Você está ${V.kind === "lancha" ? "na caminhonete" : "no carro"} (carretinha vazia): W/S/A/D · estacione numa vaga do pátio · K volta ao barco`);
+  };
+  const leaveCar = (toast = true) => { carOnly = false; setPeopleVisible(true); cam.resetOrbit(); if (toast) hud.showToast("De volta ao barco"); };
   let ctxKey = "";
   const ctxBar = document.getElementById("ctx-keys")!;
   ctxBar.addEventListener("click", (e) => { const a = (e.target as HTMLElement).closest<HTMLElement>("[data-a]")?.dataset.a; if (a) input.pushAction(a as Action); });
@@ -436,7 +445,8 @@ const boot = async () => {
   const resetBoat = (toast = true) => {
     const b = V.boat;
     if (driving) stopDriving();
-    strapT = 0; moorArmed = true; moorWhere = "";
+    strapT = 0; moorArmed = true; moorWhere = ""; buoyField.reset();
+    if (carOnly) leaveCar(false);
     input.setGear("N"); wakeField.reset();
     b.reset(spawnPos(), world.spawn.heading);
     b.repair();
@@ -485,7 +495,8 @@ const boot = async () => {
     const boat = V.boat;
     if (a === "unhitch") { unhitch(); return; }
     if (a === "moor") {
-      if (boat.mooringLines.length) { boat.mooringLines = []; moorArmed = false; hud.showToast("Amarras soltas — afaste o barco"); moorWhere = ""; }
+      if (carOnly) { hud.showToast("Você está no carro — K volta ao barco"); return; }
+      if (boat.mooringLines.length) { boat.mooringLines = []; buoyField.release(); moorArmed = false; hud.showToast("Amarras soltas — afaste o barco"); moorWhere = ""; }
       else hud.showToast("Para amarrar: entre devagar na vaga do píer (faixa amarela) ou encoste a proa numa poita (P1–P3)");
       return;
     }
@@ -502,6 +513,14 @@ const boot = async () => {
       return;
     }
     if (driving && a === "occupants") { hud.showToast("Com o barco na carretinha não dá para trocar a lotação"); return; }
+    if (a === "car") {
+      if (carOnly) leaveCar();
+      else if (driving) hud.showToast("Você já está no veículo");
+      else if (boat.mooringLines.length) enterCar();
+      else hud.showToast("Para ir ao carro, amarre o barco: vaga do píer ou numa poita");
+      return;
+    }
+    if (carOnly && (a === "ignition" || a === "lights" || a === "occupants" || a === "camera")) { hud.showToast("Você está no carro — K volta ao barco"); return; }
     if (driving && a === "camera") return;
     if (a === "camera") {
       if (V.pilot.group.parent !== V.vis.root) { hud.showToast("O piloto está na água"); return; }
@@ -557,7 +576,8 @@ const boot = async () => {
     const boat = V.boat, vis = V.vis, P = V.P;
     const isBote = V.kind === "bote";
 
-    const vin = mode === "game" && !driving ? input.update(dtReal) : idleInput;
+    const vin = mode === "game" && !driving && !carOnly ? input.update(dtReal) : idleInput;
+    const carCmd = carOnly ? input.drive(dtReal) : null;
     if (!paused && driving) {
       // dirigindo: o veículo puxa a carretinha; o barco vai preso nela (pose fixa no referencial da carretinha)
       acc += dtReal;
@@ -589,12 +609,15 @@ const boot = async () => {
         water.time += PHYSICS_DT;
         simTime += PHYSICS_DT;
         boat.step(PHYSICS_DT, vin, physWater, world);
+        buoyField.step(PHYSICS_DT, boat);
+        if (carCmd) V.rig.update(PHYSICS_DT, carCmd);
         wakeField.update(PHYSICS_DT, boat);
         snap(curPos, curRot);
         acc -= PHYSICS_DT;
         n++;
       }
       if (n === MAX_SUBSTEPS) acc = 0;
+      if (carOnly) placeRig();
       boat.obstacleDamage((p) => V.rig.insideCar(p)); // barco batendo no carro/caminhonete estacionado
       physMs += (performance.now() - tp - physMs) * 0.05;
     }
@@ -655,10 +678,10 @@ const boot = async () => {
     }
     // amarração: na posição certa o barco é amarrado sozinho (vaga do píer: proa e popa; poita: proa)
     if (mode === "game" && !driving && !boat.winchStrap && !boat.capsized) {
-      const berth = pierBerthState(boat, world.pier), bst = buoyState(boat);
+      const berth = pierBerthState(boat, world.pier), bst = buoyField.nearest(boat);
       if (!boat.mooringLines.length && moorArmed) {
         if (berth.ok) { tieToPier(boat, world.pier, berth.side); moorWhere = "píer"; hud.showToast("Atracado na vaga do píer: cabos de proa e popa amarrados (M solta)"); }
-        else if (bst.ok && bst.buoy) { tieToBuoy(boat, bst.buoy); moorWhere = "poita " + bst.buoy.id; hud.showToast(`Amarrado na poita ${bst.buoy.id} pela proa (M solta)`); }
+        else if (bst.ok && bst.buoy) { buoyField.tie(boat, bst.buoy.id); moorWhere = "poita " + bst.buoy.id; hud.showToast(`Amarrado na poita ${bst.buoy.id} pela proa (M solta)`); }
       }
       if (!moorArmed && !boat.mooringLines.length && !berth.near && bst.dist > 6) moorArmed = true;
       if (!(ld.near || ld.loaded || boat.winchStrap)) {
@@ -670,6 +693,15 @@ const boot = async () => {
         else if (showB) trailerChip.textContent = `VAGA DO PÍER · ${berth.why || "ok"}`;
         else if (showP && bst.buoy) trailerChip.textContent = `POITA ${bst.buoy.id} · encoste a proa devagar (${bst.dist.toFixed(1)} m)`;
       }
+    }
+    if (carOnly) {
+      // no carro com a carretinha vazia: velocidade e vaga
+      const stall = parkedStall(V.rig.carObb(), V.rig.trailerObb(), Math.abs(V.rig.v));
+      trailerChip.classList.add("show"); trailerChip.classList.toggle("ok", stall >= 0);
+      trailerChip.textContent = stall >= 0 ? `ESTACIONADO NA VAGA ${stall} ✓ · K volta ao barco`
+        : `${V.kind === "lancha" ? "CAMINHONETE" : "CARRO"} (carretinha vazia) · ${(Math.abs(V.rig.v) * 3.6).toFixed(0)} km/h${V.rig.v < -0.05 ? " (ré)" : ""}${V.rig.blocked ? " · BATEU!" : ""} · vagas ao sul do pátio do posto`;
+      if (stall >= 0 && stall !== lastStall2) hud.showToast(`Estacionado na vaga ${stall}! O barco continua amarrado (${moorWhere}).`);
+      lastStall2 = stall;
     }
     if (driving) {
       trailerChip.classList.add("show", "ok");
@@ -685,14 +717,15 @@ const boot = async () => {
       else if (driving && bay.ok) K.push(["F", fueling ? "PARAR de abastecer" : "ABASTECER o barco", "fuel"], ["P", T.engine === "running" ? "desligar motor" : "motor desligado ✓", T.engine === "running" ? "ignition" : null], ["W", "sair", null], ["U", "desengatar", "unhitch"]);
       else if (driving) K.push(["W", "frente", null], ["S", "freio / ré", null], ["A D", "direção", null], ["E Q", "motor (tilt)", null], ["P", T.engine === "running" ? "desligar motor" : V.kind === "bote" ? "corda" : "ligar motor", "ignition"], ["U", "DESENGATAR o barco", "unhitch"], ["R", "píer", "reset"]);
       else if (T.capsized || boat.swimmers.length) K.push(["R", "recomeçar no píer", "reset"]);
-      else if (boat.mooringLines.length) K.push(["M", "SOLTAR as amarras", "moor"], ["P", T.engine === "running" ? "desligar motor" : V.kind === "bote" ? "corda" : "ligar motor", "ignition"], ["C", "câmera", "camera"]);
+      else if (carOnly) K.push(["W", "frente", null], ["S", "freio / ré", null], ["A D", "direção", null], ["K", "VOLTAR ao barco", "car"], ["R", "píer", "reset"]);
+      else if (boat.mooringLines.length) K.push(["M", "SOLTAR as amarras", "moor"], ["K", "ir para o carro", "car"], ["P", T.engine === "running" ? "desligar motor" : V.kind === "bote" ? "corda" : "ligar motor", "ignition"], ["C", "câmera", "camera"]);
       else if (boat.winchStrap) K.push(["U", "DESENGATAR (soltar a cinta)", "unhitch"], ["E Q", "motor (tilt)", null]);
       else if (ld.near) K.push(["E", V.kind === "lancha" ? "levantar o motor" : "pino / tilt", null], ["W S", "marcha / acelerar", null], ["A D", "direção", null], ["T", "recomeçar a rampa", "ramp"]);
       else K.push(["T", "rampa e carretinha", "ramp"], ["P", V.kind === "bote" ? "corda (partida)" : "liga/desliga", "ignition"], ["C", "câmera", "camera"], ["H", "ajuda", "help"]);
       const key = K.map((k) => k[0] + k[1]).join("|");
       if (key !== ctxKey) {
         ctxKey = key;
-        ctxBar.innerHTML = K.map(([k, label, act]) => `<button class="ctx${act === "unhitch" || act === "moor" ? " hot" : ""}"${act ? ` data-a="${act}"` : " disabled"}>${k.split(" ").map((x) => `<kbd>${x}</kbd>`).join("")} ${label}</button>`).join("");
+        ctxBar.innerHTML = K.map(([k, label, act]) => `<button class="ctx${act === "unhitch" || act === "moor" || act === "car" ? " hot" : ""}"${act ? ` data-a="${act}"` : " disabled"}>${k.split(" ").map((x) => `<kbd>${x}</kbd>`).join("")} ${label}</button>`).join("");
       }
     }
     if (T.damageCount !== lastDamage) { if (mode === "game") hud.showToast(T.damageEvent + (T.engineDamage >= 0.95 ? " — MOTOR QUEBRADO" : "")); lastDamage = T.damageCount; }
@@ -708,12 +741,17 @@ const boot = async () => {
     if (!paused) vis.propeller.rotation.z += (T.propRpm / 60) * PROP_VISUAL_SCALE * 2 * Math.PI * dtReal;
     vis.propBlur.alpha = Math.min(0.3, Math.max(0, (Math.abs(T.propRpm) - 1200) / 4000));
     for (const b of buoys) b.position.y = water.getHeight(b.position.x, b.position.z) - 0.05;
-    for (const b of moorVis.buoys) b.position.y = water.getHeight(b.position.x, b.position.z) + 0.08;
+    moorVis.buoys.forEach((m, i) => { const bb = buoyField.buoys[i]; m.position.set(bb.x, water.getHeight(bb.x, bb.z) + 0.08, bb.z); });
     ropes.update(boat);
 
     if (mode === "menu") cam.spin(dtReal, 0.22, 0.12); // prévia: câmera girando devagar em volta do barco
     cam.distScale = (V.kind === "bote" ? 0.62 : 1) * (driving ? 1.35 : 1);
-    cam.update(dtReal, rPos, rRot, Math.hypot(boat.vel.x, boat.vel.z));
+    if (carOnly) {
+      // câmera segue o veículo
+      const cp = V.rig.carPose();
+      cam.distScale = V.kind === "lancha" ? 1.25 : 1.0;
+      cam.update(dtReal, new Vector3(cp.x, cp.y, cp.z), Quaternion.FromEulerAngles(cp.pitch, cp.yaw, 0), Math.abs(V.rig.v));
+    } else cam.update(dtReal, rPos, rRot, Math.hypot(boat.vel.x, boat.vel.z));
     if (!paused) fx.update(dtReal, boat, water);
     waterVis.update(water, cam.cam, engine.getRenderWidth(), engine.getRenderHeight());
     if (cfg.quality.shadows > 0) sun.position = rPos.add(sunDir.scale(150));

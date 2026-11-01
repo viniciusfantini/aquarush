@@ -262,31 +262,7 @@ export const buildWorld = (): PhysicsWorld & { pier: PierLayout; rockList: Spher
     minZ: pier.shoreZ - 6, maxZ: pier.shoreZ + pier.length,
   });
 
-  // Rochas: na margem, algumas dentro do lago e um grupo na foz do rio
-  const rand = rng(1337);
-  const tryRock = (x: number, z: number, r: number) => {
-    const g = groundHeight(x, z);
-    if (Math.hypot(x - pier.shoreX, z - (pier.shoreZ + pier.length / 2)) < 28) return; // livre perto do píer
-    if (Math.hypot(x - RAMP.x, z - RAMP.z0) < 30) return; // e da rampa
-    if (onRoadOrLot(x, z, 8)) return; // e da estrada/pátio
-    spheres.push({ x, y: g + r * 0.35, z, r });
-  };
-  for (let i = 0; i < 70; i++) {
-    const a = rand() * Math.PI * 2;
-    const rr = 0.9 + rand() * 0.16;
-    const x = Math.sin(a) * LAKE.rx * rr, z = Math.cos(a) * LAKE.rz * rr;
-    tryRock(x, z, 1.5 + rand() * 3.5);
-  }
-  for (let i = 0; i < 9; i++) {
-    const x = (rand() * 2 - 1) * 220, z = (rand() * 2 - 1) * 150;
-    if (Math.hypot(x, z - shore.z) < 60) continue;
-    tryRock(x, z, 2 + rand() * 2.5);
-  }
-  for (let i = 0; i < 10; i++) {
-    const z = RIVER.z0 + 40 + rand() * 300;
-    const x = riverCenterX(z) + (rand() * 2 - 1) * RIVER.width * 0.5;
-    tryRock(x, z, 1.2 + rand() * 1.6);
-  }
+  // (as rochas redondas foram removidas a pedido do usuário: lago e margens livres)
 
   const spawn = { x: pier.shoreX + 9, z: pier.shoreZ + pier.length - 6, heading: 0 };
   return { groundHeight, spheres, boxes, trailers: [], pier, rockList: spheres, spawn };

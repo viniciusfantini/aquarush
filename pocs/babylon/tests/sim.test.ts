@@ -9,8 +9,8 @@ import { SPEEDBOAT, DINGHY, PERSON_KG, type Occupant } from "../src/sim/params.t
 import { GerstnerWater, WAVE_PRESETS, type CurrentZone } from "../src/sim/water.ts";
 import type { PhysicsWorld } from "../src/sim/world.ts";
 import { buildWorld, RAMP, groundHeight, fromFrame, ROAD_SAMPLES, LOT, YARD, lotDistance } from "../src/sim/world.ts";
-import { STATION, stationObstacles, fuelBayState } from "../src/sim/station.ts";
-import { pierBerth, pierBerthState, tieToPier, buoyState, tieToBuoy, BUOYS } from "../src/sim/mooring.ts";
+import { STATION, stationObstacles, fuelBayState, parkedStall } from "../src/sim/station.ts";
+import { pierBerth, pierBerthState, tieToPier, buoyState, tieToBuoy, BUOYS, BuoyField } from "../src/sim/mooring.ts";
 import { buildTrailer, trailerLoadState, attachWinch } from "../src/sim/trailer.ts";
 import { TowRig, TOW_SPECS } from "../src/sim/towVehicle.ts";
 import { emptyInput, type VehicleInput } from "../src/gameplay/vehicleInput.ts";
@@ -766,6 +766,45 @@ for (const [label, thr] of [["baixa", 0.25], ["alta", 1]] as const) {
     run(b, water, 10, { ...emptyInput(), gear: "R", throttle: 0.4 }, w);
     check("amarração", `${kind}: M solta e o barco se afasta (m)`, Math.hypot(b.pos.x - buoy.x, b.pos.z - buoy.z), 5, 200, "m", 1);
   }
+}
+
+// ---------- Poitas com física (boia + corrente) e vaga de estacionamento ----------
+{
+  check("cenário", "sem as pedras redondas (colisores)", buildWorld().spheres.length, 0, 0, "", 0);
+  const w = buildWorld();
+  const water = mkWater(0.35);
+  for (const kind of ["lancha", "bote"] as const) {
+    const P = kind === "lancha" ? SPEEDBOAT : DINGHY;
+    for (const fast of [true, false]) {
+      const field = new BuoyField();
+      const bz = field.buoys[1];
+      const b = new Speedboat(P, v3(bz.x + 0.2, 0.25, bz.z - 16), 0);
+      b.systems.fuelL = 20;
+      let worst = -9, tied = -1;
+      const inp: VehicleInput = { ...emptyInput(), gear: "F", throttle: fast ? 0.12 : 0 };
+      run(b, water, 50, inp, w, (t) => {
+        field.step(DT, b);
+        const near = field.nearest(b);
+        if (!fast) inp.gear = near.dist > 2.5 && tied < 0 ? "F" : "N";
+        if (!fast && near.ok && tied < 0 && near.buoy) { tied = t; field.tie(b, near.buoy.id); }
+        const L = rotInvH(b, bz), half = P.length / 2;
+        if (Math.abs(L.z) < half) { const taper = L.z > half * 0.3 ? Math.max(0.15, 1 - (L.z - half * 0.3) / (half * 0.7)) : 1; worst = Math.max(worst, (P.beam / 2) * taper - Math.abs(L.x)); }
+      });
+      const tag = `${kind}: ${fast ? "passando por cima a 8 km/h" : "amarrado"}`;
+      check("poita", `${tag} — a boia nunca entra no casco (m dentro)`, worst, -9, 0, "m", 2);
+      check("poita", `${tag} — boia perto da poita do fundo (m)`, Math.hypot(bz.x - bz.x0, bz.z - bz.z0), 0, 2.6, "m", 2);
+      if (fast) check("poita", `${tag} — segue em frente (m adiante)`, b.pos.z - bz.z, 20, 400, "m", 0);
+      else check("poita", `${tag} — amarra e fica preso (s)`, tied, 2, 40, "s", 1);
+    }
+  }
+  // vaga do pátio: conjunto parado dentro da vaga 1 ⇒ estacionado; fora/torto ⇒ não
+  const tr = buildTrailer(SPEEDBOAT);
+  const rig = new TowRig(tr, TOW_SPECS.pickup, groundHeight);
+  const st = STATION.stalls[1];
+  rig.placeAt(st.x + 6, st.z, Math.PI / 2);
+  check("posto", "conjunto dentro da vaga, alinhado e parado ⇒ estacionado", parkedStall(rig.carObb(), rig.trailerObb(), 0), 1, 1, "", 0);
+  rig.placeAt(st.x + 6, st.z + 2.5, Math.PI / 2);
+  check("posto", "fora da faixa da vaga ⇒ não estacionado", parkedStall(rig.carObb(), rig.trailerObb(), 0), -1, -1, "", 0);
 }
 
 // ---------- Carga: gasolina e ocupantes (quantidade e posição) ----------

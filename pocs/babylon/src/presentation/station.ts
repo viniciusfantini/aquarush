@@ -104,7 +104,7 @@ export const buildRoadAndLot = (scene: Scene, terrainSubdiv: number): Mesh[] => 
     st.position.set(x, y + 0.06, z); st.rotation.y = rot; st.material = paint; meshes.push(st);
   };
   // vagas para carro + carretinha (longas, ao sul do pátio do posto)
-  for (let k = 0; k < 4; k++) stripe(STATION.parking.x - 8, LOT.cz - LOT.hz + 1.5 + k * 4.5, 22, 0.15, LOT.y);
+  for (const st of STATION.stalls) for (const dz of [-st.w / 2, st.w / 2]) stripe(st.x, st.z + dz, st.len, 0.15, LOT.y);
   // círculo de manobra pintado no meio do pátio do posto e no alto da rampa
   for (const [cx, cz, r, y] of [[LOT.cx - 2, LOT.cz, 10, LOT.y], [YARD.cx, YARD.cz, 9, YARD.y]] as const) {
     const ring = MeshBuilder.CreateTorus("maneuverRing", { diameter: r * 2, thickness: 0.2, tessellation: 64 }, scene);

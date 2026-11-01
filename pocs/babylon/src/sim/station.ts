@@ -27,6 +27,19 @@ export const STATION = {
   workshop: { x: L.cx - 25, z: L.cz - 11, w: 12, d: 12, h: 5.0 },     // oficina (portões para +X)
   /** vaga do outro veículo + carretinha (de frente para a saída, +X) */
   parking: { x: L.cx + 22, z: L.cz - 19, yaw: Math.PI / 2 },
+  /** vagas longas (carro + carretinha), lado a lado ao sul; a 1ª é a do outro conjunto */
+  stalls: [0, 1, 2].map((k) => ({ x: L.cx + 15, z: L.cz - 19 + k * 4.6, len: 24, w: 4.6 })),
+};
+
+/** O veículo (com a carretinha) está estacionado dentro de uma vaga livre, alinhado e parado? (índice ou −1) */
+export const parkedStall = (car: Obb, trailer: Obb, speed: number): number => {
+  if (speed > 0.15 || Math.abs(Math.sin(car.yaw)) < 0.95) return -1;
+  for (let k = 1; k < STATION.stalls.length; k++) {
+    const s = STATION.stalls[k];
+    const inside = (o: Obb) => Math.abs(o.z - s.z) < s.w / 2 - 0.5 && Math.abs(o.x - s.x) < s.len / 2 - o.hl * 0.6;
+    if (inside(car) && inside(trailer)) return k;
+  }
+  return -1;
 };
 
 /** Obstáculos fixos para o veículo de reboque (prédios, ilhas das bombas, colunas da cobertura). */
