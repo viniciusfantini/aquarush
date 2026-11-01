@@ -84,7 +84,9 @@ const baseGround = (x: number, z: number): number => {
 
   // ilha
   const di = Math.hypot(x - ISLAND.x, z - ISLAND.z) / ISLAND.r;
-  const island = 7 * (1 - smoothstep(0.0, 1.0, di)) - 2.2 + 1.5 * fbm(x / 18, z / 18, 2);
+  // (v0.38) a saia da ilha some além de 1,0–1,4 raio: antes o "−2,2 m" valia no lago inteiro e o max() abaixo
+  // levantava todo o fundo para 2–3 m de profundidade
+  const island = 7 * (1 - smoothstep(0.0, 1.0, di)) - 2.2 + 1.5 * fbm(x / 18, z / 18, 2) - 20 * smoothstep(1.0, 1.4, di);
   h = Math.max(h, island);
 
   // canal do rio (escava o terreno)

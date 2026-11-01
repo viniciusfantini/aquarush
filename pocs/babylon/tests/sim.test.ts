@@ -609,6 +609,20 @@ for (const [label, thr] of [["baixa", 0.25], ["alta", 1]] as const) {
   check("vento", "tempestade ancorada com 6 m (~1,3:1): garra em 1 min (m)", ok(6), 1, 80, "m", 1);
 }
 
+// ---------- Mar forte no meio do lago: o pé do motor não bate no fundo ----------
+{
+  const w = buildWorld();
+  check("lago", "profundidade no centro do lago (m)", -groundHeight(0, 0), 6, 9, "m", 1);
+  check("lago", "profundidade a 100 m do centro (m)", -groundHeight(100, 0), 6, 9, "m", 1);
+  for (const P of [SPEEDBOAT, DINGHY]) for (const thr of [0.3, 0.6, 1]) {
+    const water = mkWater(2.5); // "ondas fortes"
+    const b = new Speedboat(P, v3(0, 0.25, 0), 0);
+    b.systems.fuelL = 50;
+    run(b, water, 60, { ...emptyInput(), gear: "F", throttle: thr, steering: 0.3 }, w);
+    check("lago", `${P.kind}: mar forte, 1 min em círculo a ${thr * 100}% no meio do lago — avaria do motor (%)`, b.engineDamage * 100, 0, 0, "%", 0);
+  }
+}
+
 // ---------- Aceleração em neutro (botão da manete segurado em N) ----------
 {
   const water = mkWater(0);
