@@ -12,7 +12,7 @@ O GDD (seção 10) pede a **mesma fatia jogável** em três tecnologias antes de
 
 | # | Tecnologia | Pasta | Status |
 |---|---|---|---|
-| 1 | **Babylon.js + TypeScript** (browser-first, sem instalar engine) | [`pocs/babylon`](pocs/babylon) | ✅ **v0.41.1** (online: a última publicada): lancha 150 hp ou **bote de apoio 15 hp** (escolhidos no menu com prévia no lago), física testada (413/414 critérios), estrada até o posto, vaga no píer e poitas, avarias de casco e motor, rampa de concreto com carretinha e veículo para tirar o barco da água, barco que vira e pessoas boiando de colete e nadando até ele, água vidro, esteira na água, cavitação |
+| 1 | **Babylon.js + TypeScript** (browser-first, sem instalar engine) | [`pocs/babylon`](pocs/babylon) | ✅ **v0.41.1** (online: a última publicada): lancha 150 hp ou **bote de apoio inflável 15 hp** (escolhidos no menu com prévia no lago); física própria testada no Node (**413/414 critérios**); largada atracada na vaga do píer com os passageiros esperando; sistemas do motor (combustível, temperatura, bateria 50 Ah com curva real, alternador de 35 A, amperímetro, jump start 10 Ah/200 A); **bomba de porão** com jato e alarme; **alagar e afundar**; **âncora de proa** com molinete; **vento** em 5 níveis com deriva e carneirinhos; avarias de casco e motor; rampa de concreto, carretinha e carro/caminhonete; estrada até o posto, poitas, restaurante e frota de exposição; barco que vira e pessoas de colete nadando até ele; água vidro, esteira que a física sente, cavitação |
 | 2 | Unity 6 LTS + URP | [`pocs/unity`](pocs/unity) | ⏳ planejada (Unity não instalado nesta máquina) |
 | 3 | Unreal Engine 5 | [`pocs/unreal`](pocs/unreal) | ⏳ planejada |
 
@@ -42,24 +42,41 @@ Na abertura, o **menu já fica no lago**: a embarcação escolhida boia no píer
 |---|---|---|---|
 | **Manete F / N / R** | toque **S/↓**: F → **N** (sem empuxo, para) → **R** (ré lenta). Toque **W/↑**: R → **N** → **F** (frente lenta) | LT / RT ou D-pad ↓ / ↑ | alavanca à direita: faixa branca = N, logo acima = F lenta, logo abaixo = R lenta |
 | Acelerar na marcha engatada | **segure** W (em F) ou S (em R); ao soltar volta à lenta, ainda engatado | segure RT / LT (analógico) | arraste a alavanca para longe do N |
+| **Acelerar em neutro** (aquecer/testar: sobe o giro sem engatar, até 3000 rpm) | segure **N** + W | | |
 | Direção | A D / ← → | analógico esquerdo | joystick à esquerda |
 | Trim + / − (lancha: power trim, segure) | E / Q | RB / LB | TRIM+ / TRIM− |
 | **Bote: trim manual** (sempre que não estiver acelerando) | toque **E/Q**: pino 1 · 2 · 3; **E** no pino 3 levanta o motor todo (tilt); **Q** abaixa | RB / LB | TRIM+ / TRIM− |
 | **Recolher o motor (tilt)** | segure **E** no fim do trim, em **baixa rotação** (pode estar engatado e andando devagar); **Q** baixa | segure RB | segure TRIM+ |
+| **Ligar/desligar o motor** (partida só em N; no bote, cada P é uma puxada na corda). O jogo começa com o motor **desligado** e a bateria a **60 %** | P | B | ⏻ |
+| **Jump start** (booster de 10 Ah / 200 A; conecta a qualquer momento; desconecta sozinho quando o motor pega) | J | | botão na barra |
+| **Âncora de proa**: segure para pagar / recolher o cabo (molinete elétrico na lancha, à mão no bote) | **+** / **−** (teclado principal ou numérico) | | ⚓+ / ⚓− |
+| **Vento**: nenhum → fraco → moderado → forte → tempestade | T | | chip VENTO |
+| Água: vidro / calma / lago / forte | 0 (ou G) / 1 / 2 / 3 · V alterna | | chip ÁGUA |
+| **Embarque**: quantos passageiros levar (só **atracado na vaga do píer**, onde eles esperam em pé) | O | | chip OCUPANTES |
+| Reposicionar: volta **amarrado na vaga do píer** (5 L de gasolina, bateria a 60 %, motor desligado; desvira o barco e todos voltam a bordo) | R | Back | ↺ |
 | Câmera externa ↔ cockpit | C | Y | CAM |
-| Luzes de navegação (lancha) · lanterna de mão do piloto (bote) | L | X | LUZ |
-| Reposicionar no píer (lancha 0,25 L, bote 0,05 L; desvira o barco e todos voltam a bordo) | R | Back | ↺ |
-| Ocupantes (peso e posição) | O | | chip OCUPANTES |
-| Água: vidro / calma / lago / forte | 0 (ou G) / 1 / 2 / 3 · V alterna | | toque no chip “ÁGUA” |
-| **Ligar/desligar o motor** (partida só em N; no bote, cada P é uma puxada na corda) | P | B | ⏻ |
-| **Ir para a rampa** (treinar subir o barco na carretinha) | T | | |
-| **Dirigir o carro/caminhonete** (automático depois que a cinta prende o barco na carretinha) | W frente · S freio e, parado, ré · A/D direção · o motor do barco continua: P liga/desliga, E/Q trim/tilt | RT / LT + analógico | alavanca acima do N = frente, abaixo = freio/ré; joystick |
+| Luzes de navegação (lancha; brilho pela tensão da bateria) · lanterna de mão do piloto (bote) | L | X | LUZ |
+| **Buzina** (do carro quando você está nele; senão do barco — a elétrica da lancha perde tom com a bateria fraca) | B (segure) | | botão B |
+| **Atracar** (vaga do píer: paralelo, encostado, devagar) / **amarrar na poita** (proa devagar até a boia): amarra sozinho · **soltar as amarras** | M solta · **K** vai para o carro (com o barco amarrado) e volta | | botões SOLTAR / CARRO |
+| **Rampa**: navegue até a carretinha, levante o motor e suba devagar, de proa e alinhado; a cinta prende sozinha e o comando passa ao carro | — | | |
+| **Dirigir o carro/caminhonete** (depois que a cinta prende o barco) | W frente · S freio e, parado, ré · A/D direção · o motor do barco continua: P liga/desliga, E/Q trim/tilt | RT / LT + analógico | alavanca acima do N = frente, abaixo = freio/ré; joystick |
 | **U** com o barco na carretinha: no carro passa o comando ao barco (a cinta continua presa). No barco: com a carretinha **na água** solta a cinta; **no seco** volta ao carro (dá para ligar o motor do barco em terra) | U | | |
 | **Desacoplar / acoplar a carretinha** do carro (para acoplar: encoste a bola do engate de ré) | I | | botão I |
 | **Abastecer o barco no posto** (carro parado ao lado da bomba, motor do barco desligado) | F (de novo para parar) | | botão ABASTECER |
-| **Atracar** (vaga do píer: paralelo, encostado, devagar) / **amarrar na poita** (proa devagar até a boia): amarra sozinho · **soltar as amarras** | M solta · **K** vai para o carro (com o barco amarrado) e volta | | botões SOLTAR / CARRO |
-| **Buzina** (do carro quando você está nele; senão do barco) | B (segure) | | botão B |
+| Bomba de porão | automática (boia): liga com água no porão, joga a água pelo costado de boreste, alarme sonoro e luminoso | | |
 | Telemetria · pausa · ajuda | F3 · Esc · H | Start (pausa) | |
+
+### O que a simulação faz (resumo)
+
+- **Barco**: corpo rígido 6DOF por forças e torques a 120 Hz (flutuação em 6 pontos, planeio, hump, trim/tilt, cavitação, ventilação, correnteza, esteira que a física sente, vento). Peso e posição de gasolina, ocupantes e água do porão.
+- **Motor e elétrica**: partida com autoteste e apito; bateria de 50 Ah com tensão de chumbo-ácido (12,7 V cheia → ~10,2 V zerada) e resistência interna; alternador de 35 A (já ~9 A em lenta); amperímetro; trim e molinete sem força com a bateria zerada (só o relé estala); jump start de 10 Ah e 200 A (proteção de sobrecorrente; recarrega em cruzeiro); combustível, temperatura e horímetro.
+- **Porão**: água entra pelo furo do casco (orifício, ∝ avaria e diferença de nível) e por cima da borda/espelho (vertedouro, menos com o barco andando); enche o fundo (~1280 L sob o piso, pela forma real do casco) e depois o cockpit; a bomba de 750 GPH segue a curva vazão × altura e a tensão, e o jato sai pelo costado (linha de emissão, curva para a popa andando).
+- **Alagar e afundar** (lancha, água calma, só o piloto): borda livre de 64 cm seca, < 20 cm com ~2.500 L, **alagada/inavegável com ~3.500 L**, **afunda com ~3.900 L**. O bote inflável não afunda (flutuadores).
+- **Âncora**: desce, unha no fundo, segura pelo filame (~5:1 segura até tempestade), garra com pouco cabo; o molinete puxa o barco ao recolher.
+- **Vento**: 5 níveis com rajadas; deriva (~3 % do vento), banda e proa a sotavento; carneirinhos na água. Num lago o vento não levanta ondas (as ondas ficam nas teclas 0–3).
+- **Mundo**: lago com ~7 m no meio e marina dragada (2,3 m); rio e cânion com boias de canal; píer com vaga, poitas, rampa, estrada até o posto/loja/oficina, restaurante com piscina, estacionamento com a frota de exposição.
+
+**Temporário**: a largada está com **5 L de gasolina** nos dois barcos (pedido para os testes de bateria/âncora/porão). A regra de jogo (o combustível inicial não chega ao fim do cânion) volta com 0,25 L na lancha e 0,05 L no bote (`START_FUEL` em `pocs/babylon/src/main.ts`).
 
 ## Estrutura do repositório
 

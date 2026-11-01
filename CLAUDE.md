@@ -39,6 +39,22 @@ npm run dev            # abrir http://localhost:5173, F3 mostra a telemetria; wi
 - Para calibrar, use `node tests/debug-trim.ts` (forças por ponto em regime permanente) e `node tests/debug-turn.ts <acelerador> <t_curva>`.
 - Uma limitação nova vai para o README da POC e, se for o caso, para o mapa `KNOWN` em `tests/sim.test.ts`. Nunca afrouxe um critério só para passar.
 
+## Mapa dos sistemas (POC 1)
+
+| Sistema | Simulação (`src/sim`) | Visual / UI (`src/presentation`, `main.ts`) | Testes (`tests/sim.test.ts`) |
+|---|---|---|---|
+| Casco, planeio, trim/tilt, cavitação | `boat.ts`, `params.ts` | `boatMesh.ts`, `dinghyMesh.ts` | testes 1–6, "power trim", "bote" |
+| Forma do casco (fonte única) | `hullShape.ts` | `boatMesh.ts` importa | "afundar" |
+| Motor, combustível, temperatura, bateria, alternador, amperímetro, jump start | `engineSystems.ts`, `boat.ts` | `hud.ts`, `helm.ts`, `audio.ts` | "sistemas", "bateria", "amperímetro", "neutro" |
+| Porão, bomba, alagar/afundar, jato | `boat.ts` (`updateBilge`), `bilgeJet.ts` | `boatGear.ts`, `hud.ts` | "porão", "afundar", "jato" |
+| Âncora | `anchor.ts` | `boatGear.ts`, `hud.ts` (`#g-anchor`) | "âncora" |
+| Vento | `wind.ts` + `PhysicsWorld.wind` | `waterMaterial.ts` (carneirinhos), `hud.ts`, `audio.ts` | "vento" |
+| Amarração, píer, poitas, embarque | `mooring.ts` | `presentation/mooring.ts`, `pilot.ts` | "amarração", "poita", "embarque" |
+| Carretinha, carro, rampa, estrada, posto | `trailer.ts`, `towVehicle.ts`, `world.ts`, `station.ts` | `ramp.ts`, `station.ts`, `fleet.ts` | "rampa", "reboque", "carretinha", "estrada", "posto", "carro" |
+| Emborcamento e pessoas na água | `boat.ts` (`updateCapsize`, `ejectOccupants`, `updateSwimmers`) | `pilot.ts` (`float`, `stand`, `board`) | "emborcamento" |
+
+Valores de referência (lancha): massa seca 1030 kg; empuxo máximo 8,5 t; borda livre seca 64 cm; alagada ~3.500 L; afunda ~3.900 L; bomba ~0,55 L/s; alternador 35 A; bateria 50 Ah; booster 10 Ah/200 A. Largada: atracada na vaga do píer, motor desligado, bateria 60 %, **5 L de gasolina (temporário)**.
+
 ## Decisões registradas
 
 | Data | Decisão | Motivo |

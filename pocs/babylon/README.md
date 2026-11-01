@@ -14,33 +14,43 @@ src/
   sim/                      SIMULATION: sem dependência de Babylon (roda no Node)
     math.ts                 vetores/quaternions (X direita, Y cima, Z proa)
     water.ts                IWaterSurface + GerstnerWater (altura, normal, correnteza, profundidade)
-    world.ts                relevo do lago (função), rochas/píer (colisores), zona de correnteza
-    params.ts               PARÂMETROS DOCUMENTADOS da lancha (contrato comum entre as 3 POCs)
-    engineSystems.ts        combustível, arrefecimento, bateria/alternador, horímetro
+    world.ts                relevo do lago (função), ilha, rio, rampa, estrada, pátios, píer (colisores), correnteza
+    params.ts               PARÂMETROS DOCUMENTADOS da lancha e do bote (contrato comum entre as 3 POCs)
+    hullShape.ts            forma do casco da lancha (seções) — fonte única do visual e da hidrostática do porão
+    engineSystems.ts        combustível, arrefecimento, bateria/alternador/amperímetro, jump start, horímetro
+    boat.ts                 corpo rígido 6DOF (forças e torques), controles, porão/bomba, alagar/afundar, emborcamento, avarias
+    anchor.ts               âncora de proa: cabo, unhar, garrar, molinete
+    bilgeJet.ts             jato da bomba de porão como linha de emissão (referencial do barco)
+    wind.ts                 vento em 5 níveis com rajadas
     wake.ts                 histórico da esteira (física + visual)
-    boat.ts                 corpo rígido 6DOF + SpeedboatController (forças e torques)
-  gameplay/vehicleInput.ts  contrato VehicleInput (GDD 9.2)
+    mooring.ts              vaga do píer, poitas (BuoyField), boias do canal, largada atracada
+    trailer.ts              carretinha (berço, postes, batente, cinta do guincho)
+    towVehicle.ts           carro/caminhonete + carretinha articulada (TowRig)
+    station.ts              posto, loja, oficina, vagas, frota de exposição (obstáculos)
+  gameplay/vehicleInput.ts  contrato VehicleInput (GDD 9.2): marcha, acelerador, direção, trim, âncora, neutro, bomba
   platform/input.ts         adaptadores teclado / gamepad / touch → VehicleInput
   presentation/             WATER RENDERING + INTERACTION + UI
-    waterMaterial.ts        shader GLSL: MESMAS ondas da física + esteira + reflexo planar + vidro
+    waterMaterial.ts        shader GLSL: MESMAS ondas da física + esteira + reflexo planar + vidro + carneirinhos
     wakeMap.ts              mapa de esteira top-down (V de Kelvin, espuma da hélice, fervura de cavitação)
     waterInteraction.ts     orquestra o mapa de esteira + partículas (spray, rooster tail, bolhas, névoa)
-    environment.ts          terreno, rochas, árvores, píer, marina
-    boatMesh.ts             lancha procedural detalhada (PBR), motor e hélice de 3 pás
-    helm.ts                 posto do piloto: painel com instrumentos, volante, manete F/N/R, chave
-    pilot.ts                piloto com braços por IK (mãos no volante e na manete)
+    environment.ts          terreno, árvores, píer, marina, restaurante, piscina
+    boatMesh.ts / dinghyMesh.ts  lancha e bote procedurais (PBR), motores e hélices
+    boatGear.ts             âncora + cabo, jato da bomba de porão (gotas, espuma)
+    helm.ts / pilot.ts      posto do piloto (painel, volante, manete, chave) e pessoas com IK (sentadas, em pé, na água)
+    ramp.ts                 rampa, carretinhas, carro e caminhonete
+    station.ts / restaurant.ts / fleet.ts / mooring.ts   estrada, posto, restaurante, frota de exposição, boias e cabos
     cameras.ts              externa (mola + órbita) e cockpit
-    hud.ts                  HUD que lê só a telemetria real
-    audio.ts                motor/água procedurais (Web Audio)
+    hud.ts                  HUD que lê só a telemetria real (relógios, amperímetro, âncora, porão, vento)
+    audio.ts + engineWorklet.js  motor/água/buzina/alarme/molinete/vento procedurais (Web Audio)
   main.ts                   bootstrap + laço com física em passo fixo e render interpolado
 tests/
-  sim.test.ts               roteiro GDD A.12 (testes 1–6 + lago) headless, com PASS/FAIL
-  debug-*.ts                scripts de diagnóstico (curva, forças por ponto, trim)
+  sim.test.ts               roteiro GDD A.12 + sistemas (headless, PASS/FAIL)
+  debug-*.ts                diagnósticos: curva, trim, carretinha, rampa, âncora, porão, alagar, vento, etc.
 ```
 
 ## Modelo físico (resumo)
 
-A lancha é um **corpo rígido 6DOF** (massa de 1200 kg, tensor de inércia diagonal), integrado por Euler semi-implícito a **120 Hz em passo fixo**. Não há `Translate`: tudo são forças e torques. Os parâmetros ficam em `src/sim/params.ts`.
+A lancha é um **corpo rígido 6DOF** (massa seca de 1030 kg + gasolina, ocupantes e água do porão como cargas na posição; tensor de inércia diagonal com Steiner), integrado por Euler semi-implícito a **120 Hz em passo fixo**. Não há `Translate`: tudo são forças e torques. Os parâmetros ficam em `src/sim/params.ts`.
 
 | Força | Como |
 |---|---|
@@ -53,13 +63,18 @@ A lancha é um **corpo rígido 6DOF** (massa de 1200 kg, tensor de inércia diag
 | Trim | inclina o vetor de empuxo e age como flap da rabeta (força ∝ u² na popa). **Muda a atitude e a velocidade de fato** |
 | Manete F / N / R | a marcha pedida vem de `VehicleInput.gear`. Toda troca passa por N com 0,45 s (embreagem da rabeta) e só engrena com o acelerador em lenta. Em N o empuxo é zero. Engrenado em lenta, o motor dá 4 % do empuxo (≈ 5 km/h para frente e ≈ 3 km/h em ré) |
 | Massa e carga (v0.10) | massa **seca** de 1030 kg (casco + motor) no CG de referência, mais **gasolina** (0,74 kg/L, tanque em (0; −0,22; −0,9)) e **ocupantes** de 80 kg nos bancos (piloto em boreste, carona em bombordo, 2 no banco de popa). Cada peso é aplicado **na sua posição** (gera torque → trim e banda); a massa total e o tensor de inércia (Steiner) são recalculados a cada passo. Aproximação: o acoplamento translação–rotação do CG deslocado é desprezado (deslocamentos de poucos cm) |
-| Sistemas do motor (v0.9) | **Combustível**: tanque de 120 L, consumo pela carga (3 L/h em lenta a ~55 L/h a toda); perto do fim o motor engasga e depois morre; sem combustível não pega. **Temperatura**: termostato ~58–64 °C (aquece em ~1–2 min); sem água na entrada do pé sobe ~2 °C/s → alarme a 85 °C, **proteção a 90 °C** (limita a 2000 rpm e 30 % de acelerador), **desliga a 115 °C**; desligado esfria devagar e só pega abaixo de 90 °C. **Bateria** de 50 Ah (v0.12): 11,9–12,7 V em repouso, regulador 13,6–14,2 V com o alternador (> 900 rpm). Resistência interna de 9 mΩ (cheia) a ~39 mΩ (vazia): na partida (170 A) a tensão cai ~2 V com ela cheia e ~4 V a 40 %. Rotação do arranque = 260 rpm × (V − 7,5)/3,1; o motor pega depois de 3 a 5 voltas "úteis" (rotação de compressão > 60 rpm) e a tentativa desiste após 4 s ("não pegou"). Abaixo de 3 % nem o relé arma. Carga e descarga com **aceleração de jogo de 10×** (`batteryTimeScale`), documentada em `engineSystems.ts`. Autoteste de 1,1 s com apito antes do arranque. **Horímetro** soma o tempo ligado (salvo no navegador) |
+| Elétrica (v0.32–v0.39) | **Bateria** de 50 Ah, tensão de repouso de chumbo-ácido: 12,7 V cheia, ~12,2 V a 50 %, ~11,9 V a 15 %, **~10,2 V zerada**. **Alternador** de 35 A (~9 A já em lenta, máximo perto de 3000 rpm), limitado pelo que a bateria aceita; regulador 13,6–14,2 V. **Amperímetro** no painel (+ carga, − consumo: partida −170 A, trim −30 A, molinete −27 a −120 A, bomba −4 A). Trim, tilt e molinete precisam de ≥ 9 V sob carga (senão só o relé estala); partida precisa de ≥ 10,5 V. **Jump start**: 10 Ah, até 200 A (acima disso a proteção desarma), conecta a qualquer momento, alimenta tudo enquanto ligado, desconecta sozinho quando o motor pega e recarrega a ~10 A em cruzeiro. Buzina e luzes seguem a tensão |
+| Sistemas do motor (v0.9) | **Combustível**: tanque de 120 L, consumo pela carga (3 L/h em lenta a ~55 L/h a toda); perto do fim o motor engasga e depois morre; sem combustível não pega. **Temperatura**: termostato ~58–64 °C (aquece em ~1–2 min); sem água na entrada do pé sobe ~2 °C/s → alarme a 85 °C, **proteção a 90 °C** (limita a 2000 rpm e 30 % de acelerador), **desliga a 115 °C**; desligado esfria devagar e só pega abaixo de 90 °C. **Bateria** de 50 Ah (v0.12; tensões e alternador atualizados na linha "Elétrica" acima). Resistência interna de 9 mΩ (cheia) a ~39 mΩ (vazia): na partida (170 A) a tensão cai ~2 V com ela cheia e ~4 V a 40 %. Rotação do arranque = 260 rpm × (V − 7,5)/3,1; o motor pega depois de 3 a 5 voltas "úteis" (rotação de compressão > 60 rpm) e a tentativa desiste após 4 s ("não pegou"). Com a bateria zerada (< 10,5 V) nem o relé arma. Carga e descarga com **aceleração de jogo de 10×** (`batteryTimeScale`), documentada em `engineSystems.ts`. Autoteste de 1,1 s com apito antes do arranque. **Horímetro** soma o tempo ligado (salvo no navegador) |
 | Cavitação | índice = f(carga × escorregamento da hélice). Com carga alta e pouca velocidade (arrancada), perde até 30 % do empuxo e o RPM sobe. Some em cruzeiro |
 | Hélice × superfície (v0.8) | **imersão** = fração do disco (R = 0,19 m) dentro d'água; empuxo × imersão^1,5. **Aeração**: com o disco raso a hélice puxa ar e perde até 50 % a mais. **No ar**: sem carga, o motor sobe até o **limitador** (6100 rpm), que corta a ignição em pulsos (som de "bap-bap"). Em N a hélice gira solta: freada pela água quando imersa, quase sem freio no ar |
 | Agarre lateral do casco | sustentação lateral da quilha/strakes ∝ u·v_lateral, aplicada perto do CG (sem efeito cata-vento), mais amortecimento de guinada. A lancha derrapa ~7° numa curva forte e, ao soltar o volante, a guinada morre em ~0,7 s **sem voltar para o lado oposto** (antes voltava ~16°) |
 | Inclinação em curva | torque ∝ aceleração centrípeta (casco em V) + amortecimento de rolagem |
 | Colisões | penalidade mola-amortecedor com atrito em 12 pontos de contato contra o fundo (função de altura), as rochas (esferas) e o píer (caixas) |
 | Correnteza e ondas | a velocidade relativa à água usa a correnteza; as alturas vêm das mesmas ondas de Gerstner do shader |
+| Vento (v0.36–v0.37) | 5 níveis (0 / ~6 / ~14 / ~23 / ~39 nós) com rajadas e direção oscilando. Vento aparente: longitudinal no CG (`airDragCdA`), lateral no centro vélico (`windage`) — deriva ~3 % do vento, banda e proa a sotavento. Não levanta ondas (lago); só carneirinhos no shader |
+| Âncora (v0.34) | cabo pago/recolhido pelo molinete; ao tocar o fundo vira mola só de tração; poder de garra ∝ filame (cabo ÷ profundidade, ~5:1 = máximo de 4000 N na lancha); acima disso garra (ara o fundo); recolhendo puxa o barco e desunha |
+| Porão, bomba, alagar e afundar (v0.34–v0.41) | entrada por **orifício** no furo (Cd·A·√(2g·Δh), A ∝ avaria^1,3, Δh = fora − nível de dentro, nos dois sentidos) e **vertedouro** na borda/espelho (1,8·L·h^1,5, respingos, menos andando, poço do motor segura 2/3). Nível: sob o piso pela forma do casco (40 % livre, ~1280 L), acima pelo cockpit (7 m²); o peso da água sobe e vai para o meio. **Bomba** 750 GPH: Q = Qmáx·(1 − H/2,7 m)·f(tensão) ≈ 0,55 L/s; jato v = Q/A pela mangueira de 1 1/8". **Borda livre** < 3 cm = alagado/inavegável (~3.500 L na lancha); peso > empuxo máximo do casco (8,5 t) = afunda (~3.900 L): motor desliga, pessoas na água. Bote inflável não afunda |
+| Avarias | casco: pico de contato > 4× o peso; motor: pé raspando o fundo andando, baixar o motor contra o chão, batidas na carretinha/carro. Casco avariado arrasta mais e abre o furo do porão |
 
 **Água compartilhada:** `GerstnerWater.shaderParams()` envia ao shader exatamente as ondas que a física consulta. `getHeight` inverte o deslocamento horizontal de Gerstner por iteração de ponto fixo. No teste, o desvio médio entre o casco e a superfície é de 3 cm.
 
@@ -178,9 +193,9 @@ Resultado: **413/414 OK** (v0.41.1). Na v0.10, o peso do piloto na posição rea
 1. **Ângulo de planeio baixo**: em velocidade final a lancha roda com ~0,6° (uma lancha real roda com 3–5°). O pico do hump (8°) está correto. O teste marca isso como `KNOWN`.
 2. **Trim × velocidade invertido**: trim − deixa a lancha *mais rápida* no modelo. Na prática, um trim + moderado costuma ganhar velocidade. A atitude responde corretamente ao trim. Próximo passo: modelo de comprimento molhado (Savitsky) no lugar da saturação por ponto.
 3. **Bundle grande**: 6,3 MB (1,4 MB gzip), porque importa `@babylonjs/core` inteiro. Dá para otimizar com imports por caminho na fase P5.
-4. Em `low` não há reflexo planar (só o céu). Sem dia/noite; sem chuva nem vento.
+4. Em `low` não há reflexo planar (só o céu). Sem dia/noite nem chuva (o vento existe desde a v0.36, sem ondas de vento no lago).
 5. Colisão por pontos: um objeto fino entre dois pontos de contato pode atravessar o costado.
-6. Combustível, danos e porão ainda não existem (o HUD só mostra o consumo estimado).
+6. ~~Combustível, danos e porão ainda não existem~~: resolvidos (v0.9, v0.18, v0.34–v0.41). O empuxo é por 6 pontos de área constante: bate com o volume do casco desenhado até a borda, mas não modela compartimentos estanques separados (a água de dentro é uma carga só).
 7. ~~A física não sente a esteira~~: resolvido na v0.5 (`WaterWithWake`). A espuma continua só visual.
 9. ~~Adesivo "60" × física de 150 hp~~: resolvido na v0.7 (o adesivo lê `enginePowerHp`).
 8. As bolhas são partículas desenhadas antes da água. Com a água vidro e muito transparente, a profundidade delas é aproximada.
@@ -190,5 +205,6 @@ Resultado: **413/414 OK** (v0.41.1). Na v0.10, o peso do piloto na posição rea
 - [ ] Medir em celular Android/iOS real (FPS, aquecimento) e WebGPU
 - [ ] Corrigir o ângulo de planeio e o efeito do trim na velocidade (limitações 1 e 2)
 - [ ] Reduzir o bundle (imports por caminho) e medir o tempo de carregamento em produção
-- [ ] Publicar o `dist/` (GitHub Pages) para testar por URL no celular
+- [x] Publicar o `dist/` (GitHub Pages) para testar por URL no celular (`npm run deploy`)
+- [ ] Voltar o combustível inicial ao valor de jogo (hoje 5 L, temporário para testes)
 - [ ] Gravar vídeo do roteiro de testes para a matriz comparativa
