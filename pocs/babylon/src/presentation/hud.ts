@@ -163,6 +163,8 @@ export class Hud {
         ["escorregamento hélice", t.propSlip.toFixed(2)],
         ["rotação hélice (rpm)", t.propRpm.toFixed(0)],
         ["consumo (L/h)", t.fuelLph.toFixed(1)],
+        ["bomba do trim (A)", t.trimMotorA.toFixed(0)],
+        ["bateria (V)", t.batteryV.toFixed(2)],
         ["distância (m)", t.distanceM.toFixed(0)],
         ["profundidade (m)", t.depth.toFixed(1)],
         ["colisões", String(t.collisions)],

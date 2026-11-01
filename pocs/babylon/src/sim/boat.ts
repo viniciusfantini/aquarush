@@ -61,6 +61,7 @@ export interface BoatTelemetry {
   lowFuel: boolean;
   chargeWarn: boolean;
   stall: "" | "fuel" | "overheat"; // último motivo de o motor ter morrido sozinho
+  trimMotorA: number;    // corrente da bomba do power trim (A)
   depth: number;         // profundidade sob o casco
   submergedPoints: boolean[];
 }
@@ -93,6 +94,8 @@ export class Speedboat {
   private revLimiting = false;
   private limiterPhase = 0;
   private lastThrust = 0;
+  /** corrente da bomba elétrica do power trim (A) */
+  trimMotorA = 0;
   /** combustível, arrefecimento, bateria e horímetro */
   readonly systems = new EngineSystems();
   /** Ocupantes (posição = banco). Padrão: só o piloto. */
@@ -144,7 +147,7 @@ export class Speedboat {
     this.rpm = params.idleRpm;
     this.telemetry = {
       speedKmh: 0, waterSpeed: 0, rpm: params.idleRpm, throttle: 0, throttleCmd: 0, trim: 0, trimDeg: 0, tiltDeg: 0, tiltBlocked: false, intakeSubmerged: true, steerDeg: 0,
-      gear: "N", pitchDeg: 0, rollDeg: 0, wetFraction: 0, planing: false, thrustN: 0, ventilation: 1, cavitation: 0, propImmersion: 1, revLimiter: false, propSlip: 0, propRpm: 0, engine: "running", fuelL: 0, fuelFrac: 1, coolantC: 45, batteryV: 12.6, engineHours: 0, overheatWarn: false, protectMode: false, lowFuel: false, chargeWarn: false, stall: "", fuelLph: 0,
+      gear: "N", pitchDeg: 0, rollDeg: 0, wetFraction: 0, planing: false, thrustN: 0, ventilation: 1, cavitation: 0, propImmersion: 1, revLimiter: false, propSlip: 0, propRpm: 0, engine: "running", fuelL: 0, fuelFrac: 1, coolantC: 45, batteryV: 12.6, engineHours: 0, overheatWarn: false, protectMode: false, lowFuel: false, chargeWarn: false, stall: "", trimMotorA: 0, fuelLph: 0,
       distanceM: 0, collisions: 0, lastImpact: 0, depth: 0, submergedPoints: params.buoyancyPoints.map(() => false),
     };
   }
@@ -401,7 +404,8 @@ export class Speedboat {
     t.engine = this.engine;
     // sistemas do motor: combustível, temperatura, bateria, horímetro
     const sys = this.systems;
-    sys.update(dt, { engine: this.engine, rpm: t.rpm, fuelLph: t.fuelLph, load: this.throttleActual, intakeSubmerged, lightsOn: input.navigationLights });
+    sys.update(dt, { engine: this.engine, rpm: t.rpm, fuelLph: t.fuelLph, load: this.throttleActual, intakeSubmerged, lightsOn: input.navigationLights, trimMotorA: this.trimMotorA });
+    t.trimMotorA = this.trimMotorA;
     if (sys.stallReason && this.engine === "running") { this.engine = "off"; t.stall = sys.stallReason; }
     t.fuelL = sys.fuelL; t.fuelFrac = sys.fuelFrac; t.coolantC = sys.coolantC; t.batteryV = sys.batteryV;
     t.engineHours = sys.engineHours; t.overheatWarn = sys.overheatWarn; t.protectMode = sys.protect;
@@ -424,20 +428,29 @@ export class Speedboat {
     //    a hélice sai da água. Bloqueado em velocidade ou rotação alta (como nos motores reais).
     const trimIn = clamp(input.trim, -1, 1);
     this.tiltBlocked = false;
+    // bomba elétrica do power trim: velocidade cai com a tensão da bateria (motor DC)
+    const vFactor = clamp((this.systems.batteryV - 9.5) / 3, 0.25, 1.05);
+    const trimBefore = this.trim, tiltBefore = this.tilt;
     if (trimIn > 0 && this.trim >= 1) {
       // O que impede o tilt é a CARGA no pé: o empuxo da hélice (e a água em velocidade alta) segura o
       // motor para baixo e o cilindro hidráulico não vence. Engatado em baixa rotação funciona
       // (navegação em água rasa), mais devagar quanto maior o empuxo.
       const thrustLoad = Math.abs(this.lastThrust) / P.tiltMaxThrust;
       if (thrustLoad < 1 && this.rpm < P.tiltMaxRpm && Math.abs(u) < P.tiltMaxSpeed) {
-        const rate = P.tiltRate * (1 - 0.7 * thrustLoad) * trimIn;
+        const rate = P.tiltRate * (1 - 0.7 * thrustLoad) * trimIn * vFactor;
         this.tilt = Math.min(P.tiltMax, this.tilt + rate * dt);
       } else this.tiltBlocked = true;
     } else if (trimIn < 0 && this.tilt > 0) {
-      this.tilt = Math.max(0, this.tilt + trimIn * P.tiltRate * dt);
+      this.tilt = Math.max(0, this.tilt + trimIn * P.tiltRate * dt * vFactor);
     } else {
-      this.trim = clamp(this.trim + trimIn * P.trimRate * dt, -1, 1);
+      this.trim = clamp(this.trim + trimIn * P.trimRate * dt * vFactor, -1, 1);
     }
+    // corrente da bomba: ~30 A movendo o trim, ~40 A no tilt, ~45 A contra o batente/bloqueado
+    // (válvula de alívio) — o botão pressionado sempre puxa corrente
+    if (Math.abs(trimIn) > 0.05) {
+      const moved = this.trim !== trimBefore || this.tilt !== tiltBefore;
+      this.trimMotorA = !moved ? 45 : this.tilt !== tiltBefore ? 40 : 30;
+    } else this.trimMotorA = 0;
 
     // Manete com detentes F / N / R (GDD: frente, neutro e ré). A troca SEMPRE passa por N:
     // corta o acelerador, espera `shiftTime` em neutro (embreagem da rabeta) e só então engrena.

@@ -146,7 +146,7 @@ export const SPEEDBOAT: SpeedboatParams = {
   tiltMax: 60 * DEG,
   tiltRate: 14 * DEG,
   tiltMaxThrust: 1800,
-  tiltMaxSpeed: 8,
+  tiltMaxSpeed: 4.2, // ~15 km/h: acima, a água no pé também impede
   tiltMaxRpm: 2200,
   drivePivot: v3(0, 0.28, -2.99),
   intakePos: v3(0, -0.62, -3.35),

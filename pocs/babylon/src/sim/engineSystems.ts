@@ -33,6 +33,7 @@ export interface EngineSystemsInput {
   load: number;              // acelerador efetivo 0..1
   intakeSubmerged: boolean;  // entrada d'água de refrigeração dentro d'água
   lightsOn: boolean;
+  trimMotorA?: number;       // bomba elétrica do power trim (A)
 }
 
 export class EngineSystems {
@@ -101,15 +102,18 @@ export class EngineSystems {
 
     // ---- elétrico: bateria + alternador ----
     const charging = running && s.rpm > 900;
-    let drain = s.lightsOn ? 2.5 : 0.3;                    // A (instrumentos + luzes)
+    let drain = (s.lightsOn ? 2.5 : 0.3) + (s.trimMotorA ?? 0); // A (instrumentos + luzes + bomba do trim)
     if (s.engine === "cranking") drain += 160;             // motor de arranque
     const alt = charging ? Math.min(15, (s.rpm - 900) / 120) : 0; // A do alternador
     this.batterySoc = clamp(this.batterySoc + ((alt - drain) * dt) / 3600 / this.p.batteryAh, 0, 1);
     const rest = 11.9 + 0.8 * this.batterySoc;             // 11,9 V vazia .. 12,7 V cheia
-    let vTarget = rest - drain * 0.004;
+    // queda de tensão ≈ resistência interna + fiação (~12 mΩ) × corrente líquida
+    const net = alt - drain;
+    let vTarget = rest - Math.max(0, -net) * 0.012;
     if (s.engine === "cranking") vTarget = rest - 1.9;     // queda na partida
-    else if (charging) vTarget = 13.6 + 0.6 * Math.min((s.rpm - 900) / 2500, 1); // regulador 13,6–14,2 V
-    this.batteryV += (vTarget - this.batteryV) * (1 - Math.exp(-dt / 0.4));
+    else if (charging && net >= 0) vTarget = 13.6 + 0.6 * Math.min((s.rpm - 900) / 2500, 1); // regulador 13,6–14,2 V
+    else if (charging) vTarget = Math.max(rest - (-net) * 0.012, 13.6 + 0.6 * Math.min((s.rpm - 900) / 2500, 1) + net * 0.03); // alternador não dá conta
+    this.batteryV += (vTarget - this.batteryV) * (1 - Math.exp(-dt / 0.25));
 
     // ---- horímetro ----
     if (running) this.engineHours += dt / 3600;

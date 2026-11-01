@@ -65,6 +65,7 @@ export interface AudioState {
   cockpit: boolean;       // câmera no cockpit (casco entre o ouvinte e o motor)
   engine: "off" | "cranking" | "running";
   revLimiter?: boolean;   // limitador cortando a ignição
+  trimMotorA?: number;    // bomba elétrica do power trim (A)
 }
 
 export class EngineAudio {
@@ -100,6 +101,8 @@ export class EngineAudio {
   private workletGain!: GainNode;
   private starterGain!: GainNode;
   private starterLfo!: OscillatorNode;
+  private pumpOsc!: OscillatorNode;
+  private pumpGain!: GainNode;
   muted = false;
 
   start(): void {
@@ -195,6 +198,13 @@ export class EngineAudio {
     stBP.connect(stAM).connect(this.starterGain).connect(this.master);
     st1.start(); st2.start(); this.starterLfo.start();
 
+    // ---- bomba elétrica do power trim: zumbido de motor DC + hidráulico ----
+    this.pumpOsc = ctx.createOscillator(); this.pumpOsc.type = "sawtooth"; this.pumpOsc.frequency.value = 380;
+    const pumpBP = ctx.createBiquadFilter(); pumpBP.type = "bandpass"; pumpBP.frequency.value = 900; pumpBP.Q.value = 1.2;
+    this.pumpGain = ctx.createGain(); this.pumpGain.gain.value = 0;
+    this.pumpOsc.connect(pumpBP).connect(this.pumpGain).connect(this.master);
+    this.pumpOsc.start();
+
     // ---- motor por síntese física (explosões → tubos de escape → cubo da hélice) ----
     this.workletGain = ctx.createGain(); this.workletGain.gain.value = 0;
     const cowl = ctx.createBiquadFilter(); cowl.type = "peaking"; cowl.frequency.value = 700; cowl.Q.value = 1.1; cowl.gain.value = 3;
@@ -228,6 +238,10 @@ export class EngineAudio {
     }
     const legacy = useW || !running ? 0 : 1; // osciladores antigos só sem worklet
     this.starterGain.gain.setTargetAtTime(m * (st.engine === "cranking" ? 0.09 : 0), t, 0.03);
+    const pumpA = st.trimMotorA ?? 0;
+    this.pumpGain.gain.setTargetAtTime(m * (pumpA > 0 ? 0.035 : 0), t, 0.03);
+    // sob carga (batente/tilt) o motor DC desacelera: o tom cai
+    this.pumpOsc.frequency.setTargetAtTime(pumpA >= 45 ? 290 : pumpA >= 40 ? 330 : 380, t, 0.08);
     this.starterLfo.frequency.setTargetAtTime(Math.max(st.rpm, 60) / 30, t, 0.05);
 
     // bloco: lenta suave e baixa; com carga o filtro abre e o som "encorpa"

@@ -240,6 +240,14 @@ for (const [label, thr] of [["baixa", 0.25], ["alta", 1]] as const) {
     run(b4, water, 2, { ...emptyInput(), gear: "F", throttle: 0.15, trim: 1 });
     check("tilt", `engatado devagar (${vKmh.toFixed(0)} km/h): tilt sobe (°)`, b4.telemetry.tiltDeg, 5, 60, "°", 1);
   }
+  // navegando e pondo em N (sem empuxo), ainda rápido: a água no pé impede o tilt
+  {
+    const b5 = new Speedboat(SPEEDBOAT, v3(0, 0.25, 0));
+    settle(b5, water); b5.trim = 1;
+    run(b5, water, 15, { ...emptyInput(), gear: "F", throttle: 0.5 });
+    run(b5, water, 1.5, { ...emptyInput(), gear: "N", trim: 1 });
+    check("tilt", `em N a ${b5.telemetry.speedKmh.toFixed(0)} km/h: tilt bloqueado (°)`, b5.telemetry.tiltDeg, 0, 0.01, "°");
+  }
   // parado, em N, segurando trim +: recolhe e a hélice sai da água
   run(boat, water, 30, { ...emptyInput(), gear: "N" });
   run(boat, water, 8, { ...emptyInput(), gear: "N", trim: 1 });
@@ -358,6 +366,27 @@ for (const [label, thr] of [["baixa", 0.25], ["alta", 1]] as const) {
   check("carga", "0→60 só piloto (s)", pSolo.t60, 3, 10, "s");
   check("carga", "0→60 lotada é mais lento (s a mais)", pFull.t60 - pSolo.t60, 0.3, 20, "s");
   check("carga", "vel. máx lotada menor (km/h a menos)", pSolo.vmax - pFull.vmax, 1, 30, "km/h", 1);
+}
+
+// ---------- Power trim elétrico: consumo de corrente e queda de tensão ----------
+{
+  const water = mkWater(0);
+  const off = new Speedboat(SPEEDBOAT, v3(0, 0.25, 0));
+  off.toggleIgnition(); // desliga
+  run(off, water, 5, emptyInput());
+  const vRest = off.telemetry.batteryV;
+  let vMin = 99;
+  run(off, water, 1.5, { ...emptyInput(), trim: 1 }, openWater, () => { vMin = Math.min(vMin, off.telemetry.batteryV); });
+  check("power trim", "motor desligado: queda de tensão ao trimar (V)", vRest - vMin, 0.25, 0.8, "V", 2);
+  check("power trim", "corrente da bomba (A)", off.telemetry.trimMotorA, 25, 50, "A", 0);
+  run(off, water, 2, emptyInput());
+  check("power trim", "soltou o botão: tensão volta (V)", vRest - off.telemetry.batteryV, -0.05, 0.08, "V", 2);
+  const on = new Speedboat(SPEEDBOAT, v3(0, 0.25, 0));
+  run(on, water, 10, { ...emptyInput(), gear: "F", throttle: 0.6 });
+  const vCh = on.telemetry.batteryV;
+  let vMin2 = 99;
+  run(on, water, 1.5, { ...emptyInput(), gear: "F", throttle: 0.6, trim: -1 }, openWater, () => { vMin2 = Math.min(vMin2, on.telemetry.batteryV); });
+  check("power trim", "motor ligado: alternador não dá conta, tensão cai (V)", vCh - vMin2, 0.2, 1.5, "V", 2);
 }
 
 // ---------- Esteira: cruzar a própria marola (a física sente a esteira) ----------
