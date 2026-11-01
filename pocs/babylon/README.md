@@ -129,6 +129,7 @@ Limitação: é uma síntese aproximada, não uma gravação. Validar o timbre d
 | Tilt | trim máx navegando: tilt bloqueado e hélice na água; parado: recolhe a 60°, entrada d'água fora, empuxo 0 acelerando; trim− baixa de volta a 0° |
 | Tilt engatado | a 12 km/h engatado (1480 rpm): o tilt sobe (12,7° em 2 s). Navegando a 49 km/h: bloqueado |
 | Hélice no ar/aflorando | recolhido acelerando: imersão 0, empuxo 0, rpm 5941 com limitador ativo. Meio disco submerso (imersão 0,51): empuxo = 32 % do submerso |
+| Combustível × cânion (v0.25) | com o combustível inicial (0,2 L lancha / 0,04 L bote), no acelerador mais econômico e seguindo o rio contra a correnteza, o motor morre ~575 m antes do fim do cânion; com o tanque cheio chegam em 105 s / 199 s; 10 pares de boias laterais, todas em 3 m de água |
 | Carro (v0.24) | carro e caminhonete: 50,0 km/h para a frente, 0→45 km/h em 9,0 s / 8,1 s, rodas girando; curva a toda: aceleração lateral 7,85 m/s² (limite μ·g) e sai de frente; devagar não escorrega; roll de 5,7° numa encosta de 10 % (cada roda no relevo) |
 | Poita com física e vaga (v0.23) | sem pedras (0 colisores); lancha e bote passando pela poita a 8 km/h e amarrando nela: a boia nunca entra no casco (≤ −0,33 m), fica a ≤ 1,8 m da poita do fundo; quem passa segue em frente (138 m / 80 m); amarra em 13,0 s / 13,6 s; conjunto parado e alinhado dentro da vaga 1 ⇒ estacionado; fora da faixa ⇒ não |
 | Atracação e poitas (v0.22) | vaga do píer: lancha amarrada em 13,1 s (folga 0,20 m do píer, 2,6 m do centro da vaga), bote em 16,3 s (folga 0,04 m); sem avaria; poita P2: lancha amarrada em 11,7 s (proa a 0,28 m), bote em 11,9 s (1,86 m); M solta e o barco se afasta (26 m / 17 m em 10 s de ré). Estrada nova: rampa máx. 9,0 %, entrada do pátio 6,4 %; até a bomba: lancha 55,8 s, bote 67,8 s, sem bater |
@@ -148,7 +149,7 @@ Limitação: é uma síntese aproximada, não uma gravação. Validar o timbre d
 | 6. Ondas e correnteza | ondas fortes (×2,5): roll ≤ 30°, não emborca; deriva com correnteza de 1,6 m/s: 1,54 m/s |
 | Lago | flutua no spawn; a toda contra a margem, encalha e para sem atravessar o terreno |
 
-Resultado: **264/265 OK** (v0.24.0). Na v0.10, o peso do piloto na posição real (boreste, acima do CG) aumentou o roll em curva com ondas fortes; o `bankCoef` foi para 1800 e o `rollDamping` para 15000, com 1 limitação conhecida (abaixo). Na v0.2 a hélice foi para 0,5 m atrás do espelho, como no modelo visual, e o esterço máximo em alta velocidade caiu de 13° para 11°.
+Resultado: **272/273 OK** (v0.25.0). Na v0.10, o peso do piloto na posição real (boreste, acima do CG) aumentou o roll em curva com ondas fortes; o `bankCoef` foi para 1800 e o `rollDamping` para 15000, com 1 limitação conhecida (abaixo). Na v0.2 a hélice foi para 0,5 m atrás do espelho, como no modelo visual, e o esterço máximo em alta velocidade caiu de 13° para 11°.
 
 ### Navegador (Chrome, Windows 11, WebGL2, `q=med`, ~1370×896)
 

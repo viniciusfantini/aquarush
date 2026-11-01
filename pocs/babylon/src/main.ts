@@ -19,7 +19,7 @@ import { TowRig, TOW_SPECS, type Pose } from "./sim/towVehicle.ts";
 import { buildRamp, buildTrailerMesh, buildTowVehicle, type WheelNode } from "./presentation/ramp.ts";
 import { buildRoadAndLot, buildStation } from "./presentation/station.ts";
 import { buildMoorings, Ropes } from "./presentation/mooring.ts";
-import { pierBerthState, tieToPier, BuoyField } from "./sim/mooring.ts";
+import { pierBerthState, tieToPier, BuoyField, CANYON_END } from "./sim/mooring.ts";
 import { STATION, stationObstacles, fuelBayState, parkedStall } from "./sim/station.ts";
 import { WakeField, WaterWithWake } from "./sim/wake.ts";
 import { v3 } from "./sim/math.ts";
@@ -36,7 +36,7 @@ import { BoatCamera } from "./presentation/cameras.ts";
 import { Hud } from "./presentation/hud.ts";
 import { EngineAudio } from "./presentation/audio.ts";
 
-const BUILD = "poc-babylon 0.24.0";
+const BUILD = "poc-babylon 0.25.0";
 /** Escala visual da rotação da hélice (proporcional ao RPM, abaixo do limite estroboscópico). */
 const PROP_VISUAL_SCALE = 0.12;
 
@@ -48,8 +48,12 @@ const WATER_PRESETS = [
   { key: "forte", label: "Água: ondas fortes", waves: 2.5, ripple: 1.4 },
 ] as const;
 
-/** Combustível no tanque ao começar / reposicionar (pedido do usuário: lancha 3 L, bote 1 L). */
-const START_FUEL: Record<VesselKind, number> = { lancha: 3, bote: 1 };
+/**
+ * Combustível ao começar / reposicionar: de propósito NÃO dá para chegar ao fim do cânion (≈1 km, metade rio
+ * acima) — o melhor consumo medido é 0,28 L/km (lancha a 38 km/h) e 0,06 L/km (bote a 22 km/h). É preciso
+ * abastecer no posto (estrada da rampa). Pedido do usuário.
+ */
+const START_FUEL: Record<VesselKind, number> = { lancha: 0.2, bote: 0.04 };
 
 /** Tudo o que pertence a uma embarcação: física, visual, comandos, pessoas. */
 interface Vessel {
@@ -306,7 +310,7 @@ const boot = async () => {
   let moorArmed = true, moorWhere = "";
   // no carro com o barco amarrado (píer/poita): o barco continua na física; o comando vai para o veículo
   let carOnly = false, lastStall2 = -1;
-  let hornPulse = 0;
+  let hornPulse = 0, reachedEnd = false;
   const enterCar = () => {
     carOnly = true; setPeopleVisible(false);
     if (cam.mode === "cockpit") { cam.toggle(); hud.setCamera(cam.mode); setCockpitHead(false); }
@@ -491,7 +495,7 @@ const boot = async () => {
     resetBoat(false);
     V.boat.engine = "running";
     cam.resetOrbit();
-    hud.showToast(V.kind === "bote" ? "Bote de apoio AR-3 — 15 hp, cana do leme" : "Lancha AR-6 — 150 hp");
+    hud.showToast(`${V.kind === "bote" ? "Bote de apoio AR-3" : "Lancha AR-6"} — o combustível não dá até o fim do cânion (largada): abasteça no posto (estrada da rampa)`);
   };
   for (const c of cards) c.addEventListener("click", () => {
     const k = c.dataset.kind as VesselKind;
@@ -504,7 +508,7 @@ const boot = async () => {
   const handle = (a: Action) => {
     if (mode === "menu") return; // no menu os atalhos do jogo ficam desligados
     const boat = V.boat;
-    if (a === "horn") { hornPulse = 0.6; return; }
+    if (a === "horn") { hornPulse = 0.22; return; } // toque curto (2 toques = 2 cliques/apertos)
     if (a === "unhitch") { unhitch(); return; }
     if (a === "moor") {
       if (carOnly) { hud.showToast("Você está no carro — K volta ao barco"); return; }
@@ -753,7 +757,13 @@ const boot = async () => {
     if (!paused) vis.propeller.rotation.z += (T.propRpm / 60) * PROP_VISUAL_SCALE * 2 * Math.PI * dtReal;
     vis.propBlur.alpha = Math.min(0.3, Math.max(0, (Math.abs(T.propRpm) - 1200) / 4000));
     for (const b of buoys) b.position.y = water.getHeight(b.position.x, b.position.z) - 0.05;
-    moorVis.buoys.forEach((m, i) => { const bb = buoyField.buoys[i]; m.position.set(bb.x, water.getHeight(bb.x, bb.z) + 0.08, bb.z); });
+    moorVis.buoys.forEach((m, i) => { const bb = buoyField.buoys[i]; m.position.set(bb.x, water.getHeight(bb.x, bb.z) + (bb.kind === "mooring" ? 0.08 : 0.3), bb.z); });
+    // chegada ao fim do cânion (largada)
+    if (mode === "game" && !driving && !carOnly) {
+      const dEnd = Math.hypot(boat.pos.x - CANYON_END.x, boat.pos.z - CANYON_END.z);
+      if (dEnd < 18 && !reachedEnd) { reachedEnd = true; hud.showToast("Fim do cânion! É aqui que o jogo começa de verdade (LARGADA)"); }
+      if (dEnd > 60) reachedEnd = false;
+    }
     ropes.update(boat);
 
     if (mode === "menu") cam.spin(dtReal, 0.22, 0.12); // prévia: câmera girando devagar em volta do barco
@@ -784,7 +794,7 @@ const boot = async () => {
       rpm: T.rpm, throttle: T.throttle, speed: Math.hypot(boat.vel.x, boat.vel.z), boil: Math.max(T.cavitation, 1 - T.ventilation),
       inGear: T.gear !== "N", propInWater: T.propImmersion > 0.5, revLimiter: T.revLimiter, cockpit: cam.mode === "cockpit", engine: T.engine, trimMotorA: T.trimMotorA, buzzer: T.buzzer, starterRpm: T.starterRpm, pullStart: T.pullStart,
     });
-    // buzina: do veículo quando você está nele; senão do barco (segurar B, ou toque no botão = 0,6 s)
+    // buzina: do veículo quando você está nele; senão do barco (segurar B, ou toque no botão = 0,22 s)
     hornPulse = Math.max(0, hornPulse - dtReal);
     audio.setHorn(mode === "game" && (input.hornHeld || hornPulse > 0), driving || carOnly ? "car" : V.kind);
     hud.update(T, fpsSmooth, {

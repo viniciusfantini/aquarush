@@ -2,7 +2,8 @@
 // cabos desenhados entre o barco e as âncoras (inclusive a cinta do guincho da carretinha).
 
 import { type Scene, Mesh, MeshBuilder, StandardMaterial, Color3, Vector3, type LinesMesh, Color4 } from "@babylonjs/core";
-import { BUOYS, pierBerth } from "../sim/mooring.ts";
+import { BUOYS, CHANNEL_MARKERS, CANYON_END, pierBerth } from "../sim/mooring.ts";
+import { groundHeight } from "../sim/world.ts";
 import type { PierLayout } from "../sim/world.ts";
 import type { Speedboat } from "../sim/boat.ts";
 import { signMat } from "./station.ts";
@@ -25,6 +26,37 @@ export const buildMoorings = (scene: Scene, pier: PierLayout): { meshes: Mesh[];
     tag.billboardMode = Mesh.BILLBOARDMODE_Y;
     buoys.push(ball);
     meshes.push(ball, band, ring, tag);
+  }
+  // balizamento do canal do cânion (mesma ordem do BuoyField: poitas e depois as laterais)
+  const redM = new StandardMaterial("markRed", scene); redM.diffuseColor = new Color3(0.85, 0.08, 0.06); redM.emissiveColor = new Color3(0.18, 0.01, 0);
+  const greenM = new StandardMaterial("markGreen", scene); greenM.diffuseColor = new Color3(0.05, 0.6, 0.2); greenM.emissiveColor = new Color3(0, 0.12, 0.03);
+  for (const mk of CHANNEL_MARKERS) {
+    const red = mk.kind === "red";
+    // vermelha = "lata" (cilindro de topo plano); verde = "cone" — formatos de boia lateral
+    const body = red
+      ? MeshBuilder.CreateCylinder("mark_" + mk.id, { height: 1.0, diameter: 0.6, tessellation: 16 }, scene)
+      : MeshBuilder.CreateCylinder("mark_" + mk.id, { height: 1.1, diameterTop: 0.04, diameterBottom: 0.75, tessellation: 16 }, scene);
+    body.material = red ? redM : greenM;
+    const top = red
+      ? MeshBuilder.CreateBox("markTop", { width: 0.36, height: 0.36, depth: 0.05 }, scene)
+      : MeshBuilder.CreateCylinder("markTop", { height: 0.3, diameterTop: 0, diameterBottom: 0.34, tessellation: 12 }, scene);
+    top.material = red ? redM : greenM; top.parent = body; top.position.y = red ? 0.82 : 0.78;
+    const pole = MeshBuilder.CreateCylinder("markPole", { height: 0.4, diameter: 0.04 }, scene); pole.material = steel; pole.parent = body; pole.position.y = 0.6;
+    const band = MeshBuilder.CreateCylinder("markBand", { height: 0.08, diameter: red ? 0.62 : 0.5, tessellation: 16 }, scene); band.material = white; band.parent = body; band.position.y = red ? 0.2 : -0.1;
+    buoys.push(body);
+    meshes.push(body, top, pole, band);
+  }
+  // pórtico de LARGADA no fim do cânion (onde o jogo começa de verdade)
+  {
+    const g = CANYON_END;
+    const startM = signMat(scene, "startGateT", "LARGADA", "fim do cânion · início da corrida", "#0b2a4a", "#ffd34d", 1024, 200);
+    for (const sx of [-1, 1]) {
+      const px = g.x + sx * 16, gy = Math.max(groundHeight(px, g.z), -3.5);
+      const tower = MeshBuilder.CreateBox("startTower", { width: 0.8, height: 9 - gy, depth: 0.8 }, scene);
+      tower.material = orange; tower.position.set(px, (9 + gy) / 2, g.z); meshes.push(tower);
+    }
+    const banner = MeshBuilder.CreatePlane("startBanner", { width: 26, height: 2.4, sideOrientation: Mesh.DOUBLESIDE }, scene);
+    banner.material = startM; banner.position.set(g.x, 8.2, g.z); meshes.push(banner); // de frente para quem sobe o rio (−Z)
   }
   // vaga no píer: faixa pintada no deck, placa, 2 cunhos e defensas (pneus) no costado
   const B = pierBerth(pier);

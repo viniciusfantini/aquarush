@@ -114,7 +114,7 @@ export class EngineAudio {
   cylinders: number;
   constructor(cylinders = 4) { this.cylinders = cylinders; }
 
-  // ---- buzina (B): carro (2 tons ~420/520 Hz), lancha (buzina marítima grave 2 tons), bote (buzina de ar) ----
+  // ---- buzina (B): carro (2 tons ~500/630 Hz), lancha (buzina elétrica ~560/700 Hz), bote (buzina de ar ~760 Hz) ----
   private horn: { oscs: OscillatorNode[]; gain: GainNode; kind: string } | null = null;
   setHorn(on: boolean, kind: "car" | "lancha" | "bote"): void {
     const ctx = this.ctx;
@@ -127,14 +127,15 @@ export class EngineAudio {
       const curve = new Float32Array(256); for (let i = 0; i < 256; i++) { const x = (i / 255) * 2 - 1; curve[i] = Math.tanh(2.5 * x); }
       shaper.curve = curve;
       const bp = ctx.createBiquadFilter(); bp.type = "bandpass";
-      const freqs = kind === "car" ? [420, 523] : kind === "lancha" ? [233, 294] : [470];
-      bp.frequency.value = kind === "car" ? 900 : kind === "lancha" ? 600 : 1300; bp.Q.value = 0.8;
+      // buzinas agudas e "secas" (dá para dar dois toques curtos): carro 2 tons, lancha buzina elétrica, bote buzina de ar
+      const freqs = kind === "car" ? [500, 630] : kind === "lancha" ? [560, 700] : [760];
+      bp.frequency.value = kind === "car" ? 1300 : kind === "lancha" ? 1500 : 1900; bp.Q.value = 0.9;
       const oscs = freqs.map((f) => { const o = ctx.createOscillator(); o.type = kind === "bote" ? "square" : "sawtooth"; o.frequency.value = f; o.connect(shaper); o.start(); return o; });
       shaper.connect(bp).connect(gain).connect(this.master);
       this.horn = { oscs, gain, kind };
     }
-    const vol = this.muted ? 0 : kind === "lancha" ? 0.22 : kind === "car" ? 0.14 : 0.16;
-    this.horn.gain.gain.setTargetAtTime(on ? vol : 0, t, on ? 0.012 : 0.05);
+    const vol = this.muted ? 0 : kind === "lancha" ? 0.17 : kind === "car" ? 0.14 : 0.15;
+    this.horn.gain.gain.setTargetAtTime(on ? vol : 0, t, on ? 0.004 : 0.012); // ataque e corte rápidos
   }
 
   /** Puxada na corda de partida: "zzzip" da corda + catraca do arranque manual. */

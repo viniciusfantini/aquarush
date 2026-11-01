@@ -3,7 +3,7 @@
 // física do barco (Speedboat.mooringLines) — o barco fica preso mas ainda balança com ondas e correnteza.
 
 import type { Speedboat } from "./boat.ts";
-import type { PierLayout } from "./world.ts";
+import { type PierLayout, RIVER, riverCenterX } from "./world.ts";
 import { clamp, rotateInv, type Vec3 } from "./math.ts";
 
 export interface MooringLine { anchor: Vec3; local: Vec3; length: number }
@@ -77,10 +77,30 @@ export const tieToBuoy = (b: Speedboat, buoy: { x: number; z: number }): void =>
  * para o lado mais próximo do costado) e a tração do cabo de amarração (reação ao cabo do barco).
  * Os cabos do barco amarrado na poita usam a posição ATUAL da boia como âncora.
  */
-export interface BuoyBody { id: string; x0: number; z0: number; x: number; z: number; vx: number; vz: number }
+export interface BuoyBody { id: string; kind: "mooring" | "red" | "green"; x0: number; z0: number; x: number; z: number; vx: number; vz: number; chain: number }
+
+/**
+ * Balizamento do canal do cânion (rio, da boca no lago até o fim): pares de boias laterais a cada 60 m,
+ * VERMELHA à direita de quem SOBE o rio (vindo do lago, sistema IALA B usado no Brasil) e VERDE à esquerda.
+ */
+export const CHANNEL_MARKERS: { id: string; kind: "red" | "green"; x: number; z: number }[] = (() => {
+  const out: { id: string; kind: "red" | "green"; x: number; z: number }[] = [];
+  let n = 1;
+  for (let z = RIVER.z0 - 20; z <= RIVER.z1 - 20; z += 60) {
+    const cx = riverCenterX(z);
+    out.push({ id: "V" + n, kind: "red", x: cx + 10, z }, { id: "G" + n, kind: "green", x: cx - 10, z });
+    n++;
+  }
+  return out;
+})();
+/** Fim do cânion: onde o jogo de verdade começa (largada). */
+export const CANYON_END = { x: riverCenterX(RIVER.z1 - 10), z: RIVER.z1 - 10 };
 
 export class BuoyField {
-  readonly buoys: BuoyBody[] = BUOYS.map((b) => ({ id: b.id, x0: b.x, z0: b.z, x: b.x, z: b.z, vx: 0, vz: 0 }));
+  readonly buoys: BuoyBody[] = [
+    ...BUOYS.map((b) => ({ id: b.id, kind: "mooring" as const, x0: b.x, z0: b.z, x: b.x, z: b.z, vx: 0, vz: 0, chain: 2.0 })),
+    ...CHANNEL_MARKERS.map((b) => ({ id: b.id, kind: b.kind, x0: b.x, z0: b.z, x: b.x, z: b.z, vx: 0, vz: 0, chain: 1.5 })),
+  ];
   static readonly CHAIN = 2.0;
   static readonly R = 0.35;     // raio da boia
   static readonly MASS = 30;
@@ -96,7 +116,7 @@ export class BuoyField {
       let fx = 0, fz = 0;
       // corrente até a poita do fundo
       const dx = b.x - b.x0, dz = b.z - b.z0, d = Math.hypot(dx, dz);
-      if (d > BuoyField.CHAIN) { const k = 4000 * (d - BuoyField.CHAIN); fx -= (dx / d) * k; fz -= (dz / d) * k; }
+      if (d > b.chain) { const k = 4000 * (d - b.chain); fx -= (dx / d) * k; fz -= (dz / d) * k; }
       // arrasto da água
       fx -= 90 * b.vx; fz -= 90 * b.vz;
       // cabo do barco amarrado nesta boia: puxa a boia em direção ao olhal de proa
@@ -144,7 +164,7 @@ export class BuoyField {
   nearest(boat: Speedboat): { buoy: BuoyBody | null; dist: number; ok: boolean } {
     const e = boat.toWorld(bowEye(boat));
     let best: BuoyBody | null = null, bd = Infinity;
-    for (const y of this.buoys) { const d = Math.hypot(e.x - y.x, e.z - y.z); if (d < bd) { bd = d; best = y; } }
+    for (const y of this.buoys) { if (y.kind !== "mooring") continue; const d = Math.hypot(e.x - y.x, e.z - y.z); if (d < bd) { bd = d; best = y; } }
     return { buoy: best, dist: bd, ok: bd < 2.0 && Math.hypot(boat.vel.x, boat.vel.z) < 1.0 };
   }
 

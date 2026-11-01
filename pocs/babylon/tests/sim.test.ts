@@ -8,9 +8,9 @@ import { Speedboat } from "../src/sim/boat.ts";
 import { SPEEDBOAT, DINGHY, PERSON_KG, type Occupant } from "../src/sim/params.ts";
 import { GerstnerWater, WAVE_PRESETS, type CurrentZone } from "../src/sim/water.ts";
 import type { PhysicsWorld } from "../src/sim/world.ts";
-import { buildWorld, RAMP, groundHeight, fromFrame, ROAD_SAMPLES, LOT, YARD, lotDistance } from "../src/sim/world.ts";
+import { buildWorld, RAMP, groundHeight, fromFrame, ROAD_SAMPLES, LOT, YARD, lotDistance, RIVER, RIVER_CURRENT, riverCenterX } from "../src/sim/world.ts";
 import { STATION, stationObstacles, fuelBayState, parkedStall } from "../src/sim/station.ts";
-import { pierBerth, pierBerthState, tieToPier, buoyState, tieToBuoy, BUOYS, BuoyField } from "../src/sim/mooring.ts";
+import { pierBerth, pierBerthState, tieToPier, buoyState, tieToBuoy, BUOYS, BuoyField, CANYON_END, CHANNEL_MARKERS } from "../src/sim/mooring.ts";
 import { buildTrailer, trailerLoadState, attachWinch } from "../src/sim/trailer.ts";
 import { TowRig, TOW_SPECS } from "../src/sim/towVehicle.ts";
 import { emptyInput, type VehicleInput } from "../src/gameplay/vehicleInput.ts";
@@ -829,6 +829,39 @@ for (const [label, thr] of [["baixa", 0.25], ["alta", 1]] as const) {
     r2.placeAt(0, 0, 0);
     check("carro", `${spec}: rodas seguem o relevo (roll numa encosta de 10 %, °)`, (r2.carPose().roll ?? 0) * 57.3, 5, 6.5, "°", 1);
   }
+}
+
+// ---------- Combustível inicial × fim do cânion ----------
+{
+  const w = buildWorld();
+  const water = mkWater(0.35, [RIVER_CURRENT]);
+  const route: [number, number][] = [];
+  for (let z = w.spawn.z; z <= RIVER.z0; z += 10) route.push([w.spawn.x + (riverCenterX(RIVER.z0) - w.spawn.x) * ((z - w.spawn.z) / (RIVER.z0 - w.spawn.z)), z]);
+  for (let z = RIVER.z0; z <= CANYON_END.z + 30; z += 8) route.push([riverCenterX(z), z]);
+  const go = (P: typeof SPEEDBOAT, fuel: number, thr: number) => {
+    const b = new Speedboat(P, v3(w.spawn.x, 0.25, w.spawn.z), 0);
+    b.systems.fuelL = fuel;
+    let idx = 0, reached = -1;
+    const inp: VehicleInput = { ...emptyInput(), gear: "F", throttle: thr };
+    run(b, water, 400, inp, w, (t) => {
+      while (idx < route.length - 1 && Math.hypot(route[idx][0] - b.pos.x, route[idx][1] - b.pos.z) < 15) idx++;
+      const [tx, tz] = route[idx];
+      let err = Math.atan2(tx - b.pos.x, tz - b.pos.z) - Math.atan2(b.forward.x, b.forward.z);
+      while (err > Math.PI) err -= 2 * Math.PI; while (err < -Math.PI) err += 2 * Math.PI;
+      inp.steering = Math.max(-1, Math.min(1, err * 1.5));
+      if (reached < 0 && Math.hypot(b.pos.x - CANYON_END.x, b.pos.z - CANYON_END.z) < 18) reached = t;
+    });
+    return { b, reached };
+  };
+  for (const [kind, P, start, thr] of [["lancha", SPEEDBOAT, 0.2, 0.3], ["bote", DINGHY, 0.04, 0.3]] as const) {
+    const low = go(P, start, thr);
+    check("combustível", `${kind}: com ${start} L (início) NÃO chega ao fim do cânion`, low.reached < 0 ? 1 : 0, 1, 1, "", 0);
+    check("combustível", `${kind}: com ${start} L o motor morre no caminho (m do fim do cânion)`, Math.hypot(low.b.pos.x - CANYON_END.x, low.b.pos.z - CANYON_END.z), 100, 2000, "m", 0);
+    const full = go(P, P.tankLiters, thr);
+    check("combustível", `${kind}: com o tanque cheio chega ao fim do cânion (s)`, full.reached, 30, 390, "s", 0);
+  }
+  check("canal", "boias laterais no cânion (pares)", CHANNEL_MARKERS.length / 2, 8, 20, "", 0);
+  check("canal", "boias laterais na água funda do canal", Math.min(...CHANNEL_MARKERS.map((m) => -groundHeight(m.x, m.z))), 1.5, 10, "m", 2);
 }
 
 // ---------- Carga: gasolina e ocupantes (quantidade e posição) ----------

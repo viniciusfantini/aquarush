@@ -138,7 +138,8 @@ export class EngineSystems {
     if (running) this.engineHours += dt / 3600;
 
     // falhas de alimentação perto do fim do tanque (o motor "engasga")
-    this.sputter = running && this.fuelL < 0.6 ? this.sputter + dt : 0;
+    // engasga no finzinho do tanque (≈0,1 % do tanque: 0,1 L na lancha, 0,015 L no tanque portátil do bote)
+    this.sputter = running && this.fuelL < clamp(P.tankLiters * 0.001, 0.015, 0.1) ? this.sputter + dt : 0;
   }
 
   /** Engasgo por falta de combustível (0..1) — usado para cortar a combustão em pulsos. */
