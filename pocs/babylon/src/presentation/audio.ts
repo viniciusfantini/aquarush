@@ -64,6 +64,7 @@ export interface AudioState {
   propInWater: boolean;
   cockpit: boolean;       // câmera no cockpit (casco entre o ouvinte e o motor)
   engine: "off" | "cranking" | "running";
+  revLimiter?: boolean;   // limitador cortando a ignição
 }
 
 export class EngineAudio {
@@ -220,7 +221,9 @@ export class EngineAudio {
     const running = st.engine === "running";
     const useW = this.worklet !== null;
     if (this.worklet) {
-      this.worklet.port.postMessage({ rpm: st.rpm, load, combustion: running ? 1 : 0, wet: st.propInWater ? 1 : 0, volume: 1 });
+      // limitador: a ignição corta em rajadas ("bap-bap-bap")
+      const cut = st.revLimiter && Math.floor(t * 16) % 2 === 1;
+      this.worklet.port.postMessage({ rpm: st.rpm, load: st.revLimiter ? 0.3 : load, combustion: running && !cut ? 1 : 0, wet: st.propInWater ? 1 : 0, volume: 1 });
       this.workletGain.gain.setTargetAtTime(m * dist * 0.55, t, 0.05);
     }
     const legacy = useW || !running ? 0 : 1; // osciladores antigos só sem worklet

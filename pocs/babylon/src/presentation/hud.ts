@@ -44,7 +44,7 @@ export class Hud {
     this.engineChip.textContent = t.engine === "running" ? "MOTOR LIGADO" : t.engine === "cranking" ? "DANDO PARTIDA…" : "MOTOR DESLIGADO";
     this.engineChip.className = "chip " + (t.engine === "running" ? "on" : t.engine === "cranking" ? "crank" : "off");
     this.cav.classList.toggle("warn", t.cavitation > 0.25);
-    this.vent.classList.toggle("warn", t.ventilation < 0.75 && t.throttle > 0.15);
+    this.vent.classList.toggle("warn", t.ventilation < 0.75 && t.throttle > 0.15 && t.propImmersion > 0.2);
     if (this.debugOn) {
       const rows: [string, string][] = [
         ["FPS", fps.toFixed(0)],
@@ -56,6 +56,8 @@ export class Hud {
         ["direção (°)", t.steerDeg.toFixed(1)],
         ["ventilação hélice", t.ventilation.toFixed(2)],
         ["cavitação", t.cavitation.toFixed(2)],
+        ["imersão da hélice", t.propImmersion.toFixed(2)],
+        ["limitador de giro", t.revLimiter ? "CORTANDO" : "-"],
         ["escorregamento hélice", t.propSlip.toFixed(2)],
         ["rotação hélice (rpm)", t.propRpm.toFixed(0)],
         ["consumo (L/h)", t.fuelLph.toFixed(1)],

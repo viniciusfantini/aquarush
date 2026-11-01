@@ -24,7 +24,7 @@ import { BoatCamera } from "./presentation/cameras.ts";
 import { Hud } from "./presentation/hud.ts";
 import { EngineAudio } from "./presentation/audio.ts";
 
-const BUILD = "poc-babylon 0.7.0";
+const BUILD = "poc-babylon 0.8.0";
 /** Escala visual da rotação da hélice (proporcional ao RPM, abaixo do limite estroboscópico). */
 const PROP_VISUAL_SCALE = 0.12;
 
@@ -181,6 +181,7 @@ const boot = async () => {
   let fpsSmooth = 60;
   let lastGear = boat.telemetry.gear;
   let tiltWarned = false, intakeWarned = false;
+  const skegMesh = boatVis.meshes.find((m) => m.name === "skeg")!;
   let physMs = 0;
 
   document.getElementById("h-build")!.textContent = `${BUILD} · ${engine.isWebGPU ? "WebGPU" : "WebGL" + (engine as Engine).webGLVersion} · q=${cfg.quality.name}`;
@@ -260,10 +261,11 @@ const boot = async () => {
     if (T.engine === "running" && !T.intakeSubmerged && T.tiltDeg > 5 && !intakeWarned) { hud.showToast("Motor recolhido: sem água de refrigeração!"); intakeWarned = true; }
     if (T.intakeSubmerged) intakeWarned = false;
 
+    fx.updateDrips(dtReal, skegMesh.getAbsolutePosition().clone(), T.propImmersion);
     if (T.gear !== lastGear) { audio.clunk(T.gear !== "N"); lastGear = T.gear; }
     audio.update({
       rpm: T.rpm, throttle: T.throttle, speed: Math.hypot(boat.vel.x, boat.vel.z), boil: Math.max(T.cavitation, 1 - T.ventilation),
-      inGear: T.gear !== "N", propInWater: T.ventilation > 0.5, cockpit: cam.mode === "cockpit", engine: T.engine,
+      inGear: T.gear !== "N", propInWater: T.propImmersion > 0.5, revLimiter: T.revLimiter, cockpit: cam.mode === "cockpit", engine: T.engine,
     });
     hud.update(T, fpsSmooth, {
       "física (ms/frame)": physMs.toFixed(2),

@@ -230,7 +230,7 @@ for (const [label, thr] of [["baixa", 0.25], ["alta", 1]] as const) {
   // trim todo para cima navegando: a hélice continua na água
   run(boat, water, 20, { ...emptyInput(), gear: "F", throttle: 0.6, trim: 1 });
   check("tilt", "trim máx em movimento: tilt bloqueado (°)", boat.telemetry.tiltDeg, 0, 0.01, "°");
-  check("tilt", "trim máx em movimento: hélice na água (ventilação)", boat.telemetry.ventilation, 0.5, 1, "", 2);
+  check("tilt", "trim máx em movimento: hélice na água (imersão)", boat.telemetry.propImmersion, 0.9, 1, "", 2);
   // parado, em N, segurando trim +: recolhe e a hélice sai da água
   run(boat, water, 30, { ...emptyInput(), gear: "N" });
   run(boat, water, 8, { ...emptyInput(), gear: "N", trim: 1 });
@@ -238,8 +238,29 @@ for (const [label, thr] of [["baixa", 0.25], ["alta", 1]] as const) {
   check("tilt", "recolhido: entrada d'água fora (sem esguicho)", boat.telemetry.intakeSubmerged ? 0 : 1, 1, 1, "", 0);
   run(boat, water, 3, { ...emptyInput(), gear: "F", throttle: 1 });
   check("tilt", "recolhido: empuxo acelerando (hélice no ar)", Math.abs(boat.telemetry.thrustN), 0, 50, "N", 0);
+  check("tilt", "recolhido: imersão da hélice", boat.telemetry.propImmersion, 0, 0, "", 2);
+  check("tilt", "recolhido acelerando: bate no limitador (rpm)", boat.telemetry.rpm, 5500, 6150, "rpm", 0);
+  check("tilt", "recolhido acelerando: limitador ativo", boat.telemetry.revLimiter ? 1 : 0, 1, 1, "", 0);
   run(boat, water, 8, { ...emptyInput(), gear: "N", trim: -1 });
   check("tilt", "baixar de volta: tilt 0 (°)", boat.telemetry.tiltDeg, 0, 0.01, "°");
+
+  // hélice meio submersa (aflorando): empuxo parcial, entre 0 e o submerso
+  const thrustAt = (stopImm: number | null) => {
+    const b2 = new Speedboat(SPEEDBOAT, v3(0, 0.25, 0));
+    settle(b2, water);
+    b2.trim = 1;
+    if (stopImm !== null) {
+      let n = 0;
+      while (b2.telemetry.propImmersion > stopImm && n++ < 2000) b2.step(DT, { ...emptyInput(), gear: "N", trim: 1 }, water, openWater);
+    }
+    b2.step(DT, { ...emptyInput(), gear: "F" }, water, openWater);
+    let tSum = 0, m = 0, imm = 0;
+    run(b2, water, 0.6, { ...emptyInput(), gear: "F", throttle: 0.4 }, openWater, (t) => { if (t > 0.45) { tSum += b2.telemetry.thrustN; imm += b2.telemetry.propImmersion; m++; } });
+    return { thrust: tSum / m, imm: imm / m };
+  };
+  const full = thrustAt(null), half = thrustAt(0.5);
+  check("tilt", "aflorando: imersão medida", half.imm, 0.25, 0.75, "", 2);
+  check("tilt", "aflorando: empuxo / empuxo submerso", half.thrust / full.thrust, 0.05, 0.7, "", 2);
 }
 
 // ---------- Ignição (P): desligar / partida só em N ----------

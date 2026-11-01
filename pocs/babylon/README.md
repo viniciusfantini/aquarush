@@ -49,7 +49,7 @@ A lancha é um **corpo rígido 6DOF** (massa de 1200 kg, tensor de inércia diag
 | Trim | inclina o vetor de empuxo e age como flap da rabeta (força ∝ u² na popa). **Muda a atitude e a velocidade de fato** |
 | Manete F / N / R | a marcha pedida vem de `VehicleInput.gear`. Toda troca passa por N com 0,45 s (embreagem da rabeta) e só engrena com o acelerador em lenta. Em N o empuxo é zero. Engrenado em lenta, o motor dá 4 % do empuxo (≈ 5 km/h para frente e ≈ 3 km/h em ré) |
 | Cavitação | índice = f(carga × escorregamento da hélice). Com carga alta e pouca velocidade (arrancada), perde até 30 % do empuxo e o RPM sobe. Some em cruzeiro |
-| Ventilação | a hélice perto da superfície (trim alto, saltos) perde empuxo e dispara o RPM |
+| Hélice × superfície (v0.8) | **imersão** = fração do disco (R = 0,19 m) dentro d'água; empuxo × imersão^1,5. **Aeração**: com o disco raso a hélice puxa ar e perde até 50 % a mais. **No ar**: sem carga, o motor sobe até o **limitador** (6100 rpm), que corta a ignição em pulsos (som de "bap-bap"). Em N a hélice gira solta: freada pela água quando imersa, quase sem freio no ar |
 | Agarre lateral do casco | sustentação lateral da quilha/strakes ∝ u·v_lateral, aplicada perto do CG (sem efeito cata-vento), mais amortecimento de guinada. A lancha derrapa ~7° numa curva forte e, ao soltar o volante, a guinada morre em ~0,7 s **sem voltar para o lado oposto** (antes voltava ~16°) |
 | Inclinação em curva | torque ∝ aceleração centrípeta (casco em V) + amortecimento de rolagem |
 | Colisões | penalidade mola-amortecedor com atrito em 12 pontos de contato contra o fundo (função de altura), as rochas (esferas) e o píer (caixas) |
@@ -68,6 +68,7 @@ A lancha é um **corpo rígido 6DOF** (massa de 1200 kg, tensor de inércia diag
   - **fervura de cavitação e ventilação** na popa.
 - **Hélice:** a velocidade visual é **proporcional ao RPM do motor** (escala fixa de 0,12: 750 rpm = 0,75 volta/s e 5300 rpm = 5,2 voltas/s, medido no navegador). A rotação real (até ~48 voltas/s) causaria efeito estroboscópico a 60 FPS. Disco de borrão suave acima de 1200 rpm da hélice; bolhas, névoa e spray extra quando cavita ou ventila; aviso piscante no HUD e chiado no áudio.
 - A água não aparece dentro do cockpit (tampa só de profundidade).
+- **Hélice e splash (v0.8):** a fervura, a névoa, o rooster tail e as bolhas só aparecem com a hélice dentro d'água. **Aflorando**, as pás picam a superfície e jogam um leque de água para cima e para trás, mais forte com metade do disco submerso e com a rotação. **Recolhida**, só escorrem gotas do pé, que somem em alguns segundos.
 - **Bolhas de escape na lenta:** com o motor ligado e a lancha devagar, os gases saem pelo cubo da hélice: bolhas sobem em rajadas e a superfície atrás do pé "ferve" fino.
 - **Esguicho de refrigeração (tell-tale):** bico no capô inferior (boreste) com jato de gotas: em lenta é um fio fraco que cai rente ao capô (0,35 m/s); a velocidade (até 1,6 m/s), a vazão e a espessura sobem com o RPM (bomba d'água). O jato herda a velocidade da lancha.
 
@@ -120,12 +121,13 @@ Limitação: é uma síntese aproximada, não uma gravação. Validar o timbre d
 | 5. Desaceleração e ré | solta o acelerador: do topo a 10 km/h em 12 s; com ré a toda (reverso), em 4,4 s; ré a toda: 23 km/h |
 | 4b. Soltar o volante | depois de 3 s de curva a 55 km/h: guinada inversa 0°/s e rumo volta 0° (antes: −10°/s e 16°) |
 | Tilt | trim máx navegando: tilt bloqueado e hélice na água; parado: recolhe a 60°, entrada d'água fora, empuxo 0 acelerando; trim− baixa de volta a 0° |
+| Hélice no ar/aflorando | recolhido acelerando: imersão 0, empuxo 0, rpm 5941 com limitador ativo. Meio disco submerso (imersão 0,51): empuxo = 32 % do submerso |
 | Ignição | desliga em movimento; desligado, empuxo 0 mesmo acelerando; RPM vai a 0; partida engatado é recusada; em N dá partida e pega na lenta (750–1200 rpm) |
 | 5. Manete | de cruzeiro para N: empuxo 0 e < 1 km/h em 27 s; a hélice gira **solta** (~990 rpm 1,5 s depois do N) e para junto com a lancha. F em lenta: 5,0 km/h a 750 rpm. R em lenta: 2,8 km/h para trás. No navegador: 1 toque W = F a 4 km/h; segurar = 45 km/h; 1 toque S = N; 2º toque = R lenta; segurar S = ré acelerando |
 | 6. Ondas e correnteza | ondas fortes (×2,5): roll ≤ 30°, não emborca; deriva com correnteza de 1,6 m/s: 1,54 m/s |
 | Lago | flutua no spawn; a toda contra a margem, encalha e para sem atravessar o terreno |
 
-Resultado: **68/69 OK**, com 1 limitação conhecida (abaixo). Na v0.2 a hélice foi para 0,5 m atrás do espelho, como no modelo visual, e o esterço máximo em alta velocidade caiu de 13° para 11°.
+Resultado: **73/74 OK**, com 1 limitação conhecida (abaixo). Na v0.2 a hélice foi para 0,5 m atrás do espelho, como no modelo visual, e o esterço máximo em alta velocidade caiu de 13° para 11°.
 
 ### Navegador (Chrome, Windows 11, WebGL2, `q=med`, ~1370×896)
 

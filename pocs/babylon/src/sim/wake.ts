@@ -81,7 +81,12 @@ export class WakeField {
       bx: b.x, bz: b.z, sx: s.x, sz: s.z, rx: r.x / rl, rz: r.z / rl,
       v: Math.max(0, Math.abs(T.waterSpeed)),
       thr: T.gear === "N" ? 0 : T.throttle,
-      boil: clamp(Math.max(T.cavitation, (1 - T.ventilation) * (T.throttle > 0.2 ? 1 : 0)), 0, 1) * (T.depth > 0.4 ? 1 : 0),
+      // fervura: cavitação/ar puxado (hélice dentro d'água) + pás picando a superfície (hélice aflorando)
+      boil: clamp(Math.max(
+        T.cavitation * T.propImmersion,
+        (1 - T.ventilation) * (T.throttle > 0.2 ? 1 : 0) * smoothstep(0.2, 0.6, T.propImmersion),
+        4 * T.propImmersion * (1 - T.propImmersion) * Math.min(Math.abs(T.propRpm) / 1500, 1),
+      ), 0, 1) * (T.depth > 0.4 ? 1 : 0),
       exh: T.engine === "running" && T.depth > 0.4 ? 1 - smoothstep(1.5, 5, Math.abs(T.waterSpeed)) : 0,
       age: 0,
     };

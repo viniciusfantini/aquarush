@@ -33,6 +33,8 @@ export interface SpeedboatParams {
   reverseThrustFactor: number; // fração do empuxo em ré
   propPitchSpeed: number;  // m/s (velocidade em que o empuxo da hélice zera)
   propPos: Vec3;           // posição da hélice (local)
+  propRadius: number;      // m
+  revLimitRpm: number;     // corte de giro (limitador)
   engineResponse: number;  // s (constante de tempo do acelerador real)
   idleRpm: number;
   maxRpm: number;
@@ -111,6 +113,8 @@ export const SPEEDBOAT: SpeedboatParams = {
   reverseThrustFactor: 0.35,
   propPitchSpeed: 32,
   propPos: v3(0, -0.75, -3.6),
+  propRadius: 0.19,
+  revLimitRpm: 6100,
   engineResponse: 0.3,
   idleRpm: 750,
   maxRpm: 5800,

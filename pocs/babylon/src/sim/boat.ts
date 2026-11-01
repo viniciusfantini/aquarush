@@ -5,7 +5,7 @@
 
 import {
   type Vec3, type Quat, v3, add, sub, scale, dot, cross, len, rotate, rotateInv, qMul, qNormalize,
-  qFromAxisAngle, clamp, lerp, approach, addScaled,
+  qFromAxisAngle, clamp, lerp, approach, addScaled, smoothstep,
 } from "./math.ts";
 import type { IWaterSurface } from "./water.ts";
 import { G } from "./water.ts";
@@ -39,6 +39,8 @@ export interface BoatTelemetry {
   thrustN: number;
   ventilation: number;   // 1 = hélice bem imersa
   cavitation: number;    // 0..1 — hélice sobrecarregada (alto escorregamento sob carga)
+  propImmersion: number; // fração do disco da hélice dentro d'água (0 = no ar, 1 = submersa)
+  revLimiter: boolean;   // limitador de giro cortando (hélice no ar acelerando)
   propSlip: number;      // escorregamento da hélice 0..1
   propRpm: number;       // rotação da hélice (motor / redução)
   fuelLph: number;       // consumo estimado (L/h)
@@ -74,6 +76,9 @@ export class Speedboat {
   private lastContact = false;
   private cavitation = 0;
   private propRpmState = 0;
+  private immersion = 1;
+  private revLimiting = false;
+  private limiterPhase = 0;
   /** posição atual da hélice no mundo (gira com trim/tilt) */
   propWorld: Vec3 = v3();
   /** recolhimento (rad) além do fim do trim */
@@ -95,7 +100,7 @@ export class Speedboat {
     this.rpm = params.idleRpm;
     this.telemetry = {
       speedKmh: 0, waterSpeed: 0, rpm: params.idleRpm, throttle: 0, throttleCmd: 0, trim: 0, trimDeg: 0, tiltDeg: 0, tiltBlocked: false, intakeSubmerged: true, steerDeg: 0,
-      gear: "N", pitchDeg: 0, rollDeg: 0, wetFraction: 0, planing: false, thrustN: 0, ventilation: 1, cavitation: 0, propSlip: 0, propRpm: 0, engine: "running", fuelLph: 0,
+      gear: "N", pitchDeg: 0, rollDeg: 0, wetFraction: 0, planing: false, thrustN: 0, ventilation: 1, cavitation: 0, propImmersion: 1, revLimiter: false, propSlip: 0, propRpm: 0, engine: "running", fuelLph: 0,
       distanceM: 0, collisions: 0, lastImpact: 0, depth: 0, submergedPoints: params.buoyancyPoints.map(() => false),
     };
   }
@@ -233,8 +238,15 @@ export class Speedboat {
     const intakeSubmerged = water.getHeight(intakeW.x, intakeW.z) - intakeW.y > 0.02;
     this.propWorld = propW;
     const propDepth = water.getHeight(propW.x, propW.z) - propW.y;
-    // ventilação: hélice perto da superfície perde empuxo (trim excessivo / saltos)
-    const ventilation = clamp((propDepth + 0.05) / 0.3, 0, 1);
+    // Hélice x superfície:
+    //  • imersão = fração do disco dentro d'água (R = raio): o empuxo cai com a área molhada;
+    //  • aeração (ventilação) = ar puxado da superfície quando o disco está raso → perde mais empuxo;
+    //  • fora d'água: sem carga — o motor dispara até o limitador de giro.
+    const R = P.propRadius;
+    const immersion = clamp((propDepth + R) / (2 * R), 0, 1);
+    const aeration = immersion * (1 - smoothstep(R, R + 0.3, propDepth));
+    const ventilation = 1 - aeration; // 1 = hélice limpa (telemetria/efeitos)
+    this.immersion = immersion;
     // Direção do empuxo: esterçar à direita gira a rabeta e empurra a popa para a esquerda.
     // Trim positivo inclina o empuxo para baixo (eleva a proa); negativo, para cima.
     const tDirLocal = v3(-Math.sin(this.steer) * Math.cos(driveAngle), -Math.sin(driveAngle), Math.cos(this.steer) * Math.cos(driveAngle));
@@ -253,15 +265,15 @@ export class Speedboat {
     // ré a toda, hélice "patinando") forma bolhas de vapor -> perde empuxo e a rotação sobe.
     const slip = this.gear === "N" ? 0 : clamp(1 - Math.abs(axial) / P.propPitchSpeed, 0, 1);
     const load = Math.abs(thrust) / P.maxThrust;
-    const cavTarget = propDepth > 0 && this.engine === "running" ? clamp((load * slip - 0.55) / 0.25, 0, 1) : 0;
+    const cavTarget = immersion > 0.9 && this.engine === "running" ? clamp((load * slip - 0.55) / 0.25, 0, 1) : 0;
     this.cavitation += (cavTarget - this.cavitation) * (1 - Math.exp(-dt / 0.15));
-    thrust *= ventilation * (1 - 0.3 * this.cavitation);
+    thrust *= Math.pow(immersion, 1.5) * (1 - 0.5 * aeration) * (1 - 0.3 * this.cavitation);
     if (thrust !== 0) this.addForceAt(scale(tDir, thrust), propW, "thrust");
 
     // rabeta como "flap": trim gera sustentação/afundamento de popa proporcional a u²
     if (propDepth > 0 && u > 0) {
       const q = 0.5 * RHO * u * u;
-      this.addForceAt(scale(up, -q * P.driveLiftArea * trimAngle * ventilation), propW, "lift");
+      this.addForceAt(scale(up, -q * P.driveLiftArea * trimAngle * immersion), propW, "lift");
       // rabeta como leme: força lateral na popa
       const side = -q * P.gearcaseRudder * Math.sin(this.steer) * ventilation;
       this.addForceAt(scale(right, side), propW, "lift");
@@ -326,12 +338,15 @@ export class Speedboat {
     t.cavitation = this.cavitation;
     t.propSlip = slip;
     t.rpm = this.updateRpm(dt, axial, ventilation);
+    t.propImmersion = immersion;
+    t.revLimiter = this.revLimiting;
     // hélice: engrenada gira com o motor (redução 2:1). Em N fica desacoplada e gira SOLTA,
     // arrastada pela água (como um cata-vento), desacelerando junto com a lancha.
     const PROP_PITCH_M = 0.48;
     const engaged = this.gear !== "N";
-    const target = engaged ? (this.gear === "R" ? -1 : 1) * t.rpm / 2.0 : (axial / PROP_PITCH_M) * 60 * 0.55 * (propDepth > 0 ? 1 : 0.2);
-    this.propRpmState += (target - this.propRpmState) * (1 - Math.exp(-dt / (engaged ? 0.08 : 0.6)));
+    const target = engaged ? (this.gear === "R" ? -1 : 1) * t.rpm / 2.0 : (axial / PROP_PITCH_M) * 60 * 0.55 * immersion;
+    // solta no ar não há água freando: demora bem mais para parar
+    this.propRpmState += (target - this.propRpmState) * (1 - Math.exp(-dt / (engaged ? 0.08 : immersion > 0.2 ? 0.6 : 3.5)));
     t.propRpm = this.propRpmState;
     t.fuelLph = this.engine === "running" ? 3 + 52 * Math.pow(this.throttleActual, 1.6) * (this.gear === "N" ? 0.3 : 1) : 0;
     t.engine = this.engine;
@@ -406,9 +421,17 @@ export class Speedboat {
     const thr = this.throttleActual;
     // estimativa documentada: rotação cresce com o acelerador; a carga da hélice
     // segura a rotação em baixa velocidade; hélice ventilando dispara a rotação.
-    const load = this.gear === "N" ? 1 : lerp(0.68, 1.0, clamp(Math.abs(axial) / (P.propPitchSpeed * 0.75), 0, 1));
-    const freeRev = 1 + (1 - ventilation) * 0.25 + this.cavitation * 0.12;
-    const target = P.idleRpm + (P.maxRpm - P.idleRpm) * Math.pow(thr, 0.85) * load * freeRev;
+    // carga da hélice: segura a rotação na água; no ar (ou em N) o motor gira livre
+    const waterLoad = lerp(0.68, 1.0, clamp(Math.abs(axial) / (P.propPitchSpeed * 0.75), 0, 1));
+    const load = this.gear === "N" ? 1 : lerp(1, waterLoad, this.immersion);
+    const freeRev = 1 + (1 - ventilation) * 0.25 + this.cavitation * 0.12 + (this.gear === "N" ? 0 : (1 - this.immersion) * 0.3);
+    let target = P.idleRpm + (P.maxRpm - P.idleRpm) * Math.pow(thr, 0.85) * load * freeRev;
+    // limitador de giro: corta a ignição em pulsos quando passa do limite
+    this.revLimiting = this.engine === "running" && target > P.revLimitRpm;
+    if (this.revLimiting) {
+      this.limiterPhase += dt * 9;
+      target = P.revLimitRpm - (Math.floor(this.limiterPhase) % 2 === 0 ? 0 : 450);
+    }
     if (this.engine === "off") {
       this.rpm += (0 - this.rpm) * (1 - Math.exp(-dt / 0.45)); // motor parando
       if (this.rpm < 5) this.rpm = 0;
@@ -421,7 +444,7 @@ export class Speedboat {
       if (this.crankTimer <= 0) { this.engine = "running"; this.rpm = 1150; }
       return this.rpm;
     }
-    this.rpm += (Math.min(target, P.maxRpm * 1.08) - this.rpm) * (1 - Math.exp(-dt / 0.35));
+    this.rpm += (target - this.rpm) * (1 - Math.exp(-dt / (this.immersion < 0.3 && this.gear !== "N" ? 0.15 : 0.35)));
     return this.rpm;
   }
 
