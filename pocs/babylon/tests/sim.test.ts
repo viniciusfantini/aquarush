@@ -436,7 +436,7 @@ for (const [label, thr] of [["baixa", 0.25], ["alta", 1]] as const) {
   check("bateria", "booster depois de esgotar: carga (Ah)", jc0 * JUMP_AH, 0, 1.5, "Ah", 2);
   // molinete da âncora só no booster (bateria zerada): ~60 A tiram 10 Ah em ~1 min de jogo
   const wb = new Speedboat(SPEEDBOAT, v3(0, 0.25, 0));
-  wb.systems.batterySoc = 0; wb.systems.jumper = true;
+  wb.systems.batterySoc = 0; wb.systems.jumper = true; wb.engine = "off"; // só o booster (sem alternador)
   run(wb, water, 20, { ...N, anchor: 1 }, { groundHeight: () => -60, spheres: [], boxes: [] });
   check("bateria", "booster alimenta o molinete: cabo pago em 20 s (m)", wb.telemetry.anchorOut, 14, 17, "m", 1);
   check("bateria", "molinete 20 s no booster: carga gasta (Ah)", (1 - wb.systems.jumpCharge) * JUMP_AH, 1.0, 2.5, "Ah", 2);
@@ -478,7 +478,15 @@ for (const [label, thr] of [["baixa", 0.25], ["alta", 1]] as const) {
   check("amperímetro", "trim com o motor desligado (A)", trimA, -50, -25, "A", 0);
   b.systems.batterySoc = 0.7; b.toggleIgnition(); run(b, water, 6, { ...emptyInput(), gear: "N" });
   run(b, water, 10, { ...emptyInput(), gear: "F", throttle: 0.6 });
-  check("amperímetro", "cruzeiro: alternador carregando (A)", b.telemetry.batteryA, 5, 16, "A", 1);
+  check("amperímetro", "cruzeiro (bateria a 70 %): alternador de 35 A carregando (A)", b.telemetry.batteryA, 15, 35, "A", 1);
+  // marcha lenta: o alternador já dá ~9 A
+  const idleB = new Speedboat(SPEEDBOAT, v3(0, 0.25, 0));
+  idleB.systems.batterySoc = 0.5;
+  run(idleB, water, 5, { ...emptyInput(), gear: "N" });
+  check("amperímetro", "marcha lenta (750 rpm): o alternador carrega (A)", idleB.telemetry.batteryA, 7, 11, "A", 1);
+  const soc0 = idleB.systems.batterySoc;
+  run(idleB, water, 60, { ...emptyInput(), gear: "N" });
+  check("amperímetro", "1 min em marcha lenta: a bateria recupera (%)", (idleB.systems.batterySoc - soc0) * 100, 1.5, 6, "%", 1);
 }
 
 // ---------- Âncora de proa (lancha com molinete, bote à mão) ----------
@@ -532,6 +540,7 @@ for (const [label, thr] of [["baixa", 0.25], ["alta", 1]] as const) {
 {
   const water = mkWater(0);
   const b = new Speedboat(SPEEDBOAT, v3(0, 0.25, 0));
+  b.engine = "off"; // sem alternador: a bomba sai da bateria
   run(b, water, 2, emptyInput());
   const m0 = b.totalMass;
   b.hullDamage = 0.3;
@@ -1239,12 +1248,20 @@ for (const [label, thr] of [["baixa", 0.25], ["alta", 1]] as const) {
   check("power trim", "corrente da bomba (A)", off.telemetry.trimMotorA, 25, 50, "A", 0);
   run(off, water, 2, emptyInput());
   check("power trim", "soltou o botão: tensão volta (V)", vRest - off.telemetry.batteryV, -0.05, 0.08, "V", 2);
+  // em marcha lenta o alternador (~9 A) não dá conta da bomba (30 A): a tensão cai
   const on = new Speedboat(SPEEDBOAT, v3(0, 0.25, 0));
-  run(on, water, 10, { ...emptyInput(), gear: "F", throttle: 0.6 });
+  run(on, water, 10, { ...emptyInput(), gear: "N" });
   const vCh = on.telemetry.batteryV;
   let vMin2 = 99;
-  run(on, water, 1.5, { ...emptyInput(), gear: "F", throttle: 0.6, trim: -1 }, openWater, () => { vMin2 = Math.min(vMin2, on.telemetry.batteryV); });
-  check("power trim", "motor ligado: alternador não dá conta, tensão cai (V)", vCh - vMin2, 0.2, 1.5, "V", 2);
+  run(on, water, 1.5, { ...emptyInput(), gear: "N", trim: -1 }, openWater, () => { vMin2 = Math.min(vMin2, on.telemetry.batteryV); });
+  check("power trim", "motor em lenta: alternador não dá conta, tensão cai (V)", vCh - vMin2, 0.2, 1.5, "V", 2);
+  // em cruzeiro o alternador de 35 A cobre a bomba
+  const cr = new Speedboat(SPEEDBOAT, v3(0, 0.25, 0));
+  run(cr, water, 10, { ...emptyInput(), gear: "F", throttle: 0.6 });
+  const vCr = cr.telemetry.batteryV;
+  let vMin3 = 99;
+  run(cr, water, 1.5, { ...emptyInput(), gear: "F", throttle: 0.6, trim: -1 }, openWater, () => { vMin3 = Math.min(vMin3, cr.telemetry.batteryV); });
+  check("power trim", "cruzeiro: alternador de 35 A cobre a bomba, tensão quase não cai (V)", vCr - vMin3, -0.05, 0.15, "V", 2);
 }
 
 // ---------- Esteira: cruzar a própria marola (a física sente a esteira) ----------

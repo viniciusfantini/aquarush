@@ -17,6 +17,9 @@ export interface EngineSystemsParams {
    *  mal arranham uma bateria de 50 Ah; o jogo acelera para o efeito aparecer numa sessão. */
   batteryTimeScale: number;
   starterA: number;          // corrente do motor de arranque (A)
+  /** alternador (bobina de carga do volante): corrente máxima (A) e fração dela já na marcha lenta */
+  altMaxA: number;
+  altIdleFrac: number;
   /** false = motor de partida manual sem bateria (bote): sem tensão, sem alternador */
   hasBattery: boolean;
 }
@@ -32,6 +35,8 @@ export const ENGINE_SYSTEMS: EngineSystemsParams = {
   batteryAh: 50,
   batteryTimeScale: 10,
   starterA: 170,
+  altMaxA: 35,       // 150 hp 4T: alternador de ~35 A
+  altIdleFrac: 0.27, // ~9–10 A já em marcha lenta (750 rpm)
   hasBattery: true,
 };
 
@@ -161,10 +166,14 @@ export class EngineSystems {
     // ---- elétrico: bateria + alternador ----
     if (!P.hasBattery) { this.batteryV = 0; this.batterySoc = 0; }
     else {
-    const charging = running && s.rpm > 900;
+    // o alternador carrega desde a marcha lenta (~9 A a 750 rpm) e chega ao máximo por volta de 3000 rpm
+    const charging = running && s.rpm > 550;
     let drain = (s.lightsOn ? 2.5 : 0.3) + (s.trimMotorA ?? 0) + (s.auxA ?? 0); // A (instrumentos + luzes + trim + molinete/bomba de porão)
     if (s.engine === "cranking") drain += P.starterA * (s.starterLoad ?? 1); // motor de arranque
-    const alt = charging ? Math.min(15, (s.rpm - 900) / 120) : 0; // A do alternador
+    // corrente que a bateria aceita cai perto da carga cheia (o regulador limita): o alternador fornece só o necessário
+    const altCap = charging ? P.altMaxA * (P.altIdleFrac + (1 - P.altIdleFrac) * smoothstep(750, 3000, s.rpm)) : 0;
+    const accept = 3 + 60 * (1 - this.batterySoc); // A que a bateria aceita além das cargas
+    const alt = Math.min(altCap, drain + accept); // A do alternador
     this.altA = alt;
     // o motor pegou com o booster ligado: ele é desconectado sozinho (como a pessoa faria)
     if (running && this.prevEngine === "cranking" && this.jumper) { this.jumper = false; this.jumperAutoOff++; }
@@ -176,7 +185,8 @@ export class EngineSystems {
     // descarga em Ah (mesma escala de tempo de jogo da bateria)
     if (this.jumpA > 0) this.jumpCharge = Math.max(0, this.jumpCharge - (this.jumpA * dt * P.batteryTimeScale) / 3600 / JUMP_AH);
     // em cruzeiro (alternador folgado) ele recarrega na tomada 12 V do barco a ~10 A (≈ 6 min de 0 a 100 %)
-    if (alt >= 8) this.jumpCharge = Math.min(1, this.jumpCharge + (10 * (alt / 15) * dt * P.batteryTimeScale) / 3600 / JUMP_AH);
+    // (só em cruzeiro, com folga de alternador: o carregador do booster puxa ~10 A da tomada 12 V)
+    if (running && s.rpm >= 2000 && altCap - drain >= 10) this.jumpCharge = Math.min(1, this.jumpCharge + (10 * dt * P.batteryTimeScale) / 3600 / JUMP_AH);
     const battNet = this.jumpA > 0 ? alt : alt - drain;
     this.batteryA = battNet;
     this.batterySoc = clamp(this.batterySoc + (battNet * dt * P.batteryTimeScale) / 3600 / this.p.batteryAh, 0, 1);
@@ -186,8 +196,9 @@ export class EngineSystems {
     const net = alt - drain;
     const R = src.r;
     let vTarget = rest - Math.max(0, -net) * R;
-    if (charging && net >= 0) vTarget = 13.6 + 0.6 * Math.min((s.rpm - 900) / 2500, 1); // regulador 13,6–14,2 V
-    else if (charging) vTarget = Math.max(rest - (-net) * R, 13.6 + 0.6 * Math.min((s.rpm - 900) / 2500, 1) + net * 0.03); // alternador não dá conta
+    const reg = 13.6 + 0.6 * smoothstep(750, 3000, s.rpm); // regulador 13,6 V (lenta) – 14,2 V
+    if (charging && net >= 0) vTarget = reg;
+    else if (charging) vTarget = Math.max(rest - (-net) * R, reg + net * 0.03); // alternador não dá conta
     this.batteryV += (vTarget - this.batteryV) * (1 - Math.exp(-dt / (s.engine === "cranking" ? 0.06 : 0.25)));
     }
 
