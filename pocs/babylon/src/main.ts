@@ -27,7 +27,7 @@ import { BoatCamera } from "./presentation/cameras.ts";
 import { Hud } from "./presentation/hud.ts";
 import { EngineAudio } from "./presentation/audio.ts";
 
-const BUILD = "poc-babylon 0.10.2";
+const BUILD = "poc-babylon 0.11.0";
 /** Escala visual da rotação da hélice (proporcional ao RPM, abaixo do limite estroboscópico). */
 const PROP_VISUAL_SCALE = 0.12;
 
@@ -52,7 +52,12 @@ const boot = async () => {
   } else {
     engine = new Engine(canvas, true, { stencil: false, preserveDrawingBuffer: false, powerPreference: "high-performance" }, true);
   }
-  engine.setHardwareScalingLevel(cfg.quality.hardwareScaling * (cfg.isMobile ? Math.max(1, 2 / devicePixelRatio) : 1));
+  // Resolução: usa a densidade real da tela (retina do iPhone = 3×) até o teto do perfil. Antes o celular
+  // renderizava a 1/1,5 do pixel CSS — no iPhone isso dava 1/4,5 da resolução nativa (imagem borrada).
+  const dprMax = Math.min(devicePixelRatio || 1, cfg.quality.maxPixelRatio);
+  const dprMin = Math.min(dprMax, cfg.quality.minPixelRatio);
+  let pixelRatio = dprMax;
+  engine.setHardwareScalingLevel(1 / pixelRatio);
   const scene = new Scene(engine);
   scene.clearColor = new Color4(0.72, 0.8, 0.86, 1);
   scene.fogMode = Scene.FOGMODE_EXP2;
@@ -215,7 +220,8 @@ const boot = async () => {
   const prevRot = new Quaternion(), curRot = new Quaternion();
   const snap = (dst: Vector3, q: Quaternion) => { dst.set(boat.pos.x, boat.pos.y, boat.pos.z); q.set(boat.rot.x, boat.rot.y, boat.rot.z, boat.rot.w); };
   snap(curPos, curRot); snap(prevPos, prevRot);
-  let fpsSmooth = 60;
+  let fpsSmooth = 60, resT = 0;
+  const qTilt = new Quaternion(), qSteer = new Quaternion();
   let lastGear = boat.telemetry.gear;
   let tiltWarned = false, intakeWarned = false;
   let lastStall = "";
@@ -249,6 +255,12 @@ const boot = async () => {
   scene.onBeforeRenderObservable.add(() => {
     const dtReal = Math.min(engine.getDeltaTime() / 1000, 0.1);
     fpsSmooth += (1 / Math.max(dtReal, 1e-3) - fpsSmooth) * 0.05;
+    // resolução dinâmica: baixa se o FPS cair abaixo de ~40, sobe de volta acima de ~57 (passos de 10 %)
+    if ((resT += dtReal) > 1.5 && !paused) {
+      const next = fpsSmooth < 40 ? Math.max(dprMin, pixelRatio * 0.9) : fpsSmooth > 57 ? Math.min(dprMax, pixelRatio * 1.1) : pixelRatio;
+      if (Math.abs(next - pixelRatio) > 0.01) { pixelRatio = next; engine.setHardwareScalingLevel(1 / pixelRatio); resT = 0; }
+      else resT = 1.5;
+    }
     for (const a of input.consumeActions()) handle(a);
 
     const vin = input.update(dtReal);
@@ -276,8 +288,11 @@ const boot = async () => {
     boatVis.root.position.copyFrom(rPos);
     boatVis.root.rotationQuaternion = rRot;
     const T = boat.telemetry;
-    boatVis.engine.rotation.y = -T.steerDeg * Math.PI / 180;
-    boatVis.engine.rotation.x = (T.trimDeg + T.tiltDeg) * Math.PI / 180;
+    // tilt/trim por fora (tubo no espelho), direção por dentro (eixo do motor) — mesma ordem da física.
+    // (rotation.x/y da Babylon aplica o yaw por fora: com o motor recolhido ele varria o pé para os lados)
+    Quaternion.RotationAxisToRef(Vector3.Right(), (T.trimDeg + T.tiltDeg) * Math.PI / 180, qTilt);
+    Quaternion.RotationAxisToRef(Vector3.Up(), -T.steerDeg * Math.PI / 180, qSteer);
+    boatVis.engine.rotationQuaternion = qTilt.multiply(qSteer);
     helm.update(dtReal, T, input.state, SPEEDBOAT.maxSteerLow * 180 / Math.PI);
     pilot.update(toRootLocal(helm.wheelGrip, boatVis.root), toRootLocal(helm.leverGrip, boatVis.root));
     if (T.stall && T.stall !== lastStall) hud.showToast(T.stall === "fuel" ? "O motor morreu: acabou o combustível" : "O motor desligou: superaquecimento");
@@ -311,6 +326,7 @@ const boot = async () => {
     });
     hud.update(T, fpsSmooth, {
       "física (ms/frame)": physMs.toFixed(2),
+      "resolução": `${engine.getRenderWidth()}×${engine.getRenderHeight()} (${pixelRatio.toFixed(2)}×)`,
       "malhas ativas": String(scene.getActiveMeshes().length),
       "input": input.lastDevice,
       "ondas": water.intensity.toFixed(2),

@@ -47,6 +47,8 @@ npm run dev            # abrir http://localhost:5173, F3 mostra a telemetria; wi
 | 2026-10-31 | 6 pontos de flutuação + sustentação de planeio por ponto + sistema de ondas do casco (hump) | O GDD pede 6 pontos, e o planeio precisa surgir da física, não de animação |
 | 2026-10-31 | Monorepo com `pocs/<tecnologia>` | O GDD §15 pede pastas claramente isoladas |
 | 2026-10-31 | Qualidade padrão `low` em dispositivos touch, `med` no desktop | Meta de 30 FPS em celular intermediário |
+| 2026-11-01 | Resolução = densidade real da tela até `maxPixelRatio` do perfil + resolução dinâmica por FPS; iPhone/iPad começam em `med` | O usuário achou o iPhone borrado: o escalonamento antigo renderizava a 1/4,5 da resolução nativa |
+| 2026-11-01 | Rotação do motor: **tilt por fora, direção por dentro** (`qTilt × qSteer` no visual, `driveRot` na física). Não usar `rotation.x/y` da Babylon no motor (ela aplica o yaw por fora) | Com o motor recolhido, ele girava em torno da vertical do barco e varria o pé para os lados |
 | 2026-10-31 | A esteira é um **mapa top-down** (canvas → textura) lido pelo shader da água, não uma malha por cima | Ela precisa deformar a água, distorcer o reflexo e gerar espuma de verdade. Canais: R = espuma, G − B = altura |
 | 2026-10-31 | Reflexo planar com render target próprio (estilo WaterMaterial), em `med`/`high` | Água vidro exige refletir a lancha e as margens. Em `low` fica o céu analítico |
 | 2026-10-31 | "Tampa" do cockpit só de profundidade (`alphaIndex` 0 < água 10) | Evita água aparecendo dentro do barco sem precisar de stencil |

@@ -283,9 +283,15 @@ export class Speedboat {
     const trimAngle = this.trim >= 0 ? this.trim * P.trimUp : -this.trim * P.trimDown;
     // ângulo total da rabeta = trim + tilt; a hélice gira em torno do pivô no espelho de popa
     const driveAngle = trimAngle + this.tilt;
-    const driveRot = qFromAxisAngle(v3(1, 0, 0), driveAngle);
-    const propW = this.toWorld(add(P.drivePivot, rotate(driveRot, sub(P.propPos, P.drivePivot))));
-    const intakeW = this.toWorld(add(P.drivePivot, rotate(driveRot, sub(P.intakePos, P.drivePivot))));
+    // Ordem real do suporte do motor: o TILT gira em torno do tubo horizontal no espelho (externo) e a
+    // DIREÇÃO gira em torno do eixo do próprio motor (interno), que inclina junto. Com o motor recolhido,
+    // esterçar gira o motor em torno do próprio eixo, sem varrer o pé para os lados.
+    const tiltRot = qFromAxisAngle(v3(1, 0, 0), driveAngle);
+    const driveRot = qMul(tiltRot, qFromAxisAngle(v3(0, 1, 0), -this.steer));
+    // posição da hélice/entrada: só o tilt (o deslocamento lateral de ~0,1 m ao esterçar é desprezado:
+    // o eixo de direção real fica logo à frente do pé)
+    const propW = this.toWorld(add(P.drivePivot, rotate(tiltRot, sub(P.propPos, P.drivePivot))));
+    const intakeW = this.toWorld(add(P.drivePivot, rotate(tiltRot, sub(P.intakePos, P.drivePivot))));
     const intakeSubmerged = water.getHeight(intakeW.x, intakeW.z) - intakeW.y > 0.02;
     this.propWorld = propW;
     const propDepth = water.getHeight(propW.x, propW.z) - propW.y;
@@ -300,7 +306,7 @@ export class Speedboat {
     this.immersion = immersion;
     // Direção do empuxo: esterçar à direita gira a rabeta e empurra a popa para a esquerda.
     // Trim positivo inclina o empuxo para baixo (eleva a proa); negativo, para cima.
-    const tDirLocal = v3(-Math.sin(this.steer) * Math.cos(driveAngle), -Math.sin(driveAngle), Math.cos(this.steer) * Math.cos(driveAngle));
+    const tDirLocal = rotate(driveRot, v3(0, 0, 1)); // = (−sen δ, −cos δ·sen θ, cos δ·cos θ)
     const tDir = rotate(this.rot, tDirLocal);
     const vProp = rotateInv(this.rot, sub(this.pointVelocity(propW), water.getCurrent(propW.x, propW.z)));
     const axial = dot(vProp, tDirLocal);
