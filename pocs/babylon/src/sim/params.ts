@@ -65,6 +65,10 @@ export interface SpeedboatParams {
     sumpL: number;       // poço do porão (L) — abaixo do piso
     floorY: number;      // piso (local): acima do poço a água se espalha por areaM2
     floodCenter: Vec3;   // centro da área alagável do piso (local)
+    floodLen: number;    // comprimento da área alagável do piso (m) — superfície livre proa-popa
+    floodHalfW: number;  // meia largura dela (m) — superfície livre de bordo a bordo
+    scupperM2: number;   // drenos do cockpit no piso da popa, sem válvula (m²; 0 = não tem)
+    scupperFromStern: number; // distância deles ao espelho (m)
     shutoffHeadM: number; // altura manométrica em que a bomba para de bombear (m)
     outletAreaM2: number; // seção da mangueira de saída (m²) — v do jato = Q/A
     /** nível (y local) → litros alagáveis sob o piso (forma real do casco); sem tabela = poço linear até sumpL */
@@ -138,8 +142,8 @@ export interface AnchorParams {
   holdN: number;   // N que a âncora segura unhada com filame ≥ 5:1
 }
 
-/** Porão da lancha: 40 % do fundo do casco (até o piso, do espelho à antepara do paiol de proa) é espaço livre. */
-const LANCHA_UNDERFLOOR = floodTable(0.02, 0.4, 1.15);
+/** Porão da lancha: sob o piso o casco é quase todo espuma de flutuação, tanque e longarinas — só ~15 % é espaço livre (~480 L). */
+const LANCHA_UNDERFLOOR = floodTable(0.02, 0.15, 1.15);
 
 export const SPEEDBOAT: SpeedboatParams = {
   kind: "lancha",
@@ -194,7 +198,7 @@ export const SPEEDBOAT: SpeedboatParams = {
   bilge: { pos: v3(0, -0.32, -1.9), maxL: 8200, pumpLph: 2800, pumpA: 3.5, outlet: v3(1.13, 0.2, -2.2), areaM2: 7.0, holeMaxM2: 0.004, bowRise: 0.2, transomY: 0.38, transomW: 0.7,
     // poço ~150 L sob o piso; piso do cockpit a 0,02 m; bomba de 750 GPH para de bombear com ~2,7 m de coluna;
     // mangueira de 1 1/8" (28,6 mm). Capacidade = volume alagável do casco (~8,9 m³ até a borda − estrutura/espuma)
-    sumpL: LANCHA_UNDERFLOOR.liters[LANCHA_UNDERFLOOR.liters.length - 1], floorY: 0.02, floodCenter: v3(0, 0, -0.65), shutoffHeadM: 2.7, outletAreaM2: 6.42e-4,
+    sumpL: LANCHA_UNDERFLOOR.liters[LANCHA_UNDERFLOOR.liters.length - 1], floorY: 0.02, floodCenter: v3(0, 0, -0.65), floodLen: 3.6, floodHalfW: 0.97, scupperM2: 2 * 1.14e-3 /* 2 drenos de 1,5" */, scupperFromStern: 0.55, shutoffHeadM: 2.7, outletAreaM2: 6.42e-4,
     underFloor: LANCHA_UNDERFLOOR },
   // âncora tipo Danforth ~7 kg, 50 m de cabo, molinete elétrico de ~60 A
   anchor: { roller: v3(0, 0.62, 3.12), rodeMax: 50, rateOut: 0.8, rateIn: 0.5, motorA: 60, holdN: 4000 },
@@ -302,7 +306,7 @@ export const DINGHY: SpeedboatParams = {
   // sem bomba elétrica (sem bateria): a água fica no fundo
   // RIB: cockpit entre os flutuadores, do piso (−0,08) ao topo dos tubos (0,33): ~2,6 m² × 0,41 m ≈ 1070 L
   bilge: { pos: v3(0, -0.1, -0.4), maxL: 1070, pumpLph: 0, pumpA: 0, outlet: v3(0.8, 0.15, -0.9), areaM2: 2.6, holeMaxM2: 0.0025, bowRise: 0.08, transomY: 0.22, transomW: 0.5,
-    sumpL: 20, floorY: -0.08, floodCenter: v3(0, 0, -0.1), shutoffHeadM: 2, outletAreaM2: 3.8e-4 },
+    sumpL: 20, floorY: -0.08, floodCenter: v3(0, 0, -0.1), floodLen: 2.4, floodHalfW: 0.39, scupperM2: 0 /* RIB: dreno com válvula de aba */, scupperFromStern: 0.3, shutoffHeadM: 2, outletAreaM2: 3.8e-4 },
   // fateixa pequena (~3 kg) com 25 m de cabo, lançada e recolhida à mão
   anchor: { roller: v3(0, 0.3, 1.6), rodeMax: 25, rateOut: 0.7, rateIn: 0.35, motorA: 0, holdN: 1200 },
 

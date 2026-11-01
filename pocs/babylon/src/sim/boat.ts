@@ -273,7 +273,7 @@ export class Speedboat {
     this.tilt = 0;
     this.tiltWanted = false;
     this.capsized = false; this.capsizeT = 0; this.swimmers = []; this.winchStrap = null; this.mooringLines = [];
-    this.anchor.reset(); this.bilgeL = 0; this.bilgeAuto = false; this.bilgePumpA = 0; this.sunk = false;
+    this.anchor.reset(); this.bilgeL = 0; this.bilgeAuto = false; this.bilgePumpA = 0; this.sunk = false; this.sloshDeck = v3(); this.sloshUnder = v3();
     this.trimPin = Math.max(0, Math.min(1, this.params.trimPins.length - 1));
     this.manualAngle = this.params.trimPins[this.trimPin] ?? 0;
     this.gear = this.wantGear = "N";
@@ -553,6 +553,7 @@ export class Speedboat {
     const sys = this.systems;
     sys.update(dt, { engine: this.engine, rpm: t.rpm, fuelLph: t.fuelLph, load: this.throttleActual, intakeSubmerged, lightsOn: input.navigationLights, trimMotorA: this.trimMotorA, auxA: this.anchor.motorA + this.bilgePumpA });
     this.updateBilge(dt, water, input);
+    this.updateSlosh(dt);
     t.batteryA = sys.batteryA;
     t.anchorOut = this.anchor.out; t.anchorState = this.anchor.state; t.anchorDepth = this.anchor.depth; t.anchorScope = this.anchor.scope;
     t.anchorTension = this.anchor.tension; t.anchorRelay = this.anchor.relay; t.windlassA = this.anchor.motorA;
@@ -611,9 +612,36 @@ export class Speedboat {
     }
     const sump = B.sumpL, deck = L - sump, h = this.bilgeLevelY(L) - B.floorY;
     const ySump = (B.pos.y + B.floorY) / 2, zSump = B.pos.z + (B.floodCenter.z - B.pos.z) * 0.8;
+    // superfície livre: a água do piso corre para o lado mais baixo (deslocamento com atraso em `sloshDeck`)
     const y = (sump * ySump + deck * (B.floorY + h / 2)) / L;
-    const z = (sump * zSump + deck * B.floodCenter.z) / L;
-    return v3(0, y, z);
+    const x = (sump * this.sloshUnder.x + deck * (B.floodCenter.x + this.sloshDeck.x)) / L;
+    const z = (sump * (zSump + this.sloshUnder.z) + deck * (B.floodCenter.z + this.sloshDeck.z)) / L;
+    return v3(x, y, z);
+  }
+  /** deslocamento atual da água solta por superfície livre (local, m): no piso e sob o piso */
+  private sloshDeck: Vec3 = v3();
+  private sloshUnder: Vec3 = v3();
+  /**
+   * Efeito de superfície livre: com o barco inclinado a água solta corre para o lado mais baixo. O centro dela
+   * anda ≈ (I_superfície ÷ volume)·tg(inclinação), com I = b·l³/12 (proa-popa) ou l·b³/12 (bordo), limitado às
+   * paredes, com ~0,8 s de atraso (o chacoalhar). Popa baixa → água para trás → popa mais baixa: é assim que
+   * barco alagado afunda de popa. Sob o piso as longarinas dividem o porão (efeito reduzido a 25 %).
+   */
+  private updateSlosh(dt: number): void {
+    const B = this.params.bilge, L = this.bilgeL;
+    const fwd = this.forward, right = this.right;
+    const tanP = fwd.y / Math.max(0.2, Math.sqrt(1 - fwd.y * fwd.y));    // > 0 proa para cima
+    const tanR = right.y / Math.max(0.2, Math.sqrt(1 - right.y * right.y)); // > 0 boreste para cima
+    const shift = (vol: number, len: number, wid: number, f: number) => {
+      const V = Math.max(vol, 0.02);
+      const kz = (f * wid * len ** 3) / 12 / V, kx = (f * len * wid ** 3) / 12 / V;
+      return v3(clamp(-kx * tanR, -wid * 0.42, wid * 0.42), 0, clamp(-kz * tanP, -len * 0.42, len * 0.42));
+    };
+    const deckV = Math.max(0, L - B.sumpL) / 1000, underV = Math.min(L, B.sumpL) / 1000;
+    const tD = shift(deckV, B.floodLen, 2 * B.floodHalfW, 1), tU = shift(underV, this.params.length * 0.7, this.params.beam * 0.7, 0.25);
+    const a = 1 - Math.exp(-dt / 0.8);
+    this.sloshDeck = v3(this.sloshDeck.x + (tD.x - this.sloshDeck.x) * a, 0, this.sloshDeck.z + (tD.z - this.sloshDeck.z) * a);
+    this.sloshUnder = v3(this.sloshUnder.x + (tU.x - this.sloshUnder.x) * a, 0, this.sloshUnder.z + (tU.z - this.sloshUnder.z) * a);
   }
 
   /**
@@ -657,6 +685,14 @@ export class Speedboat {
           freeboard = Math.min(freeboard, -h);
           this.bilgeOver += moving * weir(h, seg);
         }
+      }
+      // drenos do cockpit no piso da popa (sem válvula): com a popa baixa o lado de fora fica mais alto que o
+      // piso e a água ENTRA por eles — é assim que barco pesado de popa afunda (até parado no píer)
+      if (B.scupperM2 > 0) {
+        const sp = this.toWorld(v3(0, B.floorY + 0.01, -P.length / 2 + B.scupperFromStern));
+        const insideAbove = Math.max(0, this.bilgeLevelY() - (B.floorY + 0.01));
+        const dh = water.getHeight(sp.x, sp.z) - sp.y - insideAbove;
+        if (dh > 0) { const q = 0.6 * B.scupperM2 * Math.sqrt(2 * G * dh) * 1000; this.bilgeOver += q; }
       }
       const tw = this.toWorld(v3(0, B.transomY, -P.length / 2 + 0.05));
       const ht = water.getHeight(tw.x, tw.z) - tw.y;

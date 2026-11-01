@@ -571,7 +571,7 @@ for (const [label, thr] of [["baixa", 0.25], ["alta", 1]] as const) {
   const big = new Speedboat(SPEEDBOAT, v3(0, 0.25, 0));
   big.hullDamage = 1;
   run(big, water, 60, emptyInput());
-  check("porão", "casco 100 %: 1 min (L)", big.telemetry.bilgeL, 200, 400, "L", 0);
+  check("porão", "casco 100 %: 1 min (L)", big.telemetry.bilgeL, 100, 300, "L", 0);
   // água por cima da borda/espelho
   const over = (waves: number, inp: VehicleInput, secs: number) => {
     const w = mkWater(waves);
@@ -582,7 +582,7 @@ for (const [label, thr] of [["baixa", 0.25], ["alta", 1]] as const) {
     run(s, w, secs, inp, openWater, () => { maxB = Math.max(maxB, s.bilgeL); });
     return maxB;
   };
-  check("porão", "água calma, ré a toda 30 s: não entra água (L)", over(0.35, { ...emptyInput(), gear: "R", throttle: 1 }, 30), 0, 0.5, "L", 1);
+  check("porão", "água calma, ré a toda 30 s: a popa afunda e entra um pouco pelos drenos (L)", over(0.35, { ...emptyInput(), gear: "R", throttle: 1 }, 30), 0, 15, "L", 1);
   check("porão", "lago, ré a 50 % 30 s: entra pelo espelho e a bomba dá conta (L)", over(1, { ...emptyInput(), gear: "R", throttle: 0.5 }, 30), 1, 30, "L", 1);
   check("porão", "ondas fortes, ré lenta 60 s: respingos, a bomba dá conta (L)", over(2.5, { ...emptyInput(), gear: "R" }, 60), 0.5, 30, "L", 1);
   check("porão", "ondas fortes, ré a 50 %: a popa afunda nas ondas e alaga em 30 s (L)", over(2.5, { ...emptyInput(), gear: "R", throttle: 0.5 }, 30), 300, 900, "L", 0);
@@ -614,7 +614,7 @@ for (const [label, thr] of [["baixa", 0.25], ["alta", 1]] as const) {
   const dry = settle(SPEEDBOAT, 0);
   check("afundar", "lancha seca: borda livre (cm)", dry.fb * 100, 55, 75, "cm", 0);
   const swampL = findL(SPEEDBOAT, (r) => r.fb < 0.03);
-  check("afundar", "lancha: alagada/inavegável (borda na linha d'água) com (L)", swampL, 3200, 3800, "L", 0);
+  check("afundar", "lancha: alagada/inavegável (borda na linha d'água) com (L)", swampL, 2600, 3300, "L", 0);
   const sinkL = findL(SPEEDBOAT, (r) => r.b.telemetry.sunk);
   check("afundar", "lancha: afunda com (L) — a água passa a entrar pelo espelho sem parar", sinkL, swampL, 4300, "L", 0);
   const s = settle(SPEEDBOAT, sinkL + 300, 60);
@@ -626,7 +626,21 @@ for (const [label, thr] of [["baixa", 0.25], ["alta", 1]] as const) {
   const hole = new Speedboat({ ...SPEEDBOAT, bilge: { ...SPEEDBOAT.bilge, pumpLph: 0 } }, v3(0, 0.25, 0), 0);
   hole.engine = "off"; hole.hullDamage = 0.6;
   run(hole, mkWater(0), 600, emptyInput(), flat);
-  check("afundar", "furo de 60 % por 10 min, sem bomba: equilíbrio (água iguala o nível de fora) (L)", hole.bilgeL, 400, 1300, "L", 0);
+  check("afundar", "furo de 60 % por 10 min, sem bomba: equilíbrio (água iguala o nível de fora) (L)", hole.bilgeL, 120, 600, "L", 0);
+  // com ondas a popa baixa embarca água e a água solta (superfície livre) derruba o barco
+  const inWaves = (L: number, waves: number) => {
+    const P = { ...SPEEDBOAT, bilge: { ...SPEEDBOAT.bilge, pumpLph: 0 } };
+    const b = new Speedboat(P, v3(0, 0.25, 0), 0);
+    b.engine = "off"; b.systems.fuelL = 5; b.bilgeL = L;
+    run(b, mkWater(waves), 180, emptyInput(), flat);
+    return b;
+  };
+  const calm1500 = inWaves(1500, 0.35);
+  check("afundar", "1.500 L em água calma, 3 min: ainda flutua (borda livre, cm)", calm1500.telemetry.freeboard * 100, 20, 45, "cm", 0);
+  const strong1500 = inWaves(1500, 2.5);
+  check("afundar", "1.500 L com ondas fortes, 3 min: a água solta faz o barco virar ou afundar", strong1500.capsized || strong1500.telemetry.sunk ? 1 : 0, 1, 1, "", 0);
+  const strong1000 = inWaves(1000, 2.5);
+  check("afundar", "1.000 L com ondas fortes, 3 min: a popa baixa embarca água (L a mais)", strong1000.bilgeL - 1000, 200, 7000, "L", 0);
   check("afundar", "furo de 60 %: pesado, mas não afunda nem alaga", !hole.telemetry.sunk && !hole.telemetry.swamped ? 1 : 0, 1, 1, "", 0);
 }
 
