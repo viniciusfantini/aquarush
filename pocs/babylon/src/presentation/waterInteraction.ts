@@ -58,6 +58,7 @@ export class WaterInteraction {
   private readonly splash: ParticleSystem;
   private readonly bubbles: ParticleSystem;
   private readonly mist: ParticleSystem;
+  private readonly telltale: ParticleSystem;
   private lastImpact = 0;
 
   constructor(scene: Scene, quality: { particles: number; wakeTexture: number }) {
@@ -87,6 +88,7 @@ export class WaterInteraction {
     this.splash = mk("splash", p * 0.1, drops);
     this.mist = mk("cavMist", p * 0.1, dot);
     this.bubbles = mk("bubbles", p * 0.1, dot, 0);
+    this.telltale = mk("telltale", 600, dot);
     for (const ps of [this.bowL, this.bowR]) { ps.minSize = 0.12; ps.maxSize = 0.5; ps.minLifeTime = 0.3; ps.maxLifeTime = 0.85; }
     this.rooster.minSize = 0.25; this.rooster.maxSize = 0.9; this.rooster.minLifeTime = 0.5; this.rooster.maxLifeTime = 1.3;
     this.splash.minSize = 0.3; this.splash.maxSize = 1.1; this.splash.minLifeTime = 0.4; this.splash.maxLifeTime = 1.1;
@@ -98,6 +100,24 @@ export class WaterInteraction {
     this.bubbles.minSize = 0.04; this.bubbles.maxSize = 0.14; this.bubbles.minLifeTime = 0.4; this.bubbles.maxLifeTime = 1.2;
     this.bubbles.gravity = new Vector3(0, 2.5, 0);
     this.bubbles.color1 = new Color4(0.85, 0.97, 1, 0.75); this.bubbles.color2 = new Color4(0.7, 0.9, 0.95, 0.55);
+    // esguicho de refrigeração: jato fino e contínuo de gotas (bomba d'água do motor)
+    this.telltale.minSize = 0.022; this.telltale.maxSize = 0.045;
+    this.telltale.minLifeTime = 0.55; this.telltale.maxLifeTime = 0.8;
+    this.telltale.minAngularSpeed = 0; this.telltale.maxAngularSpeed = 0;
+    this.telltale.color1 = new Color4(0.9, 0.97, 1, 0.9); this.telltale.color2 = new Color4(0.8, 0.92, 0.98, 0.8);
+    this.telltale.colorDead = new Color4(0.85, 0.95, 1, 0.2);
+  }
+
+  /** Esguicho: posição do bico e direção do jato (mundo), vazão ∝ rotação da bomba d'água. */
+  updateTelltale(nozzle: Vector3, dir: Vector3, rpm: number, boatVel: Vector3): void {
+    const ps = this.telltale;
+    ps.emitter = nozzle;
+    const v = 1.5 + rpm / 2600; // m/s — a pressão da bomba sobe com o RPM
+    const d = dir.normalize();
+    ps.direction1 = d.scale(v).add(new Vector3(0, 0.05, 0)).add(boatVel);
+    ps.direction2 = d.scale(v * 1.06).add(new Vector3(0, 0.12, 0)).add(boatVel);
+    ps.minEmitPower = ps.maxEmitPower = 1;
+    ps.emitRate = rpm > 300 ? 320 + rpm * 0.06 : 0;
   }
 
   update(dt: number, boat: Speedboat, water: GerstnerWater): void {

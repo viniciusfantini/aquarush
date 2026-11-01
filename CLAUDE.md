@@ -51,6 +51,8 @@ npm run dev            # abrir http://localhost:5173, F3 mostra a telemetria; wi
 | 2026-10-31 | Reflexo planar com render target próprio (estilo WaterMaterial), em `med`/`high` | Água vidro exige refletir a lancha e as margens. Em `low` fica o céu analítico |
 | 2026-10-31 | "Tampa" do cockpit só de profundidade (`alphaIndex` 0 < água 10) | Evita água aparecendo dentro do barco sem precisar de stencil |
 | 2026-10-31 | `VehicleInput.gear` (F/N/R) + `throttle` acima da lenta; a manete com detentes fica em `platform/input.ts` | Pedido do usuário: toques trocam a marcha (F→N→R), segurar acelera, soltar volta à lenta engrenada. A sim garante a passagem por N (`shiftTime`) e a lenta engrenada (`idleThrustFraction`). `brake`/`reverse` ficaram obsoletos |
+| 2026-10-31 | Som de motor **procedural** (Web Audio, sem samples), modelando um 4T de 4 cilindros: onda periódica no ciclo de 720° (fundamental = RPM/120, ordens de queima = RPM/30) | Leve, sem assets, e acompanha o RPM e a carga reais da simulação. Sem nome de marca no jogo (o usuário citou Yamaha como referência de som) |
+| 2026-10-31 | O adesivo do capô diz "60", mas a física continua com 150 hp (`params.ts`) | Pendente de decisão do usuário: trocar a física para 60 hp muda a velocidade final e o planeio |
 | 2026-10-31 | Cavitação = f(carga × escorregamento) da hélice, com perda de até 30 % de empuxo | Aproximação documentada: aparece na arrancada e some em cruzeiro. Testada em `test:sim` |
 
 ## Ambiente do desenvolvedor

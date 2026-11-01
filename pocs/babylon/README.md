@@ -66,6 +66,23 @@ A lancha é um **corpo rígido 6DOF** (massa de 1200 kg, tensor de inércia diag
   - **fervura de cavitação e ventilação** na popa.
 - **Hélice:** a velocidade visual é **proporcional ao RPM do motor** (escala fixa de 0,12: 750 rpm = 0,75 volta/s e 5300 rpm = 5,2 voltas/s, medido no navegador). A rotação real (até ~48 voltas/s) causaria efeito estroboscópico a 60 FPS. Disco de borrão suave acima de 1200 rpm da hélice; bolhas, névoa e spray extra quando cavita ou ventila; aviso piscante no HUD e chiado no áudio.
 - A água não aparece dentro do cockpit (tampa só de profundidade).
+- **Esguicho de refrigeração (tell-tale):** bico no capô inferior (boreste) com jato contínuo de gotas; a velocidade e a vazão sobem com o RPM (bomba d'água). O jato herda a velocidade da lancha.
+
+## Áudio (v0.4): motor de popa 4 tempos, 4 cilindros (~60 hp)
+
+Tudo sintetizado (Web Audio), a partir do RPM e da carga da simulação:
+
+| Camada | Modelo |
+|---|---|
+| Bloco do motor | onda periódica no ciclo de 4 tempos (fundamental = RPM/120). Ordens de queima (RPM/30 Hz) dominam; 2ª ordem e meias-ordens fracas dão o "ronronar" liso de um 4T de 4 cilindros. Saturação suave e filtro que abre com a carga; ressonância do capô |
+| Escape pelo cubo | ruído grave modulado pelos pulsos de queima (borbulhar abafado). Fica mais seco quando a hélice sai da água |
+| Válvulas | "tique" agudo discreto, mais audível em lenta |
+| Rabeta | zumbido fino (~13 × rotação), só engrenado e com carga |
+| Admissão | chiado de ar com acelerador alto |
+| Câmbio | "clunk" ao engrenar F/R e ao soltar em N |
+| Água, esguicho, cavitação | ruído filtrado ∝ velocidade; fio d'água constante; chiado áspero ∝ cavitação/ventilação |
+
+Limitação: é uma síntese aproximada, não uma gravação. Validar o timbre de ouvido e ajustar os ganhos em `presentation/audio.ts`.
 
 ## Roteiro de testes (GDD A.12): resultados de 2026-10-31
 
@@ -102,6 +119,7 @@ Resultado: **48/49 OK**, com 1 limitação conhecida (abaixo). Na v0.2 a hélice
 5. Colisão por pontos: um objeto fino entre dois pontos de contato pode atravessar o costado.
 6. Combustível, danos e porão ainda não existem (o HUD só mostra o consumo estimado).
 7. A física **não sente a esteira**: a lancha não pula a própria marola nem a de outra. A esteira é só visual, gerada a partir da física.
+9. O capô diz **"60"**, mas a física simula **150 hp** (`params.ts`). Mudar para 60 hp reduz a velocidade final e o planeio; está pendente de decisão.
 8. As bolhas são partículas desenhadas antes da água. Com a água vidro e muito transparente, a profundidade delas é aproximada.
 
 ## Próximos passos (POC 1)

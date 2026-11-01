@@ -10,7 +10,7 @@ O GDD (seção 10) pede a **mesma fatia jogável** em três tecnologias antes de
 
 | # | Tecnologia | Pasta | Status |
 |---|---|---|---|
-| 1 | **Babylon.js + TypeScript** (browser-first, sem instalar engine) | [`pocs/babylon`](pocs/babylon) | ✅ **v0.3.0 jogável**: física testada (48/49 critérios), água vidro, esteira na água, cavitação |
+| 1 | **Babylon.js + TypeScript** (browser-first, sem instalar engine) | [`pocs/babylon`](pocs/babylon) | ✅ **v0.4.0 jogável**: física testada (48/49 critérios), água vidro, esteira na água, cavitação |
 | 2 | Unity 6 LTS + URP | [`pocs/unity`](pocs/unity) | ⏳ planejada (Unity não instalado nesta máquina) |
 | 3 | Unreal Engine 5 | [`pocs/unreal`](pocs/unreal) | ⏳ planejada |
 
@@ -62,6 +62,7 @@ pocs/unreal/         POC 3 — planejada
 |---|---|---|
 | 2026-10-31 | babylon 0.1.0 | POC 1: lago com margens, ilha, rio com correnteza, rochas, vegetação, píer e marina. Lancha com corpo rígido 6DOF, flutuação em 6 pontos, planeio emergente, trim físico, colisões. Água Gerstner compartilhada entre física e shader. Esteira, spray, câmeras externa e cockpit, HUD, teclado, gamepad e touch, áudio procedural. Testes físicos headless. |
 | 2026-10-31 | babylon 0.2.0 | Água **vidro (glass)** e presets de água. **Reflexo planar real** (lancha, margens e píer refletidos). **Esteira integrada à água**: um mapa de esteira deforma a superfície (braços do V de Kelvin, cristas e cavados), perturba os reflexos e gera espuma da hélice, do casco e da fervura. **Cavitação e ventilação da hélice** na física (perda de empuxo, RPM sobe), com fervura branca, bolhas, névoa, spray, aviso no HUD e som. **Lancha refeita**: casco com strakes e flare, cockpit rebaixado, para-brisa envolvente, guarda-mancebo, bancos estofados, plataformas e escada de banho, painel com velocímetro e conta-giros de ponteiro, motor de popa com capô, placa anticavitação, pé e skeg, **hélice de 3 pás com passo, torção e skew** e disco de borrão. Materiais PBR com ambiente. |
+| 2026-10-31 | babylon 0.4.0 | **Som de motor de popa 4 tempos, 4 cilindros (~60 hp)**, sintetizado a partir do RPM e da carga reais: bloco liso, escape borbulhando pelo cubo da hélice, tique de válvulas, zumbido da rabeta, admissão, "clunk" ao trocar de marcha e chiado de cavitação. Adesivo **"60"** no painel traseiro do capô (sem marca). **Esguicho da água de refrigeração** (tell-tale): jato contínuo cuja vazão sobe com o RPM. |
 | 2026-10-31 | babylon 0.3.0 | **Manete F/N/R**: um toque para trás põe em N (sem empuxo, a lancha desliza e para); o segundo engata a ré em lenta (anda devagar para trás); segurar acelera. O mesmo para frente. A troca passa por N com 0,45 s de embreagem. Lenta engrenada empurra de verdade (~5 km/h para frente, ~3 km/h em ré). |
 | 2026-10-31 | babylon 0.2.1 | Correção: a esteira saía para frente (eixo Z da textura invertido no upload). A hélice passou a girar proporcional ao RPM do motor. |
 

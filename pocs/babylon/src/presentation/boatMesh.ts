@@ -12,6 +12,7 @@ export interface BoatVisual {
   root: TransformNode;
   engine: TransformNode;      // pivô do motor: yaw = direção, pitch = trim (mesmos ângulos da física)
   propeller: TransformNode;   // gira com a rotação real da hélice
+  telltale: TransformNode;    // bico do esguicho de refrigeração (jato sai em +X local, para fora)
   propBlur: PBRMaterial;      // disco de borrão (alpha ∝ rotação)
   wheel: TransformNode;       // volante (gira com a direção)
   speedNeedle: TransformNode;
@@ -377,23 +378,60 @@ export const buildBoat = (scene: Scene): BoatVisual => {
   engine.parent = root;
   engine.position.set(0, 0.28, Z_STERN - 0.04);
   add(MeshBuilder.CreateBox("bracket", { width: 0.24, height: 0.36, depth: 0.12 }, scene), blackMatte, engine).position.set(0, -0.06, -0.05);
-  // capô: loft de seções arredondadas
+  // capô: loft de seções arredondadas; frente afilada, traseira com painel plano (adesivo "60")
   const cowlSecs: Vector3[][] = [];
   const NC = 18;
+  const Z_COWL_BACK = -0.84;
+  const cowlSec = (t: number, z: number, scale = 1) => {
+    const front = Math.sqrt(smoothstep(0, 0.22, t));
+    const back = smoothstep(1, 0.85, t) * 0.12 + 0.88; // traseira quase cheia (painel)
+    const w = 0.48 * (0.45 + 0.55 * front) * back * scale;
+    const h = (0.56 * (0.55 + 0.45 * front) + 0.06 * t) * back * scale;
+    const yc = 0.5 + 0.03 * t;
+    return roundedRect(w, h, 0.1 * (0.5 + 0.5 * front) * scale, 5).map((p) => new Vector3(p.x, p.y + yc, z));
+  };
   for (let i = 0; i <= NC; i++) {
     const t = i / NC;
-    const z = -0.1 - 0.74 * t;
-    const end = Math.sqrt(smoothstep(0, 0.2, t) * smoothstep(1, 0.8, t));
-    const w = 0.48 * (0.45 + 0.55 * end);
-    const h = 0.56 * (0.55 + 0.45 * end) + 0.06 * t;  // traseira um pouco mais alta
-    const yc = 0.5 + 0.03 * t;
-    const sec = roundedRect(w, h, 0.1 * (0.5 + 0.5 * end), 5).map((p) => new Vector3(p.x, p.y + yc, z));
-    cowlSecs.push(i === 0 || i === NC ? sec.map(() => new Vector3(0, yc, z)) : sec);
+    const z = -0.1 + (Z_COWL_BACK + 0.1) * t;
+    cowlSecs.push(i === 0 ? cowlSec(0, z).map(() => new Vector3(0, 0.5, z)) : cowlSec(t, z));
   }
+  cowlSecs.push(cowlSec(1, Z_COWL_BACK - 0.02, 0.9));                                   // borda arredondada
+  cowlSecs.push(cowlSec(1, Z_COWL_BACK - 0.025, 0.0).map((p) => new Vector3(0, p.y, p.z))); // painel plano
   const cowl = add(MeshBuilder.CreateRibbon("cowl", { pathArray: cowlSecs, sideOrientation: Mesh.DOUBLESIDE }, scene), gelcoat, engine);
   colorize(cowl, (x, y) => (y > 0.5 && y < 0.54 && Math.abs(x) > 0.18 ? RED : y > 0.43 && y < 0.5 && Math.abs(x) > 0.2 ? NAVY : y < 0.29 ? new Color3(0.08, 0.08, 0.09) : WHITE));
   const lowerCowl = add(roundedBox("lowerCowl", scene, 0.4, 0.2, 0.62, 0.06), blackGloss, engine);
   lowerCowl.position.set(0, 0.17, -0.46);
+
+  // adesivo traseiro "60" (potência) — genérico, sem marca
+  const decalTex = new DynamicTexture("decal60", { width: 512, height: 320 }, scene, true);
+  {
+    const c = decalTex.getContext() as CanvasRenderingContext2D;
+    c.clearRect(0, 0, 512, 320);
+    c.fillStyle = "#0d1b33";
+    c.font = "bold 230px 'Arial Black', Arial, sans-serif";
+    c.textAlign = "center"; c.textBaseline = "middle";
+    c.fillText("60", 256, 150);
+    c.fillStyle = "#c0141c";
+    c.fillRect(70, 268, 372, 14);
+    c.fillStyle = "#0d1b33";
+    c.font = "bold 34px Arial, sans-serif";
+    c.fillText("FOUR STROKE", 256, 302);
+    decalTex.hasAlpha = true;
+    decalTex.update();
+  }
+  const decalMat = new StandardMaterial("decal60Mat", scene);
+  decalMat.diffuseTexture = decalTex;
+  decalMat.useAlphaFromDiffuseTexture = true;
+  decalMat.specularColor = new Color3(0.3, 0.3, 0.3);
+  decalMat.zOffset = -2;
+  const decal = add(MeshBuilder.CreatePlane("decal60", { width: 0.3, height: 0.19 }, scene), decalMat, engine);
+  decal.position.set(0, 0.55, Z_COWL_BACK - 0.03);
+
+  // saída da água de refrigeração ("esguicho" / tell-tale): bico no capô inferior, lado de boreste/trás
+  const telltale = new TransformNode("telltale", scene);
+  telltale.parent = engine;
+  telltale.position.set(0.2, 0.15, -0.66);
+  add(MeshBuilder.CreateCylinder("telltaleNozzle", { height: 0.03, diameter: 0.018, tessellation: 8 }, scene), steel, telltale).rotation.z = Math.PI / 2;
   // seção intermediária e pé (perfil elíptico "aerofólio")
   const mid = add(MeshBuilder.CreateCylinder("midsection", { height: 1.0, diameter: 1, tessellation: 20 }, scene), blackGloss, engine);
   mid.scaling.set(0.11, 1, 0.32);
@@ -453,7 +491,7 @@ export const buildBoat = (scene: Scene): BoatVisual => {
   meshes.push(disc);
 
   for (const m of meshes) m.isPickable = false;
-  return { root, engine, propeller, propBlur, wheel, speedNeedle, rpmNeedle, lights, cockpitLid, meshes };
+  return { root, engine, propeller, telltale, propBlur, wheel, speedNeedle, rpmNeedle, lights, cockpitLid, meshes };
 };
 
 export const setNavLights = (v: BoatVisual, on: boolean): void => {

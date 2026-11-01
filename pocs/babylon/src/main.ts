@@ -23,7 +23,7 @@ import { BoatCamera } from "./presentation/cameras.ts";
 import { Hud } from "./presentation/hud.ts";
 import { EngineAudio } from "./presentation/audio.ts";
 
-const BUILD = "poc-babylon 0.3.0";
+const BUILD = "poc-babylon 0.4.0";
 /** Escala visual da rotação da hélice (proporcional ao RPM, abaixo do limite estroboscópico). */
 const PROP_VISUAL_SCALE = 0.12;
 
@@ -175,6 +175,7 @@ const boot = async () => {
   const snap = (dst: Vector3, q: Quaternion) => { dst.set(boat.pos.x, boat.pos.y, boat.pos.z); q.set(boat.rot.x, boat.rot.y, boat.rot.z, boat.rot.w); };
   snap(curPos, curRot); snap(prevPos, prevRot);
   let fpsSmooth = 60;
+  let lastGear = boat.telemetry.gear;
   let physMs = 0;
 
   document.getElementById("h-build")!.textContent = `${BUILD} · ${engine.isWebGPU ? "WebGPU" : "WebGL" + (engine as Engine).webGLVersion} · q=${cfg.quality.name}`;
@@ -240,7 +241,15 @@ const boot = async () => {
     waterVis.update(water, cam.cam, engine.getRenderWidth(), engine.getRenderHeight());
     if (cfg.quality.shadows > 0) sun.position = rPos.add(sunDir.scale(150));
 
-    audio.update(T.rpm, T.throttle, Math.hypot(boat.vel.x, boat.vel.z), Math.max(T.cavitation, 1 - T.ventilation));
+    // esguicho de refrigeração: bico no capô, jato para fora (+X local do motor, levemente para trás e para baixo)
+    const ew = boatVis.engine.getWorldMatrix();
+    fx.updateTelltale(boatVis.telltale.getAbsolutePosition().clone(), Vector3.TransformNormal(new Vector3(1, -0.15, -0.35), ew), T.rpm, new Vector3(boat.vel.x, boat.vel.y, boat.vel.z));
+
+    if (T.gear !== lastGear) { audio.clunk(T.gear !== "N"); lastGear = T.gear; }
+    audio.update({
+      rpm: T.rpm, throttle: T.throttle, speed: Math.hypot(boat.vel.x, boat.vel.z), boil: Math.max(T.cavitation, 1 - T.ventilation),
+      inGear: T.gear !== "N", propInWater: T.ventilation > 0.5, cockpit: cam.mode === "cockpit",
+    });
     hud.update(T, fpsSmooth, {
       "física (ms/frame)": physMs.toFixed(2),
       "malhas ativas": String(scene.getActiveMeshes().length),
@@ -265,7 +274,7 @@ const boot = async () => {
   console.info(`[AquaRush] pronto em ${loadMs.toFixed(0)} ms — ${BUILD} — ${engine.description}`);
 
   // exposto para testes manuais/automatizados no console
-  (window as unknown as Record<string, unknown>).__aqua = { boat, water, waterVis, fx, world, scene, engine, cam, input, boatVis, loadMs, checkConvention: () => {
+  (window as unknown as Record<string, unknown>).__aqua = { boat, water, waterVis, fx, audio, world, scene, engine, cam, input, boatVis, loadMs, checkConvention: () => {
     const f = boat.forward;
     const bf = boatVis.root.forward;
     return { sim: f, babylon: { x: bf.x, y: bf.y, z: bf.z } };
