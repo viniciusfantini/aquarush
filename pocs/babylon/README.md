@@ -129,6 +129,7 @@ Limitação: é uma síntese aproximada, não uma gravação. Validar o timbre d
 | Tilt | trim máx navegando: tilt bloqueado e hélice na água; parado: recolhe a 60°, entrada d'água fora, empuxo 0 acelerando; trim− baixa de volta a 0° |
 | Tilt engatado | a 12 km/h engatado (1480 rpm): o tilt sobe (12,7° em 2 s). Navegando a 49 km/h: bloqueado |
 | Hélice no ar/aflorando | recolhido acelerando: imersão 0, empuxo 0, rpm 5941 com limitador ativo. Meio disco submerso (imersão 0,51): empuxo = 32 % do submerso |
+| Recarregar (v0.19) | ciclo completo para lancha e bote: carregar, rebocar 6 s, voltar de ré (o veículo para com as rodas na água), soltar, sair de ré e carregar de novo na carretinha deslocada: encaixa e prende a cinta (lancha 19,7 s, bote 13,7 s), a proa não atravessa o batente, sem avaria (`node tests/debug-reload.ts [lancha|bote]`) |
 | Avarias e desengate (v0.18) | lancha contra pedra a 15 km/h: casco 17 %, motor 0 %; a 40 km/h: casco 100 %; raso de 0,75 m a 30 km/h com o motor baixado: motor quebrado, não liga; navegando normal a toda: 0 %; R repara. Subir na carretinha com o motor levantado (trim + 8° de tilt): 0 %; soltar a cinta e dar ré devagar com o motor levantado: sai do berço e flutua a 15 m do guincho, sem avaria. Rebocar com o motor baixado: o pé arrasta (100 %); levantado: 0 % |
 | Veículo de reboque (v0.17) | carro e caminhonete: começam com a carretinha exatamente onde estava estacionada; parados na rampa não descem; 8 s acelerando tiram a carretinha da água (traseira 1,9 m acima d'água) a 14–17 km/h, em linha reta alinhada (0°); S freia e engata a ré (−2,5 m/s); de ré virando a carretinha dobra até o batente (80°); andando para a frente realinha (≤4,3°) |
 | Rampa e carretinha (v0.16) | rampa com 12 % (1,20 m em 10 m) e linha d'água no início; piloto automático simples (lenta engatada + toques, ~2–4 km/h) a 0,4 m do eixo: lancha encaixa em 16,9 s e bote em 16,1 s, centralizados (0,00 m), inclinados como a rampa (6,7°), sem adernar (≤0,6°), física estável; com a cinta presa e o motor desligado não escorregam (≤3 cm em 20 s). Muito desalinhada (1,5–2,5 m), a lancha não encaixa com esse piloto automático (vira devagar em baixa velocidade); o bote encaixa |
@@ -142,7 +143,7 @@ Limitação: é uma síntese aproximada, não uma gravação. Validar o timbre d
 | 6. Ondas e correnteza | ondas fortes (×2,5): roll ≤ 30°, não emborca; deriva com correnteza de 1,6 m/s: 1,54 m/s |
 | Lago | flutua no spawn; a toda contra a margem, encalha e para sem atravessar o terreno |
 
-Resultado: **196/197 OK** (v0.18.0). Na v0.10, o peso do piloto na posição real (boreste, acima do CG) aumentou o roll em curva com ondas fortes; o `bankCoef` foi para 1800 e o `rollDamping` para 15000, com 1 limitação conhecida (abaixo). Na v0.2 a hélice foi para 0,5 m atrás do espelho, como no modelo visual, e o esterço máximo em alta velocidade caiu de 13° para 11°.
+Resultado: **204/205 OK** (v0.19.0). Na v0.10, o peso do piloto na posição real (boreste, acima do CG) aumentou o roll em curva com ondas fortes; o `bankCoef` foi para 1800 e o `rollDamping` para 15000, com 1 limitação conhecida (abaixo). Na v0.2 a hélice foi para 0,5 m atrás do espelho, como no modelo visual, e o esterço máximo em alta velocidade caiu de 13° para 11°.
 
 ### Navegador (Chrome, Windows 11, WebGL2, `q=med`, ~1370×896)
 

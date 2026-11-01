@@ -110,6 +110,12 @@ export class Hud {
   private occ = $("h-occ");
   private dmgHull = $("h-dmg-hull");
   private dmgEng = $("h-dmg-eng");
+  private depthBox = $("g-depth");
+  private depthWater = $("h-depth-water");
+  private draftMark = $("h-draft-mark");
+  private draftHull = $("h-draft-hull");
+  private depthTxt = $("h-depth");
+  private draftTxt = $("h-draft");
   private fuelAut = $("g-aut");
   private cam = $("h-cam");
   private lights = $("h-lights");
@@ -191,6 +197,15 @@ export class Hud {
     this.lowFuelChip.classList.toggle("warn", t.lowFuel);
     if (t.lowFuel) this.lowFuelChip.textContent = `COMBUSTÍVEL BAIXO · ${t.fuelL.toFixed(1)} L`;
     this.chargeChip.classList.toggle("warn", t.chargeWarn && t.engine === "running");
+    // profundímetro: escala de 0 a 5 m de cima para baixo; água até o fundo; marcas do calado (casco amarelo, motor vermelho)
+    const D = 5, y = (m: number) => `${Math.min(100, (m / D) * 100)}%`;
+    const depth = Math.max(0, t.depth);
+    this.depthWater.style.height = y(depth);
+    this.draftHull.style.top = y(t.draftHull);
+    this.draftMark.style.top = y(t.draftMotor);
+    this.depthTxt.textContent = depth > 9.95 ? `${depth.toFixed(0)} m` : `${depth.toFixed(1)} m`;
+    this.draftTxt.textContent = `calado ${t.draftHull.toFixed(2)} · pé ${t.draftMotor.toFixed(2)}`;
+    this.depthBox.classList.toggle("warn", depth < t.draftMotor + 0.25 && depth > 0.01);
     this.dmgHull.classList.toggle("warn", t.hullDamage > 0.005);
     this.dmgEng.classList.toggle("warn", t.engineDamage > 0.005);
     if (t.hullDamage > 0.005) this.dmgHull.textContent = `AVARIA CASCO ${Math.round(t.hullDamage * 100)}%`;

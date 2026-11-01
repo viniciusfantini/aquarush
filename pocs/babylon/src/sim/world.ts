@@ -6,7 +6,11 @@ import type { CurrentZone } from "./water.ts";
 import { clamp, smoothstep, v3, qMul, qFromAxisAngle, rotate, rotateInv, type Vec3, type Quat } from "./math.ts";
 
 export interface SphereCollider { x: number; y: number; z: number; r: number }
-export interface BoxCollider { minX: number; maxX: number; minY: number; maxY: number; minZ: number; maxZ: number }
+export interface BoxCollider {
+  minX: number; maxX: number; minY: number; maxY: number; minZ: number; maxZ: number;
+  /** só empurra para +Z (batente em V da carretinha: a proa nunca escorrega pelo lado) */
+  onlyPlusZ?: boolean;
+}
 
 /** Pose de um referencial móvel (carretinha): origem, rumo (yaw, +Z = (sen, cos)) e pitch (> 0 = +Z local desce). */
 export interface FramePose { x: number; y: number; z: number; yaw: number; pitch: number }

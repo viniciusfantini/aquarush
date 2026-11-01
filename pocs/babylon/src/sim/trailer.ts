@@ -39,7 +39,8 @@ export const buildTrailer = (P: SpeedboatParams): TrailerLayout => {
   const cx = RAMP.x;
   const parked: FramePose = { x: cx, y: rampY(sFront), z: RAMP.z0 + sFront, yaw: 0, pitch: Math.atan(RAMP.slope) };
   const post = (x: number, z: number, h: number) => ({ minX: x - 0.05, maxX: x + 0.05, minY: -0.5, maxY: h, minZ: z - 0.05, maxZ: z + 0.05 });
-  const hRear = lancha ? 1.25 : 0.95, hMid = lancha ? 1.1 : 0.85;
+  // postes-guia altos (ficam acima d'água mesmo com a carretinha mais funda que a posição ideal)
+  const hRear = lancha ? 1.8 : 1.3, hMid = lancha ? 1.6 : 1.15;
   const collider: TrailerCollider = {
     pose: { ...parked }, length, clear, vSlope, halfW, mu: 0.2, // carpete molhado
     boxes: [
@@ -47,7 +48,9 @@ export const buildTrailer = (P: SpeedboatParams): TrailerLayout => {
       post(-postX, length - 0.15, hRear), post(postX, length - 0.15, hRear),
       post(-postX, length * 0.55, hMid), post(postX, length * 0.55, hMid),
       // batente de proa (rolete do guincho)
-      { minX: -0.12, maxX: 0.12, minY: clear - 0.4, maxY: clear + (lancha ? 0.95 : 0.6), minZ: -0.35, maxZ: 0 },
+      // (alto como a coluna do guincho real: segura a proa mesmo com o barco flutuando sobre uma carretinha funda)
+      // batente de proa em V (rolete + guias laterais da proa): boca de ±0,6 m recebe a proa desalinhada e centraliza
+      { minX: -0.6, maxX: 0.6, minY: clear - 0.4, maxY: clear + (lancha ? 1.35 : 0.9), minZ: -1.5, maxZ: 0, onlyPlusZ: true }, // V: sempre empurra a proa para trás
     ],
   };
   return {
@@ -63,6 +66,8 @@ export interface LoadState {
   angleDeg: number;       // desvio de rumo (0 = proa apontando para o guincho)
   bowGap: number;         // m até o batente (≤ 0,35 = encostado)
   onBunks: boolean;       // casco apoiado no berço
+  overBunks: boolean;     // sobre o berço (apoiado ou flutuando acima dele — carretinha funda)
+  bunkDepth: number;      // m de água sobre a traseira do berço (quanto a carretinha está afundada)
   loaded: boolean;        // barco na carretinha, alinhado e parado
 }
 
@@ -82,10 +87,16 @@ export const trailerLoadState = (boat: Speedboat, t: TrailerLayout): LoadState =
   const lateral = (bow.x + stern.x) / 2;
   const bowGap = bow.z;
   const near = Math.abs(lateral) < 6 && bow.z > -1 && bow.z < t.length + 15 && Math.abs(angleDeg) < 60 && dz < 0;
-  const onBunks = c.z > 0 && c.z < t.length && keel.y - t.clear < 0.08 && Math.abs(lateral) < t.halfW;
+  const inside = c.z > 0 && c.z < t.length && Math.abs(lateral) < t.halfW;
+  const onBunks = inside && keel.y - t.clear < 0.08;
+  const overBunks = inside && keel.y - t.clear < 0.9;
   const speed = Math.hypot(boat.vel.x, boat.vel.z);
-  const loaded = onBunks && bowGap < 0.35 && Math.abs(lateral) < 0.25 && Math.abs(angleDeg) < 6 && speed < 0.4 && !boat.capsized;
-  return { near, lateral, angleDeg, bowGap, onBunks, loaded };
+  // encaixado: proa no batente, alinhado e parado — apoiado OU flutuando sobre o berço (o guincho puxa)
+  // flutuando (carretinha funda) o guincho ainda endireita o barco ao puxar: aceita um pouco mais de desalinho
+  const latOk = onBunks ? 0.25 : 0.4, angOk = onBunks ? 6 : 10;
+  const loaded = overBunks && bowGap < 0.35 && Math.abs(lateral) < latOk && Math.abs(angleDeg) < angOk && speed < 0.4 && !boat.capsized;
+  const rear = fromFrame(pose, { x: 0, y: t.clear, z: t.length });
+  return { near, lateral, angleDeg, bowGap, onBunks, overBunks, bunkDepth: -rear.y, loaded };
 };
 
 /**
@@ -98,4 +109,17 @@ export const attachWinch = (boat: Speedboat, t: TrailerLayout): void => {
   const anchor = fromFrame(t.collider.pose, t.winchLocal);
   const len = Math.hypot(eye.x - anchor.x, eye.y - anchor.y, eye.z - anchor.z);
   boat.winchStrap = { anchor, local: { ...eyeL }, length: Math.max(0.05, len) };
+};
+
+/**
+ * Pose do barco assentado no berço, no referencial da carretinha (proa no guincho, centralizado,
+ * quilha sobre os bunks). É onde a cinta do guincho deixa o barco para rebocar — mesmo que ele tenha
+ * entrado flutuando numa carretinha funda.
+ */
+export const seatedBoatLocal = (P: SpeedboatParams, t: TrailerLayout, boatLocalZ: number): { y: number; z: number } => {
+  const keelY = Math.min(...P.contactPoints.map((p) => p.y), ...P.bunkPoints.map((p) => p.y));
+  const bowZ = bowPoint(P).z;
+  // proa encostada no batente (z local ≈ 0,25 m atrás dele); o barco entra de proa → origem em z = bowZ + folga
+  void boatLocalZ; // o guincho puxa até a proa encostar
+  return { y: t.clear - keelY + 0.02, z: bowZ + 0.25 };
 };

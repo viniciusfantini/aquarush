@@ -8,7 +8,7 @@ import { Speedboat } from "../src/sim/boat.ts";
 import { SPEEDBOAT, DINGHY, PERSON_KG, type Occupant } from "../src/sim/params.ts";
 import { GerstnerWater, WAVE_PRESETS, type CurrentZone } from "../src/sim/water.ts";
 import type { PhysicsWorld } from "../src/sim/world.ts";
-import { buildWorld, RAMP, groundHeight } from "../src/sim/world.ts";
+import { buildWorld, RAMP, groundHeight, fromFrame } from "../src/sim/world.ts";
 import { buildTrailer, trailerLoadState, attachWinch } from "../src/sim/trailer.ts";
 import { TowRig, TOW_SPECS } from "../src/sim/towVehicle.ts";
 import { emptyInput, type VehicleInput } from "../src/gameplay/vehicleInput.ts";
@@ -623,6 +623,35 @@ for (const [label, thr] of [["baixa", 0.25], ["alta", 1]] as const) {
       tb.carriedDamage(DT, w, (q) => rig.insideCar(q));
     }
     check("avarias", `rebocar com o motor ${tilted ? "levantado: sem avaria" : "baixado: o pé arrasta (avaria)"} (%)`, tb.engineDamage * 100, tilted ? 0 : 20, tilted ? 0 : 100, "%", 0);
+  }
+}
+
+// ---------- Carregar de novo depois de rebocar e voltar à rampa ----------
+{
+  for (const kind of ["lancha", "bote"] as const) {
+    const P = kind === "lancha" ? SPEEDBOAT : DINGHY;
+    const w = buildWorld(); const tr = buildTrailer(P); w.trailers = [tr.collider];
+    const rig = new TowRig(tr, TOW_SPECS[kind === "lancha" ? "pickup" : "car"], groundHeight);
+    // sai com o veículo e volta de ré até as rodas traseiras chegarem na água
+    for (let i = 0; i < 6 / DT; i++) { rig.update(DT, { up: 1, down: 0, steer: 0 }); tr.collider.pose = rig.trailerPose(); }
+    for (let i = 0; i < 14 / DT; i++) { rig.update(DT, { up: 0, down: 1, steer: 0 }); tr.collider.pose = rig.trailerPose(); }
+    check("rampa", `${kind}: de ré, o veículo para com as rodas na água`, rig.wheelsInWater ? 1 : 0, 1, 1, "", 0);
+    const water = mkWater(0);
+    const back = fromFrame(tr.collider.pose, { x: 0.4, y: 0, z: tr.length + 14 });
+    const b = new Speedboat(P, v3(back.x, 0.25, back.z), Math.PI);
+    b.systems.fuelL = 20; if (kind === "lancha") { b.trim = 1; b.tilt = 0.14; } else b.trimPin = 2;
+    const inp: VehicleInput = { ...emptyInput(), gear: "F" };
+    let at = -1;
+    run(b, water, 40, inp, w, (t) => {
+      const st = trailerLoadState(b, tr);
+      const want = Math.max(-25, Math.min(25, -st.lateral * 15));
+      inp.steering = Math.max(-1, Math.min(1, (st.angleDeg - want) / 12));
+      inp.throttle = st.bowGap > 0.3 && b.telemetry.speedKmh < (st.bowGap > 8 ? 4 : 2.2) ? 0.3 : 0;
+      if (st.loaded && at < 0) { at = t; attachWinch(b, tr); }
+    });
+    check("rampa", `${kind}: carretinha em outra posição — encaixa e prende a cinta (s)`, at, 3, 40, "s", 1);
+    check("rampa", `${kind}: proa não atravessa o batente (m)`, trailerLoadState(b, tr).bowGap, -0.1, 0.5, "m", 2);
+    check("avarias", `${kind}: carga na carretinha deslocada sem avaria (%)`, (b.hullDamage + b.engineDamage) * 100, 0, 0, "%", 0);
   }
 }
 

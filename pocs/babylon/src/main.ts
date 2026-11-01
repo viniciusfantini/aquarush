@@ -14,7 +14,7 @@ import { Speedboat } from "./sim/boat.ts";
 import { VESSELS, PERSON_KG, type VesselKind, type SeatId, type SpeedboatParams } from "./sim/params.ts";
 import { GerstnerWater, WAVE_PRESETS } from "./sim/water.ts";
 import { buildWorld, RIVER_CURRENT, RAMP } from "./sim/world.ts";
-import { buildTrailer, trailerLoadState, attachWinch, type TrailerLayout } from "./sim/trailer.ts";
+import { buildTrailer, trailerLoadState, attachWinch, seatedBoatLocal, type TrailerLayout } from "./sim/trailer.ts";
 import { TowRig, TOW_SPECS, type Pose } from "./sim/towVehicle.ts";
 import { buildRamp, buildTrailerMesh, buildTowVehicle } from "./presentation/ramp.ts";
 import { WakeField, WaterWithWake } from "./sim/wake.ts";
@@ -32,7 +32,7 @@ import { BoatCamera } from "./presentation/cameras.ts";
 import { Hud } from "./presentation/hud.ts";
 import { EngineAudio } from "./presentation/audio.ts";
 
-const BUILD = "poc-babylon 0.18.0";
+const BUILD = "poc-babylon 0.19.0";
 /** Escala visual da rotação da hélice (proporcional ao RPM, abaixo do limite estroboscópico). */
 const PROP_VISUAL_SCALE = 0.12;
 
@@ -291,6 +291,9 @@ const boot = async () => {
   let simTime = 0;
   let trailerDone = false;
   let lastDamage = 0;
+  let ctxKey = "";
+  const ctxBar = document.getElementById("ctx-keys")!;
+  ctxBar.addEventListener("click", (e) => { const a = (e.target as HTMLElement).closest<HTMLElement>("[data-a]")?.dataset.a; if (a) input.pushAction(a as Action); });
   // ---- dirigindo o veículo de reboque (barco preso na carretinha pela cinta) ----
   let driving = false;
   let strapT = 0;
@@ -307,8 +310,10 @@ const boot = async () => {
   const startDriving = () => {
     const b = V.boat;
     b.engine = "off";
-    const mb = Matrix.Compose(Vector3.One(), new Quaternion(b.rot.x, b.rot.y, b.rot.z, b.rot.w), new Vector3(b.pos.x, b.pos.y, b.pos.z));
-    mb.multiplyToRef(poseMatrix(V.rig.trailerPose()).invert(), boatOnTrailer);
+    // o guincho puxa o barco até a proa encostar e ele assenta centralizado no berço (mesmo se entrou
+    // flutuando numa carretinha funda): pose fixa no referencial da carretinha durante o reboque
+    const seat = seatedBoatLocal(b.params, V.trailer, 0);
+    Matrix.ComposeToRef(Vector3.One(), Quaternion.RotationYawPitchRoll(Math.PI, 0, 0), new Vector3(0, seat.y, seat.z), boatOnTrailer);
     driving = true;
     setPeopleVisible(false);
     if (cam.mode === "cockpit") { cam.toggle(); hud.setCamera(cam.mode); setCockpitHead(false); }
@@ -457,7 +462,6 @@ const boot = async () => {
       const tr = V.trailer;
       boat.reset(v3(tr.cx + 0.3, 0.25, tr.zRear + 14), Math.PI);
       boat.engine = "running";
-      if (V.kind === "lancha") boat.trim = -1;
       snap(curPos, curRot); snap(prevPos, prevRot);
       cam.resetOrbit();
       hud.showToast(V.kind === "lancha" ? "Rampa: levante o motor (E: trim todo + um pouco de tilt), depois suba devagar, de proa e alinhado" : "Rampa: passe o motor para o pino 3 (E), depois suba devagar, de proa e alinhado");
@@ -565,7 +569,7 @@ const boot = async () => {
     const ld = trailerLoadState(boat, V.trailer);
     trailerChip.classList.toggle("show", mode === "game" && (ld.near || ld.loaded || !!boat.winchStrap));
     trailerChip.classList.toggle("ok", ld.loaded || (!!boat.winchStrap && ld.onBunks));
-    if (ld.loaded || (boat.winchStrap && ld.onBunks)) trailerChip.textContent = boat.winchStrap ? "NA CARRETINHA ✓ · cinta presa" : "NA CARRETINHA · cinta solta (U)";
+    if (ld.loaded || (boat.winchStrap && ld.onBunks)) trailerChip.textContent = boat.winchStrap ? "NA CARRETINHA ✓ · cinta presa" : "NA CARRETINHA · cinta solta — dê ré com o motor para sair";
     else if (ld.near) {
       const side = Math.abs(ld.lateral) < 0.15 ? "centro" : `${Math.abs(ld.lateral).toFixed(1)} m ${ld.lateral > 0 ? "→ vá p/ direita" : "→ vá p/ esquerda"}`;
       const motorDown = T.tiltDeg < 3 && T.trimDeg < (V.kind === "lancha" ? 9 : 3.5);
@@ -576,13 +580,29 @@ const boot = async () => {
       attachWinch(boat, V.trailer);
       hud.showToast(`Barco na carretinha! Desvio ${(Math.abs(ld.lateral) * 100).toFixed(0)} cm, ${Math.abs(ld.angleDeg).toFixed(1)}° — cinta do guincho presa. Pode desligar o motor (P)`);
     }
-    if (!ld.onBunks && !boat.winchStrap) trailerDone = false;
+    // só libera um novo engate depois que o barco SAIR de cima da carretinha (flutuando sobre ela ainda conta)
+    if (!ld.overBunks && !boat.winchStrap) trailerDone = false;
     // cinta presa por ~1,5 s com o barco no berço → o comando passa para o veículo
-    if (!driving && mode === "game" && boat.winchStrap && ld.onBunks) { strapT += dtReal; if (strapT > 1.5) startDriving(); } else if (!driving) strapT = 0;
+    if (!driving && mode === "game" && boat.winchStrap && ld.overBunks) { strapT += dtReal; if (strapT > 1.5) startDriving(); } else if (!driving) strapT = 0;
     if (driving) {
       trailerChip.classList.add("show", "ok");
       const art = Math.abs(V.rig.articulation) * 180 / Math.PI;
-      trailerChip.textContent = `${V.kind === "lancha" ? "CAMINHONETE" : "CARRO"} · ${(Math.abs(V.rig.v) * 3.6).toFixed(0)} km/h${V.rig.v < -0.05 ? " (ré)" : ""} · carretinha ${art.toFixed(0)}°${art > 60 ? " — CANIVETE!" : ""}`;
+      trailerChip.textContent = `${V.kind === "lancha" ? "CAMINHONETE" : "CARRO"} · ${(Math.abs(V.rig.v) * 3.6).toFixed(0)} km/h${V.rig.v < -0.05 ? " (ré)" : ""} · carretinha ${art.toFixed(0)}°${art > 60 ? " — CANIVETE!" : ""}${V.rig.wheelsInWater ? " · RODAS NA ÁGUA: pare e solte o barco (U)" : ""}`;
+    }
+    // barra de atalhos do momento (teclas + botões tocáveis)
+    {
+      const K: [string, string, Action | null][] = [];
+      if (mode !== "game") { /* menu: sem barra */ }
+      else if (driving) K.push(["W", "frente", null], ["S", "freio / ré", null], ["A D", "direção", null], ["E Q", "motor (tilt)", null], ["U", "DESENGATAR o barco", "unhitch"], ["R", "píer", "reset"]);
+      else if (T.capsized || boat.swimmers.length) K.push(["R", "recomeçar no píer", "reset"]);
+      else if (boat.winchStrap) K.push(["U", "DESENGATAR (soltar a cinta)", "unhitch"], ["E Q", "motor (tilt)", null]);
+      else if (ld.near) K.push(["E", V.kind === "lancha" ? "levantar o motor" : "pino / tilt", null], ["W S", "marcha / acelerar", null], ["A D", "direção", null], ["T", "recomeçar a rampa", "ramp"]);
+      else K.push(["T", "rampa e carretinha", "ramp"], ["P", V.kind === "bote" ? "corda (partida)" : "liga/desliga", "ignition"], ["C", "câmera", "camera"], ["H", "ajuda", "help"]);
+      const key = K.map((k) => k[0] + k[1]).join("|");
+      if (key !== ctxKey) {
+        ctxKey = key;
+        ctxBar.innerHTML = K.map(([k, label, act]) => `<button class="ctx${act === "unhitch" ? " hot" : ""}"${act ? ` data-a="${act}"` : " disabled"}>${k.split(" ").map((x) => `<kbd>${x}</kbd>`).join("")} ${label}</button>`).join("");
+      }
     }
     if (T.damageCount !== lastDamage) { if (mode === "game") hud.showToast(T.damageEvent + (T.engineDamage >= 0.95 ? " — MOTOR QUEBRADO" : "")); lastDamage = T.damageCount; }
     if (T.startFail && T.startFail !== lastStartFail) hud.showToast(T.startFail === "pull" ? "Não pegou — puxe de novo (P)" : T.startFail === "dead" ? "Só estalou: bateria sem força para girar o arranque" : "Não pegou: o arranque girou fraco (bateria baixa)");

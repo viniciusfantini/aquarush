@@ -78,6 +78,8 @@ export interface BoatTelemetry {
   pullStart: boolean;    // partida na corda (sem arranque elétrico)
   trimMotorA: number;    // corrente da bomba do power trim (A)
   depth: number;         // profundidade sob o casco
+  draftHull: number;     // calado do casco (m abaixo da superfície no ponto mais fundo do fundo)
+  draftMotor: number;    // calado com o motor (ponta do pé — o que bate primeiro no raso)
   submergedPoints: boolean[];
 }
 
@@ -211,7 +213,7 @@ export class Speedboat {
     this.telemetry = {
       speedKmh: 0, waterSpeed: 0, rpm: params.idleRpm, throttle: 0, throttleCmd: 0, trim: 0, trimDeg: 0, tiltDeg: 0, tiltBlocked: false, intakeSubmerged: true, steerDeg: 0,
       gear: "N", pitchDeg: 0, rollDeg: 0, wetFraction: 0, planing: false, thrustN: 0, ventilation: 1, cavitation: 0, propImmersion: 1, revLimiter: false, propSlip: 0, propRpm: 0, engine: "running", fuelL: 0, fuelFrac: 1, coolantC: 45, batteryV: 12.6, engineHours: 0, overheatWarn: false, protectMode: false, lowFuel: false, chargeWarn: false, stall: "", trimMotorA: 0, fuelLph: 0, buzzer: false, starterRpm: 0, startFail: "", batterySoc: 0.92, trimPin: 0, pullStart: !params.electricStart,
-      distanceM: 0, collisions: 0, capsized: false, swimmers: 0, hullDamage: 0, engineDamage: 0, damageEvent: "", damageCount: 0, lastImpact: 0, depth: 0, submergedPoints: params.buoyancyPoints.map(() => false),
+      distanceM: 0, collisions: 0, draftHull: 0, draftMotor: 0, capsized: false, swimmers: 0, hullDamage: 0, engineDamage: 0, damageEvent: "", damageCount: 0, lastImpact: 0, depth: 0, submergedPoints: params.buoyancyPoints.map(() => false),
     };
   }
 
@@ -494,6 +496,14 @@ export class Speedboat {
     t.batterySoc = sys.batterySoc;
     t.distanceM += Math.hypot(this.pos.x - oldPos.x, this.pos.z - oldPos.z);
     t.depth = water.getDepth(this.pos.x, this.pos.z);
+    // calado: quanto o casco e a ponta do pé do motor estão abaixo da superfície (varia com carga, trim e tilt)
+    {
+      const hw = water.getHeight(this.pos.x, this.pos.z);
+      let minY = Infinity;
+      for (const p of P.bunkPoints) minY = Math.min(minY, this.toWorld(p).y);
+      t.draftHull = Math.max(0, hw - minY);
+      t.draftMotor = Math.max(t.draftHull, hw - this.lowerUnitTip().y);
+    }
     this.updateCapsize(dt, water, world);
     t.capsized = this.capsized;
     t.hullDamage = this.hullDamage; t.engineDamage = this.engineDamage;
@@ -935,7 +945,14 @@ export class Speedboat {
           ];
           let best = opts[0];
           for (const o of opts) if (o.pen < best.pen) best = o;
-          maxImpact = Math.max(maxImpact, this.applyContact(wp, this.pointVelocity(wp), rotate(q, best.n), best.pen, kC, cC, muC));
+          let nLocal = best.n, pen = best.pen;
+          if (b.onlyPlusZ) {
+            // batente em V: só age em quem encosta pela frente; empurra para trás e para o centro
+            if (opts[3].pen > 0.4) continue;
+            const side = clamp(L.x / b.maxX, -1, 1) * 0.7, nl = Math.hypot(side, 1);
+            nLocal = v3(-side / nl, 0, 1 / nl); pen = opts[3].pen;
+          }
+          maxImpact = Math.max(maxImpact, this.applyContact(wp, this.pointVelocity(wp), rotate(q, nLocal), pen, kC, cC, muC));
           contact = true;
         }
       }

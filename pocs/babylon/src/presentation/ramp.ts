@@ -138,16 +138,19 @@ export const buildTrailerMesh = (scene: Scene, t: TrailerLayout): { root: Transf
     box("rollerBracket", 0.04, t.clear - railY + 0.02, 0.05, 0, (t.clear + railY) / 2 - 0.06, z, galv);
   }
   // guincho com coluna, rolete de proa (V) e cinta
-  const postH = t.clear + (big ? 0.85 : 0.55);
+  const postH = t.clear + (big ? 1.35 : 0.9);       // coluna do guincho (mesma altura do batente da física)
+  const rollerY = t.clear + (big ? 0.75 : 0.45);     // rolete de proa na altura do olhal
   box("winchPost", 0.08, postH - railY, 0.08, 0, (postH + railY) / 2, 0.1, galv);
   const bowRoller = add(MeshBuilder.CreateCylinder("bowRoller", { height: 0.2, diameter: 0.09, tessellation: 12 }, scene), rubber);
-  bowRoller.rotation.z = Math.PI / 2; bowRoller.position.set(0, postH - 0.1, 0.17);
+  bowRoller.rotation.z = Math.PI / 2; bowRoller.position.set(0, rollerY, 0.17);
+  // guias laterais da proa (V) — a boca do batente da física (±0,6 m)
+  for (const sx of [-1, 1]) { const g = box("bowGuide", 0.04, 0.5, 0.06, sx * 0.42, rollerY + 0.12, 0.17, rubber); g.rotation.z = sx * 0.75; }
   const drum = add(MeshBuilder.CreateCylinder("winchDrum", { height: 0.14, diameter: 0.12, tessellation: 14 }, scene), galv);
-  drum.rotation.z = Math.PI / 2; drum.position.set(0, postH - 0.32, 0.0);
-  box("winchHandle", 0.02, 0.02, 0.18, 0.1, postH - 0.32, -0.08, galv);
-  box("winchStrap", 0.05, 0.005, 0.25, 0, postH - 0.2, 0.2, carpet);
+  drum.rotation.z = Math.PI / 2; drum.position.set(0, postH - 0.25, 0.0);
+  box("winchHandle", 0.02, 0.02, 0.18, 0.1, postH - 0.25, -0.08, galv);
+  box("winchStrap", 0.05, 0.005, 0.25, 0, rollerY + 0.05, 0.2, carpet);
   // postes-guia (mesmos lugares dos colisores) com capas de PVC
-  for (const [zl, h] of [[L - 0.15, big ? 1.25 : 0.95], [L * 0.55, big ? 1.1 : 0.85]] as const) {
+  for (const [zl, h] of [[L - 0.15, big ? 1.8 : 1.3], [L * 0.55, big ? 1.6 : 1.15]] as const) {
     for (const sx of [-1, 1]) {
       box("guidePost", 0.05, h, 0.05, sx * t.postX, h / 2, zl, galv);
       const sleeve = add(MeshBuilder.CreateCylinder("guideSleeve", { height: h * 0.6, diameter: 0.075, tessellation: 12 }, scene), pvc);

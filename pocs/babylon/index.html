@@ -48,6 +48,24 @@
     .vbar b { color: var(--fg); font-variant-numeric: tabular-nums; font-weight: 600; min-width: 46px; text-align: center; }
     #h-thr-bar { position: absolute; bottom: 0; left: 0; right: 0; height: 0; background: var(--accent); }
     #h-thr-bar.rev { background: var(--warn); }
+    /* profundímetro: coluna d'água sob o barco (0–5 m) com o calado do casco e do motor marcados */
+    .vbar .track.depth { width: 18px; background: linear-gradient(#4a3a24, #2b2216); }
+    #h-depth-water { position: absolute; top: 0; left: 0; right: 0; height: 0; background: linear-gradient(#5fd6f0, #16708c); }
+    #h-draft-mark, #h-draft-hull { position: absolute; left: -3px; right: -3px; height: 2px; top: 0; }
+    #h-draft-mark { background: #ff5a4e; } #h-draft-hull { background: #ffd34d; }
+    #g-depth.warn #h-depth { color: #ff5a4e; } #g-depth.warn .track { box-shadow: 0 0 0 2px #ff5a4e; }
+    #h-draft { font-size: 10px; color: var(--dim); }
+    /* barra de atalhos do momento (teclado + toque) */
+    #ctx-keys { position: absolute; left: 16px; bottom: 30px; display: flex; flex-wrap: wrap; gap: 6px; max-width: min(46vw, calc(100vw - 32px)); pointer-events: auto; }
+    #ctx-keys .ctx { font: inherit; font-size: 12.5px; color: var(--fg); background: rgba(8, 20, 30, 0.62); border: 1px solid rgba(255,255,255,0.22); border-radius: 999px; padding: 5px 11px; display: flex; align-items: center; gap: 6px; backdrop-filter: blur(4px); }
+    #ctx-keys .ctx[data-a] { cursor: pointer; }
+    #ctx-keys .ctx[data-a]:hover { border-color: var(--accent); }
+    #ctx-keys .ctx:disabled { cursor: default; opacity: 1; }
+    #ctx-keys .ctx.hot { background: #ffb13d; color: #2a0400; border-color: #ffd34d; font-weight: 700; font-size: 14px; animation: ctxpulse 1.2s ease-in-out infinite; }
+    #ctx-keys kbd { font: inherit; font-weight: 700; min-width: 18px; padding: 1px 6px; border-radius: 5px; background: rgba(255,255,255,0.18); }
+    #ctx-keys .ctx.hot kbd { background: rgba(0,0,0,0.18); }
+    @keyframes ctxpulse { 50% { box-shadow: 0 0 0 4px rgba(255, 177, 61, 0.35); } }
+    @media (max-width: 900px) { #ctx-keys { bottom: auto; top: 54px; max-width: calc(100vw - 32px); } }
     /* marcha: barra F/N/R (lancha, manete) ou mostrador redondo da alavanca do motor (bote) */
     #g-gear { display: flex; }
     .vbar .track.gear { width: 22px; overflow: visible; background: rgba(255,255,255,0.1); }
@@ -186,10 +204,12 @@
       <div>Gamepad: RT/LT, analógico, LB/RB trim, Y câmera</div>
     </div>
     <div id="h-toast"></div>
+    <div id="ctx-keys"></div>
     <div id="gauges" class="panel">
       <div id="g-bars">
         <div class="vbar"><div class="track"><div id="h-thr-bar"></div></div><b id="h-thr">0%</b>ACEL</div>
         <div class="vbar"><div class="track trim"><div id="h-trim-mark"></div></div><b id="h-trim">0.0°</b>TRIM</div>
+        <div class="vbar" id="g-depth"><div class="track depth"><div id="h-depth-water"></div><div id="h-draft-mark"></div><div id="h-draft-hull"></div></div><b id="h-depth">0.0 m</b><span id="h-draft">calado 0.00</span>PROF</div>
         <div id="g-gear"></div>
       </div>
       <div id="g-big"></div>

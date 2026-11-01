@@ -11,6 +11,9 @@ import type { TrailerLayout } from "./trailer.ts";
 import { RAMP } from "./world.ts";
 import { clamp, approach, v3, qMul, qFromAxisAngle, rotateInv, type Vec3 } from "./math.ts";
 
+/** profundidade máxima de água nas rodas traseiras ao dar ré na rampa (m) */
+export const MAX_WHEEL_DEPTH = 0.15;
+
 /** ângulo máximo entre veículo e carretinha (cabeçalho encosta no para-choque) */
 export const MAX_ARTICULATION = 80 * Math.PI / 180;
 
@@ -42,6 +45,8 @@ export class TowRig {
   rx = 0; rz = 0; yaw = Math.PI;
   /** velocidade longitudinal (m/s, + = frente) e esterço atual (rad) */
   v = 0; steer = 0;
+  /** rodas traseiras na água (a ré trava) */
+  wheelsInWater = false;
   /** eixo da carretinha (XZ) */
   ax = 0; az = 0;
   private readonly hitchToAxle: number;
@@ -91,6 +96,11 @@ export class TowRig {
     // "auto hold": sem comando e quase parado, fica freado (não desce a rampa sozinho)
     if (!up && !down && Math.abs(this.v) < 0.4) this.v = approach(this.v, 0, S.brake * dt);
     this.v = clamp(this.v, -S.maxReverse, S.maxSpeed);
+    // de ré na rampa o motorista para quando as rodas traseiras chegam na água (~15 cm): mais que isso a
+    // carretinha fica funda demais (o barco passa por cima dos postes-guia e do berço)
+    const wetRear = -this.ground(this.rx - Math.sin(this.yaw) * 0.3, this.rz - Math.cos(this.yaw) * 0.3);
+    this.wheelsInWater = wetRear > MAX_WHEEL_DEPTH;
+    if (this.wheelsInWater && this.v < 0) this.v = 0;
     // bicicleta: o eixo traseiro anda no rumo; o rumo gira com v·tan(δ)/entre-eixos
     this.yaw += (this.v / S.wheelbase) * Math.tan(this.steer) * dt;
     this.rx += Math.sin(this.yaw) * this.v * dt;
