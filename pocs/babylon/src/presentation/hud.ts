@@ -92,6 +92,9 @@ export class Hud {
   private fuelG!: RoundGauge;
   private tempG: RoundGauge | null = null;
   private voltG: RoundGauge | null = null;
+  private ampG: RoundGauge | null = null;
+  private bilgeChip = $("h-bilge");
+  private anchorChip = $("h-anchor");
   private pins = 0;
   private gearStyle: "bar" | "dial" = "bar";
   private shownGear = "";
@@ -152,6 +155,8 @@ export class Hud {
     this.fuelG = new RoundGauge(small, { title: "COMBUST.", min: 0, max: 1, labels: [0, 0.5, 1], minor: 0.125, redFrom: 0, redTo: 0.12, labelFmt: (v) => (v === 0 ? "E" : v === 1 ? "F" : "½") });
     this.tempG = opts.temp ? new RoundGauge(small, { title: "TEMP", min: 40, max: 120, labels: [40, 80, 120], minor: 10, redFrom: 90 }) : null;
     this.voltG = opts.battery ? new RoundGauge(small, { title: "BATERIA", min: 8, max: 16, labels: [8, 12, 16], minor: 1, redFrom: 8, redTo: 11.5 }) : null;
+    // amperímetro: corrente na bateria (+ carga do alternador, − consumo: arranque, trim, molinete, bomba)
+    this.ampG = opts.battery ? new RoundGauge(small, { title: "AMPÈRES", min: -60, max: 30, labels: [-60, -30, 0, 30], minor: 10, redFrom: -60, redTo: -40 }) : null;
   }
 
   update(t: BoatTelemetry, fps: number, extra: Record<string, string>): void {
@@ -163,6 +168,17 @@ export class Hud {
     this.fuelAut.textContent = autTxt ? `autonomia${autTxt.replace(" ·", "")}` : "";
     this.tempG?.set(t.coolantC, `${t.coolantC.toFixed(0)}°C`, t.protectMode ? "PROTEÇÃO" : t.overheatWarn ? "QUENTE" : "", t.overheatWarn);
     this.voltG?.set(t.batteryV, `${t.batteryV.toFixed(1)} V`, t.jumper ? "jump" : t.engine === "running" && t.batteryV > 13.2 ? "carga" : `${Math.round(t.batterySoc * 100)}%`, t.chargeWarn);
+    const amps = t.batteryA;
+    this.ampG?.set(Math.max(-60, Math.min(30, amps)), `${amps > 0.5 ? "+" : ""}${amps.toFixed(0)} A`, amps > 0.5 ? "carga" : amps < -0.5 ? "consumo" : "", amps < -40);
+    // porão: bomba jogando água fora / água alta (alerta luminoso piscando)
+    this.bilgeChip.classList.toggle("warn", t.bilgeAlarm);
+    if (t.bilgeAlarm) this.bilgeChip.textContent = t.bilgePump ? `BOMBA DE PORÃO · ${t.bilgeL.toFixed(0)} L · ${t.bilgeFlowLps.toFixed(1)} L/s` : `ÁGUA NO PORÃO · ${t.bilgeL.toFixed(0)} L`;
+    // âncora: cabo lançado, profundidade, filame e estado
+    const anc = t.anchorOut > 0.05 || t.anchorRelay;
+    this.anchorChip.classList.toggle("show", anc);
+    this.anchorChip.classList.toggle("warn", t.anchorState === "garrando" || t.anchorRelay);
+    if (anc) this.anchorChip.textContent = t.anchorRelay ? "ÂNCORA · molinete sem força (bateria)"
+      : `ÂNCORA ${t.anchorOut.toFixed(1)} m · fundo ${t.anchorDepth.toFixed(1)} m${t.anchorScope > 0 && t.anchorState !== "descendo" && t.anchorState !== "subindo" ? ` · ${t.anchorScope.toFixed(1)}:1` : ""} · ${t.anchorState.toUpperCase()}`;
     // barras de acelerador e trim (como antes)
     this.thrBar.style.height = `${t.throttle * 100}%`;
     this.thrBar.classList.toggle("rev", t.gear === "R");
@@ -230,6 +246,8 @@ export class Hud {
         ["bomba do trim (A)", t.trimMotorA.toFixed(0)],
         ["bateria (V)", t.batteryV.toFixed(2)],
         ["carga da bateria", `${(t.batterySoc * 100).toFixed(1)} %`],
+        ["porão (L · entra L/s)", `${t.bilgeL.toFixed(1)} · ${t.bilgeInflowLps.toFixed(2)}`],
+        ["âncora (m · N)", `${t.anchorOut.toFixed(1)} · ${t.anchorTension.toFixed(0)}`],
         ["jump start", `${t.jumper ? "conectado · " : ""}${(t.jumpCharge * 100).toFixed(0)} %`],
         ["arranque (rpm)", t.starterRpm.toFixed(0)],
         ["distância (m)", t.distanceM.toFixed(0)],

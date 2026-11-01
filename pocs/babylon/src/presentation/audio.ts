@@ -70,6 +70,10 @@ export interface AudioState {
   buzzer?: boolean;       // alarme do motor (autoteste da chave: "piiii")
   starterRpm?: number;    // rotação do arranque (cai com a bateria fraca)
   pullStart?: boolean;    // partida na corda (sem motor de arranque elétrico)
+  bilgeAlarm?: boolean;   // alarme de porão (bipe intermitente)
+  bilgeFlowLps?: number;  // jato da bomba de porão caindo na água
+  windlassA?: number;     // molinete da âncora (A)
+  anchorRelay?: boolean;  // molinete sem força: só o relé
 }
 
 export class EngineAudio {
@@ -110,6 +114,10 @@ export class EngineAudio {
   private buzzGain!: GainNode;
   private solenoidT = 0;
   private pumpGain!: GainNode;
+  private alarmGain!: GainNode;
+  private bilgeGain!: GainNode;
+  private winchOsc!: OscillatorNode;
+  private winchGain!: GainNode;
   muted = false;
   /** 4 = motor de 4 cilindros (lancha 150 hp); 2 = bicilíndrico (bote 15 hp) */
   cylinders: number;
@@ -271,6 +279,21 @@ export class EngineAudio {
     this.pumpOsc.connect(pumpBP).connect(this.pumpGain).connect(this.master);
     this.pumpOsc.start();
 
+    // ---- alarme de porão: bipe agudo intermitente (piezo de painel) ----
+    const al = ctx.createOscillator(); al.type = "square"; al.frequency.value = 3300;
+    const alLP = ctx.createBiquadFilter(); alLP.type = "lowpass"; alLP.frequency.value = 7000;
+    this.alarmGain = ctx.createGain(); this.alarmGain.gain.value = 0;
+    al.connect(alLP).connect(this.alarmGain).connect(this.master); al.start();
+    // ---- jato da bomba de porão caindo na água (chiado de água) ----
+    const bgBP = ctx.createBiquadFilter(); bgBP.type = "bandpass"; bgBP.frequency.value = 1400; bgBP.Q.value = 0.7;
+    this.bilgeGain = ctx.createGain(); this.bilgeGain.gain.value = 0;
+    noiseSrc().connect(bgBP).connect(this.bilgeGain).connect(this.master);
+    // ---- molinete da âncora: motor DC grave + engrenagem ----
+    this.winchOsc = ctx.createOscillator(); this.winchOsc.type = "sawtooth"; this.winchOsc.frequency.value = 140;
+    const wBP = ctx.createBiquadFilter(); wBP.type = "bandpass"; wBP.frequency.value = 520; wBP.Q.value = 1.1;
+    this.winchGain = ctx.createGain(); this.winchGain.gain.value = 0;
+    this.winchOsc.connect(wBP).connect(this.winchGain).connect(this.master); this.winchOsc.start();
+
     // ---- motor por síntese física (explosões → tubos de escape → cubo da hélice) ----
     this.workletGain = ctx.createGain(); this.workletGain.gain.value = 0;
     const cowl = ctx.createBiquadFilter(); cowl.type = "peaking"; cowl.frequency.value = 700; cowl.Q.value = 1.1; cowl.gain.value = 3;
@@ -310,7 +333,13 @@ export class EngineAudio {
     this.st1.frequency.setTargetAtTime(500 + 2.6 * sRpm, t, 0.05);
     if (st.engine === "cranking" && !st.pullStart && sRpm < 40 && t > this.solenoidT) { this.solenoidT = t + 0.35; this.clunk(false); }
     this.buzzGain.gain.setTargetAtTime(m * (st.buzzer ? 0.05 : 0), t, 0.008);
-    if (st.trimRelay && t > this.solenoidT) { this.solenoidT = t + 0.45; this.clunk(false); } // relé do trim estalando
+    if ((st.trimRelay || st.anchorRelay) && t > this.solenoidT) { this.solenoidT = t + 0.45; this.clunk(false); } // relé estalando sem força
+    // alarme de porão: 0,25 s ligado a cada 0,6 s
+    this.alarmGain.gain.setTargetAtTime(m * (st.bilgeAlarm && t % 0.6 < 0.25 ? 0.035 : 0), t, 0.005);
+    this.bilgeGain.gain.setTargetAtTime(m * Math.min(0.06, 0.05 * (st.bilgeFlowLps ?? 0)), t, 0.1);
+    const wa = st.windlassA ?? 0;
+    this.winchGain.gain.setTargetAtTime(m * (wa > 2 ? 0.05 : 0), t, 0.04);
+    this.winchOsc.frequency.setTargetAtTime(wa > 70 ? 105 : wa > 40 ? 125 : 150, t, 0.1); // com carga o motor DC pesa
     const pumpA = st.trimRelay ? 0 : st.trimMotorA ?? 0;
     this.pumpGain.gain.setTargetAtTime(m * (pumpA > 0 ? 0.035 : 0), t, 0.03);
     // sob carga (batente/tilt) o motor DC desacelera: o tom cai

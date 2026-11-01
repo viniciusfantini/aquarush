@@ -16,8 +16,10 @@ export interface VehicleInput {
   brake: number;
   /** @deprecated substituído por `gear`. */
   reverse: boolean;
-  /** Reservado (porão) — fora do escopo da POC 1. */
+  /** Interruptor manual da bomba de porão (a boia automática liga sozinha com água). */
   bilgePump: boolean;
+  /** Guincho da âncora de proa: +1 paga cabo (lança), −1 recolhe, 0 parado. */
+  anchor: number;
   /** Luzes de navegação (estado). */
   navigationLights: boolean;
   /** Botão de aceleração em neutro segurado: com a marcha em N o acelerador sobe o giro sem engatar. */
@@ -34,4 +36,5 @@ export const emptyInput = (): VehicleInput => ({
   bilgePump: false,
   navigationLights: false,
   neutralThrottle: false,
+  anchor: 0,
 });

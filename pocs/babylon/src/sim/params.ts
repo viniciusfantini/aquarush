@@ -51,6 +51,12 @@ export interface SpeedboatParams {
   contactPoints: Vec3[];   // pontos de colisão (fundo, rochas, píer)
   /** fundo do casco onde os bunks da carretinha apoiam (quilha + dois lados do V) */
   bunkPoints: Vec3[];
+  /** altura local da borda (onde a água começa a entrar por cima do costado) */
+  gunwaleY: number;
+  /** porão: centro do peso da água, capacidade, bomba elétrica (L/h; 0 = sem bomba) e saída no costado */
+  bilge: { pos: Vec3; maxL: number; pumpLph: number; pumpA: number; outlet: Vec3 };
+  /** âncora de proa (molinete elétrico se motorA > 0; senão, à mão) */
+  anchor: AnchorParams;
 
   // Motor / propulsão
   enginePowerHp: number;   // referência documental
@@ -105,6 +111,16 @@ export interface SpeedboatParams {
 
 const hl = 0.72; // meia-distância transversal dos pontos de flutuação
 
+/** Âncora de proa + guincho. */
+export interface AnchorParams {
+  roller: Vec3;    // roldana de proa (local) — o cabo sai daqui
+  rodeMax: number; // m de cabo no paiol
+  rateOut: number; // m/s pagando cabo
+  rateIn: number;  // m/s recolhendo (sem carga)
+  motorA: number;  // A do molinete elétrico (0 = guincho à mão)
+  holdN: number;   // N que a âncora segura unhada com filame ≥ 5:1
+}
+
 export const SPEEDBOAT: SpeedboatParams = {
   kind: "lancha",
   name: "Lancha provisória AR-6",
@@ -152,6 +168,11 @@ export const SPEEDBOAT: SpeedboatParams = {
     v3(-0.6, 0.35, 2.4), v3(0.6, 0.35, 2.4),
   ],
   bunkPoints: [-2.6, -1.4, 0, 1.4].flatMap((z) => [v3(0, -0.45, z), v3(-0.55, -0.35, z), v3(0.55, -0.35, z)]),
+  gunwaleY: 0.44,
+  // bomba de porão de ~1100 GPH (≈ 4200 L/h) com boia automática; saída no costado de boreste, à ré
+  bilge: { pos: v3(0, -0.32, -1.9), maxL: 700, pumpLph: 4200, pumpA: 4.5, outlet: v3(1.13, 0.2, -2.2) },
+  // âncora tipo Danforth ~7 kg, 50 m de cabo, molinete elétrico de ~60 A
+  anchor: { roller: v3(0, 0.62, 3.12), rodeMax: 50, rateOut: 0.8, rateIn: 0.5, motorA: 60, holdN: 4000 },
 
   enginePowerHp: 150,
   maxThrust: 8500,
@@ -250,6 +271,11 @@ export const DINGHY: SpeedboatParams = {
     v3(-0.7, 0.12, -1.5), v3(0.7, 0.12, -1.5),
   ],
   bunkPoints: [-1.1, -0.1, 0.8].flatMap((z) => [v3(0, -0.2, z), v3(-0.42, -0.14, z), v3(0.42, -0.14, z)]),
+  gunwaleY: 0.3,
+  // sem bomba elétrica (sem bateria): a água fica no fundo
+  bilge: { pos: v3(0, -0.1, -0.4), maxL: 300, pumpLph: 0, pumpA: 0, outlet: v3(0.8, 0.15, -0.9) },
+  // fateixa pequena (~3 kg) com 25 m de cabo, lançada e recolhida à mão
+  anchor: { roller: v3(0, 0.3, 1.6), rodeMax: 25, rateOut: 0.7, rateIn: 0.35, motorA: 0, holdN: 1200 },
 
   enginePowerHp: 15,
   maxThrust: 1200,

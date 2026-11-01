@@ -36,6 +36,7 @@ export class InputManager {
   // touch
   touchSteer = 0;
   touchTrim = 0;
+  touchAnchor = 0;
   /** alavanca touch (quando ativa, define marcha e acelerador diretamente) */
   touchLever: { gear: GearCommand; throttle: number } | null = null;
   private lights = false;
@@ -131,6 +132,8 @@ export class InputManager {
     s.trim = clamp(kbTrim + gpTrim + this.touchTrim, -1, 1);
     s.navigationLights = this.lights;
     s.neutralThrottle = nHeld && this.gear === "N";
+    // âncora de proa: "+" paga cabo, "−" recolhe (segurar) — teclado principal ou numérico, ou botões touch
+    s.anchor = clamp((this.k("Equal", "NumpadAdd") ? 1 : 0) - (this.k("Minus", "NumpadSubtract") ? 1 : 0) + this.touchAnchor, -1, 1);
     return s;
   }
 
@@ -233,6 +236,8 @@ export const attachTouchControls = (root: HTMLElement, input: InputManager): voi
   };
   hold("#t-trim-up", () => (input.touchTrim = 1), () => (input.touchTrim = 0));
   hold("#t-trim-down", () => (input.touchTrim = -1), () => (input.touchTrim = 0));
+  hold("#t-anc-out", () => (input.touchAnchor = 1), () => (input.touchAnchor = 0));
+  hold("#t-anc-in", () => (input.touchAnchor = -1), () => (input.touchAnchor = 0));
   const tap = (id: string, a: Action) => root.querySelector<HTMLElement>(id)!.addEventListener("click", () => input.pushAction(a));
   tap("#t-cam", "camera");
   tap("#t-lights", "lights");

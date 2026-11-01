@@ -442,6 +442,107 @@ for (const [label, thr] of [["baixa", 0.25], ["alta", 1]] as const) {
   check("bateria", "em marcha lenta o booster não recarrega (%)", (idle.systems.jumpCharge - 0.2) * 100, -0.5, 0.5, "%", 1);
 }
 
+// ---------- Amperímetro (corrente na bateria) ----------
+{
+  const water = mkWater(0);
+  const b = new Speedboat(SPEEDBOAT, v3(0, 0.25, 0));
+  run(b, water, 2, { ...emptyInput(), gear: "N" });
+  b.toggleIgnition(); run(b, water, 2, { ...emptyInput(), gear: "N" });
+  check("amperímetro", "desligado, sem luzes (A)", b.telemetry.batteryA, -1, 0, "A", 1);
+  let crankA = 0, trimA = 0;
+  b.toggleIgnition();
+  run(b, water, 4, { ...emptyInput(), gear: "N" }, openWater, () => { if (b.telemetry.engine === "cranking") crankA = Math.min(crankA, b.telemetry.batteryA); });
+  check("amperímetro", "dando partida (A)", crankA, -200, -120, "A", 0);
+  b.toggleIgnition(); run(b, water, 2, { ...emptyInput(), gear: "N" });
+  run(b, water, 1, { ...emptyInput(), gear: "N", trim: 1 }, openWater, () => { trimA = Math.min(trimA, b.telemetry.batteryA); });
+  check("amperímetro", "trim com o motor desligado (A)", trimA, -50, -25, "A", 0);
+  b.systems.batterySoc = 0.5; b.toggleIgnition(); run(b, water, 4, { ...emptyInput(), gear: "N" });
+  run(b, water, 10, { ...emptyInput(), gear: "F", throttle: 0.6 });
+  check("amperímetro", "cruzeiro: alternador carregando (A)", b.telemetry.batteryA, 5, 16, "A", 1);
+}
+
+// ---------- Âncora de proa (lancha com molinete, bote à mão) ----------
+{
+  const DEPTH = 3;
+  const flat: PhysicsWorld = { groundHeight: () => -DEPTH, spheres: [], boxes: [] };
+  const water = mkWater(0);
+  const A = SPEEDBOAT.anchor;
+  const b = new Speedboat(SPEEDBOAT, v3(0, 0.25, 0));
+  b.engine = "running";
+  let payA = 0, n = 0;
+  run(b, water, 16, { ...emptyInput(), gear: "N", anchor: 1 }, flat, () => { payA += b.telemetry.batteryA; n++; });
+  check("âncora", "16 s pagando: cabo lançado (m)", b.telemetry.anchorOut, 12, 13.5, "m", 1);
+  check("âncora", "âncora no fundo", b.anchor.onBottom ? 1 : 0, 1, 1, "", 0);
+  check("âncora", "profundidade medida da roldana (m)", b.telemetry.anchorDepth, DEPTH + 0.3, DEPTH + 1.2, "m", 1);
+  check("âncora", "molinete pagando cabo: corrente média (A, já com o alternador)", payA / n, -40, -10, "A", 0);
+  run(b, water, 30, { ...emptyInput(), gear: "R" }, flat);
+  const hd = () => { const r = b.toWorld(A.roller); return Math.hypot(r.x - b.anchor.pos.x, r.z - b.anchor.pos.z); };
+  check("âncora", "ré lenta 30 s: unhou e segura (cabo esticado)", b.telemetry.anchorState === "segurando" ? 1 : 0, 1, 1, "", 0);
+  check("âncora", "barco preso pelo cabo: distância horizontal à âncora (m)", hd(), 8, b.anchor.out + 0.3, "m", 1);
+  const d0 = b.anchor.dragged;
+  run(b, water, 15, { ...emptyInput(), gear: "R", throttle: 0.5 }, flat);
+  check("âncora", "filame ~4:1, ré a 50 % por 15 s: quanto arou (m)", b.anchor.dragged - d0, 0, 1.5, "m", 2);
+  // recolher: o molinete puxa o barco até a âncora, desunha e guarda
+  let haulA = 0;
+  run(b, water, 70, { ...emptyInput(), gear: "N", anchor: -1 }, flat, () => { haulA = Math.min(haulA, b.telemetry.batteryA); });
+  check("âncora", "recolhendo 70 s: âncora guardada", b.telemetry.anchorState === "recolhida" && b.telemetry.anchorOut === 0 ? 1 : 0, 1, 1, "", 0);
+  check("âncora", "molinete puxando o barco: pico de corrente (A)", haulA, -140, -50, "A", 0);
+  // pouco cabo (filame ~1,5:1): a âncora não segura e ara o fundo
+  const s = new Speedboat(SPEEDBOAT, v3(0, 0.25, 0));
+  s.engine = "running";
+  run(s, water, 6.5, { ...emptyInput(), gear: "N", anchor: 1 }, flat);
+  run(s, water, 15, { ...emptyInput(), gear: "R", throttle: 0.5 }, flat);
+  check("âncora", `pouco cabo (${s.anchor.out.toFixed(1)} m, filame ${s.anchor.scope.toFixed(1)}:1), ré a 50 %: garrou (m)`, s.anchor.dragged, 3, 60, "m", 1);
+  // bateria zerada: o molinete não gira, só o relé
+  const z = new Speedboat(SPEEDBOAT, v3(0, 0.25, 0));
+  z.systems.batterySoc = 0; z.engine = "off";
+  let relay = false;
+  run(z, water, 3, { ...emptyInput(), gear: "N", anchor: 1 }, flat, () => { relay ||= z.telemetry.anchorRelay; });
+  check("âncora", "bateria zerada: o molinete não paga cabo (m)", z.telemetry.anchorOut, 0, 0, "m", 2);
+  check("âncora", "bateria zerada: só o relé estala", relay ? 1 : 0, 1, 1, "", 0);
+  // bote: guincho à mão, sem corrente
+  const d = new Speedboat(DINGHY, v3(0, 0.25, 0));
+  let dA = 0;
+  run(d, water, 10, { ...emptyInput(), gear: "N", anchor: 1 }, flat, () => { dA = Math.max(dA, d.telemetry.windlassA); });
+  check("âncora", "bote: 10 s lançando à mão (m)", d.telemetry.anchorOut, 6, 7.5, "m", 1);
+  check("âncora", "bote: sem molinete elétrico (A)", dA, 0, 0, "A", 0);
+}
+
+// ---------- Porão: furo no casco, bomba automática, alarme e peso da água ----------
+{
+  const water = mkWater(0);
+  const b = new Speedboat(SPEEDBOAT, v3(0, 0.25, 0));
+  run(b, water, 2, emptyInput());
+  const m0 = b.totalMass;
+  b.hullDamage = 0.3;
+  let maxL = 0, pumped = false, alarm = false, maxFlow = 0, pumpBatA = 0;
+  run(b, water, 120, emptyInput(), openWater, () => {
+    const T = b.telemetry; maxL = Math.max(maxL, T.bilgeL); pumped ||= T.bilgePump; alarm ||= T.bilgeAlarm; maxFlow = Math.max(maxFlow, T.bilgeFlowLps);
+    if (T.bilgePump) pumpBatA = Math.min(pumpBatA, T.batteryA);
+  });
+  check("porão", "casco 30 %: entrada de água (L/s)", b.telemetry.bilgeInflowLps, 0.25, 0.45, "L/s", 2);
+  check("porão", "a boia liga a bomba sozinha", pumped ? 1 : 0, 1, 1, "", 0);
+  check("porão", "bomba dá conta: máximo de água no porão (L)", maxL, 5, 12, "L", 1);
+  check("porão", "vazão da bomba (L/s, ~1100 GPH)", maxFlow, 0.9, 1.25, "L/s", 2);
+  check("porão", "alarme sonoro/luminoso com a bomba jogando água fora", alarm ? 1 : 0, 1, 1, "", 0);
+  check("porão", "bomba ligada: corrente na bateria (A)", pumpBatA, -7, -4, "A", 1);
+  // furo grande (casco 100 %): entra mais que a bomba tira — a água acumula e pesa
+  const z = new Speedboat(SPEEDBOAT, v3(0, 0.25, 0));
+  run(z, water, 2, emptyInput());
+  const y0 = z.pos.y;
+  z.hullDamage = 1;
+  run(z, water, 120, emptyInput());
+  check("porão", "casco 100 %: a bomba não vence, água em 2 min (L)", z.telemetry.bilgeL, 60, 130, "L", 1);
+  check("porão", "a água pesa no barco (kg a mais)", z.totalMass - m0, z.telemetry.bilgeL - 1, z.telemetry.bilgeL + 1, "kg", 1);
+  check("porão", "barco mais fundo com a água (cm)", (y0 - z.pos.y) * 100, 0.3, 8, "cm", 1);
+  check("porão", "água alta: alarme", z.telemetry.bilgeAlarm ? 1 : 0, 1, 1, "", 0);
+  // bote: sem bomba elétrica
+  const d = new Speedboat(DINGHY, v3(0, 0.25, 0));
+  d.hullDamage = 0.3;
+  run(d, water, 60, emptyInput());
+  check("porão", "bote (sem bomba): 1 min com furo (L)", d.telemetry.bilgeL, 15, 25, "L", 1);
+}
+
 // ---------- Aceleração em neutro (botão da manete segurado em N) ----------
 {
   const water = mkWater(0);

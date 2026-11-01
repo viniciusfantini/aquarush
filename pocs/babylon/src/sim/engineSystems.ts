@@ -49,6 +49,7 @@ export interface EngineSystemsInput {
   lightsOn: boolean;
   starterLoad?: number;      // 0..1: arranque girando (1) ou travado/solenoide (0,2)
   trimMotorA?: number;       // bomba elétrica do power trim (A)
+  auxA?: number;             // outras cargas (molinete da âncora, bomba de porão) (A)
 }
 
 export class EngineSystems {
@@ -66,6 +67,8 @@ export class EngineSystems {
   jumpCharge = 1;
   /** contador de desconexões automáticas do booster (o motor pegou) — o HUD avisa */
   jumperAutoOff = 0;
+  /** corrente na bateria (A): + carregando, − descarregando (o amperímetro do painel) */
+  batteryA = 0;
   /** corrente do alternador no último passo (A) */
   private altA = 0;
   /** pedido de desligamento (sem combustível ou superaquecimento extremo) */
@@ -152,7 +155,7 @@ export class EngineSystems {
     if (!P.hasBattery) { this.batteryV = 0; this.batterySoc = 0; }
     else {
     const charging = running && s.rpm > 900;
-    let drain = (s.lightsOn ? 2.5 : 0.3) + (s.trimMotorA ?? 0); // A (instrumentos + luzes + bomba do trim)
+    let drain = (s.lightsOn ? 2.5 : 0.3) + (s.trimMotorA ?? 0) + (s.auxA ?? 0); // A (instrumentos + luzes + trim + molinete/bomba de porão)
     if (s.engine === "cranking") drain += P.starterA * (s.starterLoad ?? 1); // motor de arranque
     const alt = charging ? Math.min(15, (s.rpm - 900) / 120) : 0; // A do alternador
     this.altA = alt;
@@ -167,6 +170,7 @@ export class EngineSystems {
     // em cruzeiro (alternador folgado) o booster recarrega na tomada 12 V do barco (~1,5 min de 0 a 100 %)
     if (alt >= 8) this.jumpCharge = Math.min(1, this.jumpCharge + (alt / 15) * dt / 90);
     const battNet = boosting ? alt : alt - drain;
+    this.batteryA = battNet;
     this.batterySoc = clamp(this.batterySoc + (battNet * dt * P.batteryTimeScale) / 3600 / this.p.batteryAh, 0, 1);
     const src = this.source;
     const rest = src.v;

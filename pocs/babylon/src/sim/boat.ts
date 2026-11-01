@@ -17,6 +17,7 @@ import { type VehicleInput, emptyInput } from "../gameplay/vehicleInput.ts";
 
 const NO_PILOT: VehicleInput = emptyInput();
 import { EngineSystems } from "./engineSystems.ts";
+import { AnchorGear, type AnchorState } from "./anchor.ts";
 
 const RHO = 1000;     // água doce, kg/m³
 /** Rotação máxima em neutro (a central do motor limita o giro sem carga na hélice). */
@@ -82,6 +83,19 @@ export interface BoatTelemetry {
   trimRelay: boolean;    // botão do trim apertado mas a bomba sem força (bateria zerada): só o relé estala
   jumper: boolean;       // booster de partida (jump start) ligado na bateria
   jumpCharge: number;    // carga do booster 0..1 (cheio ≈ 3 partidas)
+  batteryA: number;      // amperímetro: + carregando, − descarregando (A)
+  bilgeL: number;        // água no porão (L)
+  bilgeInflowLps: number; // entrada de água (L/s): furo no casco + água por cima da borda
+  bilgePump: boolean;    // bomba de porão ligada
+  bilgeFlowLps: number;  // vazão da bomba (L/s) — o jato pelo costado
+  bilgeAlarm: boolean;   // alarme de porão (bomba acionada com água, ou água alta sem bomba)
+  anchorOut: number;     // cabo da âncora lançado (m)
+  anchorState: AnchorState;
+  anchorDepth: number;   // profundidade da roldana ao fundo (m)
+  anchorScope: number;   // filame (cabo ÷ profundidade)
+  anchorTension: number; // tração no cabo (N)
+  anchorRelay: boolean;  // molinete sem força: só o relé estala
+  windlassA: number;     // corrente do molinete (A)
   neutralRev: boolean;   // acelerando em neutro (botão de aceleração em neutro segurado)
   depth: number;         // profundidade sob o casco
   draftHull: number;     // calado do casco (m abaixo da superfície no ponto mais fundo do fundo)
@@ -147,6 +161,12 @@ export class Speedboat {
   mooringLines: { anchor: Vec3; local: Vec3; length: number }[] = [];
   /** forças externas (mundo) para o próximo passo — ex.: reação da boia da poita empurrada pelo casco */
   externalForces: { p: Vec3; f: Vec3 }[] = [];
+  /** âncora de proa + guincho */
+  readonly anchor: AnchorGear;
+  /** água no porão (L) — pesa no barco (carga em params.bilge.pos) */
+  bilgeL = 0;
+  private bilgeAuto = false;
+  private bilgePumpA = 0;
   private cavitation = 0;
   private propRpmState = 0;
   private immersion = 1;
@@ -181,6 +201,7 @@ export class Speedboat {
   private updateMassProperties(): void {
     const P = this.params;
     this.loads = [{ mass: this.systems.fuelL * P.fuelDensity, pos: P.fuelTankPos }];
+    if (this.bilgeL > 0) this.loads.push({ mass: this.bilgeL, pos: P.bilge.pos }); // água doce: 1 kg/L
     for (const o of this.occupants) this.loads.push({ mass: o.mass, pos: P.seats[o.seat] });
     let m = P.mass, ix = P.inertia.x, iy = P.inertia.y, iz = P.inertia.z;
     for (const L of this.loads) {
@@ -215,6 +236,7 @@ export class Speedboat {
 
   constructor(params: SpeedboatParams, pos: Vec3, headingRad = 0) {
     this.params = params;
+    this.anchor = new AnchorGear(params.anchor);
     this.systems = new EngineSystems({ ...ENGINE_SYSTEMS, tankLiters: params.tankLiters, hasBattery: params.electricStart });
     this.trimPin = Math.max(0, Math.min(1, params.trimPins.length - 1));
     this.manualAngle = params.trimPins[this.trimPin] ?? 0;
@@ -223,7 +245,8 @@ export class Speedboat {
     this.rpm = params.idleRpm;
     this.telemetry = {
       speedKmh: 0, waterSpeed: 0, rpm: params.idleRpm, throttle: 0, throttleCmd: 0, trim: 0, trimDeg: 0, tiltDeg: 0, tiltBlocked: false, intakeSubmerged: true, steerDeg: 0,
-      gear: "N", pitchDeg: 0, rollDeg: 0, wetFraction: 0, planing: false, thrustN: 0, ventilation: 1, cavitation: 0, propImmersion: 1, revLimiter: false, propSlip: 0, propRpm: 0, engine: "running", fuelL: 0, fuelFrac: 1, coolantC: 45, batteryV: 12.6, engineHours: 0, overheatWarn: false, protectMode: false, lowFuel: false, chargeWarn: false, stall: "", trimMotorA: 0, trimRelay: false, jumper: false, jumpCharge: 1, neutralRev: false, fuelLph: 0, buzzer: false, starterRpm: 0, startFail: "", batterySoc: 0.92, trimPin: 0, pullStart: !params.electricStart,
+      gear: "N", pitchDeg: 0, rollDeg: 0, wetFraction: 0, planing: false, thrustN: 0, ventilation: 1, cavitation: 0, propImmersion: 1, revLimiter: false, propSlip: 0, propRpm: 0, engine: "running", fuelL: 0, fuelFrac: 1, coolantC: 45, batteryV: 12.6, engineHours: 0, overheatWarn: false, protectMode: false, lowFuel: false, chargeWarn: false, stall: "", trimMotorA: 0, trimRelay: false, jumper: false, jumpCharge: 1, batteryA: 0, bilgeL: 0, bilgeInflowLps: 0, bilgePump: false, bilgeFlowLps: 0, bilgeAlarm: false,
+      anchorOut: 0, anchorState: "recolhida", anchorDepth: 0, anchorScope: 0, anchorTension: 0, anchorRelay: false, windlassA: 0, neutralRev: false, fuelLph: 0, buzzer: false, starterRpm: 0, startFail: "", batterySoc: 0.92, trimPin: 0, pullStart: !params.electricStart,
       distanceM: 0, collisions: 0, draftHull: 0, draftMotor: 0, capsized: false, swimmers: 0, hullDamage: 0, engineDamage: 0, damageEvent: "", damageCount: 0, lastImpact: 0, depth: 0, submergedPoints: params.buoyancyPoints.map(() => false),
     };
   }
@@ -240,6 +263,7 @@ export class Speedboat {
     this.tilt = 0;
     this.tiltWanted = false;
     this.capsized = false; this.capsizeT = 0; this.swimmers = []; this.winchStrap = null; this.mooringLines = [];
+    this.anchor.reset(); this.bilgeL = 0; this.bilgeAuto = false; this.bilgePumpA = 0;
     this.trimPin = Math.max(0, Math.min(1, this.params.trimPins.length - 1));
     this.manualAngle = this.params.trimPins[this.trimPin] ?? 0;
     this.gear = this.wantGear = "N";
@@ -439,6 +463,12 @@ export class Speedboat {
     const vAir = len(this.vel);
     if (vAir > 0.01) this.F = addScaled(this.F, this.vel, -0.5 * RHO_AIR * P.airDragCdA * vAir);
 
+    // ---------------- âncora (o cabo entra como mola em collide) ----------------
+    {
+      const A = P.anchor;
+      const voltsOk = !this.systems.p.hasBattery || A.motorA === 0 || this.systems.supplyV(A.motorA) >= 9;
+      this.anchor.step(dt, input.anchor, this.toWorld(A.roller), (x, z) => world.groundHeight(x, z), voltsOk, !!this.winchStrap || this.capsized);
+    }
     // ---------------- colisões (fundo, rochas, píer) ----------------
     const impact = this.collide(world);
     this.impactN = impact;
@@ -500,7 +530,11 @@ export class Speedboat {
     t.engine = this.engine;
     // sistemas do motor: combustível, temperatura, bateria, horímetro
     const sys = this.systems;
-    sys.update(dt, { engine: this.engine, rpm: t.rpm, fuelLph: t.fuelLph, load: this.throttleActual, intakeSubmerged, lightsOn: input.navigationLights, trimMotorA: this.trimMotorA });
+    sys.update(dt, { engine: this.engine, rpm: t.rpm, fuelLph: t.fuelLph, load: this.throttleActual, intakeSubmerged, lightsOn: input.navigationLights, trimMotorA: this.trimMotorA, auxA: this.anchor.motorA + this.bilgePumpA });
+    this.updateBilge(dt, water, input);
+    t.batteryA = sys.batteryA;
+    t.anchorOut = this.anchor.out; t.anchorState = this.anchor.state; t.anchorDepth = this.anchor.depth; t.anchorScope = this.anchor.scope;
+    t.anchorTension = this.anchor.tension; t.anchorRelay = this.anchor.relay; t.windlassA = this.anchor.motorA;
     t.trimMotorA = this.trimMotorA; t.jumper = sys.jumper; t.jumpCharge = sys.jumpCharge; t.neutralRev = this.neutralRev;
     if (sys.stallReason && this.engine === "running") { this.engine = "off"; t.stall = sys.stallReason; }
     t.fuelL = sys.fuelL; t.fuelFrac = sys.fuelFrac; t.coolantC = sys.coolantC; t.batteryV = sys.batteryV;
@@ -524,6 +558,39 @@ export class Speedboat {
     t.hullDamage = this.hullDamage; t.engineDamage = this.engineDamage;
     t.swimmers = this.swimmers.length;
     if (impact > 0) t.lastImpact = impact;
+  }
+
+  /**
+   * Porão: entra água pelo furo do casco (avaria) e por cima da borda (onda/banda); a boia liga a bomba
+   * sozinha (> 6 L, desliga < 0,5 L) ou o interruptor manual (`input.bilgePump`). A vazão cai com a
+   * tensão da bateria; a água pesa no barco (carga em params.bilge.pos).
+   */
+  private updateBilge(dt: number, water: IWaterSurface, input: VehicleInput): void {
+    const P = this.params, B = P.bilge, t = this.telemetry;
+    let inflow = 0;
+    if (this.capsized) this.bilgeL = 0; // virado: o peso da água deixa de ser "carga no porão"
+    else {
+      inflow += 2.0 * Math.pow(this.hullDamage, 1.5); // casco 100 % avariado ≈ 2 L/s (mais que a bomba)
+      for (const z of [P.length * 0.25, -P.length * 0.38]) for (const sx of [-1, 1]) {
+        const w = this.toWorld(v3(sx * (P.beam / 2 - 0.05), P.gunwaleY, z));
+        const h = water.getHeight(w.x, w.z) - w.y;
+        if (h > 0) inflow += 40 * Math.min(h, 0.5); // água por cima da borda
+      }
+    }
+    if (B.pumpLph > 0) {
+      if (this.bilgeL > 6) this.bilgeAuto = true;
+      else if (this.bilgeL < 0.5) this.bilgeAuto = false;
+    }
+    const wantPump = B.pumpLph > 0 && (this.bilgeAuto || input.bilgePump) && !this.capsized;
+    const powered = wantPump && this.systems.supplyV(B.pumpA) >= 9;
+    const flowLps = powered ? (B.pumpLph / 3600) * clamp((this.systems.batteryV - 9) / 3.4, 0.2, 1.05) : 0;
+    const out = Math.min(flowLps * dt, this.bilgeL + inflow * dt);
+    this.bilgeL = clamp(this.bilgeL + inflow * dt - out, 0, B.maxL);
+    this.bilgePumpA = powered ? B.pumpA : 0;
+    t.bilgeL = this.bilgeL; t.bilgeInflowLps = inflow; t.bilgePump = powered;
+    t.bilgeFlowLps = out > 0 ? out / dt : 0;
+    // alarme: bomba acionada e jogando água fora, ou água alta (sem bomba / bomba sem força)
+    t.bilgeAlarm = (powered && t.bilgeFlowLps > 0.05) || this.bilgeL > 40;
   }
 
   private updateControls(dt: number, input: VehicleInput, u: number): void {
@@ -1038,6 +1105,19 @@ export class Speedboat {
     const ropes: [{ anchor: Vec3; local: Vec3; length: number }, number, number][] = [];
     if (this.winchStrap) ropes.push([this.winchStrap, 60000, 6000]);
     for (const ml of this.mooringLines) ropes.push([ml, 25000, 5000]);
+    // cabo da âncora (só com ela no fundo): mais elástico (nylon); a tração alimenta o poder de garra
+    this.anchor.tension = 0;
+    const al = this.anchor.line;
+    if (al) {
+      const eye = this.toWorld(al.local);
+      const d = sub(al.anchor, eye), dl = len(d);
+      if (dl > al.length) {
+        const n = scale(d, 1 / dl);
+        const f = Math.max(0, 9000 * mk * (dl - al.length) - 4000 * mk * dot(this.pointVelocity(eye), n));
+        this.addForceAt(scale(n, f), eye, "contact");
+        this.anchor.tension = f;
+      }
+    }
     for (const [ws, k, c] of ropes) {
       const eye = this.toWorld(ws.local);
       const d = sub(ws.anchor, eye), dl = len(d);
