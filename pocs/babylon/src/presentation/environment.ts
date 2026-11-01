@@ -31,26 +31,73 @@ const noiseTexture = (scene: Scene, name: string, base: [number, number, number]
   return tex;
 };
 
+const TERRAIN_COLORS = {
+  sand: new Color3(0.76, 0.69, 0.52), wetSand: new Color3(0.45, 0.4, 0.3), grass: new Color3(0.3, 0.45, 0.2),
+  darkGrass: new Color3(0.18, 0.32, 0.13), rock: new Color3(0.43, 0.41, 0.38), bed: new Color3(0.32, 0.3, 0.24),
+};
+const terrainColor = (x: number, z: number, h: number): Color3 => {
+  const { sand, wetSand, grass, darkGrass, rock, bed } = TERRAIN_COLORS;
+  const sl = slopeAt(x, z);
+  const n = fbm(x / 30, z / 30, 2) * 0.5 + 0.5;
+  let c: Color3;
+  if (h < -0.4) c = Color3.Lerp(bed, wetSand, smoothstep(-4, -0.4, h));
+  else if (h < 1.6) c = Color3.Lerp(wetSand, sand, smoothstep(-0.4, 0.4, h));
+  else c = Color3.Lerp(grass, darkGrass, n);
+  if (h >= 1.2 && h < 2.4) c = Color3.Lerp(sand, c, smoothstep(1.2, 2.4, h));
+  return Color3.Lerp(c, rock, smoothstep(0.55, 0.95, sl));
+};
+
+/**
+ * Faixa detalhada do rio/cânion (pontos a cada 2 m ao longo do rio, alturas do MESMO relevo da física). A malha
+ * grossa (10–16 m entre pontos) não acompanha as paredes íngremes do cânion: em até 15 % do rio ela desenhava
+ * terra onde a física tem água (o barco "entrava na parede"). A malha grossa fica rebaixada embaixo desta faixa.
+ */
+export const RIVER_STRIP = { z0: RIVER.z0 - 70, z1: RIVER.z1 + 70, half: 66, lowered: 40, step: 2 };
+const inRiverStrip = (x: number, z: number, d: number) => z > RIVER_STRIP.z0 && z < RIVER_STRIP.z1 && Math.abs(x - riverCenterX(z)) < d;
+
+const buildRiverStrip = (scene: Scene, mat: StandardMaterial): Mesh => {
+  const S = RIVER_STRIP;
+  const nz = Math.round((S.z1 - S.z0) / S.step) + 1, nx = Math.round((2 * S.half) / S.step) + 1;
+  const pos: number[] = [], col: number[] = [], idx: number[] = [];
+  for (let j = 0; j < nz; j++) {
+    const z = S.z0 + j * S.step, cx = riverCenterX(z);
+    for (let i = 0; i < nx; i++) {
+      const x = cx - S.half + i * S.step;
+      const h = groundHeight(x, z);
+      pos.push(x, h, z);
+      const c = terrainColor(x, z, h);
+      col.push(c.r, c.g, c.b, 1);
+    }
+  }
+  for (let j = 0; j < nz - 1; j++) for (let i = 0; i < nx - 1; i++) {
+    const a = j * nx + i, b = a + 1, c = a + nx, d = c + 1;
+    idx.push(a, b, c, b, d, c);
+  }
+  const m = new Mesh("terrainRiver", scene);
+  const vd = new VertexData();
+  vd.positions = pos; vd.indices = idx; vd.colors = col;
+  const nrm: number[] = []; VertexData.ComputeNormals(pos, idx, nrm); vd.normals = nrm;
+  vd.applyToMesh(m);
+  m.material = mat;
+  m.receiveShadows = true;
+  m.isPickable = false;
+  m.freezeWorldMatrix();
+  return m;
+};
+
 export const buildTerrain = (scene: Scene, q: EnvQuality): Mesh => {
   const size = 2600;
   const ground = MeshBuilder.CreateGround("terrain", { width: size, height: size, subdivisions: q.terrainSubdiv, updatable: true }, scene);
   const pos = ground.getVerticesData(VertexBuffer.PositionKind)!;
   const colors: number[] = [];
-  const sand = new Color3(0.76, 0.69, 0.52), wetSand = new Color3(0.45, 0.4, 0.3), grass = new Color3(0.3, 0.45, 0.2);
-  const darkGrass = new Color3(0.18, 0.32, 0.13), rock = new Color3(0.43, 0.41, 0.38), bed = new Color3(0.32, 0.3, 0.24);
   for (let i = 0; i < pos.length; i += 3) {
     const x = pos[i], z = pos[i + 2] + 200;
     const h = groundHeight(x, z);
-    // sob a estrada/pátio a malha grossa fica rebaixada: as malhas finas deles (station.ts) cobrem
-    pos[i + 1] = onRoadOrLot(x, z, ROAD.shoulder + 4) ? h - 1.2 : h;
-    const sl = slopeAt(x, z);
-    const n = fbm(x / 30, z / 30, 2) * 0.5 + 0.5;
-    let c: Color3;
-    if (h < -0.4) c = Color3.Lerp(bed, wetSand, smoothstep(-4, -0.4, h));
-    else if (h < 1.6) c = Color3.Lerp(wetSand, sand, smoothstep(-0.4, 0.4, h));
-    else c = Color3.Lerp(grass, darkGrass, n);
-    if (h >= 1.2 && h < 2.4) c = Color3.Lerp(sand, c, smoothstep(1.2, 2.4, h));
-    c = Color3.Lerp(c, rock, smoothstep(0.55, 0.95, sl));
+    // sob a estrada/pátio a malha grossa fica rebaixada: as malhas finas deles (station.ts) cobrem;
+    // no rio/cânion também (a faixa detalhada cobre)
+    // (no rio a faixa cobre até `half`; perto da borda dela a grossa desce só 0,6 m para não cintilar com a faixa)
+    pos[i + 1] = onRoadOrLot(x, z, ROAD.shoulder + 4) ? h - 1.2 : inRiverStrip(x, z, RIVER_STRIP.lowered) ? h - 8 : inRiverStrip(x, z, RIVER_STRIP.half) ? h - 0.6 : h;
+    const c = terrainColor(x, z, h);
     colors.push(c.r, c.g, c.b, 1);
     pos[i + 2] = z; // malha centrada em z = 200 (cobre o rio ao norte)
   }
@@ -68,6 +115,9 @@ export const buildTerrain = (scene: Scene, q: EnvQuality): Mesh => {
   ground.material = mat;
   ground.receiveShadows = true;
   ground.freezeWorldMatrix();
+  const strip = buildRiverStrip(scene, mat);
+  strip.parent = null;
+  ground.metadata = { riverStrip: strip };
   return ground;
 };
 

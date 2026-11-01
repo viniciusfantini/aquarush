@@ -52,6 +52,7 @@ npm run dev            # abrir http://localhost:5173, F3 mostra a telemetria; wi
 | Vento | `wind.ts` + `PhysicsWorld.wind` | `waterMaterial.ts` (carneirinhos), `hud.ts`, `audio.ts` | "vento" |
 | Amarração, píer, poitas, embarque | `mooring.ts` | `presentation/mooring.ts`, `pilot.ts` | "amarração", "poita", "embarque" |
 | Carretinha, carro, rampa, estrada, posto | `trailer.ts`, `towVehicle.ts`, `world.ts`, `station.ts` | `ramp.ts`, `station.ts`, `fleet.ts` | "rampa", "reboque", "carretinha", "estrada", "posto", "carro" |
+| Terreno visual do rio/cânion | `world.ts` (`groundHeight`, `RIVER`) | `environment.ts` (`RIVER_STRIP`, `buildRiverStrip`; malha grossa rebaixada embaixo) | — (medido por script: 0 % do rio desenhado como terra) |
 | Contato com fundo/margem | `boat.ts` (`collide`: normal do terreno pelo gradiente de `groundHeight`, atrito no plano da encosta) | — | "barranco", "lago", "rampa" |
 | Partículas de água | — | `waterInteraction.ts` (`clipToWater`: param na superfície `physWater`; bolhas estouram nela) | — (visual) |
 | Emborcamento e pessoas na água | `boat.ts` (`updateCapsize`, `ejectOccupants`, `updateSwimmers`) | `pilot.ts` (`float`, `stand`, `board`) | "emborcamento" |

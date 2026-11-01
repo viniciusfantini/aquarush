@@ -40,7 +40,7 @@ import { BoatCamera } from "./presentation/cameras.ts";
 import { Hud } from "./presentation/hud.ts";
 import { EngineAudio } from "./presentation/audio.ts";
 
-const BUILD = "poc-babylon 0.45.0";
+const BUILD = "poc-babylon 0.45.1";
 /** Escala visual da rotação da hélice (proporcional ao RPM, abaixo do limite estroboscópico). */
 const PROP_VISUAL_SCALE = 0.12;
 
@@ -166,6 +166,7 @@ const boot = async () => {
 
   // ---------------- cena ----------------
   const terrain = buildTerrain(scene, { terrainSubdiv: cfg.quality.terrainSubdiv, trees: cfg.quality.trees });
+  const riverStrip = terrain.metadata.riverStrip as Mesh; // faixa detalhada do rio/cânion (2 m)
   const trees = buildTrees(scene, cfg.quality.trees);
   const pierMeshes = buildPier(scene, world.pier);
   const buoys = pierMeshes.filter((m) => m.name === "buoy");
@@ -231,7 +232,7 @@ const boot = async () => {
   const probe = new ReflectionProbe("envProbe", 128, scene);
   probe.position = new Vector3(0, 6, 0);
   probe.refreshRate = RenderTargetTexture.REFRESHRATE_RENDER_ONCE;
-  probe.renderList!.push(skybox, terrain, trees);
+  probe.renderList!.push(skybox, terrain, riverStrip, trees);
   scene.environmentTexture = probe.cubeTexture;
 
   const cam = new BoatCamera(scene, canvas);
@@ -241,7 +242,7 @@ const boot = async () => {
   let depth = null;
   if (cfg.quality.depthEffects) {
     depth = scene.enableDepthRenderer(cam.cam, false, true);
-    const list: Mesh[] = [terrain, ...pierMeshes, ...staticExtras, ...allBoatMeshes];
+    const list: Mesh[] = [terrain, riverStrip, ...pierMeshes, ...staticExtras, ...allBoatMeshes];
     depth.getDepthMap().renderList = list;
   }
 
@@ -251,7 +252,7 @@ const boot = async () => {
   });
   waterVis.sunDir = sunDir;
   waterVis.fogDensity = scene.fogDensity;
-  const reflList: AbstractMesh[] = [skybox, terrain, trees, ...pierMeshes, ...staticExtras, ...allBoatMeshes];
+  const reflList: AbstractMesh[] = [skybox, terrain, riverStrip, trees, ...pierMeshes, ...staticExtras, ...allBoatMeshes];
   waterVis.setReflectionList(reflList);
 
   if (cfg.quality.shadows > 0) {

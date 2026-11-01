@@ -79,6 +79,10 @@ A lancha é um **corpo rígido 6DOF** (massa seca de 1030 kg + gasolina, ocupant
 
 **Água compartilhada:** `GerstnerWater.shaderParams()` envia ao shader exatamente as ondas que a física consulta. `getHeight` inverte o deslocamento horizontal de Gerstner por iteração de ponto fixo. No teste, o desvio médio entre o casco e a superfície é de 3 cm.
 
+## Terreno do rio/cânion (v0.45.1)
+
+A malha geral do terreno (2,6 km, `terrainSubdiv` 160/256/360 → 16/10/7 m entre pontos) não acompanha as paredes do cânion. `environment.ts` desenha uma **faixa detalhada** ao longo do rio (`RIVER_STRIP`: ±66 m do eixo, 2 m entre pontos, alturas de `groundHeight`) e rebaixa a malha grossa embaixo dela (8 m até 40 m do eixo, 0,6 m até 66 m, para não cintilar). Medido: erro máximo 0,3 m, 0 % do rio desenhado como terra (antes 6,6 % em `med`, 14,8 % em `low`).
+
 ## Embaixo d'água (v0.44)
 
 `main.ts` testa se a câmera está abaixo da superfície (mesma `getHeight` da física, com a esteira). Embaixo d'água: `scene.fog` verde-azulada (densidade 0,07 + 0,01/m de profundidade), sem céu, sobreposição `#underwater` (tom e vinheta), `waterVis.under` (o shader desenha a superfície vista por baixo: janela de Snell com cosseno > ~0,66, reflexão interna total fora dela) e `audio.setUnderwater` (passa-baixa no master). A câmera externa desce até −0,75 de inclinação de órbita e não entra no fundo (`cam.ground`).
