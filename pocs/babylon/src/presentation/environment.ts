@@ -6,7 +6,7 @@ import {
   DynamicTexture, Texture,
 } from "@babylonjs/core";
 import { groundHeight, rng, slopeAt, fbm, RIVER, riverCenterX, onRoadOrLot, ROAD, type SphereCollider, type PierLayout } from "../sim/world.ts";
-import { signMat } from "./station.ts";
+import { buildRestaurant } from "./restaurant.ts";
 import { clamp, smoothstep } from "../sim/math.ts";
 
 export interface EnvQuality { terrainSubdiv: number; trees: number }
@@ -170,45 +170,12 @@ export const buildPier = (scene: Scene, pier: PierLayout): Mesh[] => {
     }
   }
   // cabana da marina
-  // bar & restaurante centralizado com o píer (o píer chega na frente do deck)
+  // bar & restaurante centralizado com o píer (o píer chega nos degraus da varanda) — presentation/restaurant.ts
   const shoreH = groundHeight(pier.shoreX, pier.shoreZ - 16);
-  const hut = MeshBuilder.CreateBox("hut", { width: 7, height: 3.2, depth: 5 }, scene);
-  hut.position.set(pier.shoreX, shoreH + 1.6, pier.shoreZ - 16);
-  const hutMat = new StandardMaterial("hutMat", scene);
-  hutMat.diffuseColor = new Color3(0.86, 0.84, 0.78);
-  hut.material = hutMat;
-  const roof = MeshBuilder.CreateCylinder("roof", { height: 7.6, diameter: 5.6, tessellation: 3 }, scene);
-  roof.rotation.z = Math.PI / 2;
-  roof.rotation.x = Math.PI / 2 + Math.PI / 6;
-  roof.scaling.set(1, 1, 0.55);
-  roof.position.set(hut.position.x, shoreH + 3.9, hut.position.z);
-  const roofMat = new StandardMaterial("roofMat", scene);
-  roofMat.diffuseColor = new Color3(0.6, 0.18, 0.12);
-  roof.material = roofMat;
-  meshes.push(hut, roof);
-  // ---- bar & restaurante (a cabana da marina): placa, janelas, deck com mesas e guarda-sóis ----
-  const hx = hut.position.x, hz = hut.position.z, front = hz + 2.5; // fachada para o lago (+Z)
-  const sign = MeshBuilder.CreatePlane("barSign", { width: 4.6, height: 0.9 }, scene);
-  sign.material = signMat(scene, "barSignT", "BAR & RESTAURANTE", "peixe frito · porções · bebidas", "#5a1d10", "#ffd8a8", 1024, 200);
-  sign.position.set(hx, shoreH + 2.75, front + 0.03); sign.rotation.y = Math.PI; meshes.push(sign);
-  const glassM = new StandardMaterial("barGlass", scene); glassM.diffuseColor = new Color3(0.2, 0.28, 0.32); glassM.specularColor = new Color3(0.5, 0.5, 0.5);
-  for (const dx of [-2.3, 2.3]) { const w = MeshBuilder.CreatePlane("barWindow", { width: 1.6, height: 1.1 }, scene); w.material = glassM; w.position.set(hx + dx, shoreH + 1.5, front + 0.02); w.rotation.y = Math.PI; meshes.push(w); }
-  const doorM = new StandardMaterial("barDoor", scene); doorM.diffuseColor = new Color3(0.35, 0.22, 0.12);
-  const door = MeshBuilder.CreatePlane("barDoorM", { width: 1.1, height: 2.1 }, scene); door.material = doorM; door.position.set(hx, shoreH + 1.05, front + 0.02); door.rotation.y = Math.PI; meshes.push(door);
-  const barDeck = MeshBuilder.CreateBox("barDeck", { width: 9, height: 0.2, depth: 4.5 }, scene);
-  barDeck.material = wood; barDeck.position.set(hx, shoreH + 0.1, front + 2.6); meshes.push(barDeck);
-  const clothM = new StandardMaterial("umbrella", scene); clothM.diffuseColor = new Color3(0.95, 0.55, 0.12);
-  const tableM = new StandardMaterial("barTable", scene); tableM.diffuseColor = new Color3(0.93, 0.92, 0.88);
-  for (const dx of [-3, 0, 3]) {
-    const tx = hx + dx, tz = front + 2.9;
-    const top = MeshBuilder.CreateCylinder("barTableTop", { height: 0.05, diameter: 0.9 }, scene); top.material = tableM; top.position.set(tx, shoreH + 0.95, tz); meshes.push(top);
-    const leg = MeshBuilder.CreateCylinder("barTableLeg", { height: 0.75, diameter: 0.08 }, scene); leg.material = tableM; leg.position.set(tx, shoreH + 0.57, tz); meshes.push(leg);
-    const pole = MeshBuilder.CreateCylinder("umbPole", { height: 2.0, diameter: 0.05 }, scene); pole.material = tableM; pole.position.set(tx, shoreH + 1.2, tz); meshes.push(pole);
-    const umb = MeshBuilder.CreateCylinder("umbrellaTop", { height: 0.45, diameterTop: 0.05, diameterBottom: 2.3, tessellation: 12 }, scene); umb.material = clothM; umb.position.set(tx, shoreH + 2.2, tz); meshes.push(umb);
-    for (const sx of [-1, 1]) { const ch = MeshBuilder.CreateBox("barChair", { width: 0.45, height: 0.45, depth: 0.45 }, scene); ch.material = tableM; ch.position.set(tx + sx * 0.75, shoreH + 0.43, tz); meshes.push(ch); }
-  }
+  const hx = pier.shoreX, hz = pier.shoreZ - 16;
+  meshes.push(...buildRestaurant(scene, hx, shoreH, hz));
   // ---- piscina do bar (lado leste, longe da rampa): borda de pedra, água azul, espreguiçadeiras e escada ----
-  const px = hx + 13, pz = hz + 1, PW = 9, PD = 5, ph = groundHeight(px, pz);
+  const px = hx + 15, pz = hz + 1, PW = 9, PD = 5, ph = groundHeight(px, pz);
   const stone = new StandardMaterial("poolStone", scene); stone.diffuseColor = new Color3(0.86, 0.84, 0.78); stone.specularColor = new Color3(0.05, 0.05, 0.05);
   const deckP = MeshBuilder.CreateBox("poolDeck", { width: PW + 4, height: 0.3, depth: PD + 4 }, scene); deckP.material = stone; deckP.position.set(px, ph + 0.15, pz); meshes.push(deckP);
   for (const [w, d, dx, dz] of [[PW + 0.6, 0.3, 0, PD / 2 + 0.15], [PW + 0.6, 0.3, 0, -PD / 2 - 0.15], [0.3, PD, PW / 2 + 0.15, 0], [0.3, PD, -PW / 2 - 0.15, 0]] as const) {

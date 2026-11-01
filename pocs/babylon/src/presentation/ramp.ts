@@ -69,15 +69,26 @@ const placeOnRamp = (node: TransformNode, s: number, x: number, facingLand: bool
   node.rotationQuaternion = Quaternion.FromEulerAngles(facingLand ? -SLOPE_ANG : SLOPE_ANG, facingLand ? Math.PI : 0, 0);
 };
 
-const wheel = (scene: Scene, parent: TransformNode, name: string, r: number, w: number, x: number, y: number, z: number, tire: PBRMaterial, rim: PBRMaterial, meshes: Mesh[]) => {
+/** Roda: nó de esterço (rotation.y, rodas da frente) → nó de giro (rotation.x) → pneu, aro e raios (o giro aparece). */
+export interface WheelNode { steer: TransformNode; spin: TransformNode; front: boolean }
+const wheel = (scene: Scene, parent: TransformNode, name: string, r: number, w: number, x: number, y: number, z: number, tire: PBRMaterial, rim: PBRMaterial, meshes: Mesh[], front = false): WheelNode => {
+  const steer = new TransformNode(name + "Steer", scene); steer.parent = parent; steer.position.set(x, y, z);
+  const spin = new TransformNode(name + "Spin", scene); spin.parent = steer;
   const t = MeshBuilder.CreateCylinder(name + "Tire", { height: w, diameter: r * 2, tessellation: 24 }, scene);
-  t.rotation.z = Math.PI / 2; t.position.set(x, y, z); t.parent = parent; t.material = tire; meshes.push(t);
+  t.rotation.z = Math.PI / 2; t.parent = spin; t.material = tire; meshes.push(t);
   const h = MeshBuilder.CreateCylinder(name + "Rim", { height: w + 0.01, diameter: r * 1.25, tessellation: 18 }, scene);
-  h.rotation.z = Math.PI / 2; h.position.set(x, y, z); h.parent = parent; h.material = rim; meshes.push(h);
+  h.rotation.z = Math.PI / 2; h.parent = spin; h.material = rim; meshes.push(h);
+  const side = Math.sign(x) || 1;
+  for (let k = 0; k < 5; k++) { // raios do aro (lado de fora)
+    const sp = MeshBuilder.CreateBox(name + "Spoke", { width: 0.02, height: r * 1.15, depth: 0.05 }, scene);
+    sp.parent = spin; sp.material = tire; sp.position.x = side * (w / 2 + 0.008); sp.rotation.x = (k / 5) * Math.PI; meshes.push(sp);
+  }
+  return { steer, spin, front };
 };
 
 /** Carretinha (chassi galvanizado, bunks acarpetados, roletes de quilha, guincho, postes-guia, rodas e para-lamas). */
-export const buildTrailerMesh = (scene: Scene, t: TrailerLayout): { root: TransformNode; meshes: Mesh[] } => {
+export const buildTrailerMesh = (scene: Scene, t: TrailerLayout): { root: TransformNode; meshes: Mesh[]; wheels: WheelNode[] } => {
+  const wheels: WheelNode[] = [];
   const meshes: Mesh[] = [];
   const root = new TransformNode("trailer_" + t.kind, scene);
   placeOnRamp(root, t.sFront, t.cx, false); // +Z local = descendo a rampa (frente da carretinha = guincho)
@@ -115,7 +126,7 @@ export const buildTrailerMesh = (scene: Scene, t: TrailerLayout): { root: Transf
   const za = L * 0.58;
   box("axle", t.frameW + 0.1, 0.07, 0.07, 0, wr, za, galv);
   for (const sx of [-1, 1]) {
-    wheel(scene, root, "trailerWheel", wr, big ? 0.2 : 0.14, sx * (halfW + 0.05), wr, za, tire, rim, meshes);
+    wheels.push(wheel(scene, root, "trailerWheel", wr, big ? 0.2 : 0.14, sx * (halfW + 0.05), wr, za, tire, rim, meshes));
     // para-lama: chapa curva sobre a roda (arco de 180° em volta do eixo X)
     const arcPts: Vector3[] = [];
     for (let i = 0; i <= 12; i++) { const a = Math.PI * (i / 12); arcPts.push(new Vector3(0, wr + Math.sin(a) * (wr + 0.07), Math.cos(a) * (wr + 0.07))); }
@@ -162,19 +173,21 @@ export const buildTrailerMesh = (scene: Scene, t: TrailerLayout): { root: Transf
   // barra de luzes traseira
   for (const sx of [-1, 1]) { const l = box("tailLight", 0.16, 0.08, 0.04, sx * (halfW - 0.05), railY + 0.08, L + 0.02, galv); l.material = redL; }
   for (const m of meshes) m.isPickable = false;
-  return { root, meshes };
+  return { root, meshes, wheels };
 };
 
 /** Carro comum (hatch médio, ~4,3 m) — reboca o bote. Frente em +Z local; rodas tocam y = 0. */
-const buildCar = (scene: Scene, name: string, paint: Color3): { root: TransformNode; meshes: Mesh[]; length: number } => {
-  const meshes: Mesh[] = [];
+const buildCar = (scene: Scene, name: string, paint: Color3): VehicleVis => {
+  const meshes: Mesh[] = [], wheels: WheelNode[] = [];
   const root = new TransformNode(name, scene);
+  const bodyNode = new TransformNode(name + "BodyNode", scene); bodyNode.parent = root;
   const body = pbr(scene, name + "Paint", paint, 0.4, 0.25, 1);
   const glass = pbr(scene, name + "Glass", new Color3(0.06, 0.08, 0.1), 0, 0.05);
   const dark = pbr(scene, name + "Trim", new Color3(0.05, 0.05, 0.055), 0, 0.6);
   const tire = pbr(scene, name + "Tire", new Color3(0.04, 0.04, 0.045), 0, 0.85);
   const rim = pbr(scene, name + "Rim", new Color3(0.75, 0.76, 0.78), 0.9, 0.3);
-  const add = <M extends Mesh>(m: M, mat: PBRMaterial | StandardMaterial): M => { m.material = mat; m.parent = root; meshes.push(m); return m; };
+  // carroceria num nó próprio (pivô na altura dos eixos) para inclinar com a transferência de carga
+  const add = <M extends Mesh>(m: M, mat: PBRMaterial | StandardMaterial): M => { m.material = mat; m.parent = bodyNode; meshes.push(m); return m; };
   const L = 4.3, W = 1.78;
   const lower = add(roundedBox(name + "Body", scene, W, 0.62, L, 0.16), body); lower.position.set(0, 0.62, 0);
   // cabine: loft afinando para cima (para-brisa inclinado na frente, traseira de hatch)
@@ -184,7 +197,7 @@ const buildCar = (scene: Scene, name: string, paint: Color3): { root: TransformN
   const roof = add(roundedBox(name + "Roof", scene, 1.36, 0.06, 1.25, 0.03), body); roof.position.set(0, 1.47, -0.75);
   for (const sx of [-1, 1]) {
     add(MeshBuilder.CreateBox(name + "Pillar", { width: 0.05, height: 0.55, depth: 0.08 }, scene), body).position.set(sx * 0.7, 1.2, 0.5);
-    for (const z of [1.28, -1.3]) wheel(scene, root, name + "Wheel", 0.31, 0.2, sx * 0.79, 0.31, z, tire, rim, meshes);
+    for (const z of [1.28, -1.3]) wheels.push(wheel(scene, root, name + "Wheel", 0.31, 0.2, sx * 0.79, 0.31, z, tire, rim, meshes, z > 0));
     add(MeshBuilder.CreateBox(name + "Mirror", { width: 0.16, height: 0.09, depth: 0.05 }, scene), dark).position.set(sx * 0.95, 1.05, 0.55);
   }
   for (const z of [L / 2 - 0.02, -L / 2 + 0.02]) add(roundedBox(name + "Bumper", scene, W + 0.02, 0.2, 0.1, 0.05), dark).position.set(0, 0.4, z);
@@ -198,19 +211,20 @@ const buildCar = (scene: Scene, name: string, paint: Color3): { root: TransformN
   add(MeshBuilder.CreateBox(name + "Hitch", { width: 0.07, height: 0.07, depth: 0.3 }, scene), dark).position.set(0, 0.42, -L / 2 - 0.12);
   add(MeshBuilder.CreateSphere(name + "Ball", { diameter: 0.06, segments: 8 }, scene), rim).position.set(0, 0.48, -L / 2 - 0.25);
   for (const m of meshes) m.isPickable = false;
-  return { root, meshes, length: L };
+  return { root, body: bodyNode, wheels, meshes, length: L };
 };
 
 /** Caminhonete cabine dupla (~5,4 m) — reboca a lancha. */
-const buildPickup = (scene: Scene, name: string, paint: Color3): { root: TransformNode; meshes: Mesh[]; length: number } => {
-  const meshes: Mesh[] = [];
+const buildPickup = (scene: Scene, name: string, paint: Color3): VehicleVis => {
+  const meshes: Mesh[] = [], wheels: WheelNode[] = [];
   const root = new TransformNode(name, scene);
+  const bodyNode = new TransformNode(name + "BodyNode", scene); bodyNode.parent = root;
   const body = pbr(scene, name + "Paint", paint, 0.35, 0.28, 1);
   const glass = pbr(scene, name + "Glass", new Color3(0.06, 0.08, 0.1), 0, 0.05);
   const dark = pbr(scene, name + "Trim", new Color3(0.06, 0.06, 0.065), 0, 0.55);
   const tire = pbr(scene, name + "Tire", new Color3(0.04, 0.04, 0.045), 0, 0.9);
   const rim = pbr(scene, name + "Rim", new Color3(0.55, 0.56, 0.58), 0.9, 0.35);
-  const add = <M extends Mesh>(m: M, mat: PBRMaterial | StandardMaterial): M => { m.material = mat; m.parent = root; meshes.push(m); return m; };
+  const add = <M extends Mesh>(m: M, mat: PBRMaterial | StandardMaterial): M => { m.material = mat; m.parent = bodyNode; meshes.push(m); return m; };
   const L = 5.4, W = 1.9;
   // chassi/carroceria baixa, capô, cabine dupla, caçamba
   const lower = add(roundedBox(name + "Lower", scene, W, 0.55, L, 0.12), body); lower.position.set(0, 0.82, 0);
@@ -224,7 +238,7 @@ const buildPickup = (scene: Scene, name: string, paint: Color3): { root: Transfo
   const cabRoof = add(roundedBox(name + "Roof", scene, W - 0.1, 0.08, 1.95, 0.04), body); cabRoof.position.set(0, 1.88, 0.5);
   for (const sx of [-1, 1]) {
     add(MeshBuilder.CreateBox(name + "BedSide", { width: 0.07, height: 0.5, depth: 1.75 }, scene), body).position.set(sx * (W / 2 - 0.035), 1.32, -L / 2 + 0.95);
-    for (const z of [1.62, -1.55]) wheel(scene, root, name + "Wheel", 0.4, 0.27, sx * 0.84, 0.4, z, tire, rim, meshes);
+    for (const z of [1.62, -1.55]) wheels.push(wheel(scene, root, name + "Wheel", 0.4, 0.27, sx * 0.84, 0.4, z, tire, rim, meshes, z > 0));
     for (const z of [1.62, -1.55]) {
       // moldura da caixa de roda (arco plástico preto)
       const pts: Vector3[] = [];
@@ -248,14 +262,16 @@ const buildPickup = (scene: Scene, name: string, paint: Color3): { root: Transfo
   add(MeshBuilder.CreateBox(name + "Hitch", { width: 0.07, height: 0.07, depth: 0.3 }, scene), dark).position.set(0, 0.5, -L / 2 - 0.12);
   add(MeshBuilder.CreateSphere(name + "Ball", { diameter: 0.06, segments: 8 }, scene), rim).position.set(0, 0.56, -L / 2 - 0.25);
   for (const m of meshes) m.isPickable = false;
-  return { root, meshes, length: L };
+  return { root, body: bodyNode, wheels, meshes, length: L };
 };
 
 /** Veículo de reboque engatado na carretinha (de ré na rampa, frente para a terra). */
-export const buildTowVehicle = (scene: Scene, t: TrailerLayout): { root: TransformNode; meshes: Mesh[] } => {
+export interface VehicleVis { root: TransformNode; body: TransformNode; wheels: WheelNode[]; meshes: Mesh[]; length: number }
+
+export const buildTowVehicle = (scene: Scene, t: TrailerLayout): VehicleVis => {
   const v = t.kind === "lancha" ? buildPickup(scene, "pickup", new Color3(0.93, 0.93, 0.92)) : buildCar(scene, "car", new Color3(0.62, 0.08, 0.08));
   // o engate (bola, 0,25 m atrás do para-choque) fica sobre o acoplador da carretinha
   const sCenter = t.coupler - (v.length / 2 + 0.25);
   placeOnRamp(v.root, sCenter, t.cx, true);
-  return { root: v.root, meshes: v.meshes };
+  return v;
 };

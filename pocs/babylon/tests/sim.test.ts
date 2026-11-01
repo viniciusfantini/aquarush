@@ -636,7 +636,8 @@ for (const [label, thr] of [["baixa", 0.25], ["alta", 1]] as const) {
     const rig = new TowRig(tr, TOW_SPECS[kind === "lancha" ? "pickup" : "car"], groundHeight);
     // sai com o veículo e volta de ré até as rodas traseiras chegarem na água
     for (let i = 0; i < 6 / DT; i++) { rig.update(DT, { up: 1, down: 0, steer: 0 }); tr.collider.pose = rig.trailerPose(); }
-    for (let i = 0; i < 14 / DT; i++) { rig.update(DT, { up: 0, down: 1, steer: 0 }); tr.collider.pose = rig.trailerPose(); }
+    for (let i = 0; i < 60 / DT && !rig.wheelsInWater; i++) { rig.update(DT, { up: 0, down: 1, steer: 0 }); tr.collider.pose = rig.trailerPose(); }
+    for (let i = 0; i < 2 / DT; i++) { rig.update(DT, { up: 0, down: 1, steer: 0 }); tr.collider.pose = rig.trailerPose(); } // insiste na ré
     check("rampa", `${kind}: de ré, o veículo para com as rodas na água`, rig.wheelsInWater ? 1 : 0, 1, 1, "", 0);
     const water = mkWater(0);
     const back = fromFrame(tr.collider.pose, { x: 0.4, y: 0, z: tr.length + 14 });
@@ -805,6 +806,29 @@ for (const [label, thr] of [["baixa", 0.25], ["alta", 1]] as const) {
   check("posto", "conjunto dentro da vaga, alinhado e parado ⇒ estacionado", parkedStall(rig.carObb(), rig.trailerObb(), 0), 1, 1, "", 0);
   rig.placeAt(st.x + 6, st.z + 2.5, Math.PI / 2);
   check("posto", "fora da faixa da vaga ⇒ não estacionado", parkedStall(rig.carObb(), rig.trailerObb(), 0), -1, -1, "", 0);
+}
+
+// ---------- Carro: velocidade, aderência dos pneus, rodas ----------
+{
+  for (const [kind, spec] of [["bote", "car"], ["lancha", "pickup"]] as const) {
+    const rig = new TowRig(buildTrailer(kind === "lancha" ? SPEEDBOAT : DINGHY), TOW_SPECS[spec], () => 0);
+    rig.placeAt(0, 0, 0);
+    let t45 = -1;
+    for (let i = 0; i < 40 / DT; i++) { rig.update(DT, { up: 1, down: 0, steer: 0 }); if (t45 < 0 && rig.v * 3.6 >= 45) t45 = i * DT; }
+    check("carro", `${spec}: velocidade máxima para a frente (km/h)`, rig.v * 3.6, 48, 50.5, "km/h", 1);
+    check("carro", `${spec}: 0→45 km/h puxando a carretinha (s)`, t45, 5, 14, "s", 1);
+    check("carro", `${spec}: rodas girando (voltas em 40 s)`, rig.wheelSpin / (2 * Math.PI), 100, 2000, "", 0);
+    for (let i = 0; i < 3 / DT; i++) rig.update(DT, { up: 1, down: 0, steer: 1 });
+    check("carro", `${spec}: curva a toda — aceleração lateral limitada pela aderência (m/s²)`, rig.accLat, 6, 7.9, "m/s²", 2);
+    check("carro", `${spec}: curva a toda — sai de frente (escorrega)`, rig.sliding ? 1 : 0, 1, 1, "", 0);
+    rig.placeAt(0, 0, 0);
+    for (let i = 0; i < 2 / DT; i++) rig.update(DT, { up: 0.3, down: 0, steer: 0.3 });
+    check("carro", `${spec}: devagar a curva não escorrega`, rig.sliding ? 0 : 1, 1, 1, "", 0);
+    // carroceria: roll pelo relevo (lado direito mais alto numa rampa lateral)
+    const r2 = new TowRig(buildTrailer(kind === "lancha" ? SPEEDBOAT : DINGHY), TOW_SPECS[spec], (x) => 0.1 * x);
+    r2.placeAt(0, 0, 0);
+    check("carro", `${spec}: rodas seguem o relevo (roll numa encosta de 10 %, °)`, (r2.carPose().roll ?? 0) * 57.3, 5, 6.5, "°", 1);
+  }
 }
 
 // ---------- Carga: gasolina e ocupantes (quantidade e posição) ----------

@@ -1,8 +1,11 @@
 // Veículo de reboque + carretinha articulada (para tirar o barco da água pela rampa).
 // Modelo simples e documentado (não é o foco do GDD, que é a física do barco):
 //  • veículo = modelo de bicicleta (eixo traseiro, entre-eixos, esterço), velocidade longitudinal
-//    integrada a partir de tração/freio/arrasto + componente do peso na rampa (sobe devagar, desce sozinho
-//    se soltar o freio — com "auto hold" parado);
+//    integrada a partir de tração (cai com a velocidade), freio, rolamento e arrasto do ar + componente do
+//    peso na rampa ("auto hold" parado). Até ~50 km/h para a frente;
+//  • pneus: aderência lateral limitada (μ ≈ 0,8): em velocidade o esterço útil diminui (sai de frente se
+//    passar do limite); cada roda segue o relevo (pitch/roll da carroceria) e a carroceria inclina com a
+//    transferência de carga (afunda a frente ao frear, levanta ao acelerar, deita nas curvas);
 //  • carretinha = reboque de 1 eixo articulado no engate (curva de perseguição/tractrix): segue o carro,
 //    de ré ela "dobra" como no mundo real (pode chegar a fazer "L" — canivete);
 //  • alturas e inclinações vêm do mesmo relevo da física (groundHeight).
@@ -23,6 +26,8 @@ export interface DriveCommand { up: number; down: number; steer: number }
 export interface TowSpec {
   length: number; width: number; height: number; // caixa do veículo (colisão com o barco → avaria)
   wheelbase: number;     // m
+  track: number;         // m (bitola)
+  wheelR: number;        // m (raio do pneu)
   rearToHitch: number;   // m do eixo traseiro até a bola do engate
   maxSteer: number;      // rad
   accel: number;         // m/s² (tração, plano)
@@ -32,11 +37,11 @@ export interface TowSpec {
 }
 
 export const TOW_SPECS: Record<"car" | "pickup", TowSpec> = {
-  car: { length: 4.3, width: 1.78, height: 1.5, wheelbase: 2.56, rearToHitch: 1.12, maxSteer: 0.6, accel: 2.4, brake: 6, maxSpeed: 11, maxReverse: 2.5 },
-  pickup: { length: 5.4, width: 1.9, height: 1.95, wheelbase: 3.17, rearToHitch: 1.4, maxSteer: 0.55, accel: 2.8, brake: 6.5, maxSpeed: 11, maxReverse: 2.5 },
+  car: { length: 4.3, width: 1.78, height: 1.5, wheelbase: 2.56, track: 1.58, wheelR: 0.31, rearToHitch: 1.12, maxSteer: 0.6, accel: 2.6, brake: 6.5, maxSpeed: 13.9, maxReverse: 2.5 },
+  pickup: { length: 5.4, width: 1.9, height: 1.95, wheelbase: 3.17, track: 1.68, wheelR: 0.4, rearToHitch: 1.4, maxSteer: 0.55, accel: 2.8, brake: 7, maxSpeed: 13.9, maxReverse: 2.5 },
 };
 
-export interface Pose { x: number; y: number; z: number; yaw: number; pitch: number }
+export interface Pose { x: number; y: number; z: number; yaw: number; pitch: number; roll?: number }
 
 export class TowRig {
   readonly spec: TowSpec;
@@ -46,6 +51,12 @@ export class TowRig {
   rx = 0; rz = 0; yaw = Math.PI;
   /** velocidade longitudinal (m/s, + = frente) e esterço atual (rad) */
   v = 0; steer = 0;
+  /** ângulo de giro das rodas (visual) — veículo e carretinha */
+  wheelSpin = 0; trailerWheelSpin = 0;
+  /** aceleração longitudinal e lateral atuais (m/s²) — para a inclinação da carroceria */
+  accLong = 0; accLat = 0;
+  /** pneus da frente no limite de aderência (saindo de frente) */
+  sliding = false;
   /** rodas traseiras na água (a ré trava) */
   wheelsInWater = false;
   /** obstáculos (prédios, bombas, outro veículo estacionado): o veículo/carretinha param ao encostar */
@@ -89,15 +100,20 @@ export class TowRig {
   update(dt: number, cmd: DriveCommand): void {
     const S = this.spec;
     const prev = { rx: this.rx, rz: this.rz, yaw: this.yaw, ax: this.ax, az: this.az };
+    // esterço: o volante gira no máximo até o batente; em velocidade a curva fica limitada pela aderência
     this.steer = approach(this.steer, clamp(cmd.steer, -1, 1) * S.maxSteer, 1.6 * dt);
+    const v0 = this.v;
     // inclinação sob o veículo (rampa): componente do peso ao longo do rumo
     const fx = this.rx + Math.sin(this.yaw) * S.wheelbase, fz = this.rz + Math.cos(this.yaw) * S.wheelbase;
     const grade = (this.ground(fx, fz) - this.ground(this.rx, this.rz)) / S.wheelbase;
     let a = -9.81 * grade * 0.9; // (o peso do barco na carretinha soma ao do carro; motor compensa)
     const up = cmd.up > 0.1, down = cmd.down > 0.1;
-    if (up) a += this.v < -0.1 ? S.brake : S.accel * cmd.up;          // W: acelera para a frente (ou freia a ré)
+    // tração cai com a velocidade (curva de potência simplificada): forte saindo, ~40 % perto dos 50 km/h
+    const traction = S.accel * (1 - 0.6 * clamp(this.v / S.maxSpeed, 0, 1));
+    if (up) a += this.v < -0.1 ? S.brake : traction * cmd.up;          // W: acelera para a frente (ou freia a ré)
     else if (down) a += this.v > 0.1 ? -S.brake : -S.accel * 0.6 * cmd.down; // S: freia; parado engata a ré
-    a -= 0.4 * this.v + 0.02 * this.v * Math.abs(this.v);           // rolamento + ar
+    // rolamento (0,15 m/s²) + arrasto do ar (∝ v²) — com isso o carro chega perto dos 50 km/h
+    a -= Math.sign(this.v) * Math.min(Math.abs(this.v) * 2, 0.15) + 0.0028 * this.v * Math.abs(this.v);
     this.v += a * dt;
     // "auto hold": sem comando e quase parado, fica freado (não desce a rampa sozinho)
     if (!up && !down && Math.abs(this.v) < 0.4) this.v = approach(this.v, 0, S.brake * dt);
@@ -107,15 +123,27 @@ export class TowRig {
     const wetRear = -this.ground(this.rx - Math.sin(this.yaw) * 0.3, this.rz - Math.cos(this.yaw) * 0.3);
     this.wheelsInWater = wetRear > MAX_WHEEL_DEPTH;
     if (this.wheelsInWater && this.v < 0) this.v = 0;
-    // bicicleta: o eixo traseiro anda no rumo; o rumo gira com v·tan(δ)/entre-eixos
-    this.yaw += (this.v / S.wheelbase) * Math.tan(this.steer) * dt;
+    // bicicleta com limite de aderência: curvatura máxima = μ·g / v² (μ ≈ 0,8) — passou disso, sai de frente
+    let kappa = Math.tan(this.steer) / S.wheelbase;
+    const kMax = 0.8 * 9.81 / Math.max(this.v * this.v, 0.01);
+    this.sliding = Math.abs(kappa) > kMax;
+    if (this.sliding) kappa = Math.sign(kappa) * kMax;
+    this.yaw += this.v * kappa * dt;
+    this.accLong = (this.v - v0) / dt;
+    this.accLat = this.v * this.v * kappa;
+    // rodas girando (visual): veículo e carretinha
+    this.wheelSpin += (this.v * dt) / S.wheelR;
     this.rx += Math.sin(this.yaw) * this.v * dt;
     this.rz += Math.cos(this.yaw) * this.v * dt;
     // carretinha: o eixo fica a distância fixa do engate, puxado/empurrado por ele (tractrix)
     const h = this.hitch;
     const dx = this.ax - h.x, dz = this.az - h.z, d = Math.hypot(dx, dz) || 1;
+    const oax = this.ax, oaz = this.az;
     this.ax = h.x + (dx / d) * this.hitchToAxle;
     this.az = h.z + (dz / d) * this.hitchToAxle;
+    // a roda da carretinha gira com o deslocamento do eixo dela (sinal: para onde a carretinha anda)
+    const tdir = (this.ax - oax) * -(dx / d) + (this.az - oaz) * -(dz / d);
+    this.trailerWheelSpin += tdir / (this.t.kind === "lancha" ? 0.33 : 0.23);
     // canivete: o cabeçalho encosta no para-choque a ~80° — daí em diante a carretinha é arrastada junto
     const art = this.articulation, lim = MAX_ARTICULATION;
     if (Math.abs(art) > lim) {
@@ -160,8 +188,13 @@ export class TowRig {
   carPose(): Pose {
     const S = this.spec;
     const fx = this.rx + Math.sin(this.yaw) * S.wheelbase, fz = this.rz + Math.cos(this.yaw) * S.wheelbase;
-    const gR = this.ground(this.rx, this.rz), gF = this.ground(fx, fz);
-    return { x: (this.rx + fx) / 2, y: (gR + gF) / 2, z: (this.rz + fz) / 2, yaw: this.yaw, pitch: -Math.atan2(gF - gR, S.wheelbase) };
+    // cada roda no relevo: pitch pela diferença frente/trás, roll pela diferença esquerda/direita
+    const rxv = Math.cos(this.yaw) * S.track / 2, rzv = -Math.sin(this.yaw) * S.track / 2; // vetor "direita"
+    const gRL = this.ground(this.rx - rxv, this.rz - rzv), gRR = this.ground(this.rx + rxv, this.rz + rzv);
+    const gFL = this.ground(fx - rxv, fz - rzv), gFR = this.ground(fx + rxv, fz + rzv);
+    const gR = (gRL + gRR) / 2, gF = (gFL + gFR) / 2;
+    const roll = Math.atan2(((gRR + gFR) - (gRL + gFL)) / 2, S.track); // > 0 = lado direito mais alto
+    return { x: (this.rx + fx) / 2, y: (gR + gF) / 2, z: (this.rz + fz) / 2, yaw: this.yaw, pitch: -Math.atan2(gF - gR, S.wheelbase), roll };
   }
 
   /** O ponto (mundo) está dentro da carroceria do veículo? (para avarias do barco batendo no carro) */

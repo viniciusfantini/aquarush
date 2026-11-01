@@ -114,6 +114,29 @@ export class EngineAudio {
   cylinders: number;
   constructor(cylinders = 4) { this.cylinders = cylinders; }
 
+  // ---- buzina (B): carro (2 tons ~420/520 Hz), lancha (buzina marítima grave 2 tons), bote (buzina de ar) ----
+  private horn: { oscs: OscillatorNode[]; gain: GainNode; kind: string } | null = null;
+  setHorn(on: boolean, kind: "car" | "lancha" | "bote"): void {
+    const ctx = this.ctx;
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    if (!this.horn || this.horn.kind !== kind) {
+      if (this.horn) { for (const o of this.horn.oscs) o.stop(); this.horn.gain.disconnect(); }
+      const gain = ctx.createGain(); gain.gain.value = 0;
+      const shaper = ctx.createWaveShaper();
+      const curve = new Float32Array(256); for (let i = 0; i < 256; i++) { const x = (i / 255) * 2 - 1; curve[i] = Math.tanh(2.5 * x); }
+      shaper.curve = curve;
+      const bp = ctx.createBiquadFilter(); bp.type = "bandpass";
+      const freqs = kind === "car" ? [420, 523] : kind === "lancha" ? [233, 294] : [470];
+      bp.frequency.value = kind === "car" ? 900 : kind === "lancha" ? 600 : 1300; bp.Q.value = 0.8;
+      const oscs = freqs.map((f) => { const o = ctx.createOscillator(); o.type = kind === "bote" ? "square" : "sawtooth"; o.frequency.value = f; o.connect(shaper); o.start(); return o; });
+      shaper.connect(bp).connect(gain).connect(this.master);
+      this.horn = { oscs, gain, kind };
+    }
+    const vol = this.muted ? 0 : kind === "lancha" ? 0.22 : kind === "car" ? 0.14 : 0.16;
+    this.horn.gain.gain.setTargetAtTime(on ? vol : 0, t, on ? 0.012 : 0.05);
+  }
+
   /** Puxada na corda de partida: "zzzip" da corda + catraca do arranque manual. */
   ropePull(): void {
     const ctx = this.ctx;
