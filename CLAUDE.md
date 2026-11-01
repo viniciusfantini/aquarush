@@ -52,6 +52,8 @@ npm run dev            # abrir http://localhost:5173, F3 mostra a telemetria; wi
 | Vento | `wind.ts` + `PhysicsWorld.wind` | `waterMaterial.ts` (carneirinhos), `hud.ts`, `audio.ts` | "vento" |
 | Amarração, píer, poitas, embarque | `mooring.ts` | `presentation/mooring.ts`, `pilot.ts` | "amarração", "poita", "embarque" |
 | Carretinha, carro, rampa, estrada, posto | `trailer.ts`, `towVehicle.ts`, `world.ts`, `station.ts` | `ramp.ts`, `station.ts`, `fleet.ts` | "rampa", "reboque", "carretinha", "estrada", "posto", "carro" |
+| Contato com fundo/margem | `boat.ts` (`collide`: normal do terreno pelo gradiente de `groundHeight`, atrito no plano da encosta) | — | "barranco", "lago", "rampa" |
+| Partículas de água | — | `waterInteraction.ts` (`clipToWater`: param na superfície `physWater`; bolhas estouram nela) | — (visual) |
 | Emborcamento e pessoas na água | `boat.ts` (`updateCapsize`, `ejectOccupants`, `updateSwimmers`) | `pilot.ts` (`float`, `stand`, `board`) | "emborcamento" |
 
 Valores de referência (lancha): massa seca 1030 kg; empuxo máximo 8,5 t; borda livre seca 64 cm; 1.500 L em água calma = 36 cm de borda livre (com ondas fortes vira); alagada ~2.900 L; afunda ~3.850 L; bomba ~0,55 L/s; alternador 35 A; bateria 50 Ah; booster 10 Ah/200 A. Largada: atracada na vaga do píer, motor desligado, bateria 60 %, **5 L de gasolina (temporário)**.

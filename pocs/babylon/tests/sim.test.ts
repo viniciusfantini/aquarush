@@ -674,6 +674,28 @@ for (const [label, thr] of [["baixa", 0.25], ["alta", 1]] as const) {
   check("jato", "saída em bombordo: jato para bombordo (m)", port[port.length - 1].x - -o.x, -0.5, -0.1, "m", 2);
 }
 
+
+// ---------- Batida em barranco / parede do cânion: a parede barra, a gravidade traz de volta ----------
+{
+  const w = buildWorld();
+  const water = mkWater(0.35);
+  const z = 420, cx = riverCenterX(z);
+  const b = new Speedboat(SPEEDBOAT, v3(cx, 0.25, z), Math.PI / 2); // do meio do rio direto para a parede
+  b.systems.fuelL = 50;
+  let maxY = -9, t10 = 0;
+  run(b, water, 16, { ...emptyInput(), gear: "F", throttle: 1 }, w, (t) => { maxY = Math.max(maxY, b.pos.y); if (Math.abs(t - 10) < 0.005) t10 = b.pos.y; });
+  check("barranco", "a toda contra a parede do cânion: não sobe a parede como rampa (altura máx., m)", maxY, 0, 3.5, "m", 2);
+  check("barranco", "a gravidade traz o barco de volta para a água (altura após 10 s, m)", t10, -1.5, 0.8, "m", 2);
+  check("barranco", "batida de frente na pedra a ~40 km/h: avaria grave do casco (%)", b.hullDamage * 100, 40, 100, "%", 0);
+  // apoiado numa encosta íngreme (> ~24°, atrito 0,45) o barco escorrega para baixo
+  const slope = 0.7; // ~35°
+  const ramp: PhysicsWorld = { groundHeight: (x: number) => -0.6 + slope * x, spheres: [], boxes: [] };
+  const s = new Speedboat(SPEEDBOAT, v3(4, 0.25 + slope * 4, 0), 0);
+  const x0 = s.pos.x;
+  run(s, mkWater(0), 4, emptyInput(), ramp);
+  check("barranco", "parado numa encosta de ~35°: escorrega para baixo pela gravidade (m)", x0 - s.pos.x, 0.5, 50, "m", 2);
+}
+
 // ---------- Vento: 5 níveis, deriva, banda, âncora ----------
 {
   const water = mkWater(0);

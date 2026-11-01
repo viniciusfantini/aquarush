@@ -1222,11 +1222,18 @@ export class Speedboat {
       const vp = this.pointVelocity(wp);
       // fundo / margem
       const g = world.groundHeight(wp.x, wp.z);
-      const pen = g - wp.y;
-      if (pen > 0) {
-        const n = v3(0, 1, 0);
-        const fn = Math.max(0, kG * pen - cG * vp.y);
-        const vt = v3(vp.x, 0, vp.z);
+      if (g - wp.y > 0) {
+        // normal REAL do terreno (gradiente do relevo): numa parede/barranco a reação é quase horizontal — barra o
+        // barco em vez de servir de rampa — e numa encosta a gravidade (componente ao longo dela) o faz escorregar.
+        const e = 0.3;
+        const gx = (world.groundHeight(wp.x + e, wp.z) - world.groundHeight(wp.x - e, wp.z)) / (2 * e);
+        const gz = (world.groundHeight(wp.x, wp.z + e) - world.groundHeight(wp.x, wp.z - e)) / (2 * e);
+        const nl = Math.hypot(gx, 1, gz);
+        const n = v3(-gx / nl, 1 / nl, -gz / nl);
+        const pen = (g - wp.y) * n.y;                       // penetração medida na normal
+        const vn = dot(vp, n);
+        const fn = Math.max(0, kG * pen - cG * vn);
+        const vt = sub(vp, scale(n, vn));                   // deslizamento no plano da encosta
         const vtl = len(vt);
         const ff = vtl > 1e-3 ? scale(vt, -Math.min(muG * fn, 4000 * mk * vtl) / vtl) : v3();
         this.addForceAt(add(scale(n, fn), ff), wp, "contact");

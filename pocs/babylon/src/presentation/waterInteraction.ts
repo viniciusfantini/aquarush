@@ -2,8 +2,8 @@
 // e as partículas: spray da proa, "rooster tail" da hélice, respingos de impacto e
 // bolhas/névoa de cavitação e ventilação. Tudo dirigido pela telemetria real da simulação.
 
-import { type Scene, DynamicTexture, Color4, ParticleSystem, Vector3 } from "@babylonjs/core";
-import type { GerstnerWater } from "../sim/water.ts";
+import { type Scene, DynamicTexture, Color4, ParticleSystem, Vector3, type Particle } from "@babylonjs/core";
+import type { GerstnerWater, IWaterSurface } from "../sim/water.ts";
 import type { Speedboat } from "../sim/boat.ts";
 import { v3, clamp, smoothstep } from "../sim/math.ts";
 import { WakeMap } from "./wakeMap.ts";
@@ -63,6 +63,8 @@ export class WaterInteraction {
   private readonly chop: ParticleSystem;
   private readonly drips: ParticleSystem;
   private dryTime = 99;
+  /** superfície da água (física, com a esteira) para as partículas pararem nela */
+  water: IWaterSurface | null = null;
   private lastImpact = 0;
 
   private readonly field: WakeField;
@@ -121,6 +123,29 @@ export class WaterInteraction {
     this.telltale.minAngularSpeed = 0; this.telltale.maxAngularSpeed = 0;
     this.telltale.color1 = new Color4(0.9, 0.97, 1, 0.9); this.telltale.color2 = new Color4(0.8, 0.92, 0.98, 0.8);
     this.telltale.colorDead = new Color4(0.85, 0.95, 1, 0.2);
+    // a água é uma superfície para as partículas: gota que cai nela para ali (vira respingo/bolha e some);
+    // bolha que sobe estoura na superfície — nada atravessa e continua do outro lado
+    for (const ps of [this.bowL, this.bowR, this.rooster, this.splash, this.mist, this.telltale, this.chop, this.drips]) this.clipToWater(ps, "fall");
+    this.clipToWater(this.bubbles, "rise");
+  }
+
+  /** Envolve o update da partícula: ao cruzar a superfície ela fica nela, sem velocidade vertical, e encolhe até sumir. */
+  private clipToWater(ps: ParticleSystem, mode: "fall" | "rise"): void {
+    const base = ps.updateFunction;
+    ps.updateFunction = (particles: Particle[]) => {
+      base(particles);
+      const W = this.water;
+      if (!W) return;
+      for (const p of particles) {
+        const h = W.getHeight(p.position.x, p.position.z);
+        const crossed = mode === "fall" ? p.position.y < h : p.position.y > h;
+        if (!crossed) continue;
+        p.position.y = h + (mode === "fall" ? 0.005 : -0.005);
+        p.direction.set(p.direction.x * 0.15, 0, p.direction.z * 0.15); // o impacto absorve o movimento
+        p.size *= 0.82;                                                  // espalha/estoura: some em ~0,2 s
+        if (p.size < 0.01) p.age = p.lifeTime;
+      }
+    };
   }
 
   /** Gotas escorrendo do pé do motor depois que ele sai da água (some em alguns segundos). */
@@ -149,6 +174,7 @@ export class WaterInteraction {
   }
 
   update(dt: number, boat: Speedboat, water: GerstnerWater): void {
+    if (!this.water) this.water = water;
     const T = boat.telemetry;
     void dt;
     this.wake.update(boat.pos.x, boat.pos.z, this.field.sampleBoat(boat));

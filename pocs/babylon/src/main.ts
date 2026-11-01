@@ -40,7 +40,7 @@ import { BoatCamera } from "./presentation/cameras.ts";
 import { Hud } from "./presentation/hud.ts";
 import { EngineAudio } from "./presentation/audio.ts";
 
-const BUILD = "poc-babylon 0.44.0";
+const BUILD = "poc-babylon 0.45.0";
 /** Escala visual da rotação da hélice (proporcional ao RPM, abaixo do limite estroboscópico). */
 const PROP_VISUAL_SCALE = 0.12;
 
@@ -904,6 +904,7 @@ const boot = async () => {
       cam.distScale = V.kind === "lancha" ? 1.25 : 1.0;
       cam.update(dtReal, new Vector3(cp.x, cp.y, cp.z), Quaternion.FromEulerAngles(cp.pitch, cp.yaw, 0), Math.abs(V.rig.v));
     } else cam.update(dtReal, rPos, rRot, Math.hypot(boat.vel.x, boat.vel.z));
+    fx.water = physWater; // as partículas param na mesma superfície da física (com a esteira)
     if (!paused) fx.update(dtReal, boat, water);
     waterVis.update(water, cam.cam, engine.getRenderWidth(), engine.getRenderHeight());
     if (cfg.quality.shadows > 0) sun.position = rPos.add(sunDir.scale(150));
