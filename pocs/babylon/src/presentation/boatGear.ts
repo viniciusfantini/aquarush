@@ -1,15 +1,17 @@
 // Visual da âncora de proa (Danforth + cabo até a roldana) e do jato da bomba de porão pelo costado.
 // Só lê a simulação: Speedboat.anchor (estado, posição, cabo lançado) e a telemetria do porão.
 
-import { type Scene, Mesh, MeshBuilder, StandardMaterial, PBRMaterial, Color3, Color4, TransformNode, Vector3, LinesMesh, Quaternion } from "@babylonjs/core";
+import { type Scene, Mesh, MeshBuilder, StandardMaterial, PBRMaterial, Color3, Color4, TransformNode, Vector3, LinesMesh, Quaternion, VertexData, VertexBuffer } from "@babylonjs/core";
 import type { Speedboat } from "../sim/boat.ts";
 import { v3, rotateInv } from "../sim/math.ts";
 import { jetStreakLocal } from "../sim/bilgeJet.ts";
+import { halfBeam } from "../sim/hullShape.ts";
 import type { SpeedboatParams } from "../sim/params.ts";
 import type { IWaterSurface } from "../sim/water.ts";
 
 const ROPE_N = 16;
 const JET_N = 14;
+const IW_NX = 9, IW_NZ = 20; // grade da água de dentro (bordo a bordo × proa-popa)
 const G = 9.81;
 
 export class BoatGearVis {
@@ -24,6 +26,10 @@ export class BoatGearVis {
   private readonly streamPath: Vector3[] = [];
   private readonly streamR: number[] = [];
   private stowed = true;
+  /** água solta sobre o piso (visual): superfície sempre horizontal no mundo, volume = o da simulação */
+  private readonly inner: Mesh;
+  private readonly iwXZ: [number, number, number][] = []; // x, z, área da célula
+  private readonly iwPos: Float32Array;
   readonly meshes: Mesh[] = [];
 
   constructor(scene: Scene, root: TransformNode, P: SpeedboatParams, prefix: string) {
@@ -70,6 +76,39 @@ export class BoatGearVis {
       foam.rotation.x = Math.PI / 2; foam.material = wm; foam.isPickable = false; foam.setEnabled(false);
       this.foam = foam;
       this.meshes.push(tube, foam, ...this.drops);
+    }
+
+    // ---- água solta sobre o piso do cockpit (lê o volume da simulação) ----
+    {
+      const B = P.bilge, z0 = B.floodCenter.z - B.floodLen / 2, z1 = B.floodCenter.z + B.floodLen / 2;
+      // meia largura interna do cockpit: lancha pela forma do casco; bote retangular afinando na proa
+      const hw = (z: number) => P.anchor.motorA > 0 ? Math.max(0.25, halfBeam(z) - 0.16) : B.floodHalfW * (z > z1 - 0.6 ? 0.55 + 0.45 * (z1 - z) / 0.6 : 1);
+      const pos: number[] = [], idx: number[] = [];
+      for (let j = 0; j < IW_NZ; j++) {
+        const z = z0 + (z1 - z0) * (j / (IW_NZ - 1));
+        for (let i = 0; i < IW_NX; i++) {
+          const x = -hw(z) + 2 * hw(z) * (i / (IW_NX - 1));
+          this.iwXZ.push([x, z, ((2 * hw(z)) / (IW_NX - 1)) * ((z1 - z0) / (IW_NZ - 1))]);
+          pos.push(x, B.floorY - 0.02, z);
+        }
+      }
+      for (let j = 0; j < IW_NZ - 1; j++) for (let i = 0; i < IW_NX - 1; i++) {
+        const a = j * IW_NX + i, b = a + 1, c = a + IW_NX, d = c + 1;
+        idx.push(a, c, b, b, c, d);
+      }
+      this.iwPos = new Float32Array(pos);
+      const m = new Mesh(prefix + "InnerWater", scene);
+      const vd = new VertexData();
+      vd.positions = pos; vd.indices = idx;
+      const nrm: number[] = []; VertexData.ComputeNormals(pos, idx, nrm); vd.normals = nrm;
+      vd.applyToMesh(m, true);
+      const wm = new StandardMaterial(prefix + "InnerWaterMat", scene);
+      wm.diffuseColor = new Color3(0.2, 0.42, 0.46); wm.specularColor = new Color3(0.9, 0.95, 1); wm.specularPower = 64;
+      wm.emissiveColor = new Color3(0.03, 0.08, 0.09); wm.alpha = 0.78; wm.backFaceCulling = false;
+      m.material = wm; m.parent = root; m.isPickable = false; m.setEnabled(false);
+      m.alphaIndex = -1; // antes da "tampa" do cockpit (só profundidade): ela não esconde esta água
+      this.inner = m;
+      this.meshes.push(m);
     }
   }
 
@@ -120,6 +159,31 @@ export class BoatGearVis {
       }
       MeshBuilder.CreateLines("", { points: pts, instance: this.rope });
       this.rope.setEnabled(true);
+    }
+    // ---- água solta sobre o piso: plano horizontal no mundo com o volume da simulação ----
+    {
+      const B = this.P.bilge;
+      const deckV = active ? Math.max(0, boat.bilgeL - B.sumpL) / 1000 : 0; // m³ sobre o piso
+      this.inner.setEnabled(deckV > 0.003);
+      if (deckV > 0.003) {
+        // "cima" do mundo em eixos do barco: a superfície é u·p = c (horizontal no mundo, inclinada no barco)
+        const u = rotateInv(boat.rot, v3(0, 1, 0));
+        const uy = Math.max(0.2, u.y);
+        const yAt = (k: number, c: number) => (c - u.x * this.iwXZ[k][0] - u.z * this.iwXZ[k][1]) / uy;
+        const vol = (c: number) => { let V = 0; for (let k = 0; k < this.iwXZ.length; k++) V += Math.max(0, yAt(k, c) - B.floorY) * this.iwXZ[k][2]; return V; };
+        let lo = 1e9;
+        for (let k = 0; k < this.iwXZ.length; k++) lo = Math.min(lo, uy * B.floorY + u.x * this.iwXZ[k][0] + u.z * this.iwXZ[k][1]);
+        let hi = lo + 3;
+        for (let it = 0; it < 18; it++) { const mid = (lo + hi) / 2; if (vol(mid) < deckV) lo = mid; else hi = mid; }
+        const c = (lo + hi) / 2;
+        const top = this.P.gunwaleY - 0.02;
+        for (let k = 0; k < this.iwXZ.length; k++) {
+          const y = yAt(k, c);
+          // seco: fica logo abaixo do piso (escondido); molhado: no nível, até a borda
+          this.iwPos[k * 3 + 1] = y > B.floorY ? Math.min(y, top) : B.floorY - 0.02;
+        }
+        this.inner.updateVerticesData(VertexBuffer.PositionKind, this.iwPos);
+      }
     }
     // ---- jato da bomba de porão: balístico no mundo, da saída até a superfície da água ----
     if (this.stream) {

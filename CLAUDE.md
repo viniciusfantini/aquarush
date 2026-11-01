@@ -46,7 +46,7 @@ npm run dev            # abrir http://localhost:5173, F3 mostra a telemetria; wi
 | Casco, planeio, trim/tilt, cavitação | `boat.ts`, `params.ts` | `boatMesh.ts`, `dinghyMesh.ts` | testes 1–6, "power trim", "bote" |
 | Forma do casco (fonte única) | `hullShape.ts` | `boatMesh.ts` importa | "afundar" |
 | Motor, combustível, temperatura, bateria, alternador, amperímetro, jump start | `engineSystems.ts`, `boat.ts` | `hud.ts`, `helm.ts`, `audio.ts` | "sistemas", "bateria", "amperímetro", "neutro" |
-| Porão, bomba, alagar/afundar, jato | `boat.ts` (`updateBilge`), `bilgeJet.ts` | `boatGear.ts`, `hud.ts` | "porão", "afundar", "jato" |
+| Porão, bomba, alagar/afundar, jato, água visível dentro | `boat.ts` (`updateBilge`, `updateSlosh`), `bilgeJet.ts` | `boatGear.ts` (jato + água solta sobre o piso, `alphaIndex` −1 para não ser escondida pela tampa do cockpit), `hud.ts` | "porão", "afundar", "jato" |
 | Âncora | `anchor.ts` | `boatGear.ts`, `hud.ts` (`#g-anchor`) | "âncora" |
 | Vento | `wind.ts` + `PhysicsWorld.wind` | `waterMaterial.ts` (carneirinhos), `hud.ts`, `audio.ts` | "vento" |
 | Amarração, píer, poitas, embarque | `mooring.ts` | `presentation/mooring.ts`, `pilot.ts` | "amarração", "poita", "embarque" |
