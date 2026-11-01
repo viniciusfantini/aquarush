@@ -536,40 +536,59 @@ for (const [label, thr] of [["baixa", 0.25], ["alta", 1]] as const) {
   check("âncora", "bote: sem molinete elétrico (A)", dA, 0, 0, "A", 0);
 }
 
-// ---------- Porão: furo no casco, bomba automática, alarme e peso da água ----------
+// ---------- Porão: furo no casco (orifício), água pela borda (vertedouro), bomba automática, alarme, peso ----------
 {
   const water = mkWater(0);
   const b = new Speedboat(SPEEDBOAT, v3(0, 0.25, 0));
   b.engine = "off"; // sem alternador: a bomba sai da bateria
   run(b, water, 2, emptyInput());
   const m0 = b.totalMass;
-  b.hullDamage = 0.3;
-  let maxL = 0, pumped = false, alarm = false, maxFlow = 0, pumpBatA = 0;
-  run(b, water, 120, emptyInput(), openWater, () => {
+  b.hullDamage = 0.17; // pedra a ~15 km/h
+  let maxL = 0, pumped = false, alarm = false, maxFlow = 0, pumpBatA = 0, inflow0 = 0;
+  run(b, water, 120, emptyInput(), openWater, (t) => {
     const T = b.telemetry; maxL = Math.max(maxL, T.bilgeL); pumped ||= T.bilgePump; alarm ||= T.bilgeAlarm; maxFlow = Math.max(maxFlow, T.bilgeFlowLps);
+    if (t < 0.5) inflow0 = T.bilgeInflowLps;
     if (T.bilgePump) pumpBatA = Math.min(pumpBatA, T.batteryA);
   });
-  check("porão", "casco 30 %: entrada de água (L/s)", b.telemetry.bilgeInflowLps, 0.25, 0.45, "L/s", 2);
+  check("porão", "casco 17 %: entrada pelo furo, orifício Cd·A·√(2gh) (L/s)", inflow0, 0.35, 0.6, "L/s", 2);
   check("porão", "a boia liga a bomba sozinha", pumped ? 1 : 0, 1, 1, "", 0);
-  check("porão", "bomba dá conta: máximo de água no porão (L)", maxL, 5, 12, "L", 1);
-  check("porão", "vazão da bomba (L/s, ~1100 GPH)", maxFlow, 0.9, 1.25, "L/s", 2);
+  check("porão", "casco 17 %: a bomba dá conta, máximo no porão (L)", maxL, 4, 12, "L", 1);
+  check("porão", "vazão da bomba (L/s, ~750 GPH)", maxFlow, 0.7, 0.85, "L/s", 2);
   check("porão", "alarme sonoro/luminoso com a bomba jogando água fora", alarm ? 1 : 0, 1, 1, "", 0);
-  check("porão", "bomba ligada: corrente na bateria (A)", pumpBatA, -7, -4, "A", 1);
-  // furo grande (casco 100 %): entra mais que a bomba tira — a água acumula e pesa
+  check("porão", "bomba ligada: corrente na bateria (A)", pumpBatA, -5, -3, "A", 1);
+  // furo maior que a bomba: a água acumula, pesa e afunda o barco (e o furo fica mais fundo)
   const z = new Speedboat(SPEEDBOAT, v3(0, 0.25, 0));
   run(z, water, 2, emptyInput());
   const y0 = z.pos.y;
-  z.hullDamage = 1;
+  z.hullDamage = 0.6;
   run(z, water, 120, emptyInput());
-  check("porão", "casco 100 %: a bomba não vence, água em 2 min (L)", z.telemetry.bilgeL, 60, 130, "L", 1);
+  check("porão", "casco 60 %: entra mais que a bomba tira, água em 2 min (L)", z.telemetry.bilgeL, 120, 300, "L", 0);
   check("porão", "a água pesa no barco (kg a mais)", z.totalMass - m0, z.telemetry.bilgeL - 1, z.telemetry.bilgeL + 1, "kg", 1);
-  check("porão", "barco mais fundo com a água (cm)", (y0 - z.pos.y) * 100, 0.3, 8, "cm", 1);
+  check("porão", "barco mais fundo com a água (cm)", (y0 - z.pos.y) * 100, 1, 15, "cm", 1);
   check("porão", "água alta: alarme", z.telemetry.bilgeAlarm ? 1 : 0, 1, 1, "", 0);
+  const big = new Speedboat(SPEEDBOAT, v3(0, 0.25, 0));
+  big.hullDamage = 1;
+  run(big, water, 60, emptyInput());
+  check("porão", "casco 100 %: 1 min (L)", big.telemetry.bilgeL, 200, 400, "L", 0);
+  // água por cima da borda/espelho
+  const over = (waves: number, inp: VehicleInput, secs: number) => {
+    const w = mkWater(waves);
+    const s = new Speedboat(SPEEDBOAT, v3(0, 0.25, 0));
+    s.systems.fuelL = 60;
+    run(s, w, 3, emptyInput());
+    let maxB = 0;
+    run(s, w, secs, inp, openWater, () => { maxB = Math.max(maxB, s.bilgeL); });
+    return maxB;
+  };
+  check("porão", "água calma, ré a toda 30 s: não entra água (L)", over(0.35, { ...emptyInput(), gear: "R", throttle: 1 }, 30), 0, 0.5, "L", 1);
+  check("porão", "lago, ré a 50 % 30 s: entra pelo espelho e a bomba dá conta (L)", over(1, { ...emptyInput(), gear: "R", throttle: 0.5 }, 30), 1, 30, "L", 1);
+  check("porão", "ondas fortes, ré lenta 60 s: respingos, a bomba dá conta (L)", over(2.5, { ...emptyInput(), gear: "R" }, 60), 0.5, 30, "L", 1);
+  check("porão", "ondas fortes, ré a 50 %: a popa afunda nas ondas e alaga em 30 s (L)", over(2.5, { ...emptyInput(), gear: "R", throttle: 0.5 }, 30), 300, 900, "L", 0);
   // bote: sem bomba elétrica
   const d = new Speedboat(DINGHY, v3(0, 0.25, 0));
   d.hullDamage = 0.3;
   run(d, water, 60, emptyInput());
-  check("porão", "bote (sem bomba): 1 min com furo (L)", d.telemetry.bilgeL, 15, 25, "L", 1);
+  check("porão", "bote (sem bomba): 1 min com furo de casco 30 % (L)", d.telemetry.bilgeL, 18, 40, "L", 1);
 }
 
 // ---------- Vento: 5 níveis, deriva, banda, âncora ----------
@@ -625,9 +644,13 @@ for (const [label, thr] of [["baixa", 0.25], ["alta", 1]] as const) {
   check("lago", "profundidade a 100 m do centro (m)", -groundHeight(100, 0), 6, 9, "m", 1);
   for (const P of [SPEEDBOAT, DINGHY]) for (const thr of [0.3, 0.6, 1]) {
     const water = mkWater(2.5); // "ondas fortes"
-    const b = new Speedboat(P, v3(0, 0.25, 0), 0);
+    // lado oeste do lago (7 m, ~270 m da ilha): o círculo deriva com as ondas mas não chega ao raso
+    const b = new Speedboat(P, v3(-130, 0.25, -20), 0);
     b.systems.fuelL = 50;
-    run(b, water, 60, { ...emptyInput(), gear: "F", throttle: thr, steering: 0.3 }, w);
+    let minD = 99;
+    run(b, water, 60, { ...emptyInput(), gear: "F", throttle: thr, steering: 0.3 }, w, () => { minD = Math.min(minD, -groundHeight(b.pos.x, b.pos.z)); });
+    check("lago", `${P.kind}: mar forte, círculo a ${thr * 100}% — sempre em água funda (m)`, minD, 5, 8, "m", 1);
+    check("lago", `${P.kind}: mar forte, círculo a ${thr * 100}% — água no porão (L, respingos)`, b.bilgeL, 0, 40, "L", 1);
     check("lago", `${P.kind}: mar forte, 1 min em círculo a ${thr * 100}% no meio do lago — avaria do motor (%)`, b.engineDamage * 100, 0, 0, "%", 0);
   }
 }

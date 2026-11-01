@@ -54,7 +54,14 @@ export interface SpeedboatParams {
   /** altura local da borda (onde a água começa a entrar por cima do costado) */
   gunwaleY: number;
   /** porão: centro do peso da água, capacidade, bomba elétrica (L/h; 0 = sem bomba) e saída no costado */
-  bilge: { pos: Vec3; maxL: number; pumpLph: number; pumpA: number; outlet: Vec3 };
+  bilge: {
+    pos: Vec3; maxL: number; pumpLph: number; pumpA: number; outlet: Vec3;
+    areaM2: number;      // área do fundo interno (a água de dentro sobe bilgeL/área)
+    holeMaxM2: number;   // área do furo com o casco 100 % avariado
+    bowRise: number;     // a borda sobe (m) da popa para a proa
+    transomY: number;    // altura do rebaixo do espelho (poço do motor) — por onde entra água dando ré
+    transomW: number;    // largura do rebaixo (m)
+  };
   /** âncora de proa (molinete elétrico se motorA > 0; senão, à mão) */
   anchor: AnchorParams;
 
@@ -172,7 +179,8 @@ export const SPEEDBOAT: SpeedboatParams = {
   bunkPoints: [-2.6, -1.4, 0, 1.4].flatMap((z) => [v3(0, -0.45, z), v3(-0.55, -0.35, z), v3(0.55, -0.35, z)]),
   gunwaleY: 0.44,
   // bomba de porão de ~1100 GPH (≈ 4200 L/h) com boia automática; saída no costado de boreste, à ré
-  bilge: { pos: v3(0, -0.32, -1.9), maxL: 700, pumpLph: 4200, pumpA: 4.5, outlet: v3(1.13, 0.2, -2.2) },
+  // bomba de porão de ~750 GPH (≈ 2800 L/h) com boia automática; saída no costado de boreste, à ré
+  bilge: { pos: v3(0, -0.32, -1.9), maxL: 900, pumpLph: 2800, pumpA: 3.5, outlet: v3(1.13, 0.2, -2.2), areaM2: 6.5, holeMaxM2: 0.004, bowRise: 0.2, transomY: 0.38, transomW: 0.7 },
   // âncora tipo Danforth ~7 kg, 50 m de cabo, molinete elétrico de ~60 A
   anchor: { roller: v3(0, 0.62, 3.12), rodeMax: 50, rateOut: 0.8, rateIn: 0.5, motorA: 60, holdN: 4000 },
 
@@ -277,7 +285,7 @@ export const DINGHY: SpeedboatParams = {
   bunkPoints: [-1.1, -0.1, 0.8].flatMap((z) => [v3(0, -0.2, z), v3(-0.42, -0.14, z), v3(0.42, -0.14, z)]),
   gunwaleY: 0.3,
   // sem bomba elétrica (sem bateria): a água fica no fundo
-  bilge: { pos: v3(0, -0.1, -0.4), maxL: 300, pumpLph: 0, pumpA: 0, outlet: v3(0.8, 0.15, -0.9) },
+  bilge: { pos: v3(0, -0.1, -0.4), maxL: 400, pumpLph: 0, pumpA: 0, outlet: v3(0.8, 0.15, -0.9), areaM2: 2.6, holeMaxM2: 0.0025, bowRise: 0.08, transomY: 0.22, transomW: 0.5 },
   // fateixa pequena (~3 kg) com 25 m de cabo, lançada e recolhida à mão
   anchor: { roller: v3(0, 0.3, 1.6), rodeMax: 25, rateOut: 0.7, rateIn: 0.35, motorA: 0, holdN: 1200 },
 

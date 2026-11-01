@@ -168,6 +168,8 @@ export class Speedboat {
   bilgeL = 0;
   private bilgeAuto = false;
   private bilgePumpA = 0;
+  /** entrada pelo furo (L/s, negativo = escoando) e por cima da borda (L/s) no último passo */
+  bilgeHole = 0; bilgeOver = 0;
   private cavitation = 0;
   private propRpmState = 0;
   private immersion = 1;
@@ -580,14 +582,42 @@ export class Speedboat {
   private updateBilge(dt: number, water: IWaterSurface, input: VehicleInput): void {
     const P = this.params, B = P.bilge, t = this.telemetry;
     let inflow = 0;
+    this.bilgeHole = 0; this.bilgeOver = 0;
     if (this.capsized) this.bilgeL = 0; // virado: o peso da água deixa de ser "carga no porão"
     else {
-      inflow += 2.0 * Math.pow(this.hullDamage, 1.5); // casco 100 % avariado ≈ 2 L/s (mais que a bomba)
-      for (const z of [P.length * 0.25, -P.length * 0.38]) for (const sx of [-1, 1]) {
-        const w = this.toWorld(v3(sx * (P.beam / 2 - 0.05), P.gunwaleY, z));
-        const h = water.getHeight(w.x, w.z) - w.y;
-        if (h > 0) inflow += 40 * Math.min(h, 0.5); // água por cima da borda
+      // furo no casco = orifício: Q = Cd·A·√(2g·Δh), Δh = água de fora acima do furo − nível da água de dentro.
+      // Afundando (água pesando, ondas) a vazão cresce; se a água de dentro ficar mais alta, ela escoa pelo furo.
+      const holeA = B.holeMaxM2 * Math.pow(this.hullDamage, 1.3);
+      if (holeA > 0) {
+        // furo no fundo do casco (quilha), sob o porão
+        const keelY = P.contactPoints.reduce((m, c) => Math.min(m, c.y), 0);
+        const hp = this.toWorld(v3(B.pos.x, keelY + 0.03, B.pos.z));
+        const inside = this.bilgeL / 1000 / B.areaM2;
+        const dh = water.getHeight(hp.x, hp.z) - hp.y - inside;
+        this.bilgeHole = Math.sign(dh) * 0.62 * holeA * Math.sqrt(2 * G * Math.abs(dh)) * 1000;
+        if (this.bilgeHole < 0) this.bilgeHole = Math.max(this.bilgeHole, -this.bilgeL / dt);
       }
+      // água por cima da borda = vertedouro em cada trecho: Q = 1,8·L·h^1,5 (m³/s). Crista raspando a borda
+      // (até 6 cm abaixo) ainda joga respingos para dentro. Borda sobe para a proa; a popa tem o poço do motor.
+      // (lâmina limitada a 30 cm: acima disso a borda já está debaixo d'água e a fórmula deixa de valer)
+      const weir = (h: number, L: number) => (h > 0 ? 1.8 * L * Math.min(h, 0.3) ** 1.5 + 0.25 * L * 0.06 ** 1.5 : h > -0.06 ? 0.25 * L * (h + 0.06) ** 1.5 : 0) * 1000;
+      // andando, a onda de proa e o bordo falso jogam a água para fora e a imersão da borda é só um instante:
+      // a entrada cai com a velocidade na água (parado = fórmula cheia; a 3 m/s = metade; planando ≈ 5 %)
+      const uw = Math.hypot(this.vel.x, this.vel.z);
+      const moving = 1 / (1 + (uw / 3) ** 2);
+      const NS = 6, z0 = -P.length * 0.46, seg = (P.length * 0.86) / NS;
+      for (let i = 0; i < NS; i++) {
+        const z = z0 + (i + 0.5) * seg;
+        const gy = P.gunwaleY + B.bowRise * smoothstep(-0.1 * P.length, 0.5 * P.length, z) ** 2;
+        for (const sx of [-1, 1]) {
+          const w = this.toWorld(v3(sx * (P.beam / 2 - 0.04), gy, z));
+          this.bilgeOver += moving * weir(water.getHeight(w.x, w.z) - w.y, seg);
+        }
+      }
+      const tw = this.toWorld(v3(0, B.transomY, -P.length / 2 + 0.05));
+      // pelo espelho a onda cai primeiro no poço do motor, que escoa pelos embornais: só ~1/3 chega ao porão
+      this.bilgeOver += 0.35 * weir(water.getHeight(tw.x, tw.z) - tw.y, B.transomW);
+      inflow = this.bilgeHole + this.bilgeOver;
     }
     if (B.pumpLph > 0) {
       if (this.bilgeL > 6) this.bilgeAuto = true;
@@ -596,7 +626,7 @@ export class Speedboat {
     const wantPump = B.pumpLph > 0 && (this.bilgeAuto || input.bilgePump) && !this.capsized;
     const powered = wantPump && this.systems.supplyV(B.pumpA) >= 9;
     const flowLps = powered ? (B.pumpLph / 3600) * clamp((this.systems.batteryV - 9) / 3.4, 0.2, 1.05) : 0;
-    const out = Math.min(flowLps * dt, this.bilgeL + inflow * dt);
+    const out = Math.min(flowLps * dt, Math.max(0, this.bilgeL + inflow * dt));
     this.bilgeL = clamp(this.bilgeL + inflow * dt - out, 0, B.maxL);
     this.bilgePumpA = powered ? B.pumpA : 0;
     t.bilgeL = this.bilgeL; t.bilgeInflowLps = inflow; t.bilgePump = powered;
