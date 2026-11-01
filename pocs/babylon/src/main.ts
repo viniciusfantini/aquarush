@@ -37,7 +37,7 @@ import { BoatCamera } from "./presentation/cameras.ts";
 import { Hud } from "./presentation/hud.ts";
 import { EngineAudio } from "./presentation/audio.ts";
 
-const BUILD = "poc-babylon 0.32.0";
+const BUILD = "poc-babylon 0.33.0";
 /** Escala visual da rotação da hélice (proporcional ao RPM, abaixo do limite estroboscópico). */
 const PROP_VISUAL_SCALE = 0.12;
 
@@ -54,6 +54,8 @@ const WATER_PRESETS = [
  * fim dele (≈1 km, metade rio acima) — o melhor consumo medido é 0,28 L/km (lancha a 38 km/h) e 0,06 L/km (bote a 22 km/h). É preciso
  * abastecer no posto (estrada da rampa). Pedido do usuário.
  */
+/** Carga da bateria na largada (a lancha começa desligada, com a bateria a 60 %). */
+const START_BATTERY = 0.6;
 const START_FUEL: Record<VesselKind, number> = { lancha: 0.25, bote: 0.05 }; // chega à entrada do cânion mesmo a toda (z≈250), nunca ao fim
 
 /** Tudo o que pertence a uma embarcação: física, visual, comandos, pessoas. */
@@ -298,7 +300,7 @@ const boot = async () => {
   const prevRot = new Quaternion(), curRot = new Quaternion();
   const snap = (dst: Vector3, q: Quaternion) => { const b = V.boat; dst.set(b.pos.x, b.pos.y, b.pos.z); q.set(b.rot.x, b.rot.y, b.rot.z, b.rot.w); };
   let fpsSmooth = 60, resT = 0;
-  let lastStartFail = "", lowFuelWarned = false, trimRelayWarned = false, neutralRevWarned = false;
+  let lastStartFail = "", lowFuelWarned = false, trimRelayWarned = false, neutralRevWarned = false, lastJumperOff = 0;
   const qTilt = new Quaternion(), qSteer = new Quaternion();
   let lastGear = V.boat.telemetry.gear;
   let tiltWarned = false, intakeWarned = false, capsizeWarned = false;
@@ -494,8 +496,9 @@ const boot = async () => {
     b.reset(v3(bs.pos.x, bs.pos.y, bs.pos.z), bs.heading);
     tieToPier(b, world.pier, bs.side); moorWhere = "píer";
     b.repair();
-    b.systems.jumper = false;
-    b.engine = mode === "game" ? "running" : "off";
+    b.systems.jumper = false; b.systems.jumpCharge = 1; lastJumperOff = b.systems.jumperAutoOff;
+    if (b.systems.p.hasBattery) b.systems.batterySoc = START_BATTERY; // bateria a 60 %
+    b.engine = "off"; // começa desligado: dê a partida (P)
     b.systems.fuelL = START_FUEL[V.kind];
     b.systems.coolantC = Math.min(b.systems.coolantC, 60);
     for (const p of [V.pilot, ...Object.values(V.pax)]) p.board(V.vis.root);
@@ -523,7 +526,6 @@ const boot = async () => {
     menu.classList.add("hidden");
     occIdx = 0;
     resetBoat(false);
-    V.boat.engine = "running";
     cam.resetOrbit();
     hud.showToast(`${V.kind === "bote" ? "Bote de apoio AR-3" : "Lancha AR-6"} atracado na vaga do píer — O escolhe quantos embarcam, M solta as amarras. O combustível não dá até o fim do cânion: abasteça no posto`);
   };
@@ -589,7 +591,7 @@ const boot = async () => {
     }
     else if (a === "lights") {
       lights = input.toggleLights();
-      setNavLights(V.vis, lights); V.dinghy?.setLantern(lights);
+      setNavLights(V.vis, lights, boat.telemetry.batteryV); V.dinghy?.setLantern(lights);
       hud.setLights(lights, V.dinghy ? "LANTERNA" : "LUZES");
     }
     else if (a === "reset") resetBoat();
@@ -609,8 +611,9 @@ const boot = async () => {
       const sys = boat.systems;
       if (!sys.p.hasBattery) { hud.showToast("O bote não tem bateria — a partida é na corda (P)"); return; }
       if (!sys.jumper && sys.batterySoc > 0.35) { hud.showToast("A bateria não está descarregada — o jump start não é necessário"); return; }
+      if (!sys.jumper && sys.jumpStartsLeft < 1) { hud.showToast("O jump start está descarregado — ele recarrega com o motor em cruzeiro"); return; }
       sys.jumper = !sys.jumper;
-      hud.showToast(sys.jumper ? "Jump start conectado nos bornes: dê a partida (P) e use o trim; com o motor ligado o alternador recarrega — J desconecta" : "Jump start desconectado");
+      hud.showToast(sys.jumper ? `Jump start conectado (carga ${Math.round(sys.jumpCharge * 100)} %, ~${sys.jumpStartsLeft} partida${sys.jumpStartsLeft > 1 ? "s" : ""}): dê a partida (P) — quando o motor pegar ele é desconectado` : "Jump start desconectado");
     }
     else if (a === "debug") hud.toggleDebug();
     else if (a === "help") hud.toggleHelp();
@@ -796,7 +799,7 @@ const boot = async () => {
       else K.push(["T", "rampa e carretinha", "ramp"], ["P", V.kind === "bote" ? "corda (partida)" : "liga/desliga", "ignition"], ["C", "câmera", "camera"], ["H", "ajuda", "help"]);
       // bateria zerada (lancha): botão para conectar o booster de partida
       if (mode === "game" && boat.systems.p.hasBattery && !T.capsized && (T.jumper || (T.engine !== "running" && T.batterySoc < 0.08)))
-        K.unshift(["J", T.jumper ? "desconectar jump start" : "CONECTAR jump start", "jump"]);
+        K.unshift(["J", T.jumper ? "desconectar jump start" : `CONECTAR jump start (${Math.round(T.jumpCharge * 100)} %)`, "jump"]);
       const key = K.map((k) => k[0] + k[1]).join("|");
       if (key !== ctxKey) {
         ctxKey = key;
@@ -806,6 +809,7 @@ const boot = async () => {
     if (T.damageCount !== lastDamage) { if (mode === "game") hud.showToast(T.damageEvent + (T.engineDamage >= 0.95 ? " — MOTOR QUEBRADO" : "")); lastDamage = T.damageCount; }
     if (T.startFail && T.startFail !== lastStartFail) hud.showToast(T.startFail === "fuel" ? "O motor gira mas não pega: sem combustível — abasteça no posto" : T.startFail === "pull" ? "Não pegou — puxe de novo (P)" : T.startFail === "dead" ? "Só estalou: bateria sem força para girar o arranque" : "Não pegou: o arranque girou fraco (bateria baixa)");
     lastStartFail = T.startFail;
+    if (boat.systems.jumperAutoOff !== lastJumperOff) { if (mode === "game") hud.showToast(`O motor pegou — jump start desconectado (carga ${Math.round(T.jumpCharge * 100)} %, recarrega em cruzeiro)`); lastJumperOff = boat.systems.jumperAutoOff; }
     if (T.trimRelay && !trimRelayWarned && mode === "game") { hud.showToast("Trim sem força: bateria zerada — só o relé estala (J conecta o jump start)"); trimRelayWarned = true; }
     if (!T.trimRelay && input.state.trim === 0) trimRelayWarned = false;
     if (T.neutralRev && !neutralRevWarned && mode === "game") hud.showToast(`Acelerando em neutro (N segurado): o giro sobe sem engatar — limitado a ${NEUTRAL_REV_LIMIT} rpm`);
@@ -859,7 +863,9 @@ const boot = async () => {
     });
     // buzina: do veículo quando você está nele; senão do barco (segurar B, ou toque no botão = 0,22 s)
     hornPulse = Math.max(0, hornPulse - dtReal);
-    audio.setHorn(mode === "game" && (input.hornHeld || hornPulse > 0), driving || carOnly ? "car" : V.kind);
+    // buzina elétrica da lancha: tom e volume caem com a tensão da bateria (o bote tem buzina de ar; o carro, bateria própria)
+    audio.setHorn(mode === "game" && (input.hornHeld || hornPulse > 0), driving || carOnly ? "car" : V.kind, !driving && !carOnly && V.boat.systems.p.hasBattery ? T.batteryV : 12.6);
+    if (lights && V.vis.lights) setNavLights(V.vis, true, T.batteryV); // luzes de navegação: brilho pela tensão
     hud.update(T, fpsSmooth, {
       "física (ms/frame)": physMs.toFixed(2),
       "resolução": `${engine.getRenderWidth()}×${engine.getRenderHeight()} (${pixelRatio.toFixed(2)}×)`,

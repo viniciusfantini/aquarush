@@ -116,8 +116,9 @@ export class EngineAudio {
   constructor(cylinders = 4) { this.cylinders = cylinders; }
 
   // ---- buzina (B): carro (2 tons ~500/630 Hz), lancha (buzina elétrica ~560/700 Hz), bote (buzina de ar ~760 Hz) ----
-  private horn: { oscs: OscillatorNode[]; gain: GainNode; kind: string } | null = null;
-  setHorn(on: boolean, kind: "car" | "lancha" | "bote"): void {
+  private horn: { oscs: OscillatorNode[]; gain: GainNode; kind: string; base: number[] } | null = null;
+  /** `volts`: tensão nos bornes — a buzina elétrica perde tom e volume com a bateria fraca (abaixo de ~8 V cala). */
+  setHorn(on: boolean, kind: "car" | "lancha" | "bote", volts = 12.6): void {
     const ctx = this.ctx;
     if (!ctx) return;
     const t = ctx.currentTime;
@@ -133,9 +134,11 @@ export class EngineAudio {
       bp.frequency.value = kind === "car" ? 1300 : kind === "lancha" ? 1500 : 1900; bp.Q.value = 0.9;
       const oscs = freqs.map((f) => { const o = ctx.createOscillator(); o.type = kind === "bote" ? "square" : "sawtooth"; o.frequency.value = f; o.connect(shaper); o.start(); return o; });
       shaper.connect(bp).connect(gain).connect(this.master);
-      this.horn = { oscs, gain, kind };
+      this.horn = { oscs, gain, kind, base: freqs };
     }
-    const vol = this.muted ? 0 : kind === "lancha" ? 0.17 : kind === "car" ? 0.14 : 0.15;
+    const h = kind === "bote" ? 1 : Math.min(1.05, Math.max(0, (volts - 8) / 4.6)); // 12,6 V = 1
+    this.horn.oscs.forEach((o, i) => o.frequency.setTargetAtTime(this.horn!.base[i] * (0.55 + 0.45 * h), t, 0.05));
+    const vol = (this.muted ? 0 : kind === "lancha" ? 0.17 : kind === "car" ? 0.14 : 0.15) * Math.min(1, h * 1.3);
     this.horn.gain.gain.setTargetAtTime(on ? vol : 0, t, on ? 0.004 : 0.012); // ataque e corte rápidos
   }
 

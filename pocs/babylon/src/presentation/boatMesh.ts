@@ -418,9 +418,12 @@ export const buildPropeller = (scene: Scene, engine: TransformNode, pos: Vector3
   return { propeller, propBlur };
 };
 
-export const setNavLights = (v: BoatVisual, on: boolean): void => {
+/** Luzes de navegação; o brilho segue a tensão da bateria (lâmpada a 12,6 V = 100 %; abaixo de ~9 V apagam). */
+export const navLightLevel = (volts: number): number => Math.min(1.05, Math.max(0, (volts - 9) / 3.6)) ** 1.6;
+export const setNavLights = (v: BoatVisual, on: boolean, volts = 12.6): void => {
   if (!v.lights) return;
-  v.lights.port.emissiveColor = on ? new Color3(1, 0.05, 0.05) : Color3.Black();
-  v.lights.star.emissiveColor = on ? new Color3(0.1, 1, 0.25) : Color3.Black();
-  v.lights.stern.emissiveColor = on ? new Color3(1, 1, 1) : Color3.Black();
+  const k = on ? navLightLevel(volts) : 0;
+  v.lights.port.emissiveColor.set(1 * k, 0.05 * k, 0.05 * k);
+  v.lights.star.emissiveColor.set(0.1 * k, 1 * k, 0.25 * k);
+  v.lights.stern.emissiveColor.set(k, k, k);
 };

@@ -35,6 +35,11 @@ export const ENGINE_SYSTEMS: EngineSystemsParams = {
   hasBattery: true,
 };
 
+/** Partidas que um booster cheio dá (cada tentativa de arranque gasta 1/JUMP_STARTS da carga). */
+export const JUMP_STARTS = 3;
+/** Equivalência para as outras cargas (trim, luzes): segundos de corrente de arranque que o booster cheio aguenta. */
+const JUMP_CRANK_S = 3.0;
+
 export interface EngineSystemsInput {
   engine: "off" | "cranking" | "running";
   rpm: number;
@@ -57,6 +62,10 @@ export class EngineSystems {
   protect = false;
   /** booster portátil (jump start) ligado nos bornes, em paralelo com a bateria */
   jumper = false;
+  /** carga do booster 0..1 — cheio dá ~3 partidas (JUMP_CRANK_S de arranque); recarrega com o motor em cruzeiro */
+  jumpCharge = 1;
+  /** contador de desconexões automáticas do booster (o motor pegou) — o HUD avisa */
+  jumperAutoOff = 0;
   /** corrente do alternador no último passo (A) */
   private altA = 0;
   /** pedido de desligamento (sem combustível ou superaquecimento extremo) */
@@ -87,8 +96,14 @@ export class EngineSystems {
   private get source(): { v: number; r: number } {
     const v = this.restV, r = this.internalR + 0.003;
     if (!this.jumper) return { v, r };
-    return { v: Math.max(v, 12.9), r: 0.006 };
+    // booster: 12,9 V cheio; nas últimas reservas a tensão despenca e ele já não vence o arranque
+    const c = this.wasCranking ? this.jumpCharge + 1 / JUMP_STARTS : this.jumpCharge; // durante a partida usa a carga reservada
+    const jv = 12.9 - 0.4 * (1 - c) - 3.2 * (1 - smoothstep(0, 0.12, c));
+    return jv > v ? { v: jv, r: 0.006 } : { v, r };
   }
+  /** Partidas que ainda cabem no booster (aprox.). */
+  get jumpStartsLeft(): number { return Math.floor(this.jumpCharge * JUMP_STARTS + 0.02); }
+  private wasCranking = false;
   /** Tensão nos bornes puxando `amps` (o alternador, girando, cobre parte da corrente). */
   supplyV(amps: number): number { const s = this.source; return s.v - Math.max(0, amps - this.altA) * s.r; }
   /** A bomba do power trim tem força para girar? (abaixo de ~9 V sob carga só o relé estala) */
@@ -141,8 +156,17 @@ export class EngineSystems {
     if (s.engine === "cranking") drain += P.starterA * (s.starterLoad ?? 1); // motor de arranque
     const alt = charging ? Math.min(15, (s.rpm - 900) / 120) : 0; // A do alternador
     this.altA = alt;
-    // com o booster ligado ele fornece a corrente (e ainda carrega a bateria devagar, ~4 A)
-    const battNet = this.jumper ? alt + 4 : alt - drain;
+    // o motor pegou: o booster é desconectado sozinho (como a pessoa faria)
+    if (running && this.jumper) { this.jumper = false; this.jumperAutoOff++; }
+    // booster ligado: ele fornece as cargas grandes (arranque, trim) e se esgota com elas
+    const boosting = this.jumper && this.jumpCharge > 0;
+    const cranking = s.engine === "cranking";
+    if (boosting && cranking && !this.wasCranking) this.jumpCharge = Math.max(0, this.jumpCharge - 1 / JUMP_STARTS); // uma partida
+    else if (boosting && !cranking) this.jumpCharge = Math.max(0, this.jumpCharge - (Math.max(0, drain - (s.lightsOn ? 2.5 : 0.3) - alt) / P.starterA) * dt / JUMP_CRANK_S);
+    this.wasCranking = cranking;
+    // em cruzeiro (alternador folgado) o booster recarrega na tomada 12 V do barco (~1,5 min de 0 a 100 %)
+    if (alt >= 8) this.jumpCharge = Math.min(1, this.jumpCharge + (alt / 15) * dt / 90);
+    const battNet = boosting ? alt : alt - drain;
     this.batterySoc = clamp(this.batterySoc + (battNet * dt * P.batteryTimeScale) / 3600 / this.p.batteryAh, 0, 1);
     const src = this.source;
     const rest = src.v;

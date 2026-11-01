@@ -375,6 +375,8 @@ for (const [label, thr] of [["baixa", 0.25], ["alta", 1]] as const) {
   const mid = tryStart(off(0.65));
   check("bateria", "bateria a 65 %: ainda pega (s)", mid.tRun, 1.4, 5.5, "s", 2);
   check("bateria", "bateria a 65 %: arranque mais lento que cheia (rpm)", mid.maxStarter, 100, good.maxStarter - 15, "rpm", 0);
+  const start60 = tryStart(off(0.6));
+  check("bateria", "largada com a bateria a 60 %: pega (s)", start60.tRun, 1.4, 5.5, "s", 2);
   const weak = tryStart(off(0.4));
   check("bateria", "bateria a 40 %: arranque mais lento (rpm)", weak.maxStarter, 60, good.maxStarter * 0.75, "rpm", 0);
   check("bateria", "bateria a 40 %: demora mais ou não pega (s)", weak.tRun < 0 ? 99 : weak.tRun, good.tRun + 0.5, 99, "s", 2);
@@ -415,10 +417,29 @@ for (const [label, thr] of [["baixa", 0.25], ["alta", 1]] as const) {
   check("bateria", "jump start: trim volta a mover (°)", Math.abs(ang() - tj0), 1, 30, "°", 1);
   const js = tryStart(z);
   check("bateria", "jump start: o motor pega (s)", js.tRun, 1.2, 4, "s", 2);
-  z.systems.jumper = false;
+  check("bateria", "jump start: desconecta sozinho quando o motor pega", !z.systems.jumper && z.systems.jumperAutoOff === 1 ? 1 : 0, 1, 1, "", 0);
   const socJ = z.systems.batterySoc;
   run(z, water, 60, { ...emptyInput(), gear: "F", throttle: 0.6 });
   check("bateria", "depois do jump start, 1 min navegando recarrega (%)", (z.systems.batterySoc - socJ) * 100, 3, 20, "%", 1);
+  // booster cheio: dá 3 partidas com a bateria zerada, a 4ª não vai
+  const jb = off(0);
+  let ok = 0;
+  for (let i = 0; i < 5; i++) {
+    jb.systems.batterySoc = 0; jb.systems.jumper = true;
+    const r = tryStart(jb);
+    if (r.tRun > 0) { ok++; jb.toggleIgnition(); run(jb, water, 1, N); } else jb.systems.jumper = false;
+  }
+  check("bateria", "booster cheio: partidas com a bateria zerada", ok, 3, 3, "", 0);
+  const jc0 = jb.systems.jumpCharge;
+  check("bateria", "booster depois de 3 partidas: quase vazio (%)", jc0 * 100, 0, 25, "%", 0);
+  // em cruzeiro o alternador recarrega o booster (tomada 12 V do barco)
+  jb.systems.batterySoc = 0.6; jb.toggleIgnition(); run(jb, water, 4, N);
+  run(jb, water, 90, { ...emptyInput(), gear: "F", throttle: 0.6 });
+  check("bateria", "1,5 min em cruzeiro: booster recarrega (%)", (jb.systems.jumpCharge - jc0) * 100, 50, 100, "%", 0);
+  // marcha lenta não recarrega o booster
+  const idle = new Speedboat(SPEEDBOAT, v3(0, 0.25, 0)); idle.systems.jumpCharge = 0.2;
+  run(idle, water, 30, N);
+  check("bateria", "em marcha lenta o booster não recarrega (%)", (idle.systems.jumpCharge - 0.2) * 100, -0.5, 0.5, "%", 1);
 }
 
 // ---------- Aceleração em neutro (botão da manete segurado em N) ----------

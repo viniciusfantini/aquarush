@@ -81,6 +81,7 @@ export interface BoatTelemetry {
   trimMotorA: number;    // corrente da bomba do power trim (A)
   trimRelay: boolean;    // botão do trim apertado mas a bomba sem força (bateria zerada): só o relé estala
   jumper: boolean;       // booster de partida (jump start) ligado na bateria
+  jumpCharge: number;    // carga do booster 0..1 (cheio ≈ 3 partidas)
   neutralRev: boolean;   // acelerando em neutro (botão de aceleração em neutro segurado)
   depth: number;         // profundidade sob o casco
   draftHull: number;     // calado do casco (m abaixo da superfície no ponto mais fundo do fundo)
@@ -222,7 +223,7 @@ export class Speedboat {
     this.rpm = params.idleRpm;
     this.telemetry = {
       speedKmh: 0, waterSpeed: 0, rpm: params.idleRpm, throttle: 0, throttleCmd: 0, trim: 0, trimDeg: 0, tiltDeg: 0, tiltBlocked: false, intakeSubmerged: true, steerDeg: 0,
-      gear: "N", pitchDeg: 0, rollDeg: 0, wetFraction: 0, planing: false, thrustN: 0, ventilation: 1, cavitation: 0, propImmersion: 1, revLimiter: false, propSlip: 0, propRpm: 0, engine: "running", fuelL: 0, fuelFrac: 1, coolantC: 45, batteryV: 12.6, engineHours: 0, overheatWarn: false, protectMode: false, lowFuel: false, chargeWarn: false, stall: "", trimMotorA: 0, trimRelay: false, jumper: false, neutralRev: false, fuelLph: 0, buzzer: false, starterRpm: 0, startFail: "", batterySoc: 0.92, trimPin: 0, pullStart: !params.electricStart,
+      gear: "N", pitchDeg: 0, rollDeg: 0, wetFraction: 0, planing: false, thrustN: 0, ventilation: 1, cavitation: 0, propImmersion: 1, revLimiter: false, propSlip: 0, propRpm: 0, engine: "running", fuelL: 0, fuelFrac: 1, coolantC: 45, batteryV: 12.6, engineHours: 0, overheatWarn: false, protectMode: false, lowFuel: false, chargeWarn: false, stall: "", trimMotorA: 0, trimRelay: false, jumper: false, jumpCharge: 1, neutralRev: false, fuelLph: 0, buzzer: false, starterRpm: 0, startFail: "", batterySoc: 0.92, trimPin: 0, pullStart: !params.electricStart,
       distanceM: 0, collisions: 0, draftHull: 0, draftMotor: 0, capsized: false, swimmers: 0, hullDamage: 0, engineDamage: 0, damageEvent: "", damageCount: 0, lastImpact: 0, depth: 0, submergedPoints: params.buoyancyPoints.map(() => false),
     };
   }
@@ -500,7 +501,7 @@ export class Speedboat {
     // sistemas do motor: combustível, temperatura, bateria, horímetro
     const sys = this.systems;
     sys.update(dt, { engine: this.engine, rpm: t.rpm, fuelLph: t.fuelLph, load: this.throttleActual, intakeSubmerged, lightsOn: input.navigationLights, trimMotorA: this.trimMotorA });
-    t.trimMotorA = this.trimMotorA; t.jumper = sys.jumper; t.neutralRev = this.neutralRev;
+    t.trimMotorA = this.trimMotorA; t.jumper = sys.jumper; t.jumpCharge = sys.jumpCharge; t.neutralRev = this.neutralRev;
     if (sys.stallReason && this.engine === "running") { this.engine = "off"; t.stall = sys.stallReason; }
     t.fuelL = sys.fuelL; t.fuelFrac = sys.fuelFrac; t.coolantC = sys.coolantC; t.batteryV = sys.batteryV;
     t.engineHours = sys.engineHours; t.overheatWarn = sys.overheatWarn; t.protectMode = sys.protect;
@@ -737,7 +738,7 @@ export class Speedboat {
     t.trim = this.trim; t.trimDeg = trimAngle * 57.2958; t.tiltDeg = this.tilt * 57.2958;
     t.tiltBlocked = this.tiltBlocked || this.manualBlockT > 0;
     t.trimPin = P.trimMode === "manual" ? (this.tiltWanted ? P.trimPins.length + 1 : this.trimPin + 1) : 0;
-    t.trimMotorA = this.trimMotorA; t.batteryV = sys.batteryV; t.batterySoc = sys.batterySoc; t.jumper = sys.jumper;
+    t.trimMotorA = this.trimMotorA; t.batteryV = sys.batteryV; t.batterySoc = sys.batterySoc; t.jumper = sys.jumper; t.jumpCharge = sys.jumpCharge;
     t.fuelL = sys.fuelL; t.fuelFrac = sys.fuelFrac; t.coolantC = sys.coolantC; t.engineHours = sys.engineHours;
     t.overheatWarn = sys.overheatWarn; t.protectMode = sys.protect; t.lowFuel = sys.lowFuel; t.chargeWarn = sys.chargeWarn;
     t.buzzer = this.selfTestT > 0; t.starterRpm = this.engine === "cranking" ? this.rpm : 0;

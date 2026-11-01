@@ -230,6 +230,7 @@ export class Hud {
         ["bomba do trim (A)", t.trimMotorA.toFixed(0)],
         ["bateria (V)", t.batteryV.toFixed(2)],
         ["carga da bateria", `${(t.batterySoc * 100).toFixed(1)} %`],
+        ["jump start", `${t.jumper ? "conectado · " : ""}${(t.jumpCharge * 100).toFixed(0)} %`],
         ["arranque (rpm)", t.starterRpm.toFixed(0)],
         ["distância (m)", t.distanceM.toFixed(0)],
         ["profundidade (m)", t.depth.toFixed(1)],
