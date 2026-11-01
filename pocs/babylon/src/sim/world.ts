@@ -145,6 +145,9 @@ export const YARD = { cx: RAMP.x, cz: RAMP.z0 + RAMP.sMin - 12, hx: 16, hz: 12, 
 const rectDistance = (r: { cx: number; cz: number; hx: number; hz: number }, x: number, z: number): number =>
   Math.hypot(Math.max(0, Math.abs(x - r.cx) - r.hx), Math.max(0, Math.abs(z - r.cz) - r.hz));
 export const yardDistance = (x: number, z: number): number => rectDistance(YARD, x, z);
+/** Estacionamento de cima: extensão plana do pátio do posto para o norte (barcos de exposição nas carretinhas). */
+export const PARK = { cx: LOT.cx, cz: LOT.cz + LOT.hz + 8, hx: LOT.hx, hz: 8 };
+export const parkDistance = (x: number, z: number): number => rectDistance(PARK, x, z);
 /** distância (≥ 0) ao retângulo do pátio */
 export const lotDistance = (x: number, z: number): number => rectDistance(LOT, x, z);
 /** Pontos de controle da estrada (Catmull-Rom): sai do alto da rampa e vai pela faixa baixa da praia com curvas. */
@@ -231,14 +234,14 @@ export const groundHeight = (x: number, z: number): number => {
   let h = terrainWithRamp(x, z);
   const r = nearestRoad(x, z);
   if (r) h += (r.s.y - h) * (1 - smoothstep(ROAD.halfWidth, ROAD.halfWidth + ROAD.shoulder, r.d));
-  const dl = lotDistance(x, z);
+  const dl = Math.min(lotDistance(x, z), parkDistance(x, z)); // pátio do posto + estacionamento de cima (mesma cota)
   if (dl < 6) h += (LOT.y - h) * (1 - smoothstep(0, 6, dl));
   const dy = yardDistance(x, z);
   if (dy < 6 && z < RAMP.z0 + RAMP.sMin + 0.01) h += (YARD.y - h) * (1 - smoothstep(0, 6, dy)); // não invade a rampa
   return h;
 };
 /** perto da estrada/pátio (para a vegetação e as rochas ficarem fora) */
-export const onRoadOrLot = (x: number, z: number, margin = 0): boolean => lotDistance(x, z) < margin + 1 || yardDistance(x, z) < margin + 1 || nearestRoad(x, z, ROAD.halfWidth + margin) !== null;
+export const onRoadOrLot = (x: number, z: number, margin = 0): boolean => lotDistance(x, z) < margin + 1 || parkDistance(x, z) < margin + 1 || yardDistance(x, z) < margin + 1 || nearestRoad(x, z, ROAD.halfWidth + margin) !== null;
 
 export const RIVER_CURRENT: CurrentZone = {
   // aproximação retangular do trecho mais reto do rio próximo à foz; vazão para o sul

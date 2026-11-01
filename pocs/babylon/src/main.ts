@@ -18,6 +18,7 @@ import { buildTrailer, trailerLoadState, attachWinch, seatedBoatLocal, type Trai
 import { TowRig, TOW_SPECS, type Pose } from "./sim/towVehicle.ts";
 import { buildRamp, buildTrailerMesh, buildTowVehicle, type WheelNode } from "./presentation/ramp.ts";
 import { buildRoadAndLot, buildStation } from "./presentation/station.ts";
+import { buildFleet } from "./presentation/fleet.ts";
 import { buildMoorings, Ropes } from "./presentation/mooring.ts";
 import { pierBerthState, tieToPier, BuoyField, CANYON_END } from "./sim/mooring.ts";
 import { STATION, stationObstacles, fuelBayState, parkedStall } from "./sim/station.ts";
@@ -36,7 +37,7 @@ import { BoatCamera } from "./presentation/cameras.ts";
 import { Hud } from "./presentation/hud.ts";
 import { EngineAudio } from "./presentation/audio.ts";
 
-const BUILD = "poc-babylon 0.28.0";
+const BUILD = "poc-babylon 0.29.0";
 /** Escala visual da rotação da hélice (proporcional ao RPM, abaixo do limite estroboscópico). */
 const PROP_VISUAL_SCALE = 0.12;
 
@@ -155,7 +156,7 @@ const boot = async () => {
   const ropes = new Ropes(scene);
   const buoyField = new BuoyField(); // poitas com física (boia + corrente; o casco as afasta)
   const rampMeshes = [...buildRamp(scene), ...buildRoadAndLot(scene, cfg.quality.terrainSubdiv)];
-  const stationMeshes = buildStation(scene);
+  const stationMeshes = [...buildStation(scene), ...buildFleet(scene)];
 
   // ---------------- as duas embarcações (as duas ficam prontas; só a escolhida aparece) ----------------
   const makeVessel = (kind: VesselKind): Vessel => {

@@ -177,7 +177,7 @@ export const buildTrailerMesh = (scene: Scene, t: TrailerLayout): { root: Transf
 };
 
 /** Carro comum (hatch médio, ~4,3 m) — reboca o bote. Frente em +Z local; rodas tocam y = 0. */
-const buildCar = (scene: Scene, name: string, paint: Color3): VehicleVis => {
+export const buildCar = (scene: Scene, name: string, paint: Color3): VehicleVis => {
   const meshes: Mesh[] = [], wheels: WheelNode[] = [];
   const root = new TransformNode(name, scene);
   const bodyNode = new TransformNode(name + "BodyNode", scene); bodyNode.parent = root;
@@ -215,7 +215,7 @@ const buildCar = (scene: Scene, name: string, paint: Color3): VehicleVis => {
 };
 
 /** Caminhonete cabine dupla (~5,4 m) — reboca a lancha. */
-const buildPickup = (scene: Scene, name: string, paint: Color3): VehicleVis => {
+export const buildPickup = (scene: Scene, name: string, paint: Color3): VehicleVis => {
   const meshes: Mesh[] = [], wheels: WheelNode[] = [];
   const root = new TransformNode(name, scene);
   const bodyNode = new TransformNode(name + "BodyNode", scene); bodyNode.parent = root;

@@ -2,7 +2,7 @@
 // oficina e vagas (onde fica o OUTRO veículo com o outro barco). Geometria em coordenadas do mundo, usada
 // pela física do veículo (obstáculos) e pelo visual (presentation/station.ts).
 
-import { LOT } from "./world.ts";
+import { LOT, PARK } from "./world.ts";
 
 /** Retângulo orientado no plano XZ (yaw: rumo do eixo "comprimento", +Z = 0). */
 export interface Obb { x: number; z: number; hw: number; hl: number; yaw: number }
@@ -42,6 +42,19 @@ export const parkedStall = (car: Obb, trailer: Obb, speed: number): number => {
   return -1;
 };
 
+/**
+ * Frota de exposição no estacionamento de cima (só visual + obstáculo): cada uma na carretinha, engatada no
+ * veículo de reboque, de frente para +X. (x, z) = centro do conjunto; len = comprimento total; w = largura.
+ */
+export type FleetKind = "jetski" | "pontoon" | "catamaran" | "cruiser50" | "offshore";
+export const FLEET: { kind: FleetKind; label: string; x: number; z: number; len: number; w: number }[] = [
+  { kind: "cruiser50", label: "Lancha cabinada 50 pés", x: PARK.cx - 20, z: PARK.cz - 3.6, len: 25, w: 4.6 },
+  { kind: "offshore", label: "Lancha offshore", x: PARK.cx + 14, z: PARK.cz - 3.6, len: 19, w: 3.0 },
+  { kind: "catamaran", label: "Catamarã fisher", x: PARK.cx - 22, z: PARK.cz + 3.8, len: 17, w: 3.0 },
+  { kind: "pontoon", label: "Pontoon", x: PARK.cx + 1, z: PARK.cz + 3.8, len: 16, w: 2.7 },
+  { kind: "jetski", label: "Jet ski", x: PARK.cx + 22, z: PARK.cz + 3.8, len: 9.5, w: 2.0 },
+];
+
 /** Obstáculos fixos para o veículo de reboque (prédios, ilhas das bombas, colunas da cobertura). */
 export const stationObstacles = (): Obb[] => {
   const S = STATION, o: Obb[] = [];
@@ -50,6 +63,7 @@ export const stationObstacles = (): Obb[] => {
   for (const p of S.pumps) o.push({ x: p.x, z: p.z, hw: S.islandLen / 2, hl: S.islandW / 2, yaw: 0 });
   const c = S.canopy;
   for (const sx of [-1, 1]) for (const sz of [-1, 1]) o.push({ x: c.x + sx * (c.w / 2 - 0.4), z: c.z + sz * (c.d / 2 - 0.4), hw: 0.2, hl: 0.2, yaw: 0 });
+  for (const f of FLEET) o.push({ x: f.x, z: f.z, hw: f.len / 2, hl: f.w / 2, yaw: 0 }); // frota de exposição
   return o;
 };
 

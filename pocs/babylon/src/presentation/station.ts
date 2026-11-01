@@ -3,8 +3,8 @@
 // asfalto + uma "saia" de terreno nas laterais (a malha geral do terreno é grossa e fica rebaixada sob elas).
 
 import { type Scene, Mesh, MeshBuilder, StandardMaterial, PBRMaterial, Color3, Vector3, DynamicTexture, Texture, VertexBuffer } from "@babylonjs/core";
-import { groundHeight, ROAD, ROAD_SAMPLES, LOT, YARD, fbm, lotDistance, yardDistance } from "../sim/world.ts";
-import { STATION } from "../sim/station.ts";
+import { groundHeight, ROAD, ROAD_SAMPLES, LOT, YARD, PARK, fbm, lotDistance, yardDistance } from "../sim/world.ts";
+import { STATION, FLEET } from "../sim/station.ts";
 import { pbr, roundedBox } from "./boatMesh.ts";
 import { smoothstep } from "../sim/math.ts";
 
@@ -98,6 +98,7 @@ export const buildRoadAndLot = (scene: Scene, terrainSubdiv: number): Mesh[] => 
   };
   pad(LOT, "lot");
   pad(YARD, "yard");
+  pad({ ...PARK, y: LOT.y }, "park");
   const paint = new StandardMaterial("paint", scene); paint.diffuseColor = new Color3(0.92, 0.92, 0.88); paint.specularColor = Color3.Black();
   const stripe = (x: number, z: number, w: number, d: number, y: number, rot = 0) => {
     const st = MeshBuilder.CreateGround("stripe", { width: w, height: d }, scene);
@@ -105,6 +106,9 @@ export const buildRoadAndLot = (scene: Scene, terrainSubdiv: number): Mesh[] => 
   };
   // vagas para carro + carretinha (longas, ao sul do pátio do posto)
   for (const st of STATION.stalls) for (const dz of [-st.w / 2, st.w / 2]) stripe(st.x, st.z + dz, st.len, 0.15, LOT.y);
+  // vagas do estacionamento de cima (frota de exposição): faixas entre as fileiras e nas pontas de cada vaga
+  for (const fz of [PARK.cz - 7.6, PARK.cz + 0.1, PARK.cz + 7.6]) stripe(PARK.cx, fz, PARK.hx * 2 - 4, 0.15, LOT.y);
+  for (const f of FLEET) for (const dx of [-f.len / 2 - 0.8, f.len / 2 + 0.8]) stripe(f.x + dx, f.z, 0.15, 3.6, LOT.y);
   // círculo de manobra pintado no meio do pátio do posto e no alto da rampa
   for (const [cx, cz, r, y] of [[LOT.cx - 2, LOT.cz, 10, LOT.y], [YARD.cx, YARD.cz, 9, YARD.y]] as const) {
     const ring = MeshBuilder.CreateTorus("maneuverRing", { diameter: r * 2, thickness: 0.2, tessellation: 64 }, scene);
