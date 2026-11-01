@@ -36,7 +36,7 @@ import { BoatCamera } from "./presentation/cameras.ts";
 import { Hud } from "./presentation/hud.ts";
 import { EngineAudio } from "./presentation/audio.ts";
 
-const BUILD = "poc-babylon 0.27.0";
+const BUILD = "poc-babylon 0.28.0";
 /** Escala visual da rotação da hélice (proporcional ao RPM, abaixo do limite estroboscópico). */
 const PROP_VISUAL_SCALE = 0.12;
 
@@ -323,6 +323,7 @@ const boot = async () => {
   ctxBar.addEventListener("click", (e) => { const a = (e.target as HTMLElement).closest<HTMLElement>("[data-a]")?.dataset.a; if (a) input.pushAction(a as Action); });
   // ---- dirigindo o veículo de reboque (barco preso na carretinha pela cinta) ----
   let driving = false;
+  let manualBoat = false; // o jogador trouxe o comando para o barco com a cinta presa
   let strapT = 0;
   const boatOnTrailer = new Matrix(); // pose do barco no referencial da carretinha (fixa enquanto preso)
   const poseMatrix = (p: Pose) => Matrix.Compose(Vector3.One(), Quaternion.FromEulerAngles(p.pitch, p.yaw, 0), new Vector3(p.x, p.y, p.z));
@@ -383,12 +384,34 @@ const boot = async () => {
     setPeopleVisible(false);
     if (cam.mode === "cockpit") { cam.toggle(); hud.setCamera(cam.mode); setCockpitHead(false); }
     cam.resetOrbit();
-    hud.showToast(`Barco preso. Acelerador e direção agora são ${V.kind === "lancha" ? "da caminhonete" : "do carro"} (W/S/A/D); o motor do barco continua no P e no E/Q. U desengata`);
+    hud.showToast(`Barco preso. Acelerador e direção agora são ${V.kind === "lancha" ? "da caminhonete" : "do carro"} (W/S/A/D); o motor do barco continua no P e no E/Q. U passa o comando ao barco`);
   };
   /** Desengata: solta a cinta; se estiver dirigindo, o comando volta para o barco (a carretinha fica onde está). */
+  /** A carretinha está na água o suficiente para o barco sair flutuando (água sobre a traseira do berço)? */
+  const trailerInWater = () => trailerLoadState(V.boat, V.trailer).bunkDepth > 0.25;
+  /** Comando do carro → barco, com a cinta ainda presa (ex.: ligar o motor do barco no seco). */
+  const toBoatKeepStrap = () => {
+    const b = V.boat;
+    driving = false; manualBoat = true; strapT = 0;
+    b.vel = v3(); b.angVel = v3();
+    setPeopleVisible(true);
+    snap(curPos, curRot); snap(prevPos, prevRot);
+    hud.showToast(trailerInWater() ? "Comando no barco (cinta ainda presa). U de novo solta a cinta" : "Comando no barco (cinta presa, no seco). U volta ao carro");
+  };
+  /**
+   * U: no carro → passa o comando ao barco (cinta presa). No barco preso: com a carretinha na água solta a
+   * cinta; no seco só volta o comando ao carro.
+   */
+  const uKey = () => {
+    if (carOnly) { leaveCar(); return; }
+    if (driving) { toBoatKeepStrap(); return; }
+    if (V.boat.winchStrap) { if (trailerInWater()) unhitch(); else { manualBoat = false; startDriving(); } return; }
+    hud.showToast("O barco não está preso na carretinha");
+  };
   const unhitch = () => {
     const b = V.boat;
     if (!b.winchStrap && !driving) { hud.showToast("O barco não está preso na carretinha"); return; }
+    manualBoat = false;
     b.winchStrap = null;
     trailerDone = true; // não prende de novo até o barco sair do berço
     strapT = 0;
@@ -432,7 +455,7 @@ const boot = async () => {
     fueling = false;
     for (const p of [V.pilot, ...Object.values(V.pax)]) p.group.setEnabled(true);
     const isBote = kind === "bote";
-    hud.configure(isBote ? { speedMax: 60, temp: false, battery: false, trimPins: V.P.trimPins.length, gear: "dial" } : { speedMax: 100, temp: true, battery: true, trimPins: 0, gear: "bar" });
+    hud.configure(isBote ? { speedMax: 60, temp: true, battery: false, trimPins: V.P.trimPins.length, gear: "dial" } : { speedMax: 100, temp: true, battery: true, trimPins: 0, gear: "bar" });
     document.getElementById("help-trim")!.innerHTML = isBote
       ? "<kbd>E</kbd>/<kbd>Q</kbd> trim manual (sem acelerar): pino 1 · 2 · 3 → <kbd>E</kbd> de novo levanta o motor (tilt)"
       : "<kbd>E</kbd> trim + (proa sobe) · <kbd>Q</kbd> trim − (proa desce)";
@@ -460,7 +483,7 @@ const boot = async () => {
   const resetBoat = (toast = true) => {
     const b = V.boat;
     if (driving) stopDriving();
-    strapT = 0; moorArmed = true; moorWhere = ""; buoyField.reset();
+    strapT = 0; moorArmed = true; moorWhere = ""; buoyField.reset(); manualBoat = false;
     if (carOnly) leaveCar(false);
     input.setGear("N"); wakeField.reset();
     b.reset(spawnPos(), world.spawn.heading);
@@ -509,7 +532,7 @@ const boot = async () => {
     if (mode === "menu") return; // no menu os atalhos do jogo ficam desligados
     const boat = V.boat;
     if (a === "horn") { hornPulse = 0.22; return; } // toque curto (2 toques = 2 cliques/apertos)
-    if (a === "unhitch") { if (carOnly) leaveCar(); else unhitch(); return; } // no carro: U volta o comando ao barco
+    if (a === "unhitch") { uKey(); return; } // U: carro → barco; barco preso: solta a cinta (na água) ou volta ao carro (no seco)
     if (a === "couple") {
       if (!driving && !carOnly) { hud.showToast("I acopla/desacopla a carretinha quando você está no carro"); return; }
       const r = V.rig.toggleCoupling();
@@ -693,7 +716,8 @@ const boot = async () => {
     // só libera um novo engate depois que o barco SAIR de cima da carretinha (flutuando sobre ela ainda conta)
     if (!ld.overBunks && !boat.winchStrap) trailerDone = false;
     // cinta presa por ~1,5 s com o barco no berço → o comando passa para o veículo
-    if (!driving && mode === "game" && boat.winchStrap && ld.overBunks) { strapT += dtReal; if (strapT > 1.5) startDriving(); } else if (!driving) strapT = 0;
+    // (automático só na 1ª vez que a cinta prende; depois de U para o barco, o comando fica no barco)
+    if (!driving && !manualBoat && mode === "game" && boat.winchStrap && ld.overBunks) { strapT += dtReal; if (strapT > 1.5) startDriving(); } else if (!driving) strapT = 0;
     // posto: guia para parar ao lado da bomba e abastecimento (só com o carro parado e o motor do barco desligado)
     const bay = driving ? fuelBayState(V.rig.carPose(), Math.abs(V.rig.v)) : { near: false, ok: false, pump: null, why: "" };
     if (fueling) {
@@ -741,13 +765,13 @@ const boot = async () => {
     {
       const K: [string, string, Action | null][] = [];
       if (mode !== "game") { /* menu: sem barra */ }
-      else if (driving && bay.ok) K.push(["F", fueling ? "PARAR de abastecer" : "ABASTECER o barco", "fuel"], ["P", T.engine === "running" ? "desligar motor" : "motor desligado ✓", T.engine === "running" ? "ignition" : null], ["W", "sair", null], ["U", "desengatar", "unhitch"]);
+      else if (driving && bay.ok) K.push(["F", fueling ? "PARAR de abastecer" : "ABASTECER o barco", "fuel"], ["P", T.engine === "running" ? "desligar motor" : "motor desligado ✓", T.engine === "running" ? "ignition" : null], ["W", "sair", null], ["U", "comando ao barco", "unhitch"]);
       else if (driving && !V.rig.coupled) K.push(["W", "frente", null], ["S", "freio / ré", null], ["A D", "direção", null], ["I", "ACOPLAR a carretinha", "couple"], ["U", "voltar ao barco", "unhitch"], ["B", "buzina", "horn"]);
-      else if (driving) K.push(["I", "desacoplar carretinha", "couple"], ["W", "frente", null], ["S", "freio / ré", null], ["A D", "direção", null], ["E Q", "motor (tilt)", null], ["P", T.engine === "running" ? "desligar motor" : V.kind === "bote" ? "corda" : "ligar motor", "ignition"], ["U", "DESENGATAR o barco", "unhitch"], ["R", "píer", "reset"]);
+      else if (driving) K.push(["I", "desacoplar carretinha", "couple"], ["W", "frente", null], ["S", "freio / ré", null], ["A D", "direção", null], ["E Q", "motor (tilt)", null], ["P", T.engine === "running" ? "desligar motor" : V.kind === "bote" ? "corda" : "ligar motor", "ignition"], ["U", "COMANDO ao barco", "unhitch"], ["R", "píer", "reset"]);
       else if (T.capsized || boat.swimmers.length) K.push(["R", "recomeçar no píer", "reset"]);
       else if (carOnly) K.push(["W", "frente", null], ["S", "freio / ré", null], ["A D", "direção", null], ["I", V.rig.coupled ? "desacoplar carretinha" : "ACOPLAR carretinha", "couple"], ["U", "VOLTAR ao barco", "unhitch"], ["B", "buzina", "horn"], ["R", "píer", "reset"]);
       else if (boat.mooringLines.length) K.push(["M", "SOLTAR as amarras", "moor"], ["K", "ir para o carro", "car"], ["P", T.engine === "running" ? "desligar motor" : V.kind === "bote" ? "corda" : "ligar motor", "ignition"], ["C", "câmera", "camera"]);
-      else if (boat.winchStrap) K.push(["U", "DESENGATAR (soltar a cinta)", "unhitch"], ["E Q", "motor (tilt)", null]);
+      else if (boat.winchStrap) K.push(["U", trailerInWater() ? "SOLTAR a cinta" : "comando ao carro", "unhitch"], ["P", T.engine === "running" ? "desligar motor" : V.kind === "bote" ? "corda" : "ligar motor", "ignition"], ["E Q", "motor (tilt)", null]);
       else if (ld.near) K.push(["E", V.kind === "lancha" ? "levantar o motor" : "pino / tilt", null], ["W S", "marcha / acelerar", null], ["A D", "direção", null], ["T", "recomeçar a rampa", "ramp"]);
       else K.push(["T", "rampa e carretinha", "ramp"], ["P", V.kind === "bote" ? "corda (partida)" : "liga/desliga", "ignition"], ["C", "câmera", "camera"], ["H", "ajuda", "help"]);
       const key = K.map((k) => k[0] + k[1]).join("|");
