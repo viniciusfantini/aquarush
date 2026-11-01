@@ -13,6 +13,10 @@ export interface EngineSystemsParams {
   shutdownC: number;         // desliga o motor
   protectRpm: number;        // rotação máxima em modo de proteção
   batteryAh: number;
+  /** Aceleração de jogo da carga/descarga da bateria (1 = tempo real). Com 1, dezenas de partidas
+   *  mal arranham uma bateria de 50 Ah; o jogo acelera para o efeito aparecer numa sessão. */
+  batteryTimeScale: number;
+  starterA: number;          // corrente do motor de arranque (A)
 }
 
 export const ENGINE_SYSTEMS: EngineSystemsParams = {
@@ -23,7 +27,9 @@ export const ENGINE_SYSTEMS: EngineSystemsParams = {
   protectC: 90,
   shutdownC: 115,
   protectRpm: 2000,
-  batteryAh: 75,
+  batteryAh: 50,
+  batteryTimeScale: 10,
+  starterA: 170,
 };
 
 export interface EngineSystemsInput {
@@ -33,6 +39,7 @@ export interface EngineSystemsInput {
   load: number;              // acelerador efetivo 0..1
   intakeSubmerged: boolean;  // entrada d'água de refrigeração dentro d'água
   lightsOn: boolean;
+  starterLoad?: number;      // 0..1: arranque girando (1) ou travado/solenoide (0,2)
   trimMotorA?: number;       // bomba elétrica do power trim (A)
 }
 
@@ -60,11 +67,17 @@ export class EngineSystems {
   get overheatWarn(): boolean { return this.coolantC >= this.p.warnC; }
   get lowFuel(): boolean { return this.fuelFrac < 0.12; }
   get chargeWarn(): boolean { return this.batteryV < 12.2; }
+  /** Resistência interna (Ω): sobe quando a bateria descarrega — a tensão despenca na partida. */
+  get internalR(): number { return 0.009 + 0.03 * (1 - this.batterySoc) ** 2; }
+  /** Tensão em repouso pelo estado de carga (11,9 V vazia .. 12,7 V cheia). */
+  get restV(): number { return 11.9 + 0.8 * this.batterySoc; }
+  /** Tensão nos bornes com o arranque puxando a corrente cheia (para prever a partida). */
+  get crankV(): number { return this.restV - this.p.starterA * this.internalR; }
 
   /** Pode dar partida? (combustível, bateria e temperatura) */
   canStart(): "" | "fuel" | "battery" | "overheat" {
     if (this.fuelL <= 0.05) return "fuel";
-    if (this.batterySoc < 0.15) return "battery";
+    if (this.batterySoc < 0.03) return "battery"; // morta: nem o relé arma
     if (this.coolantC > this.p.protectC) return "overheat";
     return "";
   }
@@ -103,17 +116,17 @@ export class EngineSystems {
     // ---- elétrico: bateria + alternador ----
     const charging = running && s.rpm > 900;
     let drain = (s.lightsOn ? 2.5 : 0.3) + (s.trimMotorA ?? 0); // A (instrumentos + luzes + bomba do trim)
-    if (s.engine === "cranking") drain += 160;             // motor de arranque
+    if (s.engine === "cranking") drain += P.starterA * (s.starterLoad ?? 1); // motor de arranque
     const alt = charging ? Math.min(15, (s.rpm - 900) / 120) : 0; // A do alternador
-    this.batterySoc = clamp(this.batterySoc + ((alt - drain) * dt) / 3600 / this.p.batteryAh, 0, 1);
-    const rest = 11.9 + 0.8 * this.batterySoc;             // 11,9 V vazia .. 12,7 V cheia
-    // queda de tensão ≈ resistência interna + fiação (~12 mΩ) × corrente líquida
+    this.batterySoc = clamp(this.batterySoc + ((alt - drain) * dt * P.batteryTimeScale) / 3600 / this.p.batteryAh, 0, 1);
+    const rest = this.restV;
+    // queda de tensão = (resistência interna, que cresce com a descarga, + fiação) × corrente líquida
     const net = alt - drain;
-    let vTarget = rest - Math.max(0, -net) * 0.012;
-    if (s.engine === "cranking") vTarget = rest - 1.9;     // queda na partida
-    else if (charging && net >= 0) vTarget = 13.6 + 0.6 * Math.min((s.rpm - 900) / 2500, 1); // regulador 13,6–14,2 V
-    else if (charging) vTarget = Math.max(rest - (-net) * 0.012, 13.6 + 0.6 * Math.min((s.rpm - 900) / 2500, 1) + net * 0.03); // alternador não dá conta
-    this.batteryV += (vTarget - this.batteryV) * (1 - Math.exp(-dt / 0.25));
+    const R = this.internalR + 0.003;
+    let vTarget = rest - Math.max(0, -net) * R;
+    if (charging && net >= 0) vTarget = 13.6 + 0.6 * Math.min((s.rpm - 900) / 2500, 1); // regulador 13,6–14,2 V
+    else if (charging) vTarget = Math.max(rest - (-net) * R, 13.6 + 0.6 * Math.min((s.rpm - 900) / 2500, 1) + net * 0.03); // alternador não dá conta
+    this.batteryV += (vTarget - this.batteryV) * (1 - Math.exp(-dt / (s.engine === "cranking" ? 0.06 : 0.25)));
 
     // ---- horímetro ----
     if (running) this.engineHours += dt / 3600;

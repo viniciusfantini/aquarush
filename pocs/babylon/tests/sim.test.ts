@@ -333,6 +333,55 @@ for (const [label, thr] of [["baixa", 0.25], ["alta", 1]] as const) {
   check("sistemas", "desligado: bateria em repouso (V)", b3.telemetry.batteryV, 12.2, 12.8, "V", 2);
 }
 
+// ---------- Bateria e partida: autoteste (apito), arranque fraco, descarga e recarga ----------
+{
+  const water = mkWater(0);
+  const N = { ...emptyInput(), gear: "N" as const };
+  /** liga a chave (motor desligado, em N) e mede: apito, tempo até pegar ou falhar, rpm do arranque */
+  const tryStart = (b: Speedboat) => {
+    const r = b.toggleIgnition();
+    let buzz = 0, tRun = -1, minV = 99, maxStarter = 0;
+    run(b, water, 6, N, openWater, (t) => {
+      if (b.telemetry.buzzer) buzz += DT;
+      if (b.telemetry.engine === "cranking") { minV = Math.min(minV, b.telemetry.batteryV); maxStarter = Math.max(maxStarter, b.telemetry.starterRpm); }
+      if (tRun < 0 && b.telemetry.engine === "running") tRun = t;
+    });
+    return { r, buzz, tRun, minV, maxStarter, fail: b.telemetry.startFail };
+  };
+  const off = (soc: number) => {
+    const b = new Speedboat(SPEEDBOAT, v3(0, 0.25, 0));
+    run(b, water, 1, N); b.toggleIgnition(); b.systems.batterySoc = soc; run(b, water, 2, N);
+    return b;
+  };
+  const good = tryStart(off(0.92));
+  check("bateria", "apito do autoteste antes do arranque (s)", good.buzz, 0.9, 1.3, "s", 2);
+  check("bateria", "bateria boa: pega em (s)", good.tRun, 1.4, 3.2, "s", 2);
+  check("bateria", "bateria boa: arranque (rpm)", good.maxStarter, 200, 280, "rpm", 0);
+  check("bateria", "bateria boa: tensão na partida (V)", good.minV, 10, 11.2, "V", 2);
+  const mid = tryStart(off(0.65));
+  check("bateria", "bateria a 65 %: ainda pega (s)", mid.tRun, good.tRun, 5.5, "s", 2);
+  const weak = tryStart(off(0.4));
+  check("bateria", "bateria a 40 %: arranque mais lento (rpm)", weak.maxStarter, 60, good.maxStarter * 0.75, "rpm", 0);
+  check("bateria", "bateria a 40 %: demora mais ou não pega (s)", weak.tRun < 0 ? 99 : weak.tRun, good.tRun + 0.5, 99, "s", 2);
+  const dead = tryStart(off(0.1));
+  check("bateria", "bateria a 10 %: não pega", dead.tRun < 0 && dead.fail !== "" ? 1 : 0, 1, 1, "", 0);
+  // várias partidas seguidas descarregam (com a aceleração de jogo documentada)
+  const many = off(0.92);
+  for (let i = 0; i < 12; i++) { tryStart(many); many.toggleIgnition(); run(many, water, 0.5, N); }
+  check("bateria", "12 partidas seguidas: carga perdida (%)", (0.92 - many.systems.batterySoc) * 100, 4, 40, "%", 1);
+  // tilt segurado 40 s com o motor desligado (bomba contra o batente) descarrega e enfraquece a partida
+  const tb = off(0.7);
+  run(tb, water, 40, { ...N, trim: 1 });
+  check("bateria", "40 s de tilt com motor desligado: carga perdida (%)", (0.7 - tb.systems.batterySoc) * 100, 5, 30, "%", 1);
+  const afterTilt = tryStart(tb);
+  check("bateria", "depois do tilt: arranque mais lento que bateria boa (rpm)", afterTilt.maxStarter, 0, good.maxStarter - 20, "rpm", 0);
+  // motor ligado em uso recarrega
+  const ch = new Speedboat(SPEEDBOAT, v3(0, 0.25, 0));
+  ch.systems.batterySoc = 0.4;
+  run(ch, water, 60, { ...emptyInput(), gear: "F", throttle: 0.6 });
+  check("bateria", "1 min navegando: recarga (%)", (ch.systems.batterySoc - 0.4) * 100, 3, 20, "%", 1);
+}
+
 // ---------- Carga: gasolina e ocupantes (quantidade e posição) ----------
 {
   const water = mkWater(0);

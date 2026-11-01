@@ -129,7 +129,7 @@ export class Hud {
     this.fuelG.set(t.fuelFrac, `${t.fuelL.toFixed(1)} L`, `${t.fuelLph.toFixed(1)} L/h`, t.lowFuel);
     this.fuelAut.textContent = autTxt ? `autonomia${autTxt.replace(" ·", "")}` : "";
     this.tempG.set(t.coolantC, `${t.coolantC.toFixed(0)}°C`, t.protectMode ? "PROTEÇÃO" : t.overheatWarn ? "QUENTE" : "", t.overheatWarn);
-    this.voltG.set(t.batteryV, `${t.batteryV.toFixed(1)} V`, t.engine === "running" && t.batteryV > 13.2 ? "carga" : "", t.chargeWarn);
+    this.voltG.set(t.batteryV, `${t.batteryV.toFixed(1)} V`, t.engine === "running" && t.batteryV > 13.2 ? "carga" : `${Math.round(t.batterySoc * 100)}%`, t.chargeWarn);
     // barras de acelerador e trim (como antes)
     this.thrBar.style.height = `${t.throttle * 100}%`;
     this.thrBar.classList.toggle("rev", t.gear === "R");
@@ -145,6 +145,7 @@ export class Hud {
     this.vent.classList.toggle("warn", t.ventilation < 0.75 && t.throttle > 0.15 && t.propImmersion > 0.2);
     this.hotChip.classList.toggle("warn", t.overheatWarn);
     this.lowFuelChip.classList.toggle("warn", t.lowFuel);
+    if (t.lowFuel) this.lowFuelChip.textContent = `COMBUSTÍVEL BAIXO · ${t.fuelL.toFixed(1)} L`;
     this.chargeChip.classList.toggle("warn", t.chargeWarn && t.engine === "running");
 
     if (this.debugOn) {
@@ -165,6 +166,8 @@ export class Hud {
         ["consumo (L/h)", t.fuelLph.toFixed(1)],
         ["bomba do trim (A)", t.trimMotorA.toFixed(0)],
         ["bateria (V)", t.batteryV.toFixed(2)],
+        ["carga da bateria", `${(t.batterySoc * 100).toFixed(1)} %`],
+        ["arranque (rpm)", t.starterRpm.toFixed(0)],
         ["distância (m)", t.distanceM.toFixed(0)],
         ["profundidade (m)", t.depth.toFixed(1)],
         ["colisões", String(t.collisions)],

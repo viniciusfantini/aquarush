@@ -12,7 +12,7 @@ O GDD (seção 10) pede a **mesma fatia jogável** em três tecnologias antes de
 
 | # | Tecnologia | Pasta | Status |
 |---|---|---|---|
-| 1 | **Babylon.js + TypeScript** (browser-first, sem instalar engine) | [`pocs/babylon`](pocs/babylon) | ✅ **v0.11.0 online**: física testada (100/101 critérios), água vidro, esteira na água, cavitação |
+| 1 | **Babylon.js + TypeScript** (browser-first, sem instalar engine) | [`pocs/babylon`](pocs/babylon) | ✅ **v0.12.0 online**: física testada (112/113 critérios), água vidro, esteira na água, cavitação |
 | 2 | Unity 6 LTS + URP | [`pocs/unity`](pocs/unity) | ⏳ planejada (Unity não instalado nesta máquina) |
 | 3 | Unreal Engine 5 | [`pocs/unreal`](pocs/unreal) | ⏳ planejada |
 
@@ -45,7 +45,7 @@ Parâmetros de URL: `?q=low|med|high` (qualidade), `?webgpu=1`, `?touch=1` (for�
 | **Recolher o motor (tilt)** | segure **E** no fim do trim, em **baixa rotação** (pode estar engatado e andando devagar); **Q** baixa | segure RB | segure TRIM+ |
 | Câmera externa ↔ cockpit | C | Y | CAM |
 | Luzes de navegação | L | X | LUZ |
-| Reposicionar no píer (volta a 30 L) | R | Back | ↺ |
+| Reposicionar no píer (volta a 3 L) | R | Back | ↺ |
 | Ocupantes (peso e posição) | O | | chip OCUPANTES |
 | Água: vidro / calma / lago / forte | 0 (ou G) / 1 / 2 / 3 · V alterna | | toque no chip “ÁGUA” |
 | **Ligar/desligar o motor** (partida só em N) | P | B | ⏻ |
@@ -68,6 +68,7 @@ pocs/unreal/         POC 3 — planejada
 |---|---|---|
 | 2026-10-31 | babylon 0.1.0 | POC 1: lago com margens, ilha, rio com correnteza, rochas, vegetação, píer e marina. Lancha com corpo rígido 6DOF, flutuação em 6 pontos, planeio emergente, trim físico, colisões. Água Gerstner compartilhada entre física e shader. Esteira, spray, câmeras externa e cockpit, HUD, teclado, gamepad e touch, áudio procedural. Testes físicos headless. |
 | 2026-10-31 | babylon 0.2.0 | Água **vidro (glass)** e presets de água. **Reflexo planar real** (lancha, margens e píer refletidos). **Esteira integrada à água**: um mapa de esteira deforma a superfície (braços do V de Kelvin, cristas e cavados), perturba os reflexos e gera espuma da hélice, do casco e da fervura. **Cavitação e ventilação da hélice** na física (perda de empuxo, RPM sobe), com fervura branca, bolhas, névoa, spray, aviso no HUD e som. **Lancha refeita**: casco com strakes e flare, cockpit rebaixado, para-brisa envolvente, guarda-mancebo, bancos estofados, plataformas e escada de banho, painel com velocímetro e conta-giros de ponteiro, motor de popa com capô, placa anticavitação, pé e skeg, **hélice de 3 pás com passo, torção e skew** e disco de borrão. Materiais PBR com ambiente. |
+| 2026-11-01 | babylon 0.12.0 | **Bateria que descarrega de verdade**: cada partida (170 A) e a bomba do trim/tilt gastam carga; a resistência interna sobe com a descarga, então a tensão despenca na partida e o arranque gira mais devagar. Com 65 % ainda pega; com ~40 % gira fraco e costuma não pegar; com 10 % só estala o solenoide. Navegando, o alternador recarrega (~5 %/min). A carga/descarga roda **10× acelerada** (bateria de 50 Ah) para o efeito aparecer numa sessão. **Apito de autoteste** ("piiii", ~1 s) ao ligar a chave, antes do arranque girar. Começa com **3 L** no tanque; aviso de combustível baixo pisca no HUD com os litros restantes, acende o LED no painel e aparece um aviso ao ligar. O relógio da bateria mostra o % de carga. |
 | 2026-11-01 | babylon 0.11.0 | **iPhone nítido**: a resolução segue a densidade real da tela (até 2× em `med`, 1,5× em `low`, 2,5× em `high`). Antes o celular renderizava a 1/1,5 do pixel CSS (no iPhone, 1/4,5 da resolução nativa). iPhone/iPad começam em `med` (reflexo, espuma, sombras). **Resolução dinâmica**: cai 10 % por vez se o FPS ficar abaixo de 40 e volta acima de 57 (F3 mostra a resolução). **Motor recolhido**: a direção agora gira o motor no próprio eixo (que inclina com o tilt), como no suporte real; antes ele girava em torno da vertical do barco e varria o pé para os lados. A física usa a mesma ordem (tilt por fora, direção por dentro). |
 | 2026-10-31 | babylon 0.10.2 | **Power trim elétrico**: a bomba puxa ~30 A (trim), ~40 A (tilt) e ~45 A no batente; a tensão cai (~0,4 V com o motor desligado; com o motor ligado o alternador não dá conta); trim mais lento com a bateria fraca; zumbido da bomba no som. Tilt bloqueado acima de ~15 km/h mesmo em N (água no pé). |
 | 2026-10-31 | babylon 0.10.1 | Acelerador e trim voltam a ser **barras** ao lado dos relógios. **Publicado online** no GitHub Pages (`npm run deploy`). |

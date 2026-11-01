@@ -27,7 +27,7 @@ import { BoatCamera } from "./presentation/cameras.ts";
 import { Hud } from "./presentation/hud.ts";
 import { EngineAudio } from "./presentation/audio.ts";
 
-const BUILD = "poc-babylon 0.11.0";
+const BUILD = "poc-babylon 0.12.0";
 /** Escala visual da rotação da hélice (proporcional ao RPM, abaixo do limite estroboscópico). */
 const PROP_VISUAL_SCALE = 0.12;
 
@@ -128,7 +128,7 @@ const boot = async () => {
     { label: "lotada (4)", seats: ["helm", "passenger", "rearLeft", "rearRight"] },
   ];
   let occIdx = 0;
-  const START_FUEL_L = 30;
+  const START_FUEL_L = 3; // pedido do usuário: começa na reserva (luz de combustível baixo acesa)
   boat.systems.fuelL = START_FUEL_L;
   const boatMeshes = boatVis.meshes.filter((m) => m.name !== "propDisc");
   // horímetro persistente (por navegador)
@@ -221,6 +221,7 @@ const boot = async () => {
   const snap = (dst: Vector3, q: Quaternion) => { dst.set(boat.pos.x, boat.pos.y, boat.pos.z); q.set(boat.rot.x, boat.rot.y, boat.rot.z, boat.rot.w); };
   snap(curPos, curRot); snap(prevPos, prevRot);
   let fpsSmooth = 60, resT = 0;
+  let lastStartFail = "", lowFuelWarned = false;
   const qTilt = new Quaternion(), qSteer = new Quaternion();
   let lastGear = boat.telemetry.gear;
   let tiltWarned = false, intakeWarned = false;
@@ -244,7 +245,7 @@ const boot = async () => {
     else if (a === "help") hud.toggleHelp();
     else if (a === "ignition") {
       const r = boat.toggleIgnition();
-      const msg: Record<string, string> = { stopped: "Motor desligado", starting: "Dando partida…", busy: "Dando partida…", needNeutral: "Coloque em N para dar partida", noFuel: "Sem combustível — R para voltar ao píer e abastecer", lowBattery: "Bateria fraca: o motor de arranque não gira", hot: "Motor quente demais — espere esfriar" };
+      const msg: Record<string, string> = { stopped: "Motor desligado", starting: "Chave ligada — autoteste…", busy: "Dando partida…", needNeutral: "Coloque em N para dar partida", noFuel: "Sem combustível — R para voltar ao píer e abastecer", lowBattery: "Bateria descarregada: nem o relé de partida arma", hot: "Motor quente demais — espere esfriar" };
       hud.showToast(msg[r]);
     }
     else if (a === "pause") { paused = !paused; hud.showToast(paused ? "Pausado" : "Continuando"); }
@@ -295,6 +296,10 @@ const boot = async () => {
     boatVis.engine.rotationQuaternion = qTilt.multiply(qSteer);
     helm.update(dtReal, T, input.state, SPEEDBOAT.maxSteerLow * 180 / Math.PI);
     pilot.update(toRootLocal(helm.wheelGrip, boatVis.root), toRootLocal(helm.leverGrip, boatVis.root));
+    if (T.startFail && T.startFail !== lastStartFail) hud.showToast(T.startFail === "dead" ? "Só estalou: bateria sem força para girar o arranque" : "Não pegou: o arranque girou fraco (bateria baixa)");
+    lastStartFail = T.startFail;
+    if (T.lowFuel && !lowFuelWarned && T.engine === "running") { hud.showToast(`Combustível na reserva: ${T.fuelL.toFixed(1)} L`); lowFuelWarned = true; }
+    if (!T.lowFuel) lowFuelWarned = false;
     if (T.stall && T.stall !== lastStall) hud.showToast(T.stall === "fuel" ? "O motor morreu: acabou o combustível" : "O motor desligou: superaquecimento");
     lastStall = T.stall;
     if ((hoursSaveT += dtReal) > 10) { hoursSaveT = 0; try { localStorage.setItem(HOURS_KEY, String(boat.systems.engineHours)); } catch { /* sem storage */ } }
@@ -322,7 +327,7 @@ const boot = async () => {
     if (T.gear !== lastGear) { audio.clunk(T.gear !== "N"); lastGear = T.gear; }
     audio.update({
       rpm: T.rpm, throttle: T.throttle, speed: Math.hypot(boat.vel.x, boat.vel.z), boil: Math.max(T.cavitation, 1 - T.ventilation),
-      inGear: T.gear !== "N", propInWater: T.propImmersion > 0.5, revLimiter: T.revLimiter, cockpit: cam.mode === "cockpit", engine: T.engine, trimMotorA: T.trimMotorA,
+      inGear: T.gear !== "N", propInWater: T.propImmersion > 0.5, revLimiter: T.revLimiter, cockpit: cam.mode === "cockpit", engine: T.engine, trimMotorA: T.trimMotorA, buzzer: T.buzzer, starterRpm: T.starterRpm,
     });
     hud.update(T, fpsSmooth, {
       "física (ms/frame)": physMs.toFixed(2),

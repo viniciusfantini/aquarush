@@ -61,6 +61,10 @@ export interface BoatTelemetry {
   lowFuel: boolean;
   chargeWarn: boolean;
   stall: "" | "fuel" | "overheat"; // último motivo de o motor ter morrido sozinho
+  buzzer: boolean;       // alarme do motor apitando (autoteste da chave)
+  starterRpm: number;    // rotação do motor de arranque (0 = só o "clique" do solenoide)
+  startFail: "" | "weak" | "dead"; // última partida que não pegou (bateria fraca / sem força)
+  batterySoc: number;    // estado de carga 0..1
   trimMotorA: number;    // corrente da bomba do power trim (A)
   depth: number;         // profundidade sob o casco
   submergedPoints: boolean[];
@@ -86,7 +90,11 @@ export class Speedboat {
   private rpm = 750;
   /** Estado do motor (ignição). */
   engine: EngineState = "running";
-  private crankTimer = 0;
+  private crankTimer = 0;        // tempo girando o arranque (s)
+  private crankRevs = 0;         // voltas "úteis" acumuladas (compressões com rotação suficiente)
+  private crankNeed = 4;         // voltas úteis para pegar (sorteado a cada tentativa)
+  /** autoteste ao ligar a chave: o alarme apita (~1 s) antes do arranque girar */
+  private selfTestT = 0;
   private lastContact = false;
   private cavitation = 0;
   private propRpmState = 0;
@@ -147,7 +155,7 @@ export class Speedboat {
     this.rpm = params.idleRpm;
     this.telemetry = {
       speedKmh: 0, waterSpeed: 0, rpm: params.idleRpm, throttle: 0, throttleCmd: 0, trim: 0, trimDeg: 0, tiltDeg: 0, tiltBlocked: false, intakeSubmerged: true, steerDeg: 0,
-      gear: "N", pitchDeg: 0, rollDeg: 0, wetFraction: 0, planing: false, thrustN: 0, ventilation: 1, cavitation: 0, propImmersion: 1, revLimiter: false, propSlip: 0, propRpm: 0, engine: "running", fuelL: 0, fuelFrac: 1, coolantC: 45, batteryV: 12.6, engineHours: 0, overheatWarn: false, protectMode: false, lowFuel: false, chargeWarn: false, stall: "", trimMotorA: 0, fuelLph: 0,
+      gear: "N", pitchDeg: 0, rollDeg: 0, wetFraction: 0, planing: false, thrustN: 0, ventilation: 1, cavitation: 0, propImmersion: 1, revLimiter: false, propSlip: 0, propRpm: 0, engine: "running", fuelL: 0, fuelFrac: 1, coolantC: 45, batteryV: 12.6, engineHours: 0, overheatWarn: false, protectMode: false, lowFuel: false, chargeWarn: false, stall: "", trimMotorA: 0, fuelLph: 0, buzzer: false, starterRpm: 0, startFail: "", batterySoc: 0.92,
       distanceM: 0, collisions: 0, lastImpact: 0, depth: 0, submergedPoints: params.buoyancyPoints.map(() => false),
     };
   }
@@ -416,6 +424,9 @@ export class Speedboat {
     t.fuelL = sys.fuelL; t.fuelFrac = sys.fuelFrac; t.coolantC = sys.coolantC; t.batteryV = sys.batteryV;
     t.engineHours = sys.engineHours; t.overheatWarn = sys.overheatWarn; t.protectMode = sys.protect;
     t.lowFuel = sys.lowFuel; t.chargeWarn = sys.chargeWarn;
+    t.buzzer = this.selfTestT > 0;
+    t.starterRpm = this.engine === "cranking" ? this.rpm : 0;
+    t.batterySoc = sys.batterySoc;
     t.distanceM += Math.hypot(this.pos.x - oldPos.x, this.pos.z - oldPos.z);
     t.depth = water.getDepth(this.pos.x, this.pos.z);
     if (impact > 0) t.lastImpact = impact;
@@ -423,6 +434,12 @@ export class Speedboat {
 
   private updateControls(dt: number, input: VehicleInput, u: number): void {
     const P = this.params;
+    if (this.selfTestT > 0) {
+      this.selfTestT -= dt;
+      if (this.selfTestT <= 0 && this.engine === "off") {
+        this.engine = "cranking"; this.crankTimer = 0; this.crankRevs = 0; this.crankNeed = 3 + Math.random() * 2;
+      }
+    }
     // direção com limite dependente da velocidade
     const maxSteer = lerp(P.maxSteerLow, P.maxSteerHigh, clamp(u / 22, 0, 1));
     this.steer = approach(this.steer, clamp(input.steering, -1, 1) * maxSteer, P.steerRate * dt);
@@ -492,9 +509,11 @@ export class Speedboat {
     if (why === "fuel") return "noFuel";
     if (why === "battery") return "lowBattery";
     if (why === "overheat") return "hot";
+    if (this.selfTestT > 0) return "busy";
     this.telemetry.stall = "";
-    this.engine = "cranking";
-    this.crankTimer = 0.9 + Math.random() * 0.4;
+    this.telemetry.startFail = "";
+    // chave em ON: autoteste com o apito característico; o arranque gira quando ele termina
+    this.selfTestT = 1.1;
     return "starting";
   }
 
@@ -529,10 +548,19 @@ export class Speedboat {
       return this.rpm;
     }
     if (this.engine === "cranking") {
-      // motor de arranque: ~250 rpm com a oscilação das compressões, depois "pega"
-      this.crankTimer -= dt;
-      this.rpm += (250 - this.rpm) * (1 - Math.exp(-dt / 0.12));
-      if (this.crankTimer <= 0) { this.engine = "running"; this.rpm = 1150; }
+      // Motor de arranque: a rotação depende da tensão nos bornes (que cai com a carga da bateria).
+      // Bateria boa ≈ 250 rpm e pega em ~1 s; fraca gira devagar ("rrr… rrr…") e pode não pegar;
+      // abaixo de ~7,5 V só o solenoide estala. O motor só pega com rotação de compressão suficiente.
+      const v = this.systems.batteryV;
+      const starterTarget = 260 * clamp((v - 7.5) / 3.1, 0, 1.05);
+      this.rpm += (starterTarget - this.rpm) * (1 - Math.exp(-dt / 0.12));
+      this.crankTimer += dt;
+      this.crankRevs += (this.rpm / 60) * dt * clamp((this.rpm - 60) / 100, 0, 1);
+      if (this.crankRevs >= this.crankNeed) { this.engine = "running"; this.rpm = 1150; }
+      else if (this.crankTimer > 4) { // o piloto solta a chave: não pegou
+        this.engine = "off";
+        this.telemetry.startFail = this.rpm < 40 ? "dead" : "weak";
+      }
       return this.rpm;
     }
     this.rpm += (target - this.rpm) * (1 - Math.exp(-dt / (this.immersion < 0.3 && this.gear !== "N" ? 0.15 : 0.35)));

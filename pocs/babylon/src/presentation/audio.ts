@@ -66,6 +66,8 @@ export interface AudioState {
   engine: "off" | "cranking" | "running";
   revLimiter?: boolean;   // limitador cortando a ignição
   trimMotorA?: number;    // bomba elétrica do power trim (A)
+  buzzer?: boolean;       // alarme do motor (autoteste da chave: "piiii")
+  starterRpm?: number;    // rotação do arranque (cai com a bateria fraca)
 }
 
 export class EngineAudio {
@@ -102,6 +104,9 @@ export class EngineAudio {
   private starterGain!: GainNode;
   private starterLfo!: OscillatorNode;
   private pumpOsc!: OscillatorNode;
+  private st1!: OscillatorNode;
+  private buzzGain!: GainNode;
+  private solenoidT = 0;
   private pumpGain!: GainNode;
   muted = false;
 
@@ -186,7 +191,7 @@ export class EngineAudio {
     noiseSrc().connect(cavHP).connect(cavAM).connect(this.cavGain).connect(this.master);
 
     // ---- motor de arranque (partida): zumbido elétrico + engrenagem, pulsando nas compressões ----
-    const st1 = ctx.createOscillator(); st1.type = "sawtooth"; st1.frequency.value = 1150;
+    const st1 = ctx.createOscillator(); st1.type = "sawtooth"; st1.frequency.value = 1150; this.st1 = st1;
     const st2 = ctx.createOscillator(); st2.type = "square"; st2.frequency.value = 93;
     const stBP = ctx.createBiquadFilter(); stBP.type = "bandpass"; stBP.frequency.value = 1100; stBP.Q.value = 2;
     const stAM = ctx.createGain(); stAM.gain.value = 0.6;
@@ -197,6 +202,15 @@ export class EngineAudio {
     st1.connect(stBP); st2.connect(stBP);
     stBP.connect(stAM).connect(this.starterGain).connect(this.master);
     st1.start(); st2.start(); this.starterLfo.start();
+
+    // ---- alarme do motor (buzzer piezo na caixa de comando): o "piiii" contínuo ao ligar a chave ----
+    // piezo ≈ 2,9 kHz com harmônicos (onda quase quadrada) + leve ressonância da caixa
+    const bz = ctx.createOscillator(); bz.type = "square"; bz.frequency.value = 2900;
+    const bzLP = ctx.createBiquadFilter(); bzLP.type = "lowpass"; bzLP.frequency.value = 6500;
+    const bzPk = ctx.createBiquadFilter(); bzPk.type = "peaking"; bzPk.frequency.value = 2900; bzPk.Q.value = 8; bzPk.gain.value = 6;
+    this.buzzGain = ctx.createGain(); this.buzzGain.gain.value = 0;
+    bz.connect(bzLP).connect(bzPk).connect(this.buzzGain).connect(this.master);
+    bz.start();
 
     // ---- bomba elétrica do power trim: zumbido de motor DC + hidráulico ----
     this.pumpOsc = ctx.createOscillator(); this.pumpOsc.type = "sawtooth"; this.pumpOsc.frequency.value = 380;
@@ -237,7 +251,13 @@ export class EngineAudio {
       this.workletGain.gain.setTargetAtTime(m * dist * 0.55, t, 0.05);
     }
     const legacy = useW || !running ? 0 : 1; // osciladores antigos só sem worklet
-    this.starterGain.gain.setTargetAtTime(m * (st.engine === "cranking" ? 0.09 : 0), t, 0.03);
+    // arranque: volume e tom acompanham a rotação (bateria fraca = "rrr… rrr…" lento e grave);
+    // travado (tensão baixa demais) só estala o solenoide
+    const sRpm = st.engine === "cranking" ? st.starterRpm ?? 250 : 0;
+    this.starterGain.gain.setTargetAtTime(m * (st.engine === "cranking" ? 0.09 * Math.min(1, Math.max(0, (sRpm - 20) / 200)) : 0), t, 0.03);
+    this.st1.frequency.setTargetAtTime(500 + 2.6 * sRpm, t, 0.05);
+    if (st.engine === "cranking" && sRpm < 40 && t > this.solenoidT) { this.solenoidT = t + 0.35; this.clunk(false); }
+    this.buzzGain.gain.setTargetAtTime(m * (st.buzzer ? 0.05 : 0), t, 0.008);
     const pumpA = st.trimMotorA ?? 0;
     this.pumpGain.gain.setTargetAtTime(m * (pumpA > 0 ? 0.035 : 0), t, 0.03);
     // sob carga (batente/tilt) o motor DC desacelera: o tom cai
