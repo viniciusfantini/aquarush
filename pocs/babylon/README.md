@@ -129,6 +129,7 @@ Limitação: é uma síntese aproximada, não uma gravação. Validar o timbre d
 | Tilt | trim máx navegando: tilt bloqueado e hélice na água; parado: recolhe a 60°, entrada d'água fora, empuxo 0 acelerando; trim− baixa de volta a 0° |
 | Tilt engatado | a 12 km/h engatado (1480 rpm): o tilt sobe (12,7° em 2 s). Navegando a 49 km/h: bloqueado |
 | Hélice no ar/aflorando | recolhido acelerando: imersão 0, empuxo 0, rpm 5941 com limitador ativo. Meio disco submerso (imersão 0,51): empuxo = 32 % do submerso |
+| Bote de apoio (v0.13) | 202 kg com o piloto e 6 L; banda de 1,8° com o piloto em boreste; máx 43,8 km/h (planando), 0→30 em 3,4 s, 5,5 L/h; curva a toda com a cana: roll máx 2,9°, fica de pé; lotado (3): 33,3 km/h; ondas fortes lotado: up.y mín 0,85. Trim manual: começa no pino 2, E → pino 3 (+4,0°) de forma progressiva (1,75° no meio do caminho), E de novo → tilt 70° (35° após 0,6 s), hélice fora d'água, sem corrente de bomba; Q volta ao pino 1 (−4°); andando, a troca é recusada. Sem bateria (0 V); corda: pega em poucas puxadas |
 | Bateria e partida (v0.12) | apito 1,1 s; bateria boa: arranque 256 rpm, 10,5 V, pega em ~2,2 s (com o apito); 65 %: pega em ~2,6 s; 40 %: 118 rpm, não pega em 4 s; 10 %: não pega; 12 partidas seguidas: −12 %; 40 s de tilt com o motor desligado: −10 % e arranque cai para 172 rpm; 1 min navegando: +4,8 % |
 | Carga | só piloto + 30 L: 1132 kg; lotada + 120 L: 1439 kg. Lotada afunda 2,9 cm a mais, faz o 0→60 em +3,0 s e perde 6,4 km/h de máxima; 2 na popa: a proa sobe +0,74° parada; piloto sozinho em boreste: banda de 0,48° para boreste; com o carona em bombordo: 0,0° |
 | Sistemas do motor | 2 min a toda: 1,82 L, 0,0333 h no horímetro, 60,8 °C, 14,2 V. Recolhido e ligado: proteção aos 28 s, desliga sozinho aos 60 s, partida recusada quente, abaixo de 90 °C após 3 min. Sem combustível: morre e não pega; bateria em repouso 12,6 V |
@@ -137,7 +138,7 @@ Limitação: é uma síntese aproximada, não uma gravação. Validar o timbre d
 | 6. Ondas e correnteza | ondas fortes (×2,5): roll ≤ 30°, não emborca; deriva com correnteza de 1,6 m/s: 1,54 m/s |
 | Lago | flutua no spawn; a toda contra a margem, encalha e para sem atravessar o terreno |
 
-Resultado: **112/113 OK** (v0.12.0). Na v0.10, o peso do piloto na posição real (boreste, acima do CG) aumentou o roll em curva com ondas fortes; o `bankCoef` foi para 1800 e o `rollDamping` para 15000, com 1 limitação conhecida (abaixo). Na v0.2 a hélice foi para 0,5 m atrás do espelho, como no modelo visual, e o esterço máximo em alta velocidade caiu de 13° para 11°.
+Resultado: **137/138 OK** (v0.13.0). Na v0.10, o peso do piloto na posição real (boreste, acima do CG) aumentou o roll em curva com ondas fortes; o `bankCoef` foi para 1800 e o `rollDamping` para 15000, com 1 limitação conhecida (abaixo). Na v0.2 a hélice foi para 0,5 m atrás do espelho, como no modelo visual, e o esterço máximo em alta velocidade caiu de 13° para 11°.
 
 ### Navegador (Chrome, Windows 11, WebGL2, `q=med`, ~1370×896)
 

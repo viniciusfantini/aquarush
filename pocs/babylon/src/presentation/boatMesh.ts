@@ -63,14 +63,14 @@ const hullSection = (z: number): Vector3[] => {
 };
 
 // ---------------- utilitários ----------------
-const colorize = (m: Mesh, fn: (x: number, y: number, z: number) => Color3) => {
+export const colorize = (m: Mesh, fn: (x: number, y: number, z: number) => Color3) => {
   const p = m.getVerticesData(VertexBuffer.PositionKind)!;
   const c: number[] = [];
   for (let i = 0; i < p.length; i += 3) { const col = fn(p[i], p[i + 1], p[i + 2]); c.push(col.r, col.g, col.b, 1); }
   m.setVerticesData(VertexBuffer.ColorKind, c);
 };
 
-const roundedRect = (w: number, h: number, r: number, seg = 4): Vector3[] => {
+export const roundedRect = (w: number, h: number, r: number, seg = 4): Vector3[] => {
   const pts: Vector3[] = [];
   const rr = Math.min(r, w / 2, h / 2);
   const corners: [number, number, number][] = [[w / 2 - rr, h / 2 - rr, 0], [-w / 2 + rr, h / 2 - rr, Math.PI / 2], [-w / 2 + rr, -h / 2 + rr, Math.PI], [w / 2 - rr, -h / 2 + rr, 1.5 * Math.PI]];
@@ -83,10 +83,10 @@ const roundedRect = (w: number, h: number, r: number, seg = 4): Vector3[] => {
 };
 
 /** Bloco com arestas arredondadas (perfil em XY extrudado em Z). */
-const roundedBox = (name: string, scene: Scene, w: number, h: number, d: number, r: number): Mesh =>
+export const roundedBox = (name: string, scene: Scene, w: number, h: number, d: number, r: number): Mesh =>
   MeshBuilder.ExtrudeShape(name, { shape: roundedRect(w, h, r), path: [new Vector3(0, 0, -d / 2), new Vector3(0, 0, d / 2)], cap: Mesh.CAP_ALL, sideOrientation: Mesh.DOUBLESIDE }, scene);
 
-const pbr = (scene: Scene, name: string, color: Color3, metallic: number, roughness: number, clearCoat = 0): PBRMaterial => {
+export const pbr = (scene: Scene, name: string, color: Color3, metallic: number, roughness: number, clearCoat = 0): PBRMaterial => {
   const m = new PBRMaterial(name, scene);
   m.albedoColor = color;
   m.metallic = metallic;
@@ -313,27 +313,7 @@ export const buildBoat = (scene: Scene): BoatVisual => {
   lowerCowl.position.set(0, 0.17, -0.46);
 
   // adesivo traseiro "150" (potência real da física: SPEEDBOAT.enginePowerHp) — genérico, sem marca
-  const decalTex = new DynamicTexture("decalHp", { width: 512, height: 320 }, scene, true);
-  {
-    const c = decalTex.getContext() as CanvasRenderingContext2D;
-    c.clearRect(0, 0, 512, 320);
-    c.fillStyle = "#0d1b33";
-    c.font = "bold 200px 'Arial Black', Arial, sans-serif";
-    c.textAlign = "center"; c.textBaseline = "middle";
-    c.fillText(String(SPEEDBOAT.enginePowerHp), 256, 150); // sempre igual à potência da física
-    c.fillStyle = "#c0141c";
-    c.fillRect(70, 268, 372, 14);
-    c.fillStyle = "#0d1b33";
-    c.font = "bold 34px Arial, sans-serif";
-    c.fillText("FOUR STROKE", 256, 302);
-    decalTex.hasAlpha = true;
-    decalTex.update();
-  }
-  const decalMat = new StandardMaterial("decal60Mat", scene);
-  decalMat.diffuseTexture = decalTex;
-  decalMat.useAlphaFromDiffuseTexture = true;
-  decalMat.specularColor = new Color3(0.3, 0.3, 0.3);
-  decalMat.zOffset = -2;
+  const decalMat = hpDecalMaterial(scene, SPEEDBOAT.enginePowerHp); // sempre igual à potência da física
   const decal = add(MeshBuilder.CreatePlane("decal60", { width: 0.3, height: 0.19 }, scene), decalMat, engine);
   decal.position.set(0, 0.55, Z_COWL_BACK - 0.03);
 
@@ -361,17 +341,51 @@ export const buildBoat = (scene: Scene): BoatVisual => {
   add(MeshBuilder.CreateBox("trimTab", { width: 0.02, height: 0.05, depth: 0.12 }, scene), steel, engine).position.set(0, -0.83, -0.66);
 
   // ---------- hélice de 3 pás (passo, torção e skew reais) ----------
+  const { propeller, propBlur } = buildPropeller(scene, engine, new Vector3(0, -1.03, -0.66), 0.19, 0.48, steel, add, meshes);
+
+  for (const m of meshes) m.isPickable = false;
+  return { root, engine, propeller, telltale, propBlur, lights, cockpitLid, meshes };
+};
+
+/** Adesivo traseiro do capô com a potência (genérico, sem marca). */
+export const hpDecalMaterial = (scene: Scene, hp: number): StandardMaterial => {
+  const decalTex = new DynamicTexture("decalHp" + hp, { width: 512, height: 320 }, scene, true);
+  const c = decalTex.getContext() as CanvasRenderingContext2D;
+  c.clearRect(0, 0, 512, 320);
+  c.fillStyle = "#0d1b33";
+  c.font = "bold 200px 'Arial Black', Arial, sans-serif";
+  c.textAlign = "center"; c.textBaseline = "middle";
+  c.fillText(String(hp), 256, 150);
+  c.fillStyle = "#c0141c";
+  c.fillRect(70, 268, 372, 14);
+  c.fillStyle = "#0d1b33";
+  c.font = "bold 34px Arial, sans-serif";
+  c.fillText("FOUR STROKE", 256, 302);
+  decalTex.hasAlpha = true;
+  decalTex.update();
+  const decalMat = new StandardMaterial("decalMat" + hp, scene);
+  decalMat.diffuseTexture = decalTex;
+  decalMat.useAlphaFromDiffuseTexture = true;
+  decalMat.specularColor = new Color3(0.3, 0.3, 0.3);
+  decalMat.zOffset = -2;
+  return decalMat;
+};
+
+/** Hélice de 3 pás (passo, torção e skew reais) + disco de borrão. */
+export const buildPropeller = (scene: Scene, engine: TransformNode, pos: Vector3, R: number, PITCH: number, steel: PBRMaterial,
+  add: (m: Mesh, mat: StandardMaterial | PBRMaterial, parent?: TransformNode) => Mesh, meshes: Mesh[]): { propeller: TransformNode; propBlur: PBRMaterial } => {
   const propeller = new TransformNode("propeller", scene);
   propeller.parent = engine;
-  propeller.position.set(0, -1.03, -0.66);
-  const R = 0.19, RH = 0.05, PITCH = 0.48;
+  propeller.position.copyFrom(pos);
+  const k = R / 0.19; // proporções da hélice de referência
+  const RH = 0.05 * k;
   for (let b = 0; b < 3; b++) {
     const th0 = (b / 3) * Math.PI * 2;
     const paths: Vector3[][] = [];
     const NR = 10, NSs = 8;
     for (let i = 0; i <= NR; i++) {
       const u = i / NR, r = RH + (R - RH) * u;
-      const chord = (0.07 + 0.12 * Math.sin(Math.PI * (0.12 + 0.72 * u))) * Math.sqrt(Math.max(0.04, 1 - u ** 6));
+      const chord = k * (0.07 + 0.12 * Math.sin(Math.PI * (0.12 + 0.72 * u))) * Math.sqrt(Math.max(0.04, 1 - u ** 6));
       const phi = Math.atan(PITCH / (2 * Math.PI * r));
       const skew = 0.38 * u * u;
       const row: Vector3[] = [];
@@ -379,29 +393,28 @@ export const buildBoat = (scene: Scene): BoatVisual => {
         const sN = j / NSs - 0.5;
         const a = sN * chord;
         const th = th0 + skew + (a * Math.cos(phi)) / r;
-        const thick = (0.012 * (1 - u) + 0.003) * Math.cos(Math.PI * sN);
-        row.push(new Vector3(r * Math.cos(th), r * Math.sin(th), -a * Math.sin(phi) - 0.025 * u + thick * 0.5));
+        const thick = k * (0.012 * (1 - u) + 0.003) * Math.cos(Math.PI * sN);
+        row.push(new Vector3(r * Math.cos(th), r * Math.sin(th), -a * Math.sin(phi) - 0.025 * k * u + thick * 0.5));
       }
       paths.push(row);
     }
     add(MeshBuilder.CreateRibbon("blade", { pathArray: paths, sideOrientation: Mesh.DOUBLESIDE }, scene), steel, propeller);
   }
-  const hub = add(MeshBuilder.CreateCylinder("propHub", { height: 0.17, diameterTop: 0.1, diameterBottom: 0.11, tessellation: 16 }, scene), steel, propeller);
+  const hub = add(MeshBuilder.CreateCylinder("propHub", { height: 0.17 * k, diameterTop: 0.1 * k, diameterBottom: 0.11 * k, tessellation: 16 }, scene), steel, propeller);
   hub.rotation.x = Math.PI / 2;
-  const cone = add(MeshBuilder.CreateCylinder("propCone", { height: 0.08, diameterTop: 0.02, diameterBottom: 0.1, tessellation: 16 }, scene), steel, propeller);
+  const cone = add(MeshBuilder.CreateCylinder("propCone", { height: 0.08 * k, diameterTop: 0.02 * k, diameterBottom: 0.1 * k, tessellation: 16 }, scene), steel, propeller);
   cone.rotation.x = -Math.PI / 2;
-  cone.position.z = -0.12;
+  cone.position.z = -0.12 * k;
   const propBlur = pbr(scene, "propBlur", new Color3(0.75, 0.78, 0.8), 1, 0.35);
   propBlur.alpha = 0;
   propBlur.backFaceCulling = false;
   const disc = MeshBuilder.CreateDisc("propDisc", { radius: R, tessellation: 32 }, scene);
   disc.material = propBlur;
   disc.parent = engine;
-  disc.position.set(0, -1.03, -0.66);
+  disc.position.copyFrom(pos);
+  disc.isPickable = false;
   meshes.push(disc);
-
-  for (const m of meshes) m.isPickable = false;
-  return { root, engine, propeller, telltale, propBlur, lights, cockpitLid, meshes };
+  return { propeller, propBlur };
 };
 
 export const setNavLights = (v: BoatVisual, on: boolean): void => {

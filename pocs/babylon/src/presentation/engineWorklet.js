@@ -24,7 +24,8 @@ class Delay {
   write(x) { this.buf[this.i] = x; this.i = (this.i + 1) % this.buf.length; }
 }
 
-const FIRE = [0, 180, 360, 540];          // ordem de queima 1-3-4-2 espaçada 180° no ciclo de 720°
+const FIRE4 = [0, 180, 360, 540];         // 4 cilindros: ordem 1-3-4-2 espaçada 180° no ciclo de 720°
+const FIRE2 = [0, 360];                   // bicilíndrico em linha (motor de 15 hp): explosões a cada 360°
 const FIRE_ERR = [0, 1.6, -1.1, 0.7];      // pequenos erros de ponto (graus) → não soa "perfeito"
 const CYL_GAIN = [1.0, 0.93, 1.06, 0.97];  // diferenças entre cilindros
 
@@ -32,7 +33,8 @@ class EngineProcessor extends AudioWorkletProcessor {
   constructor() {
     super();
     this.sr = sampleRate;
-    this.target = { rpm: 750, load: 0, combustion: 1, wet: 1, volume: 0 };
+    this.target = { rpm: 750, load: 0, combustion: 1, wet: 1, volume: 0, cylinders: 4 };
+    this.cyl = 4;
     this.rpm = 750; this.load = 0; this.comb = 1; this.wet = 1; this.vol = 0;
     this.theta = 0;
     this.seed = 1234567;
@@ -62,6 +64,14 @@ class EngineProcessor extends AudioWorkletProcessor {
     if (!out) return true;
     const sr = this.sr, T = this.target;
     const kS = 1 - Math.exp(-1 / (sr * 0.03));   // suavização dos parâmetros (~30 ms)
+    if (T.cylinders !== this.cyl) {
+      // motor menor: escape mais curto (ressonâncias mais agudas)
+      this.cyl = T.cylinders === 2 ? 2 : 4;
+      const k = this.cyl === 2 ? 0.55 : 1;
+      this.d1 = new Delay(Math.max(8, Math.round(sr * 2 * 0.45 * k / 520)));
+      this.d2 = new Delay(Math.max(8, Math.round(sr * 2 * 1.15 * k / 480)));
+    }
+    const FIRE = this.cyl === 2 ? FIRE2 : FIRE4;
     for (let n = 0; n < out.length; n++) {
       this.rpm += (T.rpm - this.rpm) * kS;
       this.load += (T.load - this.load) * kS;
@@ -75,7 +85,7 @@ class EngineProcessor extends AudioWorkletProcessor {
       this.theta += (rpm / 60) * 360 / sr;
       let wrapped = false;
       if (this.theta >= 720) { this.theta -= 720; wrapped = true; }
-      for (let c = 0; c < 4; c++) {
+      for (let c = 0; c < FIRE.length; c++) {
         const a = FIRE[c] + FIRE_ERR[c] + this.gauss() * 0.25;
         const crossed = wrapped ? (prev < a || this.theta >= a) : (prev < a && this.theta >= a);
         if (crossed && rpm > 30) {

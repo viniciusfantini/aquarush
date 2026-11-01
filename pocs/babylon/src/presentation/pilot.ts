@@ -6,7 +6,7 @@ import { type Scene, Mesh, MeshBuilder, PBRMaterial, Color3, TransformNode, Vect
 import { HELM_X } from "./helm.ts";
 
 
-const FLOOR = 0.02;
+const FLOOR_LANCHA = 0.02;
 
 const pbr = (scene: Scene, name: string, c: Color3, rough = 0.6): PBRMaterial => {
   const m = new PBRMaterial(name, scene);
@@ -49,6 +49,7 @@ export interface PersonOpts {
   zc: number;           // centro do assento (local, z)
   prefix: string;       // prefixo dos nomes das malhas ("pilot" = escondido na câmera de cockpit)
   skin: Color3; shirt: Color3; vest: Color3; shorts: Color3; cap: Color3; hair: Color3;
+  floor?: number;       // altura do piso sob os pés (local); padrão = piso da lancha
 }
 
 /** Pessoa sentada (proporções humanas, braços por IK). */
@@ -65,6 +66,7 @@ export const buildPerson = (scene: Scene, root: TransformNode, o: PersonOpts): P
   const glasses = pbr(scene, k + "GlassesM", new Color3(0.02, 0.02, 0.03), 0.08);
   const hair = pbr(scene, k + "HairM", o.hair, 0.8);
 
+  const FLOOR = o.floor ?? FLOOR_LANCHA;
   const X = o.x;
   const DZ = o.zc + 0.22; // o modelo foi feito para um assento centrado em z = −0,22
   // ---- tronco (levemente reclinado) ----
@@ -151,20 +153,21 @@ export const buildPerson = (scene: Scene, root: TransformNode, o: PersonOpts): P
 };
 
 /** Piloto no posto de boreste (mãos controladas por IK no volante e na manete). */
-export const buildPilot = (scene: Scene, root: TransformNode): Pilot => buildPerson(scene, root, {
-  x: HELM_X, zc: -0.08, prefix: "pilot",
+export const buildPilot = (scene: Scene, root: TransformNode, seat = { x: HELM_X, zc: -0.08, floor: FLOOR_LANCHA }): Pilot => buildPerson(scene, root, {
+  x: seat.x, zc: seat.zc, floor: seat.floor, prefix: "pilot",
   skin: new Color3(0.78, 0.57, 0.43), shirt: new Color3(0.06, 0.45, 0.55), vest: new Color3(0.95, 0.4, 0.05),
   shorts: new Color3(0.82, 0.78, 0.66), cap: new Color3(0.06, 0.12, 0.28), hair: new Color3(0.18, 0.12, 0.08),
 });
 
 /** Passageiro sentado com as mãos sobre as coxas. */
-export const buildPassenger = (scene: Scene, root: TransformNode, x: number, zc: number, prefix: string, look: number): Pilot => {
+export const buildPassenger = (scene: Scene, root: TransformNode, x: number, zc: number, prefix: string, look: number, floor = FLOOR_LANCHA): Pilot => {
+  const FLOOR = floor;
   const looks = [
     { skin: new Color3(0.55, 0.38, 0.27), shirt: new Color3(0.85, 0.2, 0.25), cap: new Color3(0.9, 0.9, 0.88), hair: new Color3(0.08, 0.06, 0.05) },
     { skin: new Color3(0.86, 0.68, 0.55), shirt: new Color3(0.95, 0.85, 0.3), cap: new Color3(0.15, 0.5, 0.3), hair: new Color3(0.55, 0.38, 0.18) },
     { skin: new Color3(0.68, 0.48, 0.35), shirt: new Color3(0.35, 0.3, 0.75), cap: new Color3(0.8, 0.35, 0.1), hair: new Color3(0.12, 0.08, 0.06) },
   ][look % 3];
-  const p = buildPerson(scene, root, { x, zc, prefix, vest: new Color3(0.95, 0.4, 0.05), shorts: new Color3(0.2, 0.3, 0.45), ...looks });
+  const p = buildPerson(scene, root, { x, zc, prefix, floor, vest: new Color3(0.95, 0.4, 0.05), shorts: new Color3(0.2, 0.3, 0.45), ...looks });
   const DZ = zc + 0.22;
   p.update(new Vector3(x - 0.12, FLOOR + 0.6, 0.06 + DZ), new Vector3(x + 0.12, FLOOR + 0.6, 0.06 + DZ));
   return p;

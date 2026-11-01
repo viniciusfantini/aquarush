@@ -13,7 +13,7 @@
 3. **O HUD lê só a telemetria real** (`BoatTelemetry`). Nada de valores decorativos.
 4. **`VehicleInput` é o único contrato** entre dispositivos e controladores. Os controladores não sabem a origem do comando.
 5. **Nada é marcado como concluído sem um teste executado e o resultado registrado** (README da POC).
-6. Os parâmetros da lancha (`pocs/babylon/src/sim/params.ts`) são o **contrato entre as POCs**. As POCs Unity e Unreal devem usar a mesma massa, as mesmas dimensões, os 6 pontos e os mesmos coeficientes.
+6. Os parâmetros dos barcos (`pocs/babylon/src/sim/params.ts`: `SPEEDBOAT` e `DINGHY`) são o **contrato entre as POCs**. As POCs Unity e Unreal devem usar a mesma massa, as mesmas dimensões, os 6 pontos e os mesmos coeficientes.
 
 ## POC 1: Babylon (`pocs/babylon`)
 
@@ -48,6 +48,7 @@ npm run dev            # abrir http://localhost:5173, F3 mostra a telemetria; wi
 | 2026-10-31 | Monorepo com `pocs/<tecnologia>` | O GDD §15 pede pastas claramente isoladas |
 | 2026-10-31 | Qualidade padrão `low` em dispositivos touch, `med` no desktop | Meta de 30 FPS em celular intermediário |
 | 2026-11-01 | Resolução = densidade real da tela até `maxPixelRatio` do perfil + resolução dinâmica por FPS; iPhone/iPad começam em `med` | O usuário achou o iPhone borrado: o escalonamento antigo renderizava a 1/4,5 da resolução nativa |
+| 2026-11-01 | **Dois barcos, uma física**: `Speedboat` recebe `SpeedboatParams` (`VESSELS.lancha` / `VESSELS.bote`). O bote só muda parâmetros e modos (`steering: "tiller"`, `trimMode: "manual"`, `electricStart: false`); o visual do bote fica em `presentation/dinghyMesh.ts` e expõe o mesmo `BoatVisual` + `controls` (no lugar do `helm.ts`) | Pedido do usuário: bote de apoio de até 3 pessoas com motor de cana, sem trim elétrico, trim em 3 furos + tilt só parado, escolha do barco na abertura (`?barco=` na URL) |
 | 2026-11-01 | Bateria com resistência interna dependente da carga + rotação do arranque pela tensão + autoteste com apito; carga/descarga com `batteryTimeScale` = 10 | Pedido do usuário: muitas partidas ou tilt com o motor desligado deixam a partida fraca, e o motor ligado recarrega. Em tempo real o efeito levaria horas |
 | 2026-11-01 | Rotação do motor: **tilt por fora, direção por dentro** (`qTilt × qSteer` no visual, `driveRot` na física). Não usar `rotation.x/y` da Babylon no motor (ela aplica o yaw por fora) | Com o motor recolhido, ele girava em torno da vertical do barco e varria o pé para os lados |
 | 2026-10-31 | A esteira é um **mapa top-down** (canvas → textura) lido pelo shader da água, não uma malha por cima | Ela precisa deformar a água, distorcer o reflexo e gerar espuma de verdade. Canais: R = espuma, G − B = altura |

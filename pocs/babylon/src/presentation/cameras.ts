@@ -17,6 +17,10 @@ export class BoatCamera {
   private lastY = 0;
   private idle = 0;
   private first = true;
+  /** olhos do piloto (local do barco) para a câmera de cockpit */
+  headLocal = new Vector3(0.5, 1.24, -0.06);
+  /** escala da distância da câmera externa (barcos menores = mais perto) */
+  distScale = 1;
 
   constructor(scene: Scene, canvas: HTMLCanvasElement) {
     this.cam = new UniversalCamera("cam", new Vector3(0, 5, -15), scene);
@@ -65,13 +69,13 @@ export class BoatCamera {
       this.cam.fov = 0.95 + clamp(speed / 25, 0, 1) * 0.12;
       const flat = new Vector3(fwd.x, 0, fwd.z).normalize();
       const yaw = Math.atan2(flat.x, flat.z) + this.orbitYaw;
-      const dist = 11 + clamp(speed / 22, 0, 1) * 2.5;
-      const height = 3.3 + this.orbitPitch * 8;
+      const dist = (11 + clamp(speed / 22, 0, 1) * 2.5) * this.distScale;
+      const height = (3.3 + this.orbitPitch * 8) * (0.4 + 0.6 * this.distScale);
       const desired = new Vector3(boatPos.x - Math.sin(yaw) * dist, boatPos.y + height, boatPos.z - Math.cos(yaw) * dist);
       const k = this.first ? 1 : 1 - Math.exp(-dt * 6);
       this.pos = Vector3.Lerp(this.pos, desired, k);
       if (this.pos.y < 0.6) this.pos.y = 0.6;
-      const lookT = boatPos.add(new Vector3(flat.x * 2.5, 1.0, flat.z * 2.5));
+      const lookT = boatPos.add(new Vector3(flat.x * 2.5 * this.distScale, 1.0 * (0.5 + 0.5 * this.distScale), flat.z * 2.5 * this.distScale));
       this.look = this.first ? lookT : Vector3.Lerp(this.look, lookT, 1 - Math.exp(-dt * 12));
       this.first = false;
       this.cam.position.copyFrom(this.pos);
@@ -79,7 +83,7 @@ export class BoatCamera {
       this.cam.setTarget(this.look);
     } else {
       this.cam.fov = 1.15;
-      const head = Vector3.TransformCoordinates(new Vector3(0.5, 1.24, -0.06), Matrix.Compose(Vector3.One(), boatRot, boatPos));
+      const head = Vector3.TransformCoordinates(this.headLocal, Matrix.Compose(Vector3.One(), boatRot, boatPos));
       this.cam.position.copyFrom(head);
       const yawQ = Quaternion.RotationAxis(Vector3.Up(), this.orbitYaw * 1.5);
       const pitchQ = Quaternion.RotationAxis(Vector3.Right(), 0.2 + this.orbitPitch * 0.6);

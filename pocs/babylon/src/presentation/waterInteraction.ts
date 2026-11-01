@@ -161,7 +161,7 @@ export class WaterInteraction {
     const bowWet = T.submergedPoints[0] || T.submergedPoints[1];
     const bowRate = bowWet ? planing * 900 * (1 - 0.4 * smoothstep(18, 25, T.waterSpeed)) : 0;
     const setBow = (ps: ParticleSystem, side: number) => {
-      const p = boat.toWorld(v3(side * 0.95, -0.15, 1.2));
+      const p = boat.toWorld(v3(side * boat.params.beam * 0.41, -0.15, boat.params.length * 0.2));
       ps.emitter = new Vector3(p.x, water.getHeight(p.x, p.z) + 0.05, p.z);
       const out = new Vector3(right.x * side, 0, right.z * side);
       const base = new Vector3(fwd.x * 0.25, 0, fwd.z * 0.25).add(out.scale(0.9));

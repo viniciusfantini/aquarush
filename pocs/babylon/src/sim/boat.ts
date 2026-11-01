@@ -12,6 +12,7 @@ import { G } from "./water.ts";
 import type { PhysicsWorld } from "./world.ts";
 import type { SpeedboatParams, Occupant } from "./params.ts";
 import { PERSON_KG } from "./params.ts";
+import { ENGINE_SYSTEMS } from "./engineSystems.ts";
 import type { VehicleInput } from "../gameplay/vehicleInput.ts";
 import { EngineSystems } from "./engineSystems.ts";
 
@@ -63,8 +64,10 @@ export interface BoatTelemetry {
   stall: "" | "fuel" | "overheat"; // último motivo de o motor ter morrido sozinho
   buzzer: boolean;       // alarme do motor apitando (autoteste da chave)
   starterRpm: number;    // rotação do motor de arranque (0 = só o "clique" do solenoide)
-  startFail: "" | "weak" | "dead"; // última partida que não pegou (bateria fraca / sem força)
+  startFail: "" | "weak" | "dead" | "pull"; // última partida que não pegou (bateria fraca / sem força / corda)
   batterySoc: number;    // estado de carga 0..1
+  trimPin: number;       // trim manual: furo do pino 1..N, N+1 = tilt total; 0 = power trim
+  pullStart: boolean;    // partida na corda (sem arranque elétrico)
   trimMotorA: number;    // corrente da bomba do power trim (A)
   depth: number;         // profundidade sob o casco
   submergedPoints: boolean[];
@@ -105,7 +108,16 @@ export class Speedboat {
   /** corrente da bomba elétrica do power trim (A) */
   trimMotorA = 0;
   /** combustível, arrefecimento, bateria e horímetro */
-  readonly systems = new EngineSystems();
+  readonly systems: EngineSystems;
+  /** trim manual (bote): furo atual do pino, ângulo atual (anima até o furo) e tilt pedido */
+  trimPin = 1;
+  private manualAngle = 0;
+  private tiltWanted = false;
+  private prevTrimIn = 0;
+  /** tempo restante do aviso "pare o bote para mexer no motor" */
+  private manualBlockT = 0;
+  /** partida na corda: esta puxada vai pegar? */
+  private pullCatch = false;
   /** Ocupantes (posição = banco). Padrão: só o piloto. */
   occupants: Occupant[] = [{ seat: "helm", mass: PERSON_KG }];
   totalMass = 0;
@@ -150,12 +162,15 @@ export class Speedboat {
 
   constructor(params: SpeedboatParams, pos: Vec3, headingRad = 0) {
     this.params = params;
+    this.systems = new EngineSystems({ ...ENGINE_SYSTEMS, tankLiters: params.tankLiters, hasBattery: params.electricStart });
+    this.trimPin = Math.max(0, Math.min(1, params.trimPins.length - 1));
+    this.manualAngle = params.trimPins[this.trimPin] ?? 0;
     this.pos = { ...pos };
     this.rot = qFromAxisAngle(v3(0, 1, 0), headingRad);
     this.rpm = params.idleRpm;
     this.telemetry = {
       speedKmh: 0, waterSpeed: 0, rpm: params.idleRpm, throttle: 0, throttleCmd: 0, trim: 0, trimDeg: 0, tiltDeg: 0, tiltBlocked: false, intakeSubmerged: true, steerDeg: 0,
-      gear: "N", pitchDeg: 0, rollDeg: 0, wetFraction: 0, planing: false, thrustN: 0, ventilation: 1, cavitation: 0, propImmersion: 1, revLimiter: false, propSlip: 0, propRpm: 0, engine: "running", fuelL: 0, fuelFrac: 1, coolantC: 45, batteryV: 12.6, engineHours: 0, overheatWarn: false, protectMode: false, lowFuel: false, chargeWarn: false, stall: "", trimMotorA: 0, fuelLph: 0, buzzer: false, starterRpm: 0, startFail: "", batterySoc: 0.92,
+      gear: "N", pitchDeg: 0, rollDeg: 0, wetFraction: 0, planing: false, thrustN: 0, ventilation: 1, cavitation: 0, propImmersion: 1, revLimiter: false, propSlip: 0, propRpm: 0, engine: "running", fuelL: 0, fuelFrac: 1, coolantC: 45, batteryV: 12.6, engineHours: 0, overheatWarn: false, protectMode: false, lowFuel: false, chargeWarn: false, stall: "", trimMotorA: 0, fuelLph: 0, buzzer: false, starterRpm: 0, startFail: "", batterySoc: 0.92, trimPin: 0, pullStart: !params.electricStart,
       distanceM: 0, collisions: 0, lastImpact: 0, depth: 0, submergedPoints: params.buoyancyPoints.map(() => false),
     };
   }
@@ -170,6 +185,9 @@ export class Speedboat {
     this.steer = 0;
     this.trim = 0;
     this.tilt = 0;
+    this.tiltWanted = false;
+    this.trimPin = Math.max(0, Math.min(1, this.params.trimPins.length - 1));
+    this.manualAngle = this.params.trimPins[this.trimPin] ?? 0;
     this.gear = this.wantGear = "N";
     this.shiftTimer = 0;
   }
@@ -288,7 +306,7 @@ export class Speedboat {
     }
 
     // ---------------- propulsão (motor de popa / rabeta) ----------------
-    const trimAngle = this.trim >= 0 ? this.trim * P.trimUp : -this.trim * P.trimDown;
+    const trimAngle = P.trimMode === "manual" ? this.manualAngle : this.trim >= 0 ? this.trim * P.trimUp : -this.trim * P.trimDown;
     // ângulo total da rabeta = trim + tilt; a hélice gira em torno do pivô no espelho de popa
     const driveAngle = trimAngle + this.tilt;
     // Ordem real do suporte do motor: o TILT gira em torno do tubo horizontal no espelho (externo) e a
@@ -391,7 +409,8 @@ export class Speedboat {
     t.trim = this.trim;
     t.trimDeg = trimAngle * 57.2958;
     t.tiltDeg = this.tilt * 57.2958;
-    t.tiltBlocked = this.tiltBlocked;
+    t.tiltBlocked = this.tiltBlocked || this.manualBlockT > 0;
+    t.trimPin = P.trimMode === "manual" ? (this.tiltWanted ? P.trimPins.length + 1 : this.trimPin + 1) : 0;
     t.intakeSubmerged = intakeSubmerged;
     t.steerDeg = this.steer * 57.2958;
     t.gear = this.gear;
@@ -414,7 +433,7 @@ export class Speedboat {
     // solta no ar não há água freando: demora bem mais para parar
     this.propRpmState += (target - this.propRpmState) * (1 - Math.exp(-dt / (engaged ? 0.08 : immersion > 0.2 ? 0.6 : 3.5)));
     t.propRpm = this.propRpmState;
-    t.fuelLph = this.engine === "running" ? 3 + 52 * Math.pow(this.throttleActual, 1.6) * (this.gear === "N" ? 0.3 : 1) : 0;
+    t.fuelLph = this.engine === "running" ? P.fuelIdleLph + (P.fuelMaxLph - P.fuelIdleLph) * Math.pow(this.throttleActual, 1.6) * (this.gear === "N" ? 0.3 : 1) : 0;
     t.engine = this.engine;
     // sistemas do motor: combustível, temperatura, bateria, horímetro
     const sys = this.systems;
@@ -451,6 +470,8 @@ export class Speedboat {
     //    a hélice sai da água. Bloqueado em velocidade ou rotação alta (como nos motores reais).
     const trimIn = clamp(input.trim, -1, 1);
     this.tiltBlocked = false;
+    if (P.trimMode === "manual") { this.updateManualTrim(dt, trimIn, u); this.trimMotorA = 0; }
+    else {
     // bomba elétrica do power trim: velocidade cai com a tensão da bateria (motor DC)
     const vFactor = clamp((this.systems.batteryV - 9.5) / 3, 0.25, 1.05);
     const trimBefore = this.trim, tiltBefore = this.tilt;
@@ -474,6 +495,7 @@ export class Speedboat {
       const moved = this.trim !== trimBefore || this.tilt !== tiltBefore;
       this.trimMotorA = !moved ? 45 : this.tilt !== tiltBefore ? 40 : 30;
     } else this.trimMotorA = 0;
+    }
 
     // Manete com detentes F / N / R (GDD: frente, neutro e ré). A troca SEMPRE passa por N:
     // corta o acelerador, espera `shiftTime` em neutro (embreagem da rabeta) e só então engrena.
@@ -498,10 +520,36 @@ export class Speedboat {
   }
 
   /**
+   * Trim MANUAL (bote, sem power trim): cada toque em trim+ / trim- passa o motor para o próximo furo
+   * do pino (3 ângulos); depois do furo mais alto, trim+ levanta o motor todo (tilt, travado em cima);
+   * trim- abaixa de volta. Só com o bote parado (no mundo real o piloto se vira, solta a trava e
+   * levanta o motor com a mão). O motor ANDA até a posição nova (nunca salta).
+   */
+  private updateManualTrim(dt: number, trimIn: number, u: number): void {
+    const P = this.params;
+    const pins = P.trimPins;
+    const up = trimIn > 0.5 && this.prevTrimIn <= 0.5;
+    const down = trimIn < -0.5 && this.prevTrimIn >= -0.5;
+    this.prevTrimIn = trimIn;
+    this.manualBlockT = Math.max(0, this.manualBlockT - dt);
+    if (up || down) {
+      if (Math.abs(u) > P.manualTrimMaxSpeed) this.manualBlockT = 1.2;
+      else if (up) { if (this.trimPin < pins.length - 1) this.trimPin++; else this.tiltWanted = true; }
+      else if (this.tiltWanted) this.tiltWanted = false;
+      else if (this.trimPin > 0) this.trimPin--;
+    }
+    this.tilt = approach(this.tilt, this.tiltWanted ? P.tiltMax : 0, P.tiltRate * dt);
+    // o motor só acomoda no furo novo com o tilt embaixo
+    if (this.tilt < 0.02) this.manualAngle = approach(this.manualAngle, pins[this.trimPin], P.trimRate * dt);
+    const span = pins[pins.length - 1] - pins[0] || 1;
+    this.trim = ((this.manualAngle - pins[0]) / span) * 2 - 1;
+  }
+
+  /**
    * Ignição (tecla P): desliga o motor ou dá partida. Por segurança (como nos motores reais),
    * a partida só funciona em NEUTRO. Retorna o que aconteceu.
    */
-  toggleIgnition(): "stopped" | "starting" | "needNeutral" | "busy" | "noFuel" | "lowBattery" | "hot" {
+  toggleIgnition(): "stopped" | "starting" | "pulling" | "needNeutral" | "busy" | "noFuel" | "lowBattery" | "hot" {
     if (this.engine === "running") { this.engine = "off"; return "stopped"; }
     if (this.engine === "cranking") return "busy";
     if (this.gear !== "N") return "needNeutral";
@@ -512,6 +560,12 @@ export class Speedboat {
     if (this.selfTestT > 0) return "busy";
     this.telemetry.stall = "";
     this.telemetry.startFail = "";
+    if (!this.params.electricStart) {
+      // partida na corda: uma puxada (~0,5 s). Motor quente pega quase sempre; frio pode precisar de 2–3
+      this.engine = "cranking"; this.crankTimer = 0;
+      this.pullCatch = Math.random() < (this.systems.coolantC > 45 ? 0.85 : 0.5);
+      return "pulling";
+    }
     // chave em ON: autoteste com o apito característico; o arranque gira quando ele termina
     this.selfTestT = 1.1;
     return "starting";
@@ -545,6 +599,14 @@ export class Speedboat {
     if (this.engine === "off") {
       this.rpm += (0 - this.rpm) * (1 - Math.exp(-dt / 0.45)); // motor parando
       if (this.rpm < 5) this.rpm = 0;
+      return this.rpm;
+    }
+    if (this.engine === "cranking" && !this.params.electricStart) {
+      // corda: um puxão gira o motor a ~450 rpm por meio segundo
+      this.crankTimer += dt;
+      this.rpm += ((this.crankTimer < 0.45 ? 450 : 0) - this.rpm) * (1 - Math.exp(-dt / 0.08));
+      if (this.crankTimer > 0.4 && this.pullCatch) { this.engine = "running"; this.rpm = 1400; }
+      else if (this.crankTimer > 0.9) { this.engine = "off"; this.telemetry.startFail = "pull"; }
       return this.rpm;
     }
     if (this.engine === "cranking") {

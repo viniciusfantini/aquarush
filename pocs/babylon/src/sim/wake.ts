@@ -73,8 +73,9 @@ export class WakeField {
   /** Amostra do estado atual da lancha (também usada como "ponta viva" pelo visual). */
   sampleBoat(boat: Speedboat): WakeSample {
     const T = boat.telemetry;
-    const b = boat.toWorld(v3(0, 0, 2.6));
-    const s = boat.toWorld(v3(0, 0, -3.0));
+    const L = boat.params.length;
+    const b = boat.toWorld(v3(0, 0, 0.43 * L)); // proa
+    const s = boat.toWorld(v3(0, 0, -0.5 * L)); // popa
     const r = boat.right;
     const rl = Math.hypot(r.x, r.z) || 1;
     return {

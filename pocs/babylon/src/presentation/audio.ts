@@ -68,6 +68,7 @@ export interface AudioState {
   trimMotorA?: number;    // bomba elétrica do power trim (A)
   buzzer?: boolean;       // alarme do motor (autoteste da chave: "piiii")
   starterRpm?: number;    // rotação do arranque (cai com a bateria fraca)
+  pullStart?: boolean;    // partida na corda (sem motor de arranque elétrico)
 }
 
 export class EngineAudio {
@@ -109,6 +110,29 @@ export class EngineAudio {
   private solenoidT = 0;
   private pumpGain!: GainNode;
   muted = false;
+  /** 4 = motor de 4 cilindros (lancha 150 hp); 2 = bicilíndrico (bote 15 hp) */
+  readonly cylinders: number;
+  constructor(cylinders = 4) { this.cylinders = cylinders; }
+
+  /** Puxada na corda de partida: "zzzip" da corda + catraca do arranque manual. */
+  ropePull(): void {
+    const ctx = this.ctx;
+    if (!ctx || this.muted) return;
+    const t = ctx.currentTime;
+    const src = ctx.createBufferSource(); src.buffer = this.noise;
+    const bp = ctx.createBiquadFilter(); bp.type = "bandpass"; bp.Q.value = 3;
+    bp.frequency.setValueAtTime(700, t); bp.frequency.exponentialRampToValueAtTime(2600, t + 0.25); bp.frequency.exponentialRampToValueAtTime(900, t + 0.5);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(0.18, t + 0.04); g.gain.setTargetAtTime(0, t + 0.42, 0.05);
+    src.connect(bp).connect(g).connect(this.master);
+    src.start(t); src.stop(t + 0.8);
+    for (let i = 0; i < 9; i++) { // catraca (dentes do arranque manual)
+      const o = ctx.createOscillator(); o.type = "square"; o.frequency.value = 1800 + 200 * Math.random();
+      const gg = ctx.createGain(); const ti = t + 0.03 + i * 0.045;
+      gg.gain.setValueAtTime(0, ti); gg.gain.linearRampToValueAtTime(0.03, ti + 0.002); gg.gain.exponentialRampToValueAtTime(0.0005, ti + 0.02);
+      o.connect(gg).connect(this.master); o.start(ti); o.stop(ti + 0.03);
+    }
+  }
 
   start(): void {
     if (this.ctx) { void this.ctx.resume(); return; }
@@ -247,16 +271,16 @@ export class EngineAudio {
     if (this.worklet) {
       // limitador: a ignição corta em rajadas ("bap-bap-bap")
       const cut = st.revLimiter && Math.floor(t * 16) % 2 === 1;
-      this.worklet.port.postMessage({ rpm: st.rpm, load: st.revLimiter ? 0.3 : load, combustion: running && !cut ? 1 : 0, wet: st.propInWater ? 1 : 0, volume: 1 });
+      this.worklet.port.postMessage({ cylinders: this.cylinders, rpm: st.rpm, load: st.revLimiter ? 0.3 : load, combustion: running && !cut ? 1 : 0, wet: st.propInWater ? 1 : 0, volume: 1 });
       this.workletGain.gain.setTargetAtTime(m * dist * 0.55, t, 0.05);
     }
     const legacy = useW || !running ? 0 : 1; // osciladores antigos só sem worklet
     // arranque: volume e tom acompanham a rotação (bateria fraca = "rrr… rrr…" lento e grave);
     // travado (tensão baixa demais) só estala o solenoide
-    const sRpm = st.engine === "cranking" ? st.starterRpm ?? 250 : 0;
+    const sRpm = st.engine === "cranking" && !st.pullStart ? st.starterRpm ?? 250 : 0;
     this.starterGain.gain.setTargetAtTime(m * (st.engine === "cranking" ? 0.09 * Math.min(1, Math.max(0, (sRpm - 20) / 200)) : 0), t, 0.03);
     this.st1.frequency.setTargetAtTime(500 + 2.6 * sRpm, t, 0.05);
-    if (st.engine === "cranking" && sRpm < 40 && t > this.solenoidT) { this.solenoidT = t + 0.35; this.clunk(false); }
+    if (st.engine === "cranking" && !st.pullStart && sRpm < 40 && t > this.solenoidT) { this.solenoidT = t + 0.35; this.clunk(false); }
     this.buzzGain.gain.setTargetAtTime(m * (st.buzzer ? 0.05 : 0), t, 0.008);
     const pumpA = st.trimMotorA ?? 0;
     this.pumpGain.gain.setTargetAtTime(m * (pumpA > 0 ? 0.035 : 0), t, 0.03);

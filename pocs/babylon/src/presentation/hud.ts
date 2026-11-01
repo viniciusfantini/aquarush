@@ -88,8 +88,9 @@ export class Hud {
   private speedG: RoundGauge;
   private rpmG: RoundGauge;
   private fuelG: RoundGauge;
-  private tempG: RoundGauge;
-  private voltG: RoundGauge;
+  private tempG: RoundGauge | null;
+  private voltG: RoundGauge | null;
+  private readonly pins: number;
   private thrBar = $("h-thr-bar");
   private thrTxt = $("h-thr");
   private trimMark = $("h-trim-mark");
@@ -112,13 +113,16 @@ export class Hud {
   private toastTimer = 0;
   debugOn = false;
 
-  constructor() {
+  /** opts: barco com/sem painel de instrumentos (bote de cana não tem temperatura nem bateria) */
+  constructor(opts: { speedMax: number; temp: boolean; battery: boolean; trimPins: number } = { speedMax: 100, temp: true, battery: true, trimPins: 0 }) {
     const big = $("g-big"), small = $("g-small");
-    this.speedG = new RoundGauge(big, { title: "km/h", min: 0, max: 100, labels: [0, 20, 40, 60, 80, 100], minor: 5, big: true });
+    this.pins = opts.trimPins;
+    const sm = opts.speedMax;
+    this.speedG = new RoundGauge(big, { title: "km/h", min: 0, max: sm, labels: Array.from({ length: 6 }, (_, i) => (sm / 5) * i), minor: sm / 20, big: true });
     this.rpmG = new RoundGauge(big, { title: "RPM x1000", min: 0, max: 7000, labels: [0, 1000, 2000, 3000, 4000, 5000, 6000, 7000], minor: 250, redFrom: 6000, big: true, labelFmt: (v) => String(v / 1000) });
     this.fuelG = new RoundGauge(small, { title: "COMBUST.", min: 0, max: 1, labels: [0, 0.5, 1], minor: 0.125, redFrom: 0, redTo: 0.12, labelFmt: (v) => (v === 0 ? "E" : v === 1 ? "F" : "½") });
-    this.tempG = new RoundGauge(small, { title: "TEMP", min: 40, max: 120, labels: [40, 80, 120], minor: 10, redFrom: 90 });
-    this.voltG = new RoundGauge(small, { title: "BATERIA", min: 8, max: 16, labels: [8, 12, 16], minor: 1, redFrom: 8, redTo: 11.5 });
+    this.tempG = opts.temp ? new RoundGauge(small, { title: "TEMP", min: 40, max: 120, labels: [40, 80, 120], minor: 10, redFrom: 90 }) : null;
+    this.voltG = opts.battery ? new RoundGauge(small, { title: "BATERIA", min: 8, max: 16, labels: [8, 12, 16], minor: 1, redFrom: 8, redTo: 11.5 }) : null;
   }
 
   update(t: BoatTelemetry, fps: number, extra: Record<string, string>): void {
@@ -128,15 +132,16 @@ export class Hud {
     const autTxt = t.engine === "running" && autonomy > 0 ? ` · ${Math.floor(autonomy)}h${String(Math.floor((autonomy % 1) * 60)).padStart(2, "0")}` : "";
     this.fuelG.set(t.fuelFrac, `${t.fuelL.toFixed(1)} L`, `${t.fuelLph.toFixed(1)} L/h`, t.lowFuel);
     this.fuelAut.textContent = autTxt ? `autonomia${autTxt.replace(" ·", "")}` : "";
-    this.tempG.set(t.coolantC, `${t.coolantC.toFixed(0)}°C`, t.protectMode ? "PROTEÇÃO" : t.overheatWarn ? "QUENTE" : "", t.overheatWarn);
-    this.voltG.set(t.batteryV, `${t.batteryV.toFixed(1)} V`, t.engine === "running" && t.batteryV > 13.2 ? "carga" : `${Math.round(t.batterySoc * 100)}%`, t.chargeWarn);
+    this.tempG?.set(t.coolantC, `${t.coolantC.toFixed(0)}°C`, t.protectMode ? "PROTEÇÃO" : t.overheatWarn ? "QUENTE" : "", t.overheatWarn);
+    this.voltG?.set(t.batteryV, `${t.batteryV.toFixed(1)} V`, t.engine === "running" && t.batteryV > 13.2 ? "carga" : `${Math.round(t.batterySoc * 100)}%`, t.chargeWarn);
     // barras de acelerador e trim (como antes)
     this.thrBar.style.height = `${t.throttle * 100}%`;
     this.thrBar.classList.toggle("rev", t.gear === "R");
     this.thrTxt.textContent = `${Math.round(t.throttle * 100)}%`;
     this.trimMark.style.bottom = t.tiltDeg > 0.5 ? "100%" : `${((t.trim + 1) / 2) * 100}%`;
     this.trimMark.style.background = t.tiltDeg > 0.5 ? "#ff9d3d" : "";
-    this.trimTxt.textContent = t.tiltDeg > 0.5 ? `TILT ${t.tiltDeg.toFixed(0)}°` : `${t.trimDeg >= 0 ? "+" : ""}${t.trimDeg.toFixed(1)}°`;
+    this.trimTxt.textContent = t.trimPin > this.pins ? `TILT ${t.tiltDeg.toFixed(0)}°` : t.tiltDeg > 0.5 ? `TILT ${t.tiltDeg.toFixed(0)}°`
+      : this.pins > 0 ? `PINO ${t.trimPin}/${this.pins}` : `${t.trimDeg >= 0 ? "+" : ""}${t.trimDeg.toFixed(1)}°`;
 
     this.planing.classList.toggle("on", t.planing);
     this.engineChip.textContent = t.engine === "running" ? "MOTOR LIGADO" : t.engine === "cranking" ? "DANDO PARTIDA…" : "MOTOR DESLIGADO";

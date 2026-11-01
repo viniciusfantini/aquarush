@@ -5,7 +5,7 @@ declare const performance: { now(): number };
 // Saída: tabela de medições + PASS/FAIL por critério. Código de saída != 0 se algo falhar.
 
 import { Speedboat } from "../src/sim/boat.ts";
-import { SPEEDBOAT, PERSON_KG, type Occupant } from "../src/sim/params.ts";
+import { SPEEDBOAT, DINGHY, PERSON_KG, type Occupant } from "../src/sim/params.ts";
 import { GerstnerWater, WAVE_PRESETS, type CurrentZone } from "../src/sim/water.ts";
 import type { PhysicsWorld } from "../src/sim/world.ts";
 import { buildWorld } from "../src/sim/world.ts";
@@ -359,7 +359,8 @@ for (const [label, thr] of [["baixa", 0.25], ["alta", 1]] as const) {
   check("bateria", "bateria boa: arranque (rpm)", good.maxStarter, 200, 280, "rpm", 0);
   check("bateria", "bateria boa: tensão na partida (V)", good.minV, 10, 11.2, "V", 2);
   const mid = tryStart(off(0.65));
-  check("bateria", "bateria a 65 %: ainda pega (s)", mid.tRun, good.tRun, 5.5, "s", 2);
+  check("bateria", "bateria a 65 %: ainda pega (s)", mid.tRun, 1.4, 5.5, "s", 2);
+  check("bateria", "bateria a 65 %: arranque mais lento que cheia (rpm)", mid.maxStarter, 100, good.maxStarter - 15, "rpm", 0);
   const weak = tryStart(off(0.4));
   check("bateria", "bateria a 40 %: arranque mais lento (rpm)", weak.maxStarter, 60, good.maxStarter * 0.75, "rpm", 0);
   check("bateria", "bateria a 40 %: demora mais ou não pega (s)", weak.tRun < 0 ? 99 : weak.tRun, good.tRun + 0.5, 99, "s", 2);
@@ -380,6 +381,76 @@ for (const [label, thr] of [["baixa", 0.25], ["alta", 1]] as const) {
   ch.systems.batterySoc = 0.4;
   run(ch, water, 60, { ...emptyInput(), gear: "F", throttle: 0.6 });
   check("bateria", "1 min navegando: recarga (%)", (ch.systems.batterySoc - 0.4) * 100, 3, 20, "%", 1);
+}
+
+// ---------- Bote de apoio (15 hp, cana do leme, trim manual, partida na corda) ----------
+{
+  const water = mkWater(0);
+  const mk = (seats: Occupant["seat"][]) => {
+    const b = new Speedboat(DINGHY, v3(0, 0.2, 0));
+    b.occupants = seats.map((seat) => ({ seat, mass: PERSON_KG }));
+    b.systems.fuelL = 6;
+    run(b, water, 5, emptyInput());
+    return b;
+  };
+  const solo = mk(["helm"]);
+  check("bote", "massa só piloto + 6 L (kg)", solo.totalMass, 190, 215, "kg", 0);
+  check("bote", "parado: hélice submersa", solo.telemetry.propImmersion, 0.99, 1, "", 2);
+  check("bote", "parado: banda com o piloto em boreste (°)", solo.telemetry.rollDeg, 0.3, 5, "°", 2);
+  let t30 = -1;
+  run(solo, water, 25, { ...emptyInput(), gear: "F", throttle: 1 }, openWater, (t) => { if (t30 < 0 && solo.telemetry.speedKmh > 30) t30 = t; });
+  check("bote", "só piloto: velocidade máx (km/h)", solo.telemetry.speedKmh, 36, 50, "km/h", 1);
+  check("bote", "só piloto: 0→30 km/h (s)", t30, 2, 7, "s", 1);
+  check("bote", "só piloto: planeia", solo.telemetry.planing ? 1 : 0, 1, 1, "", 0);
+  check("bote", "consumo a toda (L/h)", solo.telemetry.fuelLph, 4.5, 6.5, "L/h", 1);
+  const soloMax = solo.telemetry.speedKmh;
+  let rollMax = 0;
+  run(solo, water, 8, { ...emptyInput(), gear: "F", throttle: 1, steering: 1 }, openWater, () => { rollMax = Math.max(rollMax, Math.abs(solo.telemetry.rollDeg)); });
+  check("bote", "curva a toda com a cana: roll máx (°)", rollMax, 0, 15, "°", 1);
+  check("bote", "curva a toda: segue de pé (up.y)", solo.up.y, 0.95, 1, "", 3);
+  const full = mk(["helm", "passenger", "rearLeft"]);
+  run(full, water, 25, { ...emptyInput(), gear: "F", throttle: 1 });
+  check("bote", "lotado (3): velocidade máx (km/h)", full.telemetry.speedKmh, 24, soloMax - 5, "km/h", 1);
+  const wv = mkWater(2.5);
+  const rough = mk(["helm", "passenger", "rearLeft"]);
+  let upMin = 1;
+  run(rough, wv, 40, { ...emptyInput(), gear: "F", throttle: 0.5 }, openWater, () => { upMin = Math.min(upMin, rough.up.y); });
+  check("bote", "ondas fortes, lotado: segue de pé (up.y mín)", upMin, 0.7, 1, "", 2);
+
+  // trim manual: 3 furos + tilt, progressivo, só parado, sem bomba elétrica
+  const tb = mk(["helm"]);
+  const tap = (dir: 1 | -1) => { run(tb, water, 0.1, { ...emptyInput(), trim: dir }); run(tb, water, 0.1, emptyInput()); };
+  const pin0 = tb.telemetry.trimPin;
+  tap(1);
+  const midDeg = (() => { run(tb, water, 0.15, emptyInput()); return tb.telemetry.trimDeg; })();
+  run(tb, water, 1.5, emptyInput());
+  check("bote", "pino inicial = 2 (meio)", pin0, 2, 2, "", 0);
+  check("bote", "trim+ → pino 3 (+4°)", tb.telemetry.trimDeg, 3.9, 4.1, "°", 2);
+  check("bote", "troca de pino é progressiva (° no meio do caminho)", midDeg, 0.5, 3.8, "°", 2);
+  tap(1);
+  const tiltMid = (() => { run(tb, water, 0.5, emptyInput()); return tb.telemetry.tiltDeg; })();
+  run(tb, water, 2, emptyInput());
+  check("bote", "trim+ no pino 3 → tilt total (°)", tb.telemetry.tiltDeg, 69, 70.1, "°", 1);
+  check("bote", "tilt sobe aos poucos (° após 0,6 s)", tiltMid, 10, 50, "°", 1);
+  check("bote", "tilt: hélice fora d'água", tb.telemetry.propImmersion, 0, 0.01, "", 2);
+  check("bote", "sem bomba elétrica (A)", tb.telemetry.trimMotorA, 0, 0, "A", 0);
+  tap(-1); run(tb, water, 2, emptyInput()); tap(-1); tap(-1); run(tb, water, 2, emptyInput());
+  check("bote", "abaixa e desce até o pino 1 (−4°)", tb.telemetry.trimDeg, -4.1, -3.9, "°", 2);
+  check("bote", "tilt voltou a 0 (°)", tb.telemetry.tiltDeg, 0, 0.01, "°", 2);
+  // andando não deixa
+  run(tb, water, 4, { ...emptyInput(), gear: "F", throttle: 0.6 });
+  const pinMoving = tb.telemetry.trimPin;
+  run(tb, water, 0.1, { ...emptyInput(), gear: "F", throttle: 0.6, trim: 1 });
+  check("bote", "andando: mudança de pino recusada", tb.telemetry.trimPin === pinMoving && tb.telemetry.tiltBlocked ? 1 : 0, 1, 1, "", 0);
+
+  // partida na corda: sem bateria; pega em algumas puxadas
+  const pb = mk(["helm"]);
+  check("bote", "sem bateria (V)", pb.telemetry.batteryV, 0, 0, "V", 1);
+  run(pb, water, 0.5, emptyInput()); pb.toggleIgnition(); run(pb, water, 1, emptyInput());
+  check("bote", "P desliga o motor", pb.telemetry.engine === "off" ? 1 : 0, 1, 1, "", 0);
+  let pulls = 0;
+  while (pb.telemetry.engine !== "running" && pulls < 12) { pulls++; pb.toggleIgnition(); run(pb, water, 1.2, emptyInput()); }
+  check("bote", "corda: pegou em até 12 puxadas", pb.telemetry.engine === "running" ? pulls : 99, 1, 12, "puxadas", 0);
 }
 
 // ---------- Carga: gasolina e ocupantes (quantidade e posição) ----------

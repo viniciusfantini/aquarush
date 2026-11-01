@@ -17,6 +17,8 @@ export interface EngineSystemsParams {
    *  mal arranham uma bateria de 50 Ah; o jogo acelera para o efeito aparecer numa sessão. */
   batteryTimeScale: number;
   starterA: number;          // corrente do motor de arranque (A)
+  /** false = motor de partida manual sem bateria (bote): sem tensão, sem alternador */
+  hasBattery: boolean;
 }
 
 export const ENGINE_SYSTEMS: EngineSystemsParams = {
@@ -30,6 +32,7 @@ export const ENGINE_SYSTEMS: EngineSystemsParams = {
   batteryAh: 50,
   batteryTimeScale: 10,
   starterA: 170,
+  hasBattery: true,
 };
 
 export interface EngineSystemsInput {
@@ -66,7 +69,7 @@ export class EngineSystems {
   get fuelFrac(): number { return this.fuelL / this.p.tankLiters; }
   get overheatWarn(): boolean { return this.coolantC >= this.p.warnC; }
   get lowFuel(): boolean { return this.fuelFrac < 0.12; }
-  get chargeWarn(): boolean { return this.batteryV < 12.2; }
+  get chargeWarn(): boolean { return this.p.hasBattery && this.batteryV < 12.2; }
   /** Resistência interna (Ω): sobe quando a bateria descarrega — a tensão despenca na partida. */
   get internalR(): number { return 0.009 + 0.03 * (1 - this.batterySoc) ** 2; }
   /** Tensão em repouso pelo estado de carga (11,9 V vazia .. 12,7 V cheia). */
@@ -77,7 +80,7 @@ export class EngineSystems {
   /** Pode dar partida? (combustível, bateria e temperatura) */
   canStart(): "" | "fuel" | "battery" | "overheat" {
     if (this.fuelL <= 0.05) return "fuel";
-    if (this.batterySoc < 0.03) return "battery"; // morta: nem o relé arma
+    if (this.p.hasBattery && this.batterySoc < 0.03) return "battery"; // morta: nem o relé arma
     if (this.coolantC > this.p.protectC) return "overheat";
     return "";
   }
@@ -114,6 +117,8 @@ export class EngineSystems {
     else if (this.coolantC < P.warnC - 5) this.protect = false;
 
     // ---- elétrico: bateria + alternador ----
+    if (!P.hasBattery) { this.batteryV = 0; this.batterySoc = 0; }
+    else {
     const charging = running && s.rpm > 900;
     let drain = (s.lightsOn ? 2.5 : 0.3) + (s.trimMotorA ?? 0); // A (instrumentos + luzes + bomba do trim)
     if (s.engine === "cranking") drain += P.starterA * (s.starterLoad ?? 1); // motor de arranque
@@ -127,6 +132,7 @@ export class EngineSystems {
     if (charging && net >= 0) vTarget = 13.6 + 0.6 * Math.min((s.rpm - 900) / 2500, 1); // regulador 13,6–14,2 V
     else if (charging) vTarget = Math.max(rest - (-net) * R, 13.6 + 0.6 * Math.min((s.rpm - 900) / 2500, 1) + net * 0.03); // alternador não dá conta
     this.batteryV += (vTarget - this.batteryV) * (1 - Math.exp(-dt / (s.engine === "cranking" ? 0.06 : 0.25)));
+    }
 
     // ---- horímetro ----
     if (running) this.engineHours += dt / 3600;

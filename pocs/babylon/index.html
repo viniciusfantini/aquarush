@@ -15,6 +15,16 @@
 
     #loading { position: fixed; inset: 0; display: grid; place-items: center; background: #0b1a24; font-size: 18px; letter-spacing: 0.2em; transition: opacity 0.6s; z-index: 5; }
     #loading.done { opacity: 0; pointer-events: none; }
+    #loading { grid-auto-flow: row; align-content: center; gap: 22px; padding: 16px; text-align: center; }
+    #loading .brand { font-size: 28px; letter-spacing: 0.3em; }
+    #pick.hidden { display: none; }
+    .pick-t { font-size: 13px; letter-spacing: 0.15em; color: var(--dim); margin-bottom: 12px; }
+    .pick-row { display: flex; flex-wrap: wrap; gap: 14px; justify-content: center; }
+    .pick-b { width: min(300px, calc(100vw - 32px)); display: grid; gap: 6px; padding: 16px; border-radius: 14px; border: 1px solid rgba(255,255,255,0.25); background: rgba(41, 211, 194, 0.08); color: var(--fg); font: inherit; letter-spacing: 0.02em; text-align: left; cursor: pointer; }
+    .pick-b:hover, .pick-b:focus-visible { background: rgba(41, 211, 194, 0.22); border-color: var(--accent); outline: none; }
+    .pick-b b { font-size: 17px; }
+    .pick-b span { font-size: 12.5px; color: var(--dim); letter-spacing: 0; }
+    #loading-msg { font-size: 12px; letter-spacing: 0.15em; color: var(--dim); min-height: 1em; }
 
     /* relógios (SVG) — canto inferior direito, sem sobreposição */
     #gauges { position: absolute; right: 14px; bottom: 12px; display: flex; gap: 10px; align-items: flex-end; padding: 10px 12px; }
@@ -96,7 +106,17 @@
 </head>
 <body>
   <canvas id="game"></canvas>
-  <div id="loading">AQUA RUSH</div>
+  <div id="loading">
+    <div class="brand">AQUA RUSH</div>
+    <div id="pick" class="hidden">
+      <div class="pick-t">Escolha o barco</div>
+      <div class="pick-row">
+        <button class="pick-b" data-kind="lancha"><b>Lancha AR-6</b><span>6 m · 150 hp · até 4 pessoas</span><span>volante, manete, power trim elétrico, partida na chave</span></button>
+        <button class="pick-b" data-kind="bote"><b>Bote de apoio AR-3</b><span>3,1 m · 15 hp · até 3 pessoas</span><span>cana do leme no motor, partida na corda, trim manual (3 furos + tilt)</span></button>
+      </div>
+    </div>
+    <div id="loading-msg"></div>
+  </div>
   <div id="ui">
     <div id="leftcol">
       <div id="status">
@@ -111,6 +131,7 @@
         <div class="chip" id="h-charge">BATERIA</div>
         <div class="chip btn" id="h-water">ÁGUA: LAGO</div>
         <div class="chip btn" id="h-occ">OCUPANTES: 1</div>
+        <div class="chip btn" id="h-vessel">TROCAR BARCO</div>
       </div>
       <div id="h-debug" class="panel"></div>
     </div>
@@ -119,11 +140,11 @@
       <div>Manete: toque <kbd>S</kbd>/<kbd>↓</kbd> → <b>N</b>, de novo → <b>R</b> (ré lenta)</div>
       <div>toque <kbd>W</kbd>/<kbd>↑</kbd> → <b>N</b>, de novo → <b>F</b> (frente lenta) · <b>segure</b> para acelerar</div>
       <div><kbd>A</kbd><kbd>D</kbd>/<kbd>←</kbd><kbd>→</kbd> direção</div>
-      <div><kbd>E</kbd> trim + (proa sobe) · <kbd>Q</kbd> trim − (proa desce)</div>
-      <div><kbd>C</kbd> câmera · <kbd>L</kbd> luzes · <kbd>R</kbd> reposicionar (30 L)</div>
-      <div><kbd>O</kbd> ocupantes (1 · carona · 2 na popa · 4) — mudam o peso e o equilíbrio</div>
+      <div id="help-trim"><kbd>E</kbd> trim + (proa sobe) · <kbd>Q</kbd> trim − (proa desce)</div>
+      <div><kbd>C</kbd> câmera · <kbd>L</kbd> luzes · <kbd>R</kbd> reposicionar (3 L)</div>
+      <div id="help-occ"><kbd>O</kbd> ocupantes (1 · carona · 2 na popa · 4) — mudam o peso e o equilíbrio</div>
       <div><kbd>0</kbd>/<kbd>G</kbd> água vidro · <kbd>1</kbd> calma · <kbd>2</kbd> lago · <kbd>3</kbd> forte · <kbd>V</kbd> alterna</div>
-      <div><kbd>P</kbd> liga/desliga o motor (partida só em <b>N</b>) · <kbd>Esc</kbd> pausa</div>
+      <div id="help-ign"><kbd>P</kbd> liga/desliga o motor (partida só em <b>N</b>) · <kbd>Esc</kbd> pausa</div>
       <div><kbd>F3</kbd> telemetria · <kbd>H</kbd> ajuda</div>
       <div>Mouse: arraste para orbitar a câmera</div>
       <div>Gamepad: RT/LT, analógico, LB/RB trim, Y câmera</div>
