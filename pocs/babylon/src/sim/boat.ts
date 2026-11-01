@@ -19,6 +19,8 @@ const NO_PILOT: VehicleInput = emptyInput();
 import { EngineSystems } from "./engineSystems.ts";
 
 const RHO = 1000;     // água doce, kg/m³
+/** Rotação máxima em neutro (a central do motor limita o giro sem carga na hélice). */
+export const NEUTRAL_REV_LIMIT = 3000;
 const RHO_AIR = 1.2;
 
 export type Gear = "F" | "N" | "R";
@@ -77,6 +79,9 @@ export interface BoatTelemetry {
   trimPin: number;       // trim manual: furo do pino 1..N, N+1 = tilt total; 0 = power trim
   pullStart: boolean;    // partida na corda (sem arranque elétrico)
   trimMotorA: number;    // corrente da bomba do power trim (A)
+  trimRelay: boolean;    // botão do trim apertado mas a bomba sem força (bateria zerada): só o relé estala
+  jumper: boolean;       // booster de partida (jump start) ligado na bateria
+  neutralRev: boolean;   // acelerando em neutro (botão de aceleração em neutro segurado)
   depth: number;         // profundidade sob o casco
   draftHull: number;     // calado do casco (m abaixo da superfície no ponto mais fundo do fundo)
   draftMotor: number;    // calado com o motor (ponta do pé — o que bate primeiro no raso)
@@ -110,6 +115,7 @@ export class Speedboat {
 
   // estado dos atuadores
   private throttleActual = 0;
+  private neutralRev = false;
   private steer = 0;           // rad
   trim = 0;                    // -1..1
   gear: Gear = "N";
@@ -216,7 +222,7 @@ export class Speedboat {
     this.rpm = params.idleRpm;
     this.telemetry = {
       speedKmh: 0, waterSpeed: 0, rpm: params.idleRpm, throttle: 0, throttleCmd: 0, trim: 0, trimDeg: 0, tiltDeg: 0, tiltBlocked: false, intakeSubmerged: true, steerDeg: 0,
-      gear: "N", pitchDeg: 0, rollDeg: 0, wetFraction: 0, planing: false, thrustN: 0, ventilation: 1, cavitation: 0, propImmersion: 1, revLimiter: false, propSlip: 0, propRpm: 0, engine: "running", fuelL: 0, fuelFrac: 1, coolantC: 45, batteryV: 12.6, engineHours: 0, overheatWarn: false, protectMode: false, lowFuel: false, chargeWarn: false, stall: "", trimMotorA: 0, fuelLph: 0, buzzer: false, starterRpm: 0, startFail: "", batterySoc: 0.92, trimPin: 0, pullStart: !params.electricStart,
+      gear: "N", pitchDeg: 0, rollDeg: 0, wetFraction: 0, planing: false, thrustN: 0, ventilation: 1, cavitation: 0, propImmersion: 1, revLimiter: false, propSlip: 0, propRpm: 0, engine: "running", fuelL: 0, fuelFrac: 1, coolantC: 45, batteryV: 12.6, engineHours: 0, overheatWarn: false, protectMode: false, lowFuel: false, chargeWarn: false, stall: "", trimMotorA: 0, trimRelay: false, jumper: false, neutralRev: false, fuelLph: 0, buzzer: false, starterRpm: 0, startFail: "", batterySoc: 0.92, trimPin: 0, pullStart: !params.electricStart,
       distanceM: 0, collisions: 0, draftHull: 0, draftMotor: 0, capsized: false, swimmers: 0, hullDamage: 0, engineDamage: 0, damageEvent: "", damageCount: 0, lastImpact: 0, depth: 0, submergedPoints: params.buoyancyPoints.map(() => false),
     };
   }
@@ -494,7 +500,7 @@ export class Speedboat {
     // sistemas do motor: combustível, temperatura, bateria, horímetro
     const sys = this.systems;
     sys.update(dt, { engine: this.engine, rpm: t.rpm, fuelLph: t.fuelLph, load: this.throttleActual, intakeSubmerged, lightsOn: input.navigationLights, trimMotorA: this.trimMotorA });
-    t.trimMotorA = this.trimMotorA;
+    t.trimMotorA = this.trimMotorA; t.jumper = sys.jumper; t.neutralRev = this.neutralRev;
     if (sys.stallReason && this.engine === "running") { this.engine = "off"; t.stall = sys.stallReason; }
     t.fuelL = sys.fuelL; t.fuelFrac = sys.fuelFrac; t.coolantC = sys.coolantC; t.batteryV = sys.batteryV;
     t.engineHours = sys.engineHours; t.overheatWarn = sys.overheatWarn; t.protectMode = sys.protect;
@@ -538,10 +544,14 @@ export class Speedboat {
     //    a hélice sai da água. Bloqueado em velocidade ou rotação alta (como nos motores reais).
     const trimIn = clamp(input.trim, -1, 1);
     this.tiltBlocked = false;
+    this.telemetry.trimRelay = false;
     if (P.trimMode === "manual") { this.updateManualTrim(dt, trimIn, input.throttle); this.trimMotorA = 0; }
     else {
-    // bomba elétrica do power trim: velocidade cai com a tensão da bateria (motor DC)
-    const vFactor = clamp((this.systems.batteryV - 9.5) / 3, 0.25, 1.05);
+    // bomba elétrica do power trim: velocidade cai com a tensão da bateria (motor DC); com a bateria
+    // zerada (abaixo de ~9 V sob a carga da bomba) o relé fecha mas a bomba não gira — só o estalo
+    const pumpOk = this.systems.trimPumpOk;
+    const vFactor = pumpOk ? clamp((this.systems.batteryV - 9.5) / 3, 0.25, 1.05) : 0;
+    this.telemetry.trimRelay = !pumpOk && Math.abs(trimIn) > 0.05;
     const trimBefore = this.trim, tiltBefore = this.tilt;
     if (trimIn > 0 && this.trim >= 1) {
       // O que impede o tilt é a CARGA no pé: o empuxo da hélice (e a água em velocidade alta) segura o
@@ -561,7 +571,7 @@ export class Speedboat {
     // (válvula de alívio) — o botão pressionado sempre puxa corrente
     if (Math.abs(trimIn) > 0.05) {
       const moved = this.trim !== trimBefore || this.tilt !== tiltBefore;
-      this.trimMotorA = !moved ? 45 : this.tilt !== tiltBefore ? 40 : 30;
+      this.trimMotorA = !pumpOk ? 1.5 : !moved ? 45 : this.tilt !== tiltBefore ? 40 : 30; // sem força: só a bobina do relé
     } else this.trimMotorA = 0;
     }
 
@@ -581,7 +591,10 @@ export class Speedboat {
       this.shiftTimer -= dt;
       if (this.shiftTimer <= 0 && this.throttleActual < 0.12) this.gear = this.wantGear;
     }
-    let target = this.gear === "N" || this.engine !== "running" ? 0 : cmd;
+    // aceleração em neutro (botão da manete segurado com a marcha em N): o motor sobe o giro sem
+    // engatar — para aquecer ou testar. Só em N; a rotação fica limitada pela central (NEUTRAL_REV_LIMIT).
+    this.neutralRev = this.gear === "N" && this.wantGear === "N" && !!input.neutralThrottle && this.engine === "running";
+    let target = (this.gear === "N" && !this.neutralRev) || this.engine !== "running" ? 0 : cmd;
     if (this.systems.protect) target = Math.min(target, 0.3);   // modo de proteção
     if (this.systems.starving) target = Math.min(target, 0.05); // engasgando sem combustível
     this.throttleActual += (target - this.throttleActual) * (1 - Math.exp(-dt / P.engineResponse));
@@ -724,7 +737,7 @@ export class Speedboat {
     t.trim = this.trim; t.trimDeg = trimAngle * 57.2958; t.tiltDeg = this.tilt * 57.2958;
     t.tiltBlocked = this.tiltBlocked || this.manualBlockT > 0;
     t.trimPin = P.trimMode === "manual" ? (this.tiltWanted ? P.trimPins.length + 1 : this.trimPin + 1) : 0;
-    t.trimMotorA = this.trimMotorA; t.batteryV = sys.batteryV; t.batterySoc = sys.batterySoc;
+    t.trimMotorA = this.trimMotorA; t.batteryV = sys.batteryV; t.batterySoc = sys.batterySoc; t.jumper = sys.jumper;
     t.fuelL = sys.fuelL; t.fuelFrac = sys.fuelFrac; t.coolantC = sys.coolantC; t.engineHours = sys.engineHours;
     t.overheatWarn = sys.overheatWarn; t.protectMode = sys.protect; t.lowFuel = sys.lowFuel; t.chargeWarn = sys.chargeWarn;
     t.buzzer = this.selfTestT > 0; t.starterRpm = this.engine === "cranking" ? this.rpm : 0;
@@ -891,6 +904,7 @@ export class Speedboat {
     // limitador de giro: corta a ignição em pulsos quando passa do limite
     // modo de proteção (superaquecimento): a central limita a rotação; falta de combustível: engasga
     if (this.systems.protect) target = Math.min(target, this.systems.p.protectRpm);
+    if (this.gear === "N") target = Math.min(target, NEUTRAL_REV_LIMIT); // central limita o giro em neutro
     if (this.systems.starving) target = Math.min(target, P.idleRpm * 0.8);
     this.revLimiting = this.engine === "running" && target > P.revLimitRpm;
     if (this.revLimiting) {

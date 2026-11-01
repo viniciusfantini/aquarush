@@ -4,7 +4,7 @@ declare const performance: { now(): number };
 // direto no módulo de simulação. Uso: `npm run test:sim` (Node >= 22.18, type stripping nativo).
 // Saída: tabela de medições + PASS/FAIL por critério. Código de saída != 0 se algo falhar.
 
-import { Speedboat } from "../src/sim/boat.ts";
+import { Speedboat, NEUTRAL_REV_LIMIT } from "../src/sim/boat.ts";
 import { SPEEDBOAT, DINGHY, PERSON_KG, type Occupant } from "../src/sim/params.ts";
 import { GerstnerWater, WAVE_PRESETS, type CurrentZone } from "../src/sim/water.ts";
 import type { PhysicsWorld } from "../src/sim/world.ts";
@@ -395,6 +395,48 @@ for (const [label, thr] of [["baixa", 0.25], ["alta", 1]] as const) {
   ch.systems.batterySoc = 0.4;
   run(ch, water, 60, { ...emptyInput(), gear: "F", throttle: 0.6 });
   check("bateria", "1 min navegando: recarga (%)", (ch.systems.batterySoc - 0.4) * 100, 3, 20, "%", 1);
+  // bateria zerada: tensão bem abaixo de 12 V, trim/tilt sem força (só o relé), nem o relé de partida arma
+  const z = off(0);
+  check("bateria", "zerada: tensão em repouso (V)", z.telemetry.batteryV, 9.8, 10.8, "V", 2);
+  const ang = () => z.telemetry.trimDeg + z.telemetry.tiltDeg;
+  const trim0 = ang();
+  let relay = false, maxA = 0;
+  run(z, water, 3, { ...N, trim: 1 }, openWater, () => { relay ||= z.telemetry.trimRelay; maxA = Math.max(maxA, z.telemetry.trimMotorA); });
+  check("bateria", "zerada: trim/tilt não se move (°)", Math.abs(ang() - trim0), 0, 0.01, "°", 3);
+  check("bateria", "zerada: só o relé do trim estala", relay ? 1 : 0, 1, 1, "", 0);
+  check("bateria", "zerada: corrente só da bobina do relé (A)", maxA, 0, 2, "A", 1);
+  check("bateria", "zerada: partida recusada (relé não arma)", z.toggleIgnition() === "lowBattery" ? 1 : 0, 1, 1, "", 0);
+  // jump start: o booster em paralelo dá força ao trim e à partida; depois o alternador recarrega
+  z.systems.jumper = true;
+  run(z, water, 0.5, N);
+  check("bateria", "jump start: tensão com o booster (V)", z.telemetry.batteryV, 12.4, 13.2, "V", 2);
+  const tj0 = ang();
+  run(z, water, 1.5, { ...N, trim: -1 });
+  check("bateria", "jump start: trim volta a mover (°)", Math.abs(ang() - tj0), 1, 30, "°", 1);
+  const js = tryStart(z);
+  check("bateria", "jump start: o motor pega (s)", js.tRun, 1.2, 4, "s", 2);
+  z.systems.jumper = false;
+  const socJ = z.systems.batterySoc;
+  run(z, water, 60, { ...emptyInput(), gear: "F", throttle: 0.6 });
+  check("bateria", "depois do jump start, 1 min navegando recarrega (%)", (z.systems.batterySoc - socJ) * 100, 3, 20, "%", 1);
+}
+
+// ---------- Aceleração em neutro (botão da manete segurado em N) ----------
+{
+  const water = mkWater(0);
+  const b = new Speedboat(SPEEDBOAT, v3(0, 0.25, 0));
+  run(b, water, 2, { ...emptyInput(), gear: "N" });
+  run(b, water, 4, { ...emptyInput(), gear: "N", throttle: 1 });
+  check("neutro", "N sem o botão: acelerador ignorado (rpm)", b.telemetry.rpm, 600, 900, "rpm", 0);
+  let maxSpeed = 0, maxThrust = 0;
+  run(b, water, 5, { ...emptyInput(), gear: "N", throttle: 1, neutralThrottle: true }, openWater, () => { maxSpeed = Math.max(maxSpeed, Math.abs(b.telemetry.speedKmh)); maxThrust = Math.max(maxThrust, Math.abs(b.telemetry.thrustN)); });
+  check("neutro", "N + botão: o giro sobe (rpm)", b.telemetry.rpm, 2500, NEUTRAL_REV_LIMIT + 50, "rpm", 0);
+  check("neutro", "N + botão: sem empuxo (N)", maxThrust, 0, 1, "N", 0);
+  check("neutro", "N + botão: a lancha não anda (km/h)", maxSpeed, 0, 0.5, "km/h", 2);
+  // soltando o botão e pedindo F: só engata depois que o giro cai
+  let engagedAt = -1;
+  run(b, water, 4, { ...emptyInput(), gear: "F" }, openWater, (t) => { if (engagedAt < 0 && b.telemetry.gear === "F") engagedAt = t; });
+  check("neutro", "depois de acelerar em N, F engata só com o giro baixo (s)", engagedAt, 0.4, 3, "s", 2);
 }
 
 // ---------- Bote de apoio (15 hp, cana do leme, trim manual, partida na corda) ----------

@@ -162,7 +162,7 @@ export class Hud {
     this.fuelG.set(t.fuelFrac, `${t.fuelL.toFixed(1)} L`, `${t.fuelLph.toFixed(1)} L/h`, t.lowFuel);
     this.fuelAut.textContent = autTxt ? `autonomia${autTxt.replace(" ·", "")}` : "";
     this.tempG?.set(t.coolantC, `${t.coolantC.toFixed(0)}°C`, t.protectMode ? "PROTEÇÃO" : t.overheatWarn ? "QUENTE" : "", t.overheatWarn);
-    this.voltG?.set(t.batteryV, `${t.batteryV.toFixed(1)} V`, t.engine === "running" && t.batteryV > 13.2 ? "carga" : `${Math.round(t.batterySoc * 100)}%`, t.chargeWarn);
+    this.voltG?.set(t.batteryV, `${t.batteryV.toFixed(1)} V`, t.jumper ? "jump" : t.engine === "running" && t.batteryV > 13.2 ? "carga" : `${Math.round(t.batterySoc * 100)}%`, t.chargeWarn);
     // barras de acelerador e trim (como antes)
     this.thrBar.style.height = `${t.throttle * 100}%`;
     this.thrBar.classList.toggle("rev", t.gear === "R");

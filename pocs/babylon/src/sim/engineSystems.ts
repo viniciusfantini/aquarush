@@ -2,7 +2,7 @@
 // elétrico (bateria/alternador) e horímetro. Modelos simples, documentados e testáveis;
 // alimentam o HUD e os instrumentos do painel 3D (nada decorativo).
 
-import { clamp } from "./math.ts";
+import { clamp, smoothstep } from "./math.ts";
 
 export interface EngineSystemsParams {
   tankLiters: number;
@@ -55,6 +55,10 @@ export class EngineSystems {
   engineHours = 0;
   /** motor em modo de proteção (superaquecido): rotação limitada */
   protect = false;
+  /** booster portátil (jump start) ligado nos bornes, em paralelo com a bateria */
+  jumper = false;
+  /** corrente do alternador no último passo (A) */
+  private altA = 0;
   /** pedido de desligamento (sem combustível ou superaquecimento extremo) */
   stallReason: "" | "fuel" | "overheat" = "";
   private sputter = 0;
@@ -72,15 +76,28 @@ export class EngineSystems {
   get chargeWarn(): boolean { return this.p.hasBattery && this.batteryV < 12.2; }
   /** Resistência interna (Ω): sobe quando a bateria descarrega — a tensão despenca na partida. */
   get internalR(): number { return 0.009 + 0.03 * (1 - this.batterySoc) ** 2; }
-  /** Tensão em repouso pelo estado de carga (11,9 V vazia .. 12,7 V cheia). */
-  get restV(): number { return 11.9 + 0.8 * this.batterySoc; }
+  /**
+   * Tensão em repouso pelo estado de carga (chumbo-ácido 12 V): 12,7 V cheia, ~12,2 V a 50 %, ~11,9 V a 15 %;
+   * abaixo disso despenca — zerada fica em ~10,2 V (célula esgotada).
+   */
+  get restV(): number { return 12.7 - 0.9 * (1 - this.batterySoc) - 1.6 * (1 - smoothstep(0, 0.15, this.batterySoc)); }
   /** Tensão nos bornes com o arranque puxando a corrente cheia (para prever a partida). */
-  get crankV(): number { return this.restV - this.p.starterA * this.internalR; }
+  get crankV(): number { return this.supplyV(this.p.starterA); }
+  /** Fonte vista pelos consumidores: bateria sozinha ou em paralelo com o booster (12,9 V, 6 mΩ). */
+  private get source(): { v: number; r: number } {
+    const v = this.restV, r = this.internalR + 0.003;
+    if (!this.jumper) return { v, r };
+    return { v: Math.max(v, 12.9), r: 0.006 };
+  }
+  /** Tensão nos bornes puxando `amps` (o alternador, girando, cobre parte da corrente). */
+  supplyV(amps: number): number { const s = this.source; return s.v - Math.max(0, amps - this.altA) * s.r; }
+  /** A bomba do power trim tem força para girar? (abaixo de ~9 V sob carga só o relé estala) */
+  get trimPumpOk(): boolean { return !this.p.hasBattery || this.supplyV(40) >= 9; }
 
   /** Pode dar partida? (combustível, bateria e temperatura) */
   canStart(): "" | "fuel" | "battery" | "overheat" {
     if (this.fuelL <= 0.05) return "fuel";
-    if (this.p.hasBattery && this.batterySoc < 0.03) return "battery"; // morta: nem o relé arma
+    if (this.p.hasBattery && this.supplyV(5) < 10.5) return "battery"; // morta: nem o relé arma
     if (this.coolantC > this.p.protectC) return "overheat";
     return "";
   }
@@ -123,11 +140,15 @@ export class EngineSystems {
     let drain = (s.lightsOn ? 2.5 : 0.3) + (s.trimMotorA ?? 0); // A (instrumentos + luzes + bomba do trim)
     if (s.engine === "cranking") drain += P.starterA * (s.starterLoad ?? 1); // motor de arranque
     const alt = charging ? Math.min(15, (s.rpm - 900) / 120) : 0; // A do alternador
-    this.batterySoc = clamp(this.batterySoc + ((alt - drain) * dt * P.batteryTimeScale) / 3600 / this.p.batteryAh, 0, 1);
-    const rest = this.restV;
+    this.altA = alt;
+    // com o booster ligado ele fornece a corrente (e ainda carrega a bateria devagar, ~4 A)
+    const battNet = this.jumper ? alt + 4 : alt - drain;
+    this.batterySoc = clamp(this.batterySoc + (battNet * dt * P.batteryTimeScale) / 3600 / this.p.batteryAh, 0, 1);
+    const src = this.source;
+    const rest = src.v;
     // queda de tensão = (resistência interna, que cresce com a descarga, + fiação) × corrente líquida
     const net = alt - drain;
-    const R = this.internalR + 0.003;
+    const R = src.r;
     let vTarget = rest - Math.max(0, -net) * R;
     if (charging && net >= 0) vTarget = 13.6 + 0.6 * Math.min((s.rpm - 900) / 2500, 1); // regulador 13,6–14,2 V
     else if (charging) vTarget = Math.max(rest - (-net) * R, 13.6 + 0.6 * Math.min((s.rpm - 900) / 2500, 1) + net * 0.03); // alternador não dá conta

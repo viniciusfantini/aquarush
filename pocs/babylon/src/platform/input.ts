@@ -5,7 +5,7 @@
 import { type VehicleInput, type GearCommand, emptyInput } from "../gameplay/vehicleInput.ts";
 import { approach, clamp } from "../sim/math.ts";
 
-export type Action = "camera" | "lights" | "reset" | "ramp" | "unhitch" | "fuel" | "moor" | "car" | "horn" | "couple" | "debug" | "help" | "pause" | "ignition" | "occupants" | "water0" | "water1" | "water2" | "water3" | "waterNext";
+export type Action = "camera" | "lights" | "reset" | "ramp" | "unhitch" | "fuel" | "moor" | "car" | "horn" | "couple" | "debug" | "help" | "pause" | "ignition" | "occupants" | "jump" | "water0" | "water1" | "water2" | "water3" | "waterNext";
 
 /**
  * Manete única (como numa lancha real), com detentes  R ← N → F:
@@ -50,7 +50,7 @@ export class InputManager {
       this.keys.add(e.code);
       this.lastDevice = "teclado";
       const map: Record<string, Action> = {
-        KeyC: "camera", KeyL: "lights", KeyR: "reset", KeyT: "ramp", KeyU: "unhitch", KeyF: "fuel", KeyM: "moor", KeyK: "car", KeyB: "horn", KeyI: "couple", F3: "debug", KeyH: "help", KeyP: "ignition", Escape: "pause", KeyO: "occupants",
+        KeyC: "camera", KeyL: "lights", KeyR: "reset", KeyT: "ramp", KeyU: "unhitch", KeyF: "fuel", KeyM: "moor", KeyK: "car", KeyB: "horn", KeyI: "couple", F3: "debug", KeyH: "help", KeyP: "ignition", Escape: "pause", KeyO: "occupants", KeyJ: "jump",
         Digit0: "water0", Digit1: "water1", Digit2: "water2", Digit3: "water3", KeyG: "water0", KeyV: "waterNext",
       };
       const a = map[e.code];
@@ -99,13 +99,16 @@ export class InputManager {
     const upAmt = Math.max(this.k("KeyW", "ArrowUp") ? 1 : 0, gpUp);
     const downAmt = Math.max(this.k("KeyS", "ArrowDown") ? 1 : 0, gpDown);
     const up = upAmt > 0.3, down = downAmt > 0.3;
-    if (up && !this.prevUp) this.press("up");
-    if (down && !this.prevDown) this.press("down");
+    // N segurado = botão de aceleração em neutro da manete: a manete fica em N e "para frente" só sobe o giro
+    const nHeld = this.k("KeyN");
+    if (nHeld && this.gear !== "N") { this.touchLever = null; this.setGear("N"); }
+    if (!nHeld && up && !this.prevUp) this.press("up");
+    if (!nHeld && down && !this.prevDown) this.press("down");
     if (!up && !down) { this.holdTime = 0; this.pressShifted = false; } else this.holdTime += dt;
     this.prevUp = up; this.prevDown = down;
 
-    const holding = (this.gear === "F" && up) || (this.gear === "R" && down);
-    const amt = this.gear === "F" ? upAmt : downAmt;
+    const holding = (this.gear === "F" && up) || (this.gear === "R" && down) || (nHeld && up);
+    const amt = this.gear === "R" ? downAmt : upAmt;
     const canRamp = holding && (!this.pressShifted || this.holdTime > HOLD_TO_THROTTLE);
     this.leverThrottle = approach(this.leverThrottle, canRamp ? amt : 0, (canRamp ? 0.9 : 1.6) * dt);
 
@@ -127,6 +130,7 @@ export class InputManager {
     s.steering = clamp(this.kbSteer + gpSteer + this.touchSteer, -1, 1);
     s.trim = clamp(kbTrim + gpTrim + this.touchTrim, -1, 1);
     s.navigationLights = this.lights;
+    s.neutralThrottle = nHeld && this.gear === "N";
     return s;
   }
 

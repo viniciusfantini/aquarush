@@ -66,6 +66,7 @@ export interface AudioState {
   engine: "off" | "cranking" | "running";
   revLimiter?: boolean;   // limitador cortando a ignição
   trimMotorA?: number;    // bomba elétrica do power trim (A)
+  trimRelay?: boolean;    // botão do trim sem força (bateria zerada): só o relé estala
   buzzer?: boolean;       // alarme do motor (autoteste da chave: "piiii")
   starterRpm?: number;    // rotação do arranque (cai com a bateria fraca)
   pullStart?: boolean;    // partida na corda (sem motor de arranque elétrico)
@@ -306,7 +307,8 @@ export class EngineAudio {
     this.st1.frequency.setTargetAtTime(500 + 2.6 * sRpm, t, 0.05);
     if (st.engine === "cranking" && !st.pullStart && sRpm < 40 && t > this.solenoidT) { this.solenoidT = t + 0.35; this.clunk(false); }
     this.buzzGain.gain.setTargetAtTime(m * (st.buzzer ? 0.05 : 0), t, 0.008);
-    const pumpA = st.trimMotorA ?? 0;
+    if (st.trimRelay && t > this.solenoidT) { this.solenoidT = t + 0.45; this.clunk(false); } // relé do trim estalando
+    const pumpA = st.trimRelay ? 0 : st.trimMotorA ?? 0;
     this.pumpGain.gain.setTargetAtTime(m * (pumpA > 0 ? 0.035 : 0), t, 0.03);
     // sob carga (batente/tilt) o motor DC desacelera: o tom cai
     this.pumpOsc.frequency.setTargetAtTime(pumpA >= 45 ? 290 : pumpA >= 40 ? 330 : 380, t, 0.08);

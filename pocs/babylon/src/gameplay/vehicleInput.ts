@@ -20,6 +20,8 @@ export interface VehicleInput {
   bilgePump: boolean;
   /** Luzes de navegação (estado). */
   navigationLights: boolean;
+  /** Botão de aceleração em neutro segurado: com a marcha em N o acelerador sobe o giro sem engatar. */
+  neutralThrottle: boolean;
 }
 
 export const emptyInput = (): VehicleInput => ({
@@ -31,4 +33,5 @@ export const emptyInput = (): VehicleInput => ({
   reverse: false,
   bilgePump: false,
   navigationLights: false,
+  neutralThrottle: false,
 });
