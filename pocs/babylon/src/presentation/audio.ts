@@ -9,6 +9,9 @@ export class EngineAudio {
   private filter!: BiquadFilterNode;
   private waterGain!: GainNode;
   private waterFilter!: BiquadFilterNode;
+  private cavGain!: GainNode;
+  private cavFilter!: BiquadFilterNode;
+  private cavLfo!: OscillatorNode;
   muted = false;
 
   start(): void {
@@ -46,10 +49,26 @@ export class EngineAudio {
     this.waterGain = ctx.createGain();
     this.waterGain.gain.value = 0;
     noise.connect(this.waterFilter).connect(this.waterGain).connect(master);
+    // cavitação: chiado/estalo áspero (ruído agudo modulado em amplitude)
+    this.cavFilter = ctx.createBiquadFilter();
+    this.cavFilter.type = "highpass";
+    this.cavFilter.frequency.value = 1800;
+    const am = ctx.createGain();
+    am.gain.value = 0.5;
+    this.cavLfo = ctx.createOscillator();
+    this.cavLfo.type = "square";
+    this.cavLfo.frequency.value = 37;
+    const lfoDepth = ctx.createGain();
+    lfoDepth.gain.value = 0.5;
+    this.cavLfo.connect(lfoDepth).connect(am.gain);
+    this.cavLfo.start();
+    this.cavGain = ctx.createGain();
+    this.cavGain.gain.value = 0;
+    noise.connect(this.cavFilter).connect(am).connect(this.cavGain).connect(master);
     noise.start();
   }
 
-  update(rpm: number, throttle: number, speed: number): void {
+  update(rpm: number, throttle: number, speed: number, boil = 0): void {
     if (!this.ctx) return;
     const t = this.ctx.currentTime;
     const f = rpm / 20; // V6 4 tempos: 3 explosões por volta
@@ -60,5 +79,7 @@ export class EngineAudio {
     this.engGain.gain.setTargetAtTime(m * (0.035 + throttle * 0.07), t, 0.1);
     this.waterGain.gain.setTargetAtTime(m * Math.min(speed / 22, 1) * 0.12, t, 0.15);
     this.waterFilter.frequency.setTargetAtTime(400 + speed * 40, t, 0.2);
+    this.cavGain.gain.setTargetAtTime(m * Math.min(boil, 1) * 0.16 * (0.3 + throttle), t, 0.05);
+    this.cavLfo.frequency.setTargetAtTime(20 + rpm / 120, t, 0.1);
   }
 }

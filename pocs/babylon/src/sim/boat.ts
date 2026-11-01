@@ -34,6 +34,9 @@ export interface BoatTelemetry {
   planing: boolean;
   thrustN: number;
   ventilation: number;   // 1 = hélice bem imersa
+  cavitation: number;    // 0..1 — hélice sobrecarregada (alto escorregamento sob carga)
+  propSlip: number;      // escorregamento da hélice 0..1
+  propRpm: number;       // rotação da hélice (motor / redução)
   fuelLph: number;       // consumo estimado (L/h)
   distanceM: number;
   collisions: number;
@@ -61,6 +64,7 @@ export class Speedboat {
   private wantGear: Gear = "F";
   private rpm = 750;
   private lastContact = false;
+  private cavitation = 0;
 
   telemetry: BoatTelemetry;
   debugForces: ForceDebug[] = [];
@@ -77,7 +81,7 @@ export class Speedboat {
     this.rpm = params.idleRpm;
     this.telemetry = {
       speedKmh: 0, waterSpeed: 0, rpm: params.idleRpm, throttle: 0, throttleCmd: 0, trim: 0, trimDeg: 0, steerDeg: 0,
-      gear: "F", pitchDeg: 0, rollDeg: 0, wetFraction: 0, planing: false, thrustN: 0, ventilation: 1, fuelLph: 0,
+      gear: "F", pitchDeg: 0, rollDeg: 0, wetFraction: 0, planing: false, thrustN: 0, ventilation: 1, cavitation: 0, propSlip: 0, propRpm: 0, fuelLph: 0,
       distanceM: 0, collisions: 0, lastImpact: 0, depth: 0, submergedPoints: params.buoyancyPoints.map(() => false),
     };
   }
@@ -209,7 +213,13 @@ export class Speedboat {
     } else if (this.gear === "R") {
       thrust = -P.maxThrust * P.reverseThrustFactor * this.throttleActual * clamp(1 + axial / (P.propPitchSpeed * 0.6), 0, 1.3);
     }
-    thrust *= ventilation;
+    // Cavitação (aproximação documentada): carga alta com escorregamento alto (arrancada,
+    // ré a toda, hélice "patinando") forma bolhas de vapor -> perde empuxo e a rotação sobe.
+    const slip = this.gear === "N" ? 0 : clamp(1 - Math.abs(axial) / P.propPitchSpeed, 0, 1);
+    const load = Math.abs(thrust) / P.maxThrust;
+    const cavTarget = propDepth > 0 ? clamp((load * slip - 0.55) / 0.25, 0, 1) : 0;
+    this.cavitation += (cavTarget - this.cavitation) * (1 - Math.exp(-dt / 0.15));
+    thrust *= ventilation * (1 - 0.3 * this.cavitation);
     if (thrust !== 0) this.addForceAt(scale(tDir, thrust), propW, "thrust");
 
     // rabeta como "flap": trim gera sustentação/afundamento de popa proporcional a u²
@@ -273,7 +283,10 @@ export class Speedboat {
     t.planing = u > 7 && wetFraction < 0.6;
     t.thrustN = thrust;
     t.ventilation = ventilation;
+    t.cavitation = this.cavitation;
+    t.propSlip = slip;
     t.rpm = this.updateRpm(dt, axial, ventilation);
+    t.propRpm = this.gear === "N" ? 0 : (this.gear === "R" ? -1 : 1) * t.rpm / 2.0; // redução 2:1
     t.fuelLph = 3 + 52 * Math.pow(this.throttleActual, 1.6) * (this.gear === "N" ? 0.3 : 1);
     t.distanceM += Math.hypot(this.pos.x - oldPos.x, this.pos.z - oldPos.z);
     t.depth = water.getDepth(this.pos.x, this.pos.z);
@@ -321,7 +334,7 @@ export class Speedboat {
     // estimativa documentada: rotação cresce com o acelerador; a carga da hélice
     // segura a rotação em baixa velocidade; hélice ventilando dispara a rotação.
     const load = this.gear === "N" ? 1 : lerp(0.68, 1.0, clamp(Math.abs(axial) / (P.propPitchSpeed * 0.75), 0, 1));
-    const freeRev = 1 + (1 - ventilation) * 0.25;
+    const freeRev = 1 + (1 - ventilation) * 0.25 + this.cavitation * 0.12;
     const target = P.idleRpm + (P.maxRpm - P.idleRpm) * Math.pow(thr, 0.85) * load * freeRev;
     this.rpm += (Math.min(target, P.maxRpm * 1.08) - this.rpm) * (1 - Math.exp(-dt / 0.35));
     return this.rpm;

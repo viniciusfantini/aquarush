@@ -20,10 +20,11 @@ src/
   gameplay/vehicleInput.ts  contrato VehicleInput (GDD 9.2)
   platform/input.ts         adaptadores teclado / gamepad / touch → VehicleInput
   presentation/             WATER RENDERING + INTERACTION + UI
-    waterMaterial.ts        shader GLSL com as MESMAS ondas da física
-    waterInteraction.ts     esteira (faixa de espuma) e spray (partículas)
+    waterMaterial.ts        shader GLSL: MESMAS ondas da física + esteira + reflexo planar + vidro
+    wakeMap.ts              mapa de esteira top-down (V de Kelvin, espuma da hélice, fervura de cavitação)
+    waterInteraction.ts     orquestra o mapa de esteira + partículas (spray, rooster tail, bolhas, névoa)
     environment.ts          terreno, rochas, árvores, píer, marina
-    boatMesh.ts             lancha procedural (casco em V, motor que esterça e faz trim)
+    boatMesh.ts             lancha procedural detalhada (PBR), painel com ponteiros, motor e hélice de 3 pás
     cameras.ts              externa (mola + órbita) e cockpit
     hud.ts                  HUD que lê só a telemetria real
     audio.ts                motor/água procedurais (Web Audio)
@@ -45,11 +46,25 @@ A lancha é um **corpo rígido 6DOF** (massa de 1200 kg, tensor de inércia diag
 | "Hump" | sistema de ondas do próprio casco (onda na proa, cavado na popa, em Froude ~0,5): a proa empina antes de planar. Mais resistência de ondas |
 | Propulsão | empuxo na posição da hélice; cai com a velocidade (passo da hélice); direção = esterço + trim; ventila perto da superfície |
 | Trim | inclina o vetor de empuxo e age como flap da rabeta (força ∝ u² na popa). **Muda a atitude e a velocidade de fato** |
+| Cavitação | índice = f(carga × escorregamento da hélice). Com carga alta e pouca velocidade (arrancada), perde até 30 % do empuxo e o RPM sobe. Some em cruzeiro |
+| Ventilação | a hélice perto da superfície (trim alto, saltos) perde empuxo e dispara o RPM |
 | Inclinação em curva | torque ∝ aceleração centrípeta (casco em V) + amortecimento de rolagem |
 | Colisões | penalidade mola-amortecedor com atrito em 12 pontos de contato contra o fundo (função de altura), as rochas (esferas) e o píer (caixas) |
 | Correnteza e ondas | a velocidade relativa à água usa a correnteza; as alturas vêm das mesmas ondas de Gerstner do shader |
 
 **Água compartilhada:** `GerstnerWater.shaderParams()` envia ao shader exatamente as ondas que a física consulta. `getHeight` inverte o deslocamento horizontal de Gerstner por iteração de ponto fixo. No teste, o desvio médio entre o casco e a superfície é de 3 cm.
+
+## Água e interação (v0.2)
+
+- **Presets de água:** vidro (glass: sem ondas nem ondulação fina), calma, lago e forte. A física usa a mesma amplitude que o visual.
+- **Reflexo planar real** (`med`/`high`): a lancha, as margens, as rochas e o píer aparecem refletidos, com a distorção vinda das ondas e da esteira. Em `low` o reflexo é do céu analítico.
+- **Esteira dentro da água** (`wakeMap.ts`): uma textura de 192 m × 192 m ao redor da lancha, redesenhada a cada quadro a partir do histórico da simulação:
+  - braços do V de Kelvin (19,5° em deslocamento, mais fechado em planeio), com crista, cavado e crista secundária que deslocam a superfície e entortam os reflexos;
+  - ondas transversais em baixa velocidade (λ = 2πv²/g);
+  - água revolvida da hélice (espuma que se abre e some) e "bigode" de espuma no costado e na proa;
+  - **fervura de cavitação e ventilação** na popa.
+- **Hélice:** rotação real (motor ÷ 2); disco de borrão em alta rotação; bolhas, névoa e spray extra quando cavita ou ventila; aviso piscante no HUD e chiado no áudio.
+- A água não aparece dentro do cockpit (tampa só de profundidade).
 
 ## Roteiro de testes (GDD A.12): resultados de 2026-10-31
 
@@ -58,19 +73,20 @@ A lancha é um **corpo rígido 6DOF** (massa de 1200 kg, tensor de inércia diag
 | Teste | Resultado medido |
 |---|---|
 | 1. Estabilidade (60 s parada) | oscilação vertical 0,0000 m; pitch 0,39°; roll 0°; deriva 0. Com ondas: pitch ≤ 7°, roll ≤ 3° |
-| 2. Aceleração | 0→30 km/h em 2,0 s; 0→60 km/h em 5,4 s; velocidade final 77 km/h a 5600 rpm; proa empina 8,2° a ~18 km/h (hump); planeio a partir de ~26 km/h |
-| 3. Trim (acelerador 85 %) | pitch −1: 0,0° / 0: 0,6° / +1: 2,0°; velocidade 82,5 / 72,5 / 63,6 km/h |
-| 4. Curva | baixa (22 km/h): raio 6 m. Alta (77 km/h, volante todo): raio 24 m, inclina 2,3° para dentro, perde velocidade |
+| 2. Aceleração | 0→30 km/h em 2,4 s; 0→60 km/h em 5,8 s; velocidade final 77 km/h a 5600 rpm; proa empina ~7,5° a ~17 km/h (hump); planeio a partir de ~25 km/h. Cavitação 0,83 na arrancada e 0 em cruzeiro |
+| 3. Trim (acelerador 85 %) | pitch −1: −0,1° / 0: 0,6° / +1: 2,2°; velocidade 83,5 / 72,5 / 63,1 km/h |
+| 4. Curva | baixa (22 km/h): raio 5 m. Alta (77 km/h, volante todo): raio 17 m, inclina 2,5° para dentro, perde velocidade |
 | 5. Desaceleração e ré | solta o acelerador: do topo a 10 km/h em 12 s; com freio/reverso, em 4,4 s; ré a 23 km/h |
 | 6. Ondas e correnteza | ondas fortes (×2,5): roll ≤ 30°, não emborca; deriva com correnteza de 1,6 m/s: 1,54 m/s |
 | Lago | flutua no spawn; a toda contra a margem, encalha e para sem atravessar o terreno |
 
-Resultado: **41/42 OK**, com 1 limitação conhecida (abaixo).
+Resultado: **43/44 OK**, com 1 limitação conhecida (abaixo). Na v0.2 a hélice foi para 0,5 m atrás do espelho, como no modelo visual, e o esterço máximo em alta velocidade caiu de 13° para 11°.
 
 ### Navegador (Chrome, Windows 11, WebGL2, `q=med`, ~1370×896)
 
 - A cena fica pronta em **~450–840 ms** no servidor de desenvolvimento local.
-- **~86 FPS** navegando a 66 km/h. A física custa **0,14 ms/frame**.
+- v0.1: **~86 FPS** navegando a 66 km/h. A física custa **0,14 ms/frame**.
+- v0.2 (reflexo planar, mapa de esteira 512², PBR): **~85 FPS** a 1775×1161, com 94 malhas ativas.
 - A convenção de quaternions da simulação bate com a da Babylon (verificado em `__aqua.checkConvention()`).
 - Funcionou: aceleração, planeio, curva com esteira curvando, câmera de cockpit, HUD com dados reais e UI touch (`?touch=1`).
 - **Ainda não medido**: celular real, WebGPU, aquecimento e memória (testes 9 e 10 do GDD).
@@ -80,9 +96,11 @@ Resultado: **41/42 OK**, com 1 limitação conhecida (abaixo).
 1. **Ângulo de planeio baixo**: em velocidade final a lancha roda com ~0,6° (uma lancha real roda com 3–5°). O pico do hump (8°) está correto. O teste marca isso como `KNOWN`.
 2. **Trim × velocidade invertido**: trim − deixa a lancha *mais rápida* no modelo. Na prática, um trim + moderado costuma ganhar velocidade. A atitude responde corretamente ao trim. Próximo passo: modelo de comprimento molhado (Savitsky) no lugar da saturação por ponto.
 3. **Bundle grande**: 6,3 MB (1,4 MB gzip), porque importa `@babylonjs/core` inteiro. Dá para otimizar com imports por caminho na fase P5.
-4. Reflexo do céu analítico (não reflete o terreno nem a lancha); sem dia/noite; sem chuva nem vento.
+4. Em `low` não há reflexo planar (só o céu). Sem dia/noite; sem chuva nem vento.
 5. Colisão por pontos: um objeto fino entre dois pontos de contato pode atravessar o costado.
 6. Combustível, danos e porão ainda não existem (o HUD só mostra o consumo estimado).
+7. A física **não sente a esteira**: a lancha não pula a própria marola nem a de outra. A esteira é só visual, gerada a partir da física.
+8. As bolhas são partículas desenhadas antes da água. Com a água vidro e muito transparente, a profundidade delas é aproximada.
 
 ## Próximos passos (POC 1)
 

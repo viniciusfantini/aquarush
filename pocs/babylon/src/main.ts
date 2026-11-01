@@ -4,7 +4,7 @@
 
 import {
   Engine, WebGPUEngine, Scene, Vector3, Quaternion, Color3, Color4, HemisphericLight, DirectionalLight, ShadowGenerator,
-  MeshBuilder, type AbstractEngine, type Mesh,
+  MeshBuilder, ReflectionProbe, RenderTargetTexture, ImageProcessingConfiguration, type AbstractEngine, type Mesh, type AbstractMesh,
 } from "@babylonjs/core";
 import { SkyMaterial } from "@babylonjs/materials/sky/skyMaterial";
 
@@ -14,16 +14,24 @@ import { SPEEDBOAT } from "./sim/params.ts";
 import { GerstnerWater, WAVE_PRESETS } from "./sim/water.ts";
 import { buildWorld, RIVER_CURRENT } from "./sim/world.ts";
 import { v3 } from "./sim/math.ts";
-import { InputManager, attachTouchControls } from "./platform/input.ts";
+import { InputManager, attachTouchControls, type Action } from "./platform/input.ts";
 import { WaterVisual } from "./presentation/waterMaterial.ts";
 import { buildTerrain, buildRocks, buildTrees, buildPier } from "./presentation/environment.ts";
-import { buildBoat, setNavLights } from "./presentation/boatMesh.ts";
+import { buildBoat, setNavLights, needleAngle } from "./presentation/boatMesh.ts";
 import { WaterInteraction } from "./presentation/waterInteraction.ts";
 import { BoatCamera } from "./presentation/cameras.ts";
 import { Hud } from "./presentation/hud.ts";
 import { EngineAudio } from "./presentation/audio.ts";
 
-const BUILD = "poc-babylon 0.1.0";
+const BUILD = "poc-babylon 0.2.0";
+
+/** Presets de água: amplitude das ondas de Gerstner (física + visual) e ondulação fina (visual). */
+const WATER_PRESETS = [
+  { key: "vidro", label: "Água: vidro (glass)", waves: 0, ripple: 0 },
+  { key: "calma", label: "Água: calma", waves: 0.35, ripple: 0.45 },
+  { key: "lago", label: "Água: lago", waves: 1, ripple: 1 },
+  { key: "forte", label: "Água: ondas fortes", waves: 2.5, ripple: 1.4 },
+] as const;
 
 const boot = async () => {
   const cfg = readUrlConfig();
@@ -45,6 +53,11 @@ const boot = async () => {
   scene.fogDensity = 0.0009;
   scene.fogColor = new Color3(0.72, 0.8, 0.86);
   scene.skipPointerMovePicking = true;
+  // grupo 1 = spray (desenhado depois da água, mas respeitando a profundidade da cena)
+  scene.setRenderingAutoClearDepthStencil(1, false, false, false);
+  scene.imageProcessingConfiguration.toneMappingEnabled = true;
+  scene.imageProcessingConfiguration.toneMappingType = ImageProcessingConfiguration.TONEMAPPING_KHR_PBR_NEUTRAL;
+  scene.imageProcessingConfiguration.exposure = 1.05;
 
   // ---------------- luz e céu ----------------
   const sunDir = new Vector3(-0.45, 0.62, 0.55).normalize(); // direção PARA o sol
@@ -69,6 +82,7 @@ const boot = async () => {
   const skybox = MeshBuilder.CreateBox("skyBox", { size: 3000 }, scene);
   skybox.material = skyMat;
   skybox.infiniteDistance = true;
+  skybox.isPickable = false;
 
   // ---------------- simulação ----------------
   const world = buildWorld();
@@ -83,6 +97,14 @@ const boot = async () => {
   const pierMeshes = buildPier(scene, world.pier);
   const buoys = pierMeshes.filter((m) => m.name === "buoy");
   const boatVis = buildBoat(scene);
+  const boatMeshes = boatVis.meshes.filter((m) => m.name !== "propDisc");
+
+  // ambiente para os materiais PBR (céu + margens, renderizado uma vez)
+  const probe = new ReflectionProbe("envProbe", 128, scene);
+  probe.position = new Vector3(0, 6, 0);
+  probe.refreshRate = RenderTargetTexture.REFRESHRATE_RENDER_ONCE;
+  probe.renderList!.push(skybox, terrain, trees);
+  scene.environmentTexture = probe.cubeTexture;
 
   const cam = new BoatCamera(scene, canvas);
   scene.activeCamera = cam.cam;
@@ -90,18 +112,24 @@ const boot = async () => {
   let depth = null;
   if (cfg.quality.depthEffects) {
     depth = scene.enableDepthRenderer(cam.cam, false, true);
-    const list: Mesh[] = [terrain, rocks, ...pierMeshes, ...(boatVis.root.getChildMeshes(false) as Mesh[])];
+    const list: Mesh[] = [terrain, rocks, ...pierMeshes, ...boatMeshes];
     depth.getDepthMap().renderList = list;
   }
-  const waterVis = new WaterVisual(scene, { resolution: cfg.quality.waterResolution, innerExtent: 80, outerExtent: 2600, depth });
+
+  const fx = new WaterInteraction(scene, { particles: cfg.quality.particles, wakeTexture: cfg.quality.wakeTexture });
+  const waterVis = new WaterVisual(scene, {
+    resolution: cfg.quality.waterResolution, innerExtent: 80, outerExtent: 2600, depth, wake: fx.wake, reflectionSize: cfg.quality.reflection,
+  });
   waterVis.sunDir = sunDir;
   waterVis.fogDensity = scene.fogDensity;
+  const reflList: AbstractMesh[] = [skybox, terrain, rocks, trees, ...pierMeshes, ...boatMeshes];
+  waterVis.setReflectionList(reflList);
 
   if (cfg.quality.shadows > 0) {
     const sg = new ShadowGenerator(cfg.quality.shadows, sun);
     sg.usePercentageCloserFiltering = true;
     sg.bias = 0.002;
-    for (const m of boatVis.root.getChildMeshes(false)) sg.addShadowCaster(m);
+    for (const m of boatMeshes) { if (m.name !== "windshield") sg.addShadowCaster(m); m.receiveShadows = true; }
     for (const m of pierMeshes) sg.addShadowCaster(m);
     sg.addShadowCaster(trees);
     trees.receiveShadows = true;
@@ -112,7 +140,6 @@ const boot = async () => {
     sun.orthoLeft = -40; sun.orthoRight = 40; sun.orthoTop = 40; sun.orthoBottom = -40;
   }
 
-  const fx = new WaterInteraction(scene, { particles: cfg.quality.particles, wakeSamples: cfg.quality.wakeSamples });
   const input = new InputManager(window);
   const ui = document.getElementById("ui")!;
   attachTouchControls(ui, input);
@@ -121,6 +148,18 @@ const boot = async () => {
   const startAudio = () => audio.start();
   window.addEventListener("keydown", startAudio);
   window.addEventListener("pointerdown", startAudio);
+
+  let waterPreset = 2;
+  const applyWater = (i: number) => {
+    waterPreset = (i + WATER_PRESETS.length) % WATER_PRESETS.length;
+    const p = WATER_PRESETS[waterPreset];
+    water.intensity = p.waves;
+    waterVis.ripple = p.ripple;
+    hud.setWater(p.key);
+    hud.showToast(p.label);
+  };
+  applyWater(2);
+  document.getElementById("h-water")!.addEventListener("click", () => input.pushAction("waterNext"));
 
   // ---------------- laço: física em passo fixo + render interpolado ----------------
   let acc = 0;
@@ -132,26 +171,29 @@ const boot = async () => {
   snap(curPos, curRot); snap(prevPos, prevRot);
   let fpsSmooth = 60;
   let physMs = 0;
-  let propAngle = 0;
 
   document.getElementById("h-build")!.textContent = `${BUILD} · ${engine.isWebGPU ? "WebGPU" : "WebGL" + (engine as Engine).webGLVersion} · q=${cfg.quality.name}`;
+
+  const handle = (a: Action) => {
+    if (a === "camera") {
+      const mode = cam.toggle();
+      hud.setCamera(mode);
+      // no cockpit a câmera fica na cabeça do piloto: esconde cabeça/tronco (mãos e pernas continuam visíveis)
+      for (const m of boatVis.meshes) if (/^pilot|^capBrim/.test(m.name)) m.setEnabled(mode !== "cockpit");
+    }
+    else if (a === "lights") { lights = input.toggleLights(); setNavLights(boatVis, lights); hud.setLights(lights); }
+    else if (a === "reset") { boat.reset(spawnPos(), world.spawn.heading); snap(curPos, curRot); snap(prevPos, prevRot); hud.showToast("Reposicionado no píer"); }
+    else if (a === "debug") hud.toggleDebug();
+    else if (a === "help") hud.toggleHelp();
+    else if (a === "pause") { paused = !paused; hud.showToast(paused ? "Pausado" : "Continuando"); }
+    else if (a === "waterNext") applyWater(waterPreset + 1);
+    else if (a.startsWith("water")) applyWater(Number(a.slice(5)));
+  };
 
   scene.onBeforeRenderObservable.add(() => {
     const dtReal = Math.min(engine.getDeltaTime() / 1000, 0.1);
     fpsSmooth += (1 / Math.max(dtReal, 1e-3) - fpsSmooth) * 0.05;
-
-    for (const a of input.consumeActions()) {
-      if (a === "camera") hud.setCamera(cam.toggle());
-      else if (a === "lights") { lights = input.toggleLights(); setNavLights(boatVis, lights); hud.setLights(lights); }
-      else if (a === "reset") { boat.reset(spawnPos(), world.spawn.heading); snap(curPos, curRot); snap(prevPos, prevRot); hud.showToast("Reposicionado no píer"); }
-      else if (a === "debug") hud.toggleDebug();
-      else if (a === "help") hud.toggleHelp();
-      else if (a === "pause") { paused = !paused; hud.showToast(paused ? "Pausado" : "Continuando"); }
-      else if (a === "waves0" || a === "waves1" || a === "waves2") {
-        water.intensity = a === "waves0" ? 0 : a === "waves1" ? 1 : 2.5;
-        hud.showToast(`Ondas: ${a === "waves0" ? "calmas" : a === "waves1" ? "lago" : "fortes"}`);
-      }
-    }
+    for (const a of input.consumeActions()) handle(a);
 
     const vin = input.update(dtReal);
     if (!paused) {
@@ -179,9 +221,11 @@ const boot = async () => {
     const T = boat.telemetry;
     boatVis.engine.rotation.y = -T.steerDeg * Math.PI / 180;
     boatVis.engine.rotation.x = T.trimDeg * Math.PI / 180;
-    boatVis.wheel.rotation.y = T.steerDeg * Math.PI / 180 * 6;
-    propAngle += T.rpm / 60 * 2 * Math.PI * dtReal * 0.2;
-    for (const m of boatVis.engine.getChildMeshes()) if (m.metadata?.spin) m.rotation.y = propAngle;
+    boatVis.wheel.rotation.z = -T.steerDeg * Math.PI / 180 * 5;
+    boatVis.speedNeedle.rotation.z = needleAngle(T.speedKmh, 100);
+    boatVis.rpmNeedle.rotation.z = needleAngle(T.rpm / 1000, 7);
+    if (!paused) boatVis.propeller.rotation.z += (T.propRpm / 60) * 2 * Math.PI * dtReal;
+    boatVis.propBlur.alpha = Math.min(0.55, Math.max(0, (Math.abs(T.propRpm) - 250) / 1400)) * (1 - 0.4 * T.cavitation);
     for (const b of buoys) b.position.y = water.getHeight(b.position.x, b.position.z) - 0.05;
 
     cam.update(dtReal, rPos, rRot, Math.hypot(boat.vel.x, boat.vel.z));
@@ -189,17 +233,24 @@ const boot = async () => {
     waterVis.update(water, cam.cam, engine.getRenderWidth(), engine.getRenderHeight());
     if (cfg.quality.shadows > 0) sun.position = rPos.add(sunDir.scale(150));
 
-    audio.update(T.rpm, T.throttle, Math.hypot(boat.vel.x, boat.vel.z));
+    audio.update(T.rpm, T.throttle, Math.hypot(boat.vel.x, boat.vel.z), Math.max(T.cavitation, 1 - T.ventilation));
     hud.update(T, fpsSmooth, {
       "física (ms/frame)": physMs.toFixed(2),
       "malhas ativas": String(scene.getActiveMeshes().length),
       "input": input.lastDevice,
-      "ondas": water.intensity.toFixed(1),
+      "ondas": water.intensity.toFixed(2),
       "correnteza (m/s)": Math.hypot(water.getCurrent(boat.pos.x, boat.pos.z).x, water.getCurrent(boat.pos.x, boat.pos.z).z).toFixed(2),
     });
   });
 
+  // diagnóstico: se a cena demorar a ficar pronta, lista o que está pendente
+  const readyWatch = window.setTimeout(() => {
+    const pend = scene.meshes.filter((m) => m.isEnabled() && !m.isReady(true)).map((m) => `${m.name}:${m.material?.name ?? "-"}`);
+    const rtts = scene.customRenderTargets.filter((t) => !t.isReady()).map((t) => t.name);
+    console.warn("[AquaRush] cena ainda não pronta " + JSON.stringify({ pend, rtts, env: scene.environmentTexture?.isReady() }));
+  }, 4000);
   await scene.whenReadyAsync();
+  clearTimeout(readyWatch);
   engine.runRenderLoop(() => scene.render());
   window.addEventListener("resize", () => engine.resize());
   document.getElementById("loading")?.classList.add("done");
@@ -207,8 +258,7 @@ const boot = async () => {
   console.info(`[AquaRush] pronto em ${loadMs.toFixed(0)} ms — ${BUILD} — ${engine.description}`);
 
   // exposto para testes manuais/automatizados no console
-  (window as unknown as Record<string, unknown>).__aqua = { boat, water, world, scene, engine, cam, input, loadMs, checkConvention: () => {
-    // confirma que a convenção de quaternions da simulação == Babylon
+  (window as unknown as Record<string, unknown>).__aqua = { boat, water, waterVis, fx, world, scene, engine, cam, input, boatVis, loadMs, checkConvention: () => {
     const f = boat.forward;
     const bf = boatVis.root.forward;
     return { sim: f, babylon: { x: bf.x, y: bf.y, z: bf.z } };

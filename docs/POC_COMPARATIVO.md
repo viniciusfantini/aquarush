@@ -7,7 +7,7 @@ Nota de 1 a 5 por critério, com vídeo e medições reproduzíveis. A coluna "P
 | Sensação de pilotagem | 25% | *pendente de avaliação por pessoa* | | |
 | Água e interação | 20% | | | |
 | Desempenho mobile | 15% | *não medido* | | |
-| Desempenho Web | 15% | desktop: ~86 FPS, física 0,14 ms (ver README da POC) | | |
+| Desempenho Web | 15% | desktop (v0.2, med, 1775×1161, com reflexo planar): ~85 FPS; física 0,14 ms | | |
 | Qualidade visual | 10% | | | |
 | Velocidade de desenvolvimento | 10% | fatia completa em 1 sessão com IA | | |
 | Evolução e manutenção | 5% | física desacoplada e testável em Node | | |
@@ -17,6 +17,7 @@ Nota de 1 a 5 por critério, com vídeo e medições reproduzíveis. A coluna "P
 | POC | Aparelho / SO | Navegador / Build | Resolução | Qualidade | Versão |
 |---|---|---|---|---|---|
 | Babylon | PC Windows 11 Home (26200) | Chrome, WebGL2, servidor dev | ~1370×896 | med | poc-babylon 0.1.0 |
+| Babylon | PC Windows 11 Home (26200) | Chrome, WebGL2, servidor dev | 1775×1161 (render) | med | poc-babylon 0.2.0 |
 
 ## Notas
 

@@ -5,7 +5,7 @@
 import { type VehicleInput, emptyInput } from "../gameplay/vehicleInput.ts";
 import { approach, clamp } from "../sim/math.ts";
 
-export type Action = "camera" | "lights" | "reset" | "debug" | "help" | "waves0" | "waves1" | "waves2" | "pause";
+export type Action = "camera" | "lights" | "reset" | "debug" | "help" | "pause" | "water0" | "water1" | "water2" | "water3" | "waterNext";
 
 export class InputManager {
   readonly state: VehicleInput = emptyInput();
@@ -29,7 +29,8 @@ export class InputManager {
       this.keys.add(e.code);
       this.lastDevice = "teclado";
       const map: Record<string, Action> = {
-        KeyC: "camera", KeyL: "lights", KeyR: "reset", F3: "debug", KeyH: "help", Digit1: "waves0", Digit2: "waves1", Digit3: "waves2", KeyP: "pause",
+        KeyC: "camera", KeyL: "lights", KeyR: "reset", F3: "debug", KeyH: "help", KeyP: "pause",
+        Digit0: "water0", Digit1: "water1", Digit2: "water2", Digit3: "water3", KeyG: "water0", KeyV: "waterNext",
       };
       const a = map[e.code];
       if (a) { this.actions.push(a); e.preventDefault(); }

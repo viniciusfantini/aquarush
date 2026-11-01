@@ -101,14 +101,14 @@ export const SPEEDBOAT: SpeedboatParams = {
   maxThrust: 8500,
   reverseThrustFactor: 0.35,
   propPitchSpeed: 32,
-  propPos: v3(0, -0.75, -3.1),
+  propPos: v3(0, -0.75, -3.6),
   engineResponse: 0.3,
   idleRpm: 750,
   maxRpm: 5800,
   shiftTime: 0.35,
 
   maxSteerLow: 32 * DEG,
-  maxSteerHigh: 13 * DEG,
+  maxSteerHigh: 11 * DEG,
   steerRate: 2.2,
   gearcaseRudder: 0.09,
 

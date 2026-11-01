@@ -18,6 +18,8 @@
 ## POC 1: Babylon (`pocs/babylon`)
 
 - `src/sim/**` **não pode importar Babylon** (precisa rodar no Node para os testes).
+- A esteira, o spray e o HUD só leem a telemetria (`BoatTelemetry`): velocidade na água, acelerador, `cavitation`, `ventilation`, `propRpm`.
+- Uma textura dinâmica nova precisa de `update()` antes do 1º quadro, senão o material fica "not ready" e a cena não inicia (aconteceu com o mapa de esteira). Se a cena não carregar, o `main.ts` loga após 4 s o que está pendente.
 - Convenção de eixos: X direita, Y cima, Z proa. Quaternions de Hamilton, iguais aos da Babylon (verificado no navegador).
 - A física roda a 120 Hz em passo fixo (`core/config.ts`). O render interpola.
 - Só use sintaxe TS "apagável" (`erasableSyntaxOnly`): sem `enum`, `namespace` nem parameter properties. Os imports levam a extensão `.ts`.
@@ -44,6 +46,10 @@ npm run dev            # abrir http://localhost:5173, F3 mostra a telemetria; wi
 | 2026-10-31 | 6 pontos de flutuação + sustentação de planeio por ponto + sistema de ondas do casco (hump) | O GDD pede 6 pontos, e o planeio precisa surgir da física, não de animação |
 | 2026-10-31 | Monorepo com `pocs/<tecnologia>` | O GDD §15 pede pastas claramente isoladas |
 | 2026-10-31 | Qualidade padrão `low` em dispositivos touch, `med` no desktop | Meta de 30 FPS em celular intermediário |
+| 2026-10-31 | A esteira é um **mapa top-down** (canvas → textura) lido pelo shader da água, não uma malha por cima | Ela precisa deformar a água, distorcer o reflexo e gerar espuma de verdade. Canais: R = espuma, G − B = altura |
+| 2026-10-31 | Reflexo planar com render target próprio (estilo WaterMaterial), em `med`/`high` | Água vidro exige refletir a lancha e as margens. Em `low` fica o céu analítico |
+| 2026-10-31 | "Tampa" do cockpit só de profundidade (`alphaIndex` 0 < água 10) | Evita água aparecendo dentro do barco sem precisar de stencil |
+| 2026-10-31 | Cavitação = f(carga × escorregamento) da hélice, com perda de até 30 % de empuxo | Aproximação documentada: aparece na arrancada e some em cruzeiro. Testada em `test:sim` |
 
 ## Ambiente do desenvolvedor
 

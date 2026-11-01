@@ -80,8 +80,9 @@ let topSpeed = 0;
   const boat = new Speedboat(SPEEDBOAT, v3(0, 0.25, 0));
   settle(boat, water);
   const inp = { ...emptyInput(), throttle: 1 };
-  let t30 = -1, t60 = -1, maxPitch = 0, tMaxPitch = 0, planeAt = -1;
+  let t30 = -1, t60 = -1, maxPitch = 0, tMaxPitch = 0, planeAt = -1, maxCav = 0;
   run(boat, water, 45, inp, openWater, (t) => {
+    if (t < 1.5) maxCav = Math.max(maxCav, boat.telemetry.cavitation);
     const s = boat.telemetry.speedKmh;
     if (t30 < 0 && s >= 30) t30 = t;
     if (t60 < 0 && s >= 60) t60 = t;
@@ -97,6 +98,8 @@ let topSpeed = 0;
   check("2 aceleração", "pitch em velocidade final (°)", boat.telemetry.pitchDeg, 1, 7, "°");
   check("2 aceleração", "entra em planeio a (km/h)", planeAt, 18, 45, "km/h", 1);
   check("2 aceleração", "RPM em velocidade final", boat.telemetry.rpm, 4800, 6300, "rpm", 0);
+  check("2 hélice", "cavitação na arrancada (0–1,5 s)", maxCav, 0.4, 1, "", 2);
+  check("2 hélice", "cavitação em velocidade final", boat.telemetry.cavitation, 0, 0.05, "", 3);
 }
 
 // ---------- Teste 3 — trim ----------

@@ -10,15 +10,16 @@ export interface Quality {
   depthEffects: boolean;     // transparência/espuma de margem via depth map
   shadows: number;           // 0 = sem sombras; senão, tamanho do shadow map
   particles: number;
-  wakeSamples: number;
+  wakeTexture: number;       // px do mapa de esteira
+  reflection: number;        // px do reflexo planar (0 = desligado)
   terrainSubdiv: number;
   trees: number;
 }
 
 export const QUALITY: Record<QualityName, Quality> = {
-  low: { name: "low", hardwareScaling: 1.5, waterResolution: 128, depthEffects: false, shadows: 0, particles: 500, wakeSamples: 90, terrainSubdiv: 160, trees: 500 },
-  med: { name: "med", hardwareScaling: 1, waterResolution: 192, depthEffects: true, shadows: 1024, particles: 1200, wakeSamples: 140, terrainSubdiv: 256, trees: 1200 },
-  high: { name: "high", hardwareScaling: 1, waterResolution: 256, depthEffects: true, shadows: 2048, particles: 2400, wakeSamples: 160, terrainSubdiv: 360, trees: 2200 },
+  low: { name: "low", hardwareScaling: 1.5, waterResolution: 128, depthEffects: false, shadows: 0, particles: 500, wakeTexture: 256, reflection: 0, terrainSubdiv: 160, trees: 500 },
+  med: { name: "med", hardwareScaling: 1, waterResolution: 192, depthEffects: true, shadows: 1024, particles: 1200, wakeTexture: 512, reflection: 512, terrainSubdiv: 256, trees: 1200 },
+  high: { name: "high", hardwareScaling: 1, waterResolution: 256, depthEffects: true, shadows: 2048, particles: 2400, wakeTexture: 512, reflection: 1024, terrainSubdiv: 360, trees: 2200 },
 };
 
 export const PHYSICS_DT = 1 / 120;
