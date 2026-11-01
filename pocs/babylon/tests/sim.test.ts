@@ -5,6 +5,7 @@ declare const performance: { now(): number };
 // Saída: tabela de medições + PASS/FAIL por critério. Código de saída != 0 se algo falhar.
 
 import { Speedboat, NEUTRAL_REV_LIMIT } from "../src/sim/boat.ts";
+import { JUMP_AH } from "../src/sim/engineSystems.ts";
 import { SPEEDBOAT, DINGHY, PERSON_KG, type Occupant } from "../src/sim/params.ts";
 import { GerstnerWater, WAVE_PRESETS, type CurrentZone } from "../src/sim/water.ts";
 import type { PhysicsWorld } from "../src/sim/world.ts";
@@ -421,21 +422,39 @@ for (const [label, thr] of [["baixa", 0.25], ["alta", 1]] as const) {
   const socJ = z.systems.batterySoc;
   run(z, water, 60, { ...emptyInput(), gear: "F", throttle: 0.6 });
   check("bateria", "depois do jump start, 1 min navegando recarrega (%)", (z.systems.batterySoc - socJ) * 100, 3, 20, "%", 1);
-  // booster cheio: dá 3 partidas com a bateria zerada, a 4ª não vai
+  // booster de 10 Ah / 200 A: quantas partidas com a bateria zerada até esvaziar (escala de tempo do jogo = a da bateria)
   const jb = off(0);
-  let ok = 0;
-  for (let i = 0; i < 5; i++) {
+  let ok = 0, fails = 0;
+  for (let i = 0; i < 60 && fails < 2; i++) {
     jb.systems.batterySoc = 0; jb.systems.jumper = true;
     const r = tryStart(jb);
-    if (r.tRun > 0) { ok++; jb.toggleIgnition(); run(jb, water, 1, N); } else jb.systems.jumper = false;
+    if (r.tRun > 0) { ok++; jb.toggleIgnition(); run(jb, water, 1, N); } else { fails++; jb.systems.jumper = false; }
   }
-  check("bateria", "booster cheio: partidas com a bateria zerada", ok, 3, 3, "", 0);
+  check("bateria", "booster 10 Ah: partidas com a bateria zerada até esvaziar", ok, 12, 30, "", 0);
   const jc0 = jb.systems.jumpCharge;
-  check("bateria", "booster depois de 3 partidas: quase vazio (%)", jc0 * 100, 0, 25, "%", 0);
-  // em cruzeiro o alternador recarrega o booster (tomada 12 V do barco)
+  check("bateria", "booster depois de esgotar: carga (Ah)", jc0 * JUMP_AH, 0, 1.5, "Ah", 2);
+  // molinete da âncora só no booster (bateria zerada): ~60 A tiram 10 Ah em ~1 min de jogo
+  const wb = new Speedboat(SPEEDBOAT, v3(0, 0.25, 0));
+  wb.systems.batterySoc = 0; wb.systems.jumper = true;
+  run(wb, water, 20, { ...N, anchor: 1 }, { groundHeight: () => -60, spheres: [], boxes: [] });
+  check("bateria", "booster alimenta o molinete: cabo pago em 20 s (m)", wb.telemetry.anchorOut, 14, 17, "m", 1);
+  check("bateria", "molinete 20 s no booster: carga gasta (Ah)", (1 - wb.systems.jumpCharge) * JUMP_AH, 1.0, 2.5, "Ah", 2);
+  // proteção: partida (170 A) + molinete recolhendo (≥ 60 A) passam de 200 A — o booster desarma
+  const tp = off(0);
+  const deep = { groundHeight: () => -60, spheres: [], boxes: [] };
+  tp.systems.jumper = true;
+  run(tp, water, 6, { ...N, anchor: 1 }, deep);
+  tp.toggleIgnition();
+  run(tp, water, 3, { ...N, anchor: -1 }, deep);
+  check("bateria", "partida + molinete > 200 A: proteção do booster desarma", tp.systems.jumperTrips >= 1 && !tp.systems.jumper ? 1 : 0, 1, 1, "", 0);
+  // conectar com o motor ligado é permitido (não desconecta sozinho: só na partida)
+  const on = new Speedboat(SPEEDBOAT, v3(0, 0.25, 0));
+  run(on, water, 2, N); on.systems.jumper = true; run(on, water, 2, N);
+  check("bateria", "booster conectado com o motor já ligado continua conectado", on.systems.jumper ? 1 : 0, 1, 1, "", 0);
+  // em cruzeiro o alternador recarrega o booster (tomada 12 V do barco, ~10 A)
   jb.systems.batterySoc = 0.6; jb.toggleIgnition(); run(jb, water, 4, N);
-  run(jb, water, 90, { ...emptyInput(), gear: "F", throttle: 0.6 });
-  check("bateria", "1,5 min em cruzeiro: booster recarrega (%)", (jb.systems.jumpCharge - jc0) * 100, 50, 100, "%", 0);
+  run(jb, water, 120, { ...emptyInput(), gear: "F", throttle: 0.6 });
+  check("bateria", "2 min em cruzeiro: booster recarrega (Ah)", (jb.systems.jumpCharge - jc0) * JUMP_AH, 2.5, 4.5, "Ah", 2);
   // marcha lenta não recarrega o booster
   const idle = new Speedboat(SPEEDBOAT, v3(0, 0.25, 0)); idle.systems.jumpCharge = 0.2;
   run(idle, water, 30, N);
@@ -456,7 +475,7 @@ for (const [label, thr] of [["baixa", 0.25], ["alta", 1]] as const) {
   b.toggleIgnition(); run(b, water, 2, { ...emptyInput(), gear: "N" });
   run(b, water, 1, { ...emptyInput(), gear: "N", trim: 1 }, openWater, () => { trimA = Math.min(trimA, b.telemetry.batteryA); });
   check("amperímetro", "trim com o motor desligado (A)", trimA, -50, -25, "A", 0);
-  b.systems.batterySoc = 0.5; b.toggleIgnition(); run(b, water, 4, { ...emptyInput(), gear: "N" });
+  b.systems.batterySoc = 0.7; b.toggleIgnition(); run(b, water, 6, { ...emptyInput(), gear: "N" });
   run(b, water, 10, { ...emptyInput(), gear: "F", throttle: 0.6 });
   check("amperímetro", "cruzeiro: alternador carregando (A)", b.telemetry.batteryA, 5, 16, "A", 1);
 }

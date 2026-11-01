@@ -95,6 +95,14 @@ export class Hud {
   private ampG: RoundGauge | null = null;
   private bilgeChip = $("h-bilge");
   private anchorChip = $("h-anchor");
+  private ancBox = $("g-anchor");
+  private ancRope = $("h-anc-rope");
+  private ancMin = $("h-anc-min");
+  private ancIcon = $("h-anc-icon");
+  private ancTxt = $("h-anc");
+  private ancSt = $("h-anc-st");
+  /** cabo total no paiol (m) — escala do indicador */
+  anchorRodeMax = 50;
   private pins = 0;
   private gearStyle: "bar" | "dial" = "bar";
   private shownGear = "";
@@ -179,6 +187,18 @@ export class Hud {
     this.anchorChip.classList.toggle("warn", t.anchorState === "garrando" || t.anchorRelay);
     if (anc) this.anchorChip.textContent = t.anchorRelay ? "ÂNCORA · molinete sem força (bateria)"
       : `ÂNCORA ${t.anchorOut.toFixed(1)} m · fundo ${t.anchorDepth.toFixed(1)} m${t.anchorScope > 0 && t.anchorState !== "descendo" && t.anchorState !== "subindo" ? ` · ${t.anchorScope.toFixed(1)}:1` : ""} · ${t.anchorState.toUpperCase()}`;
+    // indicador da âncora: corda descendo pela barra (cabo lançado ÷ cabo total) e a âncora na ponta
+    {
+      const f = Math.min(1, t.anchorOut / this.anchorRodeMax);
+      this.ancRope.style.height = `${f * 100}%`;
+      this.ancIcon.style.top = `${f * 100}%`;
+      const rec = t.anchorDepth * 5;
+      this.ancMin.style.display = t.anchorOut > 0.05 && t.anchorDepth > 0.1 ? "block" : "none";
+      this.ancMin.style.top = `${Math.min(100, (rec / this.anchorRodeMax) * 100)}%`;
+      this.ancTxt.textContent = `${t.anchorOut.toFixed(1)} m`;
+      this.ancSt.textContent = t.anchorRelay ? "sem força" : t.anchorOut > 0.05 && t.anchorScope > 0 && (t.anchorState === "segurando" || t.anchorState === "no fundo" || t.anchorState === "garrando") ? `${t.anchorState} ${t.anchorScope.toFixed(1)}:1` : t.anchorState;
+      this.ancBox.className = "vbar " + (t.anchorState === "garrando" || t.anchorRelay ? "drag" : t.anchorState === "segurando" ? "hold" : t.anchorState === "no fundo" ? "down" : "");
+    }
     // barras de acelerador e trim (como antes)
     this.thrBar.style.height = `${t.throttle * 100}%`;
     this.thrBar.classList.toggle("rev", t.gear === "R");

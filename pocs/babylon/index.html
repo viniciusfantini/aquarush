@@ -55,6 +55,14 @@
     #h-draft-mark { background: #ff5a4e; } #h-draft-hull { background: #ffd34d; }
     #g-depth.warn #h-depth { color: #ff5a4e; } #g-depth.warn .track { box-shadow: 0 0 0 2px #ff5a4e; }
     #h-draft { font-size: 10px; color: var(--dim); }
+    /* âncora: cabo lançado (de cima para baixo, até o fim do paiol), marca do cabo recomendado (5× a profundidade) */
+    .vbar .track.anchor { width: 18px; background: rgba(255,255,255,0.12); overflow: visible; }
+    #h-anc-rope { position: absolute; top: 0; left: 5px; width: 8px; height: 0; border-radius: 4px; background: repeating-linear-gradient(#e9dfb8 0 5px, #b8ab7c 5px 7px); }
+    #h-anc-min { position: absolute; left: -4px; right: -4px; height: 2px; top: 0; background: #7dff9a; display: none; }
+    #h-anc-icon { position: absolute; left: 50%; top: 0; transform: translate(-50%, -2px); font-size: 15px; line-height: 1; color: #cfd8dc; text-shadow: 0 1px 2px #000; }
+    #g-anchor.hold #h-anc-icon { color: #7dff9a; } #g-anchor.down #h-anc-icon { color: #ffd34d; }
+    #g-anchor.drag #h-anc-icon, #g-anchor.drag #h-anc { color: #ff5a4e; animation: blink 0.35s steps(2) infinite; }
+    #h-anc-st { font-size: 10px; color: var(--dim); }
     /* barra de atalhos do momento (teclado + toque) */
     #ctx-keys { position: absolute; left: 16px; bottom: 30px; display: flex; flex-wrap: wrap; gap: 6px; max-width: min(46vw, calc(100vw - 32px)); pointer-events: auto; }
     #ctx-keys .ctx { font: inherit; font-size: 12.5px; color: var(--fg); background: rgba(8, 20, 30, 0.62); border: 1px solid rgba(255,255,255,0.22); border-radius: 999px; padding: 5px 11px; display: flex; align-items: center; gap: 6px; backdrop-filter: blur(4px); }
@@ -220,6 +228,7 @@
         <div class="vbar"><div class="track"><div id="h-thr-bar"></div></div><b id="h-thr">0%</b>ACEL</div>
         <div class="vbar"><div class="track trim"><div id="h-trim-mark"></div></div><b id="h-trim">0.0°</b>TRIM</div>
         <div class="vbar" id="g-depth"><div class="track depth"><div id="h-depth-water"></div><div id="h-draft-mark"></div><div id="h-draft-hull"></div></div><b id="h-depth">0.0 m</b><span id="h-draft">calado 0.00</span>PROF</div>
+        <div class="vbar" id="g-anchor"><div class="track anchor"><div id="h-anc-rope"></div><div id="h-anc-min"></div><div id="h-anc-icon">⚓</div></div><b id="h-anc">0.0 m</b><span id="h-anc-st">recolhida</span>ÂNCORA</div>
         <div id="g-gear"></div>
       </div>
       <div id="g-big"></div>
