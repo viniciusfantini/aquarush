@@ -8,7 +8,8 @@ import { Speedboat } from "../src/sim/boat.ts";
 import { SPEEDBOAT, DINGHY, PERSON_KG, type Occupant } from "../src/sim/params.ts";
 import { GerstnerWater, WAVE_PRESETS, type CurrentZone } from "../src/sim/water.ts";
 import type { PhysicsWorld } from "../src/sim/world.ts";
-import { buildWorld } from "../src/sim/world.ts";
+import { buildWorld, RAMP, groundHeight } from "../src/sim/world.ts";
+import { buildTrailer, trailerLoadState, attachWinch } from "../src/sim/trailer.ts";
 import { emptyInput, type VehicleInput } from "../src/gameplay/vehicleInput.ts";
 import { v3, len, qFromAxisAngle } from "../src/sim/math.ts";
 import { WakeField, WaterWithWake } from "../src/sim/wake.ts";
@@ -494,6 +495,44 @@ for (const [label, thr] of [["baixa", 0.25], ["alta", 1]] as const) {
   check("emborcamento", "pessoas paradas boiando (m/s)", Math.max(...b.swimmers.map((s) => Math.abs(s.vel.y))), 0, 0.4, "m/s", 2);
   b.reset(v3(0, 0.2, 0), 0);
   check("emborcamento", "R: ninguém na água e barco de pé", b.swimmers.length === 0 && !b.capsized ? 1 : 0, 1, 1, "", 0);
+}
+
+// ---------- Rampa e carretinha: tirar o barco da água ----------
+{
+  check("rampa", "concreto: 12 % de inclinação (m em 10 m)", groundHeight(RAMP.x, RAMP.z0 - 4) - groundHeight(RAMP.x, RAMP.z0 + 6), 1.19, 1.21, "m", 3);
+  check("rampa", "linha d'água no início da rampa (m)", groundHeight(RAMP.x, RAMP.z0), -0.01, 0.01, "m", 3);
+  for (const kind of ["lancha", "bote"] as const) {
+    const P = kind === "lancha" ? SPEEDBOAT : DINGHY;
+    const w = buildWorld();
+    const tr = buildTrailer(P);
+    w.surfaces = tr.surfaces; w.boxes = [...w.boxes, ...tr.boxes];
+    const water = mkWater(0);
+    const b = new Speedboat(P, v3(RAMP.x + 0.4, 0.25, tr.zRear + 14), Math.PI);
+    b.systems.fuelL = 20;
+    let loadedAt = -1, finite = true;
+    const inp: VehicleInput = { ...emptyInput(), gear: "F" }; // o "piloto" ajusta a cada passo
+    run(b, water, 40, inp, w, (t) => {
+      const st = trailerLoadState(b, tr);
+      const steer = Math.max(-1, Math.min(1, st.lateral * 1.2 + st.angleDeg / 25));
+      const vMax = st.bowGap > 8 ? 4 : 2.2;
+      // entrada do "piloto" para o próximo passo
+      inp.steering = steer; inp.throttle = st.bowGap > 0.3 && b.telemetry.speedKmh < vMax ? 0.3 : 0;
+      if (st.loaded && loadedAt < 0) loadedAt = t;
+      if (!Number.isFinite(b.pos.y)) finite = false;
+    });
+    // cinta presa e motor desligado: o barco fica na carretinha
+    if (loadedAt >= 0) { attachWinch(b, tr); b.engine = "off"; }
+    const gap0 = trailerLoadState(b, tr).bowGap;
+    inp.throttle = 0; inp.steering = 0;
+    run(b, water, 20, inp, w);
+    const st = trailerLoadState(b, tr);
+    check("rampa", `${kind}: com a cinta e motor desligado não escorrega (m)`, st.bowGap - gap0, -0.05, 0.1, "m", 2);
+    check("rampa", `${kind}: sobe na carretinha alinhado (s)`, loadedAt, 3, 35, "s", 1);
+    check("rampa", `${kind}: parado no berço, centralizado (m)`, Math.abs(st.lateral), 0, 0.1, "m", 2);
+    check("rampa", `${kind}: inclinado como a rampa (°)`, b.telemetry.pitchDeg, 5.5, 8, "°", 1);
+    check("rampa", `${kind}: sem tombar no berço (roll °)`, Math.abs(b.telemetry.rollDeg), 0, 3, "°", 1);
+    check("rampa", `${kind}: física estável`, finite ? 1 : 0, 1, 1, "", 0);
+  }
 }
 
 // ---------- Carga: gasolina e ocupantes (quantidade e posição) ----------

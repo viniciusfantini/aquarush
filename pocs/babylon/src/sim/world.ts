@@ -8,11 +8,21 @@ import { clamp, smoothstep } from "./math.ts";
 export interface SphereCollider { x: number; y: number; z: number; r: number }
 export interface BoxCollider { minX: number; maxX: number; minY: number; maxY: number; minZ: number; maxZ: number }
 
+/**
+ * Superfície de apoio inclinada (bunks/berço da carretinha): só segura de CIMA para baixo.
+ * Altura = y0 + slope·(z − z0) + vSlope·|x − cx|  (berço em V: centraliza o casco).
+ */
+export interface SupportSurface { cx: number; halfW: number; z0: number; z1: number; y0: number; slope: number; vSlope: number; mu: number }
+
 export interface PhysicsWorld {
   groundHeight(x: number, z: number): number;
   spheres: SphereCollider[];
   boxes: BoxCollider[];
+  surfaces?: SupportSurface[];
 }
+
+export const surfaceHeight = (s: SupportSurface, x: number, z: number): number | null =>
+  Math.abs(x - s.cx) > s.halfW || z < Math.min(s.z0, s.z1) || z > Math.max(s.z0, s.z1) ? null : s.y0 + s.slope * (z - s.z0) + s.vSlope * Math.abs(x - s.cx);
 
 // ---------- ruído determinístico ----------
 const hash = (x: number, z: number): number => {
@@ -51,7 +61,7 @@ export const riverCenterX = (z: number): number => -60 + 38 * Math.sin(z / 95);
 const lakeR = (x: number, z: number): number =>
   Math.hypot(x / LAKE.rx, z / LAKE.rz) + 0.11 * fbm(x / 140 + 7.3, z / 140 - 2.1, 3);
 
-export const groundHeight = (x: number, z: number): number => {
+const baseGround = (x: number, z: number): number => {
   const r = lakeR(x, z);
   const hills = 6 + 22 * (0.5 + 0.5 * fbm(x / 210, z / 210, 4));
   let h = -7 + 6.2 * smoothstep(0.5, 1.0, r) + 2.6 * smoothstep(1.0, 1.14, r) + hills * smoothstep(1.12, 1.75, r);
@@ -72,6 +82,34 @@ export const groundHeight = (x: number, z: number): number => {
     h = Math.min(h, target);
   }
   return h;
+};
+
+// ---------- rampa de concreto (descida de barcos) ----------
+/**
+ * Rampa na margem sul, 22 m a oeste do píer, descendo para o norte (+Z) com 12 % de inclinação.
+ * s = distância ao longo da rampa a partir da linha d'água (s > 0 = dentro do lago).
+ */
+export const RAMP = (() => {
+  const x = -22;
+  let z = -300;
+  while (baseGround(x, z) > 0 && z < 0) z += 0.05;
+  return { x, z0: z, width: 5.5, slope: 0.12, sMin: -16, sMax: 9, shoulder: 2.5 };
+})();
+export const rampY = (s: number): number => -RAMP.slope * s;
+/** dentro da faixa de concreto (para efeitos/vegetação) */
+export const onRamp = (x: number, z: number, margin = 0): boolean => {
+  const s = z - RAMP.z0;
+  return Math.abs(x - RAMP.x) < RAMP.width / 2 + margin && s > RAMP.sMin - margin && s < RAMP.sMax + margin;
+};
+
+export const groundHeight = (x: number, z: number): number => {
+  const b = baseGround(x, z);
+  const s = z - RAMP.z0, lat = Math.abs(x - RAMP.x);
+  if (lat > RAMP.width / 2 + RAMP.shoulder || s < RAMP.sMin - 6 || s > RAMP.sMax + 6) return b;
+  const r = rampY(clamp(s, RAMP.sMin, RAMP.sMax));
+  const wLat = 1 - smoothstep(RAMP.width / 2, RAMP.width / 2 + RAMP.shoulder, lat);
+  const wLon = 1 - smoothstep(0, 6, s < RAMP.sMin ? RAMP.sMin - s : s > RAMP.sMax ? s - RAMP.sMax : 0);
+  return b + (r - b) * wLat * wLon;
 };
 
 export const RIVER_CURRENT: CurrentZone = {
@@ -113,6 +151,7 @@ export const buildWorld = (): PhysicsWorld & { pier: PierLayout; rockList: Spher
   const tryRock = (x: number, z: number, r: number) => {
     const g = groundHeight(x, z);
     if (Math.hypot(x - pier.shoreX, z - (pier.shoreZ + pier.length / 2)) < 28) return; // livre perto do píer
+    if (Math.hypot(x - RAMP.x, z - RAMP.z0) < 30) return; // e da rampa
     spheres.push({ x, y: g + r * 0.35, z, r });
   };
   for (let i = 0; i < 70; i++) {
@@ -133,7 +172,7 @@ export const buildWorld = (): PhysicsWorld & { pier: PierLayout; rockList: Spher
   }
 
   const spawn = { x: pier.shoreX + 9, z: pier.shoreZ + pier.length - 6, heading: 0 };
-  return { groundHeight, spheres, boxes, pier, rockList: spheres, spawn };
+  return { groundHeight, spheres, boxes, surfaces: [], pier, rockList: spheres, spawn };
 };
 
 export const isWater = (x: number, z: number): boolean => groundHeight(x, z) < -0.3;

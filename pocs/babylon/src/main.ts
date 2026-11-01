@@ -13,7 +13,9 @@ import { readUrlConfig, PHYSICS_DT, MAX_SUBSTEPS } from "./core/config.ts";
 import { Speedboat } from "./sim/boat.ts";
 import { VESSELS, PERSON_KG, type VesselKind, type SeatId, type SpeedboatParams } from "./sim/params.ts";
 import { GerstnerWater, WAVE_PRESETS } from "./sim/water.ts";
-import { buildWorld, RIVER_CURRENT } from "./sim/world.ts";
+import { buildWorld, RIVER_CURRENT, RAMP } from "./sim/world.ts";
+import { buildTrailer, trailerLoadState, attachWinch, type TrailerLayout } from "./sim/trailer.ts";
+import { buildRamp, buildTrailerMesh, buildTowVehicle } from "./presentation/ramp.ts";
 import { WakeField, WaterWithWake } from "./sim/wake.ts";
 import { v3 } from "./sim/math.ts";
 import { emptyInput } from "./gameplay/vehicleInput.ts";
@@ -29,7 +31,7 @@ import { BoatCamera } from "./presentation/cameras.ts";
 import { Hud } from "./presentation/hud.ts";
 import { EngineAudio } from "./presentation/audio.ts";
 
-const BUILD = "poc-babylon 0.15.0";
+const BUILD = "poc-babylon 0.16.0";
 /** Escala visual da rotação da hélice (proporcional ao RPM, abaixo do limite estroboscópico). */
 const PROP_VISUAL_SCALE = 0.12;
 
@@ -57,6 +59,10 @@ interface Vessel {
   presets: { label: string; seats: SeatId[] }[];
   skeg: Mesh;
   hoursKey: string;
+  /** carretinha estacionada na rampa (física) + visual (carretinha e veículo de reboque) */
+  trailer: TrailerLayout;
+  trailerNodes: import("@babylonjs/core").TransformNode[];
+  trailerMeshes: Mesh[];
 }
 
 const boot = async () => {
@@ -130,6 +136,8 @@ const boot = async () => {
   const trees = buildTrees(scene, cfg.quality.trees);
   const pierMeshes = buildPier(scene, world.pier);
   const buoys = pierMeshes.filter((m) => m.name === "buoy");
+  const rampMeshes = buildRamp(scene);
+  const baseBoxes = [...world.boxes];
 
   // ---------------- as duas embarcações (as duas ficam prontas; só a escolhida aparece) ----------------
   const makeVessel = (kind: VesselKind): Vessel => {
@@ -167,11 +175,18 @@ const boot = async () => {
     try { const h = Number(localStorage.getItem(hoursKey)); boat.systems.engineHours = Number.isFinite(h) && h > 0 ? h : kind === "bote" ? 112.4 : 37.2; } catch { boat.systems.engineHours = 37.2; }
     boat.systems.fuelL = START_FUEL[kind];
     vis.root.setEnabled(false);
-    return { kind, P, boat, vis, helm, dinghy: d ? d.controls : null, pilot, pax, presets, skeg: vis.meshes.find((m) => m.name === "skeg")!, hoursKey };
+    // carretinha do tamanho do barco + veículo (bote: carro comum; lancha: caminhonete)
+    const trailer = buildTrailer(P);
+    const tm = buildTrailerMesh(scene, trailer);
+    const tv = buildTowVehicle(scene, trailer);
+    tm.root.setEnabled(false); tv.root.setEnabled(false);
+    return { kind, P, boat, vis, helm, dinghy: d ? d.controls : null, pilot, pax, presets, skeg: vis.meshes.find((m) => m.name === "skeg")!, hoursKey,
+      trailer, trailerNodes: [tm.root, tv.root], trailerMeshes: [...tm.meshes, ...tv.meshes] };
   };
   const vessels: Record<VesselKind, Vessel> = { lancha: makeVessel("lancha"), bote: makeVessel("bote") };
   let V = vessels[urlKind === "bote" ? "bote" : "lancha"];
   const allBoatMeshes = [...vessels.lancha.vis.meshes, ...vessels.bote.vis.meshes].filter((m) => m.name !== "propDisc");
+  const staticExtras = [...rampMeshes, ...vessels.lancha.trailerMeshes, ...vessels.bote.trailerMeshes];
 
   // ambiente para os materiais PBR (céu + margens, renderizado uma vez)
   const probe = new ReflectionProbe("envProbe", 128, scene);
@@ -186,7 +201,7 @@ const boot = async () => {
   let depth = null;
   if (cfg.quality.depthEffects) {
     depth = scene.enableDepthRenderer(cam.cam, false, true);
-    const list: Mesh[] = [terrain, rocks, ...pierMeshes, ...allBoatMeshes];
+    const list: Mesh[] = [terrain, rocks, ...pierMeshes, ...staticExtras, ...allBoatMeshes];
     depth.getDepthMap().renderList = list;
   }
 
@@ -196,7 +211,7 @@ const boot = async () => {
   });
   waterVis.sunDir = sunDir;
   waterVis.fogDensity = scene.fogDensity;
-  const reflList: AbstractMesh[] = [skybox, terrain, rocks, trees, ...pierMeshes, ...allBoatMeshes];
+  const reflList: AbstractMesh[] = [skybox, terrain, rocks, trees, ...pierMeshes, ...staticExtras, ...allBoatMeshes];
   waterVis.setReflectionList(reflList);
 
   if (cfg.quality.shadows > 0) {
@@ -205,6 +220,7 @@ const boot = async () => {
     sg.bias = 0.002;
     for (const m of allBoatMeshes) { if (m.name !== "windshield") sg.addShadowCaster(m); m.receiveShadows = true; }
     for (const m of pierMeshes) sg.addShadowCaster(m);
+    for (const m of staticExtras) { sg.addShadowCaster(m); m.receiveShadows = true; }
     sg.addShadowCaster(trees);
     trees.receiveShadows = true;
     for (const m of pierMeshes) m.receiveShadows = true;
@@ -268,6 +284,8 @@ const boot = async () => {
   let hoursSaveT = 0;
   let physMs = 0;
   let simTime = 0;
+  let trailerDone = false;
+  const trailerChip = document.getElementById("h-trailer")!;
 
   document.getElementById("h-build")!.textContent = `${BUILD} · ${engine.isWebGPU ? "WebGPU" : "WebGL" + (engine as Engine).webGLVersion} · q=${cfg.quality.name}`;
 
@@ -281,10 +299,16 @@ const boot = async () => {
     if (V.kind !== kind) {
       try { localStorage.setItem(V.hoursKey, String(V.boat.systems.engineHours)); } catch { /* sem storage */ }
       V.vis.root.setEnabled(false);
+      for (const n of V.trailerNodes) n.setEnabled(false);
       for (const p of [V.pilot, ...Object.values(V.pax)]) p.board(V.vis.root);
     }
     V = vessels[kind];
     V.vis.root.setEnabled(true);
+    // carretinha deste barco na rampa (visual + colisores do berço, postes-guia e batente)
+    for (const n of V.trailerNodes) n.setEnabled(true);
+    world.surfaces = V.trailer.surfaces;
+    world.boxes = [...baseBoxes, ...V.trailer.boxes];
+    trailerDone = false;
     const isBote = kind === "bote";
     hud.configure(isBote ? { speedMax: 60, temp: false, battery: false, trimPins: V.P.trimPins.length } : undefined);
     document.getElementById("help-trim")!.innerHTML = isBote
@@ -370,6 +394,17 @@ const boot = async () => {
       hud.setLights(lights, V.dinghy ? "LANTERNA" : "LUZES");
     }
     else if (a === "reset") resetBoat();
+    else if (a === "ramp") {
+      // treino: reposiciona o barco 14 m atrás da carretinha, de proa para a rampa, motor ligado em N
+      resetBoat(false);
+      const tr = V.trailer;
+      boat.reset(v3(tr.cx + 0.3, 0.25, tr.zRear + 14), Math.PI);
+      boat.engine = "running";
+      if (V.kind === "lancha") boat.trim = -1;
+      snap(curPos, curRot); snap(prevPos, prevRot);
+      cam.resetOrbit();
+      hud.showToast("Rampa: suba o barco na carretinha devagar, de proa e alinhado (F engatada, toques no acelerador)");
+    }
     else if (a === "occupants") applyOccupants(occIdx + 1);
     else if (a === "debug") hud.toggleDebug();
     else if (a === "help") hud.toggleHelp();
@@ -447,6 +482,21 @@ const boot = async () => {
     else if (cam.mode === "cockpit") { cam.toggle(); hud.setCamera(cam.mode); setCockpitHead(false); }
     if (T.capsized && !capsizeWarned && mode === "game") { hud.showToast("O barco virou! O corta-circuito desligou o motor e todos caíram na água (de colete) — R para recomeçar"); capsizeWarned = true; }
 
+    // manobra da carretinha: guia de alinhamento perto dela; aviso quando o barco está carregado
+    const ld = trailerLoadState(boat, V.trailer);
+    trailerChip.classList.toggle("show", mode === "game" && (ld.near || ld.loaded || !!boat.winchStrap));
+    trailerChip.classList.toggle("ok", ld.loaded || (!!boat.winchStrap && ld.onBunks));
+    if (ld.loaded || (boat.winchStrap && ld.onBunks)) trailerChip.textContent = "NA CARRETINHA ✓ · cinta presa";
+    else if (ld.near) {
+      const side = Math.abs(ld.lateral) < 0.15 ? "centro" : `${Math.abs(ld.lateral).toFixed(1)} m ${ld.lateral > 0 ? "→ vá p/ direita" : "→ vá p/ esquerda"}`;
+      trailerChip.textContent = `CARRETINHA · ${side} · ${Math.abs(ld.angleDeg).toFixed(0)}° · falta ${Math.max(0, ld.bowGap).toFixed(1)} m`;
+    }
+    if (ld.loaded && !trailerDone && mode === "game") {
+      trailerDone = true;
+      attachWinch(boat, V.trailer);
+      hud.showToast(`Barco na carretinha! Desvio ${(Math.abs(ld.lateral) * 100).toFixed(0)} cm, ${Math.abs(ld.angleDeg).toFixed(1)}° — cinta do guincho presa. Pode desligar o motor (P)`);
+    }
+    if (!ld.onBunks && !boat.winchStrap) trailerDone = false;
     if (T.startFail && T.startFail !== lastStartFail) hud.showToast(T.startFail === "pull" ? "Não pegou — puxe de novo (P)" : T.startFail === "dead" ? "Só estalou: bateria sem força para girar o arranque" : "Não pegou: o arranque girou fraco (bateria baixa)");
     lastStartFail = T.startFail;
     if (T.lowFuel && !lowFuelWarned && T.engine === "running" && mode === "game") { hud.showToast(`Combustível na reserva: ${T.fuelL.toFixed(1)} L`); lowFuelWarned = true; }

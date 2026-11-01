@@ -49,6 +49,8 @@ export interface SpeedboatParams {
   wetDepth: number;        // m (imersão para considerar o ponto "totalmente molhado")
   buoyancyPoints: BuoyancyPoint[];
   contactPoints: Vec3[];   // pontos de colisão (fundo, rochas, píer)
+  /** fundo do casco onde os bunks da carretinha apoiam (quilha + dois lados do V) */
+  bunkPoints: Vec3[];
 
   // Motor / propulsão
   enginePowerHp: number;   // referência documental
@@ -149,6 +151,7 @@ export const SPEEDBOAT: SpeedboatParams = {
     v3(-1.1, 0.35, -2.85), v3(1.1, 0.35, -2.85),
     v3(-0.6, 0.35, 2.4), v3(0.6, 0.35, 2.4),
   ],
+  bunkPoints: [-2.6, -1.4, 0, 1.4].flatMap((z) => [v3(0, -0.45, z), v3(-0.55, -0.35, z), v3(0.55, -0.35, z)]),
 
   enginePowerHp: 150,
   maxThrust: 8500,
@@ -246,6 +249,7 @@ export const DINGHY: SpeedboatParams = {
     v3(-0.8, 0.12, 0.6), v3(0.8, 0.12, 0.6), v3(-0.82, 0.12, -0.6), v3(0.82, 0.12, -0.6),
     v3(-0.7, 0.12, -1.5), v3(0.7, 0.12, -1.5),
   ],
+  bunkPoints: [-1.1, -0.1, 0.8].flatMap((z) => [v3(0, -0.2, z), v3(-0.42, -0.14, z), v3(0.42, -0.14, z)]),
 
   enginePowerHp: 15,
   maxThrust: 1200,

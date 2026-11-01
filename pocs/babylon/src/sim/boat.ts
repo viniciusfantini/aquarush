@@ -9,7 +9,7 @@ import {
 } from "./math.ts";
 import type { IWaterSurface } from "./water.ts";
 import { G } from "./water.ts";
-import type { PhysicsWorld } from "./world.ts";
+import { type PhysicsWorld, surfaceHeight } from "./world.ts";
 import type { SpeedboatParams, Occupant, SeatId } from "./params.ts";
 import { PERSON_KG } from "./params.ts";
 import { ENGINE_SYSTEMS } from "./engineSystems.ts";
@@ -118,6 +118,10 @@ export class Speedboat {
   /** autoteste ao ligar a chave: o alarme apita (~1 s) antes do arranque girar */
   private selfTestT = 0;
   private lastContact = false;
+  /** apoiado no berço da carretinha neste passo */
+  onSupport = false;
+  /** cinta do guincho presa ao olhal de proa (carretinha) — só traciona */
+  winchStrap: { anchor: Vec3; local: Vec3; length: number } | null = null;
   private cavitation = 0;
   private propRpmState = 0;
   private immersion = 1;
@@ -210,7 +214,7 @@ export class Speedboat {
     this.trim = 0;
     this.tilt = 0;
     this.tiltWanted = false;
-    this.capsized = false; this.capsizeT = 0; this.swimmers = [];
+    this.capsized = false; this.capsizeT = 0; this.swimmers = []; this.winchStrap = null;
     this.trimPin = Math.max(0, Math.min(1, this.params.trimPins.length - 1));
     this.manualAngle = this.params.trimPins[this.trimPin] ?? 0;
     this.gear = this.wantGear = "N";
@@ -747,10 +751,14 @@ export class Speedboat {
   /** Contatos por penalidade (mola-amortecedor + atrito) — sempre forças, nunca teleporte. */
   private collide(world: PhysicsWorld): number {
     const P = this.params;
-    const kG = 260000, cG = 26000, muG = 0.45;   // fundo
-    const kC = 450000, cC = 32000, muC = 0.25;   // rochas / píer
+    // rigidez/amortecimento dos contatos proporcionais à massa (calibrados para a lancha de ~1300 kg):
+    // o bote de ~200 kg com as mesmas molas ficaria numericamente instável no passo de 1/120 s
+    const mk = clamp(this.totalMass / 1300, 0.12, 1.5);
+    const kG = 260000 * mk, cG = 26000 * mk, muG = 0.45;   // fundo
+    const kC = 450000 * mk, cC = 32000 * mk, muC = 0.25;   // rochas / píer
     let maxImpact = 0;
     let contact = false;
+    this.onSupport = false;
     for (const lp of P.contactPoints) {
       const wp = this.toWorld(lp);
       const vp = this.pointVelocity(wp);
@@ -762,7 +770,7 @@ export class Speedboat {
         const fn = Math.max(0, kG * pen - cG * vp.y);
         const vt = v3(vp.x, 0, vp.z);
         const vtl = len(vt);
-        const ff = vtl > 1e-3 ? scale(vt, -Math.min(muG * fn, 4000 * vtl) / vtl) : v3();
+        const ff = vtl > 1e-3 ? scale(vt, -Math.min(muG * fn, 4000 * mk * vtl) / vtl) : v3();
         this.addForceAt(add(scale(n, fn), ff), wp, "contact");
         maxImpact = Math.max(maxImpact, fn);
         contact = true;
@@ -790,6 +798,37 @@ export class Speedboat {
         contact = true;
       }
     }
+    // berço da carretinha (bunks): apoio só por cima, com atrito baixo (carpete) — o casco desliza e centraliza no V
+    if (world.surfaces?.length) {
+      const kS = 140000 * mk, cS = 14000 * mk;
+      for (const lp of [...P.contactPoints, ...P.bunkPoints]) {
+        const wp = this.toWorld(lp);
+        for (const sf of world.surfaces) {
+          const hs = surfaceHeight(sf, wp.x, wp.z);
+          if (hs === null) continue;
+          const pen = hs - wp.y;
+          if (pen <= 0 || pen > 0.3) continue;
+          const gx = sf.vSlope * Math.sign(wp.x - sf.cx);
+          const nl = Math.hypot(gx, 1, sf.slope);
+          const n = v3(-gx / nl, 1 / nl, -sf.slope / nl);
+          maxImpact = Math.max(maxImpact, this.applyContact(wp, this.pointVelocity(wp), n, pen / nl, kS, cS, sf.mu));
+          contact = true;
+          this.onSupport = true;
+        }
+      }
+    }
+    // cinta do guincho: mola só de tração entre o olhal de proa e o guincho
+    if (this.winchStrap) {
+      const ws = this.winchStrap;
+      const eye = this.toWorld(ws.local);
+      const d = sub(ws.anchor, eye), dl = len(d);
+      if (dl > ws.length) {
+        const n = scale(d, 1 / dl);
+        const vrel = dot(this.pointVelocity(eye), n);
+        const f = Math.max(0, 60000 * mk * (dl - ws.length) - 6000 * mk * vrel);
+        this.addForceAt(scale(n, f), eye, "contact");
+      }
+    }
     if (contact && !this.lastContact && maxImpact > 6000) this.telemetry.collisions++;
     this.lastContact = contact;
     return maxImpact;
@@ -800,7 +839,7 @@ export class Speedboat {
     const fn = Math.max(0, k * pen - c * vn);
     const vt = sub(vp, scale(n, vn));
     const vtl = len(vt);
-    const ff = vtl > 1e-3 ? scale(vt, -Math.min(mu * fn, 3000 * vtl) / vtl) : v3();
+    const ff = vtl > 1e-3 ? scale(vt, -Math.min(mu * fn, 3000 * clamp(this.totalMass / 1300, 0.12, 1.5) * vtl) / vtl) : v3();
     this.addForceAt(add(scale(n, fn), ff), wp, "contact");
     return fn;
   }

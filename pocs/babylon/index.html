@@ -77,6 +77,8 @@
     #status { display: flex; gap: 8px; flex-wrap: wrap; }
     .chip { font-size: 12px; letter-spacing: 0.08em; padding: 5px 10px; border-radius: 999px; background: var(--panel); color: var(--dim); }
     .chip.on { color: #04222a; background: var(--accent); }
+    #h-trailer.show { color: var(--fg); background: rgba(13, 79, 139, 0.75); }
+    #h-trailer.ok { color: #04222a; background: #7dff9a; }
     #h-lights.on { background: #7dff9b; }
     #h-engine.off { color: #fff; background: #b3261e; }
     #h-engine.crank { color: #2a0400; background: #ffd34d; }
@@ -84,7 +86,7 @@
     @keyframes blink { 50% { background: #ff5a4e; } }
     #status .chip.btn { pointer-events: auto; cursor: pointer; color: var(--fg); border: 1px solid rgba(255,255,255,0.3); }
     #status { pointer-events: auto; }
-    #h-hot:not(.warn), #h-lowfuel:not(.warn), #h-charge:not(.warn), #h-cav:not(.warn), #h-vent:not(.warn) { display: none; }
+    #h-trailer:not(.show), #h-hot:not(.warn), #h-lowfuel:not(.warn), #h-charge:not(.warn), #h-cav:not(.warn), #h-vent:not(.warn) { display: none; }
     #h-build { position: absolute; left: 18px; bottom: 10px; font-size: 11px; color: var(--dim); }
 
     #h-debug { display: none; padding: 10px 14px; font-size: 12px; width: 270px; }
@@ -144,6 +146,7 @@
         <div class="chip" id="h-vent">VENTILAÇÃO</div>
         <div class="chip" id="h-hot">SUPERAQUECIMENTO</div>
         <div class="chip" id="h-lowfuel">COMBUSTÍVEL BAIXO</div>
+        <div class="chip" id="h-trailer">CARRETINHA</div>
         <div class="chip" id="h-charge">BATERIA</div>
         <div class="chip btn" id="h-water">ÁGUA: LAGO</div>
         <div class="chip btn" id="h-occ">OCUPANTES: 1</div>
@@ -161,6 +164,7 @@
       <div id="help-occ"><kbd>O</kbd> ocupantes (1 · carona · 2 na popa · 4) — mudam o peso e o equilíbrio</div>
       <div><kbd>0</kbd>/<kbd>G</kbd> água vidro · <kbd>1</kbd> calma · <kbd>2</kbd> lago · <kbd>3</kbd> forte · <kbd>V</kbd> alterna</div>
       <div id="help-ign"><kbd>P</kbd> liga/desliga o motor (partida só em <b>N</b>) · <kbd>Esc</kbd> pausa</div>
+      <div><kbd>T</kbd> ir para a rampa: alinhe e suba o barco na carretinha (devagar, de proa)</div>
       <div><kbd>F3</kbd> telemetria · <kbd>H</kbd> ajuda</div>
       <div>Mouse: arraste para orbitar a câmera</div>
       <div>Gamepad: RT/LT, analógico, LB/RB trim, Y câmera</div>
