@@ -30,8 +30,6 @@ export interface SpeedboatParams {
   trimMode: "power" | "manual";
   /** ângulos do pino de trim manual (rad), do mais baixo ao mais alto */
   trimPins: number[];
-  /** velocidade máxima na água (m/s) para mexer no pino/tilt manual (só com o barco parado) */
-  manualTrimMaxSpeed: number;
   /** partida elétrica (chave + arranque + bateria) ou manual (corda) */
   electricStart: boolean;
   tankLiters: number;
@@ -111,7 +109,6 @@ export const SPEEDBOAT: SpeedboatParams = {
   steering: "remote",
   trimMode: "power",
   trimPins: [],
-  manualTrimMaxSpeed: 0,
   electricStart: true,
   tankLiters: 120,
   fuelIdleLph: 3,
@@ -203,7 +200,7 @@ export const SPEEDBOAT: SpeedboatParams = {
 // ---------------------------------------------------------------------------------------------
 // Bote de apoio (inflável com fundo rígido, 3,1 m) — até 3 pessoas, motor de popa de 15 hp com
 // cana do leme (direção e acelerador na mão), partida na corda, tanque portátil, SEM power trim:
-// pino de trim com 3 furos + tilt manual, só com o bote parado.
+// pino de trim com 3 furos + tilt manual, só sem acelerar.
 // Valores de referência de botes reais de 3,0–3,2 m (casco ~70 kg, motor 15 hp 4T ~45 kg).
 // Origem = CG do bote seco (casco + motor). X boreste, Y cima, Z proa.
 // ---------------------------------------------------------------------------------------------
@@ -215,7 +212,6 @@ export const DINGHY: SpeedboatParams = {
   steering: "tiller",
   trimMode: "manual",
   trimPins: [-4 * DEG, 0, 4 * DEG],
-  manualTrimMaxSpeed: 0.7, // ~2,5 km/h: na prática, parado
   electricStart: false,
   tankLiters: 10,  // tanque portátil (máx. 10 L)
   fuelIdleLph: 0.6,

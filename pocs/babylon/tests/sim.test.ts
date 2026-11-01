@@ -16,6 +16,11 @@ import { WakeField, WaterWithWake } from "../src/sim/wake.ts";
 const DT = 1 / 120;
 const openWater: PhysicsWorld = { groundHeight: () => -50, spheres: [], boxes: [] };
 
+const rotInvH = (b: Speedboat, p: { x: number; z: number }) => {
+  // posição horizontal no referencial do barco (só o rumo)
+  const f = b.forward, yaw = Math.atan2(f.x, f.z), dx = p.x - b.pos.x, dz = p.z - b.pos.z;
+  return { x: dx * Math.cos(yaw) - dz * Math.sin(yaw), z: dx * Math.sin(yaw) + dz * Math.cos(yaw) };
+};
 const mkWater = (intensity: number, currents: CurrentZone[] = []) => {
   const w = new GerstnerWater({ waves: WAVE_PRESETS.lago, groundHeight: () => -50, currents });
   w.intensity = intensity;
@@ -437,11 +442,15 @@ for (const [label, thr] of [["baixa", 0.25], ["alta", 1]] as const) {
   tap(-1); run(tb, water, 2, emptyInput()); tap(-1); tap(-1); run(tb, water, 2, emptyInput());
   check("bote", "abaixa e desce até o pino 1 (−4°)", tb.telemetry.trimDeg, -4.1, -3.9, "°", 2);
   check("bote", "tilt voltou a 0 (°)", tb.telemetry.tiltDeg, 0, 0.01, "°", 2);
-  // andando não deixa
+  // acelerando não deixa; sem acelerar (mesmo deslizando) deixa
   run(tb, water, 4, { ...emptyInput(), gear: "F", throttle: 0.6 });
   const pinMoving = tb.telemetry.trimPin;
   run(tb, water, 0.1, { ...emptyInput(), gear: "F", throttle: 0.6, trim: 1 });
-  check("bote", "andando: mudança de pino recusada", tb.telemetry.trimPin === pinMoving && tb.telemetry.tiltBlocked ? 1 : 0, 1, 1, "", 0);
+  check("bote", "acelerando: mudança de pino recusada", tb.telemetry.trimPin === pinMoving && tb.telemetry.tiltBlocked ? 1 : 0, 1, 1, "", 0);
+  run(tb, water, 0.6, { ...emptyInput(), gear: "F" });
+  const vCoast = tb.telemetry.speedKmh;
+  run(tb, water, 0.1, { ...emptyInput(), gear: "F", trim: 1 }); run(tb, water, 0.1, { ...emptyInput(), gear: "F" });
+  check("bote", "sem acelerar, ainda andando: pino muda", tb.telemetry.trimPin === pinMoving + 1 && vCoast > 5 ? 1 : 0, 1, 1, "", 0);
 
   // partida na corda: sem bateria; pega em algumas puxadas
   const pb = mk(["helm"]);
@@ -470,6 +479,18 @@ for (const [label, thr] of [["baixa", 0.25], ["alta", 1]] as const) {
   const dy = b.swimmers.map((s) => s.pos.y - water.getHeight(s.pos.x, s.pos.z));
   check("emborcamento", "colete: centro do colete na linha d'água (m)", Math.max(...dy.map(Math.abs)), 0, 0.2, "m", 2);
   check("emborcamento", "pessoas fora do casco: distância mín. do centro (m)", Math.min(...b.swimmers.map((s) => Math.hypot(s.pos.x - b.pos.x, s.pos.z - b.pos.z))), DINGHY.beam / 2 + 0.2, 6, "m", 2);
+  // nadam até o barco e ficam em volta dele (inclusive com o barco à deriva)
+  run(b, water, 30, emptyInput());
+  const near = b.swimmers.map((s) => { const L = rotInvH(b, s.pos); return Math.max(Math.abs(L.x) - DINGHY.beam / 2, Math.abs(L.z) - DINGHY.length / 2); });
+  check("emborcamento", "30 s depois: todos a até 1 m do casco (m)", Math.max(...near), -1, 1, "m", 2);
+  check("emborcamento", "chegaram: pararam de nadar (esforço)", Math.max(...b.swimmers.map((s) => s.swim)), 0, 0.2, "", 2);
+  check("emborcamento", "ninguém dentro do casco (m fora)", Math.min(...b.swimmers.map((s) => { const L = rotInvH(b, s.pos); return Math.max(Math.abs(L.x) - DINGHY.beam / 2, Math.abs(L.z) - DINGHY.length / 2); })), 0, 1, "m", 2);
+  // sem piloto a bordo: comandos não fazem nada
+  const z0 = b.pos.z, yaw0 = Math.atan2(b.forward.x, b.forward.z);
+  run(b, water, 5, { ...emptyInput(), gear: "F", throttle: 1, steering: 1, trim: 1 });
+  check("emborcamento", "sem piloto: acelerador/cana não fazem nada (m)", Math.abs(b.pos.z - z0), 0, 0.3, "m", 2);
+  check("emborcamento", "sem piloto: o barco não gira (°)", Math.abs(Math.atan2(b.forward.x, b.forward.z) - yaw0) * 57.3, 0, 3, "°", 1);
+  check("emborcamento", "sem piloto: P não dá partida", b.toggleIgnition() === "noPilot" ? 1 : 0, 1, 1, "", 0);
   check("emborcamento", "pessoas paradas boiando (m/s)", Math.max(...b.swimmers.map((s) => Math.abs(s.vel.y))), 0, 0.4, "m/s", 2);
   b.reset(v3(0, 0.2, 0), 0);
   check("emborcamento", "R: ninguém na água e barco de pé", b.swimmers.length === 0 && !b.capsized ? 1 : 0, 1, 1, "", 0);

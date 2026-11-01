@@ -29,7 +29,7 @@ import { BoatCamera } from "./presentation/cameras.ts";
 import { Hud } from "./presentation/hud.ts";
 import { EngineAudio } from "./presentation/audio.ts";
 
-const BUILD = "poc-babylon 0.14.0";
+const BUILD = "poc-babylon 0.15.0";
 /** Escala visual da rotação da hélice (proporcional ao RPM, abaixo do limite estroboscópico). */
 const PROP_VISUAL_SCALE = 0.12;
 
@@ -288,7 +288,7 @@ const boot = async () => {
     const isBote = kind === "bote";
     hud.configure(isBote ? { speedMax: 60, temp: false, battery: false, trimPins: V.P.trimPins.length } : undefined);
     document.getElementById("help-trim")!.innerHTML = isBote
-      ? "<kbd>E</kbd>/<kbd>Q</kbd> trim manual (parado): pino 1 · 2 · 3 → <kbd>E</kbd> de novo levanta o motor (tilt)"
+      ? "<kbd>E</kbd>/<kbd>Q</kbd> trim manual (sem acelerar): pino 1 · 2 · 3 → <kbd>E</kbd> de novo levanta o motor (tilt)"
       : "<kbd>E</kbd> trim + (proa sobe) · <kbd>Q</kbd> trim − (proa desce)";
     document.getElementById("help-occ")!.innerHTML = isBote
       ? "<kbd>O</kbd> ocupantes (1 · 1 no meio · 1 na popa · 3) — mudam o peso e o equilíbrio"
@@ -376,6 +376,7 @@ const boot = async () => {
     else if (a === "ignition") {
       if (boat.capsized) { hud.showToast("Barco virado — R para recomeçar"); return; }
       const r = boat.toggleIgnition();
+      if (r === "noPilot") { hud.showToast("Ninguém no comando — o piloto está na água"); return; }
       if (r === "pulling") audio.ropePull();
       const msg: Record<string, string> = { stopped: "Motor desligado", pulling: "Puxando a corda…", starting: "Chave ligada — autoteste…", busy: "Dando partida…", needNeutral: "Coloque em N para dar partida", noFuel: "Sem combustível — R para voltar ao píer e abastecer", lowBattery: "Bateria descarregada: nem o relé de partida arma", hot: "Motor quente demais — espere esfriar" };
       hud.showToast(msg[r]);
@@ -437,7 +438,7 @@ const boot = async () => {
     const persons: [SeatId, Pilot][] = [["helm", V.pilot], ...(Object.entries(V.pax) as [SeatId, Pilot][])];
     for (const [seat, person] of persons) {
       const sw = boat.swimmers.find((s) => s.seat === seat);
-      if (sw) person.float(new Vector3(sw.pos.x, sw.pos.y, sw.pos.z), sw.yaw, simTime + (seat.length * 0.7));
+      if (sw) person.float(new Vector3(sw.pos.x, sw.pos.y, sw.pos.z), sw.yaw, simTime + (seat.length * 0.7), sw.swim);
       else if (person.group.parent !== vis.root) person.board(vis.root);
     }
     const pilotAboard = !boat.swimmers.some((s) => s.seat === "helm");
@@ -469,7 +470,7 @@ const boot = async () => {
     const ew = vis.engine.getWorldMatrix();
     fx.updateTelltale(vis.telltale.getAbsolutePosition().clone(), Vector3.TransformNormal(new Vector3(1, -0.15, -0.35), ew), T.rpm, new Vector3(boat.vel.x, boat.vel.y, boat.vel.z),
       T.engine === "running" && T.intakeSubmerged); // sem água na entrada do pé = sem esguicho
-    if (T.tiltBlocked && !tiltWarned) { hud.showToast(isBote ? "Pare o bote para mudar a posição do motor" : "Tilt bloqueado: o empuxo da hélice segura o motor — reduza a rotação"); tiltWarned = true; }
+    if (T.tiltBlocked && !tiltWarned) { hud.showToast(isBote ? "Solte o acelerador para mudar a posição do motor" : "Tilt bloqueado: o empuxo da hélice segura o motor — reduza a rotação"); tiltWarned = true; }
     if (isBote && T.trimPin !== lastPin) { if (lastPin > 0) hud.showToast(T.trimPin > P.trimPins.length ? "Motor levantado (tilt) e travado" : `Motor no pino ${T.trimPin} de ${P.trimPins.length} (${(P.trimPins[T.trimPin - 1] * 180 / Math.PI).toFixed(0)}°)`); lastPin = T.trimPin; }
     if (!T.tiltBlocked) tiltWarned = false;
     if (T.engine === "running" && !T.intakeSubmerged && T.tiltDeg > 5 && !intakeWarned && !T.capsized) { hud.showToast("Motor recolhido: sem água de refrigeração!"); intakeWarned = true; }

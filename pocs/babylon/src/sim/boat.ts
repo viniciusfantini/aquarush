@@ -13,7 +13,9 @@ import type { PhysicsWorld } from "./world.ts";
 import type { SpeedboatParams, Occupant, SeatId } from "./params.ts";
 import { PERSON_KG } from "./params.ts";
 import { ENGINE_SYSTEMS } from "./engineSystems.ts";
-import type { VehicleInput } from "../gameplay/vehicleInput.ts";
+import { type VehicleInput, emptyInput } from "../gameplay/vehicleInput.ts";
+
+const NO_PILOT: VehicleInput = emptyInput();
 import { EngineSystems } from "./engineSystems.ts";
 
 const RHO = 1000;     // água doce, kg/m³
@@ -80,7 +82,15 @@ export interface BoatTelemetry {
  * peito na linha d'água (postura "HELP", pernas encolhidas), o arrasto da água freia o corpo e a
  * correnteza/ondas o carregam. Modelo de 1 ponto (posição = centro do colete).
  */
-export interface Swimmer { seat: SeatId; mass: number; pos: Vec3; vel: Vec3; yaw: number }
+export interface Swimmer {
+  seat: SeatId; mass: number; pos: Vec3; vel: Vec3; yaw: number;
+  /** posição em volta do barco para onde a pessoa nada (ângulo no plano do barco, 0 = proa) */
+  slot: number;
+  /** esforço de nado 0..1 (animação das braçadas) */
+  swim: number;
+  /** tempo na água (s): primeiro se recupera do tombo, depois nada */
+  t: number;
+}
 
 export interface ForceDebug { p: Vec3; f: Vec3; kind: "buoy" | "lift" | "thrust" | "contact" }
 
@@ -238,6 +248,9 @@ export class Speedboat {
     const u = relC.z; // velocidade longitudinal na água
 
     // ---------------- atuadores ----------------
+    // sem ninguém no posto de pilotagem (caiu na água), os comandos não fazem nada: volante/cana soltos,
+    // acelerador na lenta, trim parado (a marcha fica onde estava)
+    if (!this.occupants.some((o) => o.seat === "helm")) input = { ...NO_PILOT, gear: this.wantGear };
     this.updateControls(dt, input, u);
 
     // ---------------- gravidade ----------------
@@ -488,7 +501,7 @@ export class Speedboat {
     //    a hélice sai da água. Bloqueado em velocidade ou rotação alta (como nos motores reais).
     const trimIn = clamp(input.trim, -1, 1);
     this.tiltBlocked = false;
-    if (P.trimMode === "manual") { this.updateManualTrim(dt, trimIn, u); this.trimMotorA = 0; }
+    if (P.trimMode === "manual") { this.updateManualTrim(dt, trimIn, input.throttle); this.trimMotorA = 0; }
     else {
     // bomba elétrica do power trim: velocidade cai com a tensão da bateria (motor DC)
     const vFactor = clamp((this.systems.batteryV - 9.5) / 3, 0.25, 1.05);
@@ -557,7 +570,8 @@ export class Speedboat {
         const side = Math.abs(seat.x) > 0.1 ? Math.sign(seat.x) : rollSide;
         const out = v3(right.x * side, 0, right.z * side);
         const ol = Math.hypot(out.x, out.z) || 1;
-        this.swimmers.push({ seat: o.seat, mass: o.mass, pos: p, vel: addScaled(this.pointVelocity(p), v3(out.x / ol, 0.5, out.z / ol), 1.6), yaw: Math.atan2(fwd.x, fwd.z) });
+        this.swimmers.push({ seat: o.seat, mass: o.mass, pos: p, vel: addScaled(this.pointVelocity(p), v3(out.x / ol, 0.5, out.z / ol), 1.6), yaw: Math.atan2(fwd.x, fwd.z),
+          slot: Math.atan2(side * 1, seat.z / (this.params.length / 2)), swim: 0, t: 0 });
       }
       this.occupants = [];
     }
@@ -568,13 +582,41 @@ export class Speedboat {
       const dSub = clamp(h - 0.05 - s.pos.y, -0.5, 0.6);
       const inWater = h - s.pos.y > -0.3;
       const ay = -G + (dSub > -0.3 ? (G + 60 * dSub) : 0) - (inWater ? 4 * s.vel.y : 0);
-      // arrasto do corpo na água (puxa para a velocidade da correnteza)
+      // nado: depois de ~1 s se recuperando, a pessoa nada (até ~0,7 m/s, crawl/peito de colete) para o
+      // seu lugar em volta do barco (elipse um pouco maior que o casco) e fica ali, acompanhando o barco
+      const fwdH = this.forward;
+      const yawB = Math.atan2(fwdH.x, fwdH.z);
+      const ex = this.params.beam / 2 + 0.38, ez = this.params.length / 2 + 0.35; // ao alcance do cabo de mão
+      if (s.t <= 1 && s.t + dt > 1) {
+        // escolhe o lugar do lado em que a pessoa está (nunca nada por baixo do casco)
+        const dx = s.pos.x - this.pos.x, dz = s.pos.z - this.pos.z;
+        const fx = dx * Math.cos(yawB) - dz * Math.sin(yawB), fz = dx * Math.sin(yawB) + dz * Math.cos(yawB);
+        s.slot = Math.atan2(fx / ex, fz / ez);
+      }
+      s.t += dt;
+      const lx = Math.sin(s.slot) * ex, lz = Math.cos(s.slot) * ez;
+      const tx = this.pos.x + lx * Math.cos(yawB) + lz * Math.sin(yawB);
+      const tz = this.pos.z - lx * Math.sin(yawB) + lz * Math.cos(yawB);
+      const dxT = tx - s.pos.x, dzT = tz - s.pos.z, dT = Math.hypot(dxT, dzT);
+      let swx = this.vel.x, swz = this.vel.z; // perto do lugar: só acompanha o barco (segura no cabo)
+      let effort = 0;
+      if (s.t > 1 && inWater && dT > 0.25) {
+        const sp = Math.min(0.7, dT * 0.8);
+        swx += (dxT / dT) * sp; swz += (dzT / dT) * sp;
+        effort = clamp(sp / 0.7, 0.3, 1);
+        s.yaw = Math.atan2(dxT, dzT); // de frente para onde nada
+      } else if (s.t > 1) {
+        s.yaw = Math.atan2(this.pos.x - s.pos.x, this.pos.z - s.pos.z); // de frente para o barco
+      }
+      s.swim += (effort - s.swim) * Math.min(1, dt * 3);
+      // arrasto do corpo na água: puxa para a correnteza + a velocidade de nado
       const kd = inWater ? 1.6 : 0.05;
-      s.vel = v3(s.vel.x + (cur.x - s.vel.x) * kd * dt, s.vel.y + ay * dt, s.vel.z + (cur.z - s.vel.z) * kd * dt);
+      const vx = s.t > 1 ? swx : cur.x, vz = s.t > 1 ? swz : cur.z;
+      s.vel = v3(s.vel.x + (vx - s.vel.x) * kd * dt, s.vel.y + ay * dt, s.vel.z + (vz - s.vel.z) * kd * dt);
       s.pos = addScaled(s.pos, s.vel, dt);
       // não atravessa o casco: dentro da projeção do barco, empurra para o bordo mais próximo
       const L = rotateInv(this.rot, sub(s.pos, this.pos));
-      const hx = this.params.beam / 2 + 0.3, hz = this.params.length / 2 + 0.15;
+      const hx = this.params.beam / 2 + 0.22, hz = this.params.length / 2 + 0.15;
       if (Math.abs(L.x) < hx && Math.abs(L.z) < hz && Math.abs(L.y) < 1.2) {
         const px = (hx - Math.abs(L.x)) * (Math.sign(L.x) || 1);
         const push = rotate(this.rot, v3(px, 0, 0));
@@ -594,10 +636,10 @@ export class Speedboat {
   /**
    * Trim MANUAL (bote, sem power trim): cada toque em trim+ / trim- passa o motor para o próximo furo
    * do pino (3 ângulos); depois do furo mais alto, trim+ levanta o motor todo (tilt, travado em cima);
-   * trim- abaixa de volta. Só com o bote parado (no mundo real o piloto se vira, solta a trava e
-   * levanta o motor com a mão). O motor ANDA até a posição nova (nunca salta).
+   * trim- abaixa de volta. Só sem acelerar (o piloto solta o acelerador, se vira, solta a trava e
+   * mexe no motor com a mão — pode estar parado ou deslizando na lenta). O motor ANDA até a posição nova (nunca salta).
    */
-  private updateManualTrim(dt: number, trimIn: number, u: number): void {
+  private updateManualTrim(dt: number, trimIn: number, throttleCmd: number): void {
     const P = this.params;
     const pins = P.trimPins;
     const up = trimIn > 0.5 && this.prevTrimIn <= 0.5;
@@ -605,7 +647,7 @@ export class Speedboat {
     this.prevTrimIn = trimIn;
     this.manualBlockT = Math.max(0, this.manualBlockT - dt);
     if (up || down) {
-      if (Math.abs(u) > P.manualTrimMaxSpeed) this.manualBlockT = 1.2;
+      if (throttleCmd > 0.02 || this.throttleActual > 0.05) this.manualBlockT = 1.2; // acelerando: a mão está no acelerador
       else if (up) { if (this.trimPin < pins.length - 1) this.trimPin++; else this.tiltWanted = true; }
       else if (this.tiltWanted) this.tiltWanted = false;
       else if (this.trimPin > 0) this.trimPin--;
@@ -621,7 +663,8 @@ export class Speedboat {
    * Ignição (tecla P): desliga o motor ou dá partida. Por segurança (como nos motores reais),
    * a partida só funciona em NEUTRO. Retorna o que aconteceu.
    */
-  toggleIgnition(): "stopped" | "starting" | "pulling" | "needNeutral" | "busy" | "noFuel" | "lowBattery" | "hot" {
+  toggleIgnition(): "stopped" | "starting" | "pulling" | "needNeutral" | "busy" | "noFuel" | "lowBattery" | "hot" | "noPilot" {
+    if (!this.occupants.some((o) => o.seat === "helm")) return "noPilot";
     if (this.engine === "running") { this.engine = "off"; return "stopped"; }
     if (this.engine === "cranking") return "busy";
     if (this.gear !== "N") return "needNeutral";

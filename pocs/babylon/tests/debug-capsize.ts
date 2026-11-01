@@ -17,3 +17,13 @@ run(10, (t) => { if (Math.round(t * 120) % 120 === 0) console.log(`t=${t.toFixed
 const B = b;
 const loc = B.swimmers.map((s) => { const dx = s.pos.x - B.pos.x, dz = s.pos.z - B.pos.z; return Math.hypot(dx, dz).toFixed(2); });
 console.log("distância horizontal do centro do barco (m):", loc.join(", "));
+for (let k = 0; k < 6; k++) { run(5); console.log(`+5s esforço=${B.swimmers.map((s) => s.swim.toFixed(2)).join(",")} dist=${B.swimmers.map((s) => Math.hypot(s.pos.x - B.pos.x, s.pos.z - B.pos.z).toFixed(2)).join(",")}`); }
+{
+  const f = B.forward, yawB = Math.atan2(f.x, f.z);
+  for (const s of B.swimmers) {
+    const ex = B.params.beam / 2 + 0.5, ez = B.params.length / 2 + 0.4;
+    const lx = Math.sin(s.slot) * ex, lz = Math.cos(s.slot) * ez;
+    const tx = B.pos.x + lx * Math.cos(yawB) + lz * Math.sin(yawB), tz = B.pos.z - lx * Math.sin(yawB) + lz * Math.cos(yawB);
+    console.log(`seat=${s.seat} slot=${(s.slot * 57.3).toFixed(0)} pos=(${(s.pos.x - B.pos.x).toFixed(2)},${(s.pos.z - B.pos.z).toFixed(2)}) alvo=(${(tx - B.pos.x).toFixed(2)},${(tz - B.pos.z).toFixed(2)}) vel=(${s.vel.x.toFixed(2)},${s.vel.z.toFixed(2)}) boatvel=(${B.vel.x.toFixed(2)},${B.vel.z.toFixed(2)})`);
+  }
+}

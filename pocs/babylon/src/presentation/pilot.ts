@@ -44,8 +44,8 @@ export interface Pilot {
   group: TransformNode;
   /** alvos das mãos no espaço local da lancha */
   update(leftHand: Vector3, rightHand: Vector3): void;
-  /** na água: centro do colete em `pos` (mundo), virada para `yaw`; braços abertos remando */
-  float(pos: Vector3, yaw: number, t: number): void;
+  /** na água: centro do colete em `pos` (mundo), virada para `yaw`; `swim` 0..1 = esforço de nado (braçadas) */
+  float(pos: Vector3, yaw: number, t: number, swim?: number): void;
   /** de volta ao banco */
   board(root: TransformNode): void;
 }
@@ -145,16 +145,24 @@ export const buildPerson = (scene: Scene, root: TransformNode, o: PersonOpts): P
   const api: Pilot = {
     meshes,
     group,
-    float(pos: Vector3, yaw: number, t: number) {
+    float(pos: Vector3, yaw: number, t: number, swim = 0) {
       if (group.parent) group.parent = null;
-      // postura "HELP" do colete: reclinada ~30° para trás, pernas encolhidas (a pose sentada serve)
-      Quaternion.FromEulerAnglesToRef(-0.5 + 0.05 * Math.sin(t * 1.3), yaw, 0.04 * Math.sin(t * 0.9), q);
+      // parada: postura "HELP" do colete (reclinada ~30°, pernas encolhidas — a pose sentada serve);
+      // nadando: corpo mais deitado para a frente, rolando um pouco a cada braçada
+      const stroke = t * 3.2;
+      Quaternion.FromEulerAnglesToRef(-0.5 + 0.75 * swim + 0.05 * Math.sin(t * 1.3), yaw, 0.04 * Math.sin(t * 0.9) + 0.12 * swim * Math.sin(stroke), q);
       group.rotationQuaternion = q;
       const off = anchor.applyRotationQuaternion(q);
       group.position.copyFrom(pos.subtract(off));
-      // braços abertos, remando devagar
+      // braços: abertos remando devagar (parada) ou braçadas alternadas para a frente (nadando)
       const sw = 0.06 * Math.sin(t * 2.2);
-      api.update(new Vector3(X - 0.42, FLOOR + 0.82 + sw, -0.1 + DZ), new Vector3(X + 0.42, FLOOR + 0.82 - sw, -0.1 + DZ));
+      const arm = (side: number, ph: number) => {
+        const c = Math.cos(stroke + ph), sn = Math.sin(stroke + ph);
+        const idle = new Vector3(X + side * 0.42, FLOOR + 0.82 + side * sw, -0.1 + DZ);
+        const swimT = new Vector3(X + side * 0.22, FLOOR + 0.85 + 0.25 * Math.max(0, sn), -0.05 + DZ + 0.42 * c);
+        return Vector3.Lerp(idle, swimT, swim);
+      };
+      api.update(arm(-1, 0), arm(1, Math.PI));
     },
     board(root2: TransformNode) {
       group.parent = root2;
