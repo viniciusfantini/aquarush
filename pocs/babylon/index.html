@@ -19,7 +19,15 @@
     /* relógios (SVG) — canto inferior direito, sem sobreposição */
     #gauges { position: absolute; right: 14px; bottom: 12px; display: flex; gap: 10px; align-items: flex-end; padding: 10px 12px; }
     #g-big { display: flex; gap: 8px; }
-    #g-small { display: grid; grid-template-columns: repeat(2, 84px); gap: 6px; }
+    #g-bars { display: flex; gap: 10px; align-self: center; }
+    .vbar { display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: 11px; color: var(--dim); }
+    .vbar .track { position: relative; width: 14px; height: 120px; border-radius: 7px; background: rgba(255,255,255,0.15); overflow: hidden; }
+    .vbar b { color: var(--fg); font-variant-numeric: tabular-nums; font-weight: 600; min-width: 46px; text-align: center; }
+    #h-thr-bar { position: absolute; bottom: 0; left: 0; right: 0; height: 0; background: var(--accent); }
+    #h-thr-bar.rev { background: var(--warn); }
+    #h-trim-mark { position: absolute; left: -3px; right: -3px; height: 4px; margin-bottom: -2px; background: #ffd34d; border-radius: 2px; }
+    .vbar .track.trim::after { content: ""; position: absolute; left: 0; right: 0; top: 50%; height: 1px; background: rgba(255,255,255,0.4); }
+    #g-small { display: grid; grid-template-columns: repeat(3, 84px); gap: 6px; }
     .gauge.big { width: 156px; height: 156px; }
     .gauge.small { width: 84px; height: 84px; }
     .gauge .g-face { fill: rgba(6, 14, 22, 0.78); }
@@ -121,7 +129,14 @@
       <div>Gamepad: RT/LT, analógico, LB/RB trim, Y câmera</div>
     </div>
     <div id="h-toast"></div>
-    <div id="gauges" class="panel"><div id="g-big"></div><div id="g-side"><div id="g-small"></div><div id="g-aut"></div></div></div>
+    <div id="gauges" class="panel">
+      <div id="g-bars">
+        <div class="vbar"><div class="track"><div id="h-thr-bar"></div></div><b id="h-thr">0%</b>ACEL</div>
+        <div class="vbar"><div class="track trim"><div id="h-trim-mark"></div></div><b id="h-trim">0.0°</b>TRIM</div>
+      </div>
+      <div id="g-big"></div>
+      <div id="g-side"><div id="g-small"></div><div id="g-aut"></div></div>
+    </div>
     <div id="h-build"></div>
 
     <div class="touch" id="t-stick"><div id="t-knob"></div></div>

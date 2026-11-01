@@ -68,3 +68,4 @@ npm run dev            # abrir http://localhost:5173, F3 mostra a telemetria; wi
 
 - Windows 11, Node 24.16, Git 2.55. Unity e Unreal **não** estão instalados. O `gh` CLI não está instalado.
 - Repositório: https://github.com/viniciusfantini/aquarush
+- **Online (GitHub Pages, público):** https://viniciusfantini.github.io/aquarush/. Publicar: `cd pocs/babylon && npm run deploy` (roda typecheck e testes; se algo falhar, não publica; empurra `dist/` para a branch `gh-pages`). Depois de cada versão aprovada, faça o deploy e atualize o README.

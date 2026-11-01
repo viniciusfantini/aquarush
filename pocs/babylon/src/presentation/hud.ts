@@ -90,7 +90,10 @@ export class Hud {
   private fuelG: RoundGauge;
   private tempG: RoundGauge;
   private voltG: RoundGauge;
-  private trimG: RoundGauge;
+  private thrBar = $("h-thr-bar");
+  private thrTxt = $("h-thr");
+  private trimMark = $("h-trim-mark");
+  private trimTxt = $("h-trim");
   private planing = $("h-planing");
   private engineChip = $("h-engine");
   private hotChip = $("h-hot");
@@ -116,11 +119,10 @@ export class Hud {
     this.fuelG = new RoundGauge(small, { title: "COMBUST.", min: 0, max: 1, labels: [0, 0.5, 1], minor: 0.125, redFrom: 0, redTo: 0.12, labelFmt: (v) => (v === 0 ? "E" : v === 1 ? "F" : "½") });
     this.tempG = new RoundGauge(small, { title: "TEMP", min: 40, max: 120, labels: [40, 80, 120], minor: 10, redFrom: 90 });
     this.voltG = new RoundGauge(small, { title: "BATERIA", min: 8, max: 16, labels: [8, 12, 16], minor: 1, redFrom: 8, redTo: 11.5 });
-    this.trimG = new RoundGauge(small, { title: "TRIM", min: -1, max: 2, labels: [-1, 0, 1, 2], minor: 0.25, labelFmt: (v) => (v === -1 ? "▼" : v === 0 ? "0" : v === 1 ? "▲" : "TILT") });
   }
 
   update(t: BoatTelemetry, fps: number, extra: Record<string, string>): void {
-    this.speedG.set(t.speedKmh, `${Math.round(t.speedKmh)}`, `acel ${Math.round(t.throttle * 100)}% · ${t.gear}`);
+    this.speedG.set(t.speedKmh, `${Math.round(t.speedKmh)}`, `marcha ${t.gear}`);
     this.rpmG.set(t.rpm, `${Math.round(t.rpm / 10) * 10}`, `${t.engineHours.toFixed(1).padStart(6, "0")} h`, t.revLimiter);
     const autonomy = t.fuelLph > 0.1 ? t.fuelL / t.fuelLph : 0;
     const autTxt = t.engine === "running" && autonomy > 0 ? ` · ${Math.floor(autonomy)}h${String(Math.floor((autonomy % 1) * 60)).padStart(2, "0")}` : "";
@@ -128,8 +130,13 @@ export class Hud {
     this.fuelAut.textContent = autTxt ? `autonomia${autTxt.replace(" ·", "")}` : "";
     this.tempG.set(t.coolantC, `${t.coolantC.toFixed(0)}°C`, t.protectMode ? "PROTEÇÃO" : t.overheatWarn ? "QUENTE" : "", t.overheatWarn);
     this.voltG.set(t.batteryV, `${t.batteryV.toFixed(1)} V`, t.engine === "running" && t.batteryV > 13.2 ? "carga" : "", t.chargeWarn);
-    const trimVal = t.tiltDeg > 0.5 ? 1 + Math.min(t.tiltDeg / 60, 1) : t.trim;
-    this.trimG.set(trimVal, t.tiltDeg > 0.5 ? `TILT ${t.tiltDeg.toFixed(0)}°` : `${t.trimDeg >= 0 ? "+" : ""}${t.trimDeg.toFixed(1)}°`, "");
+    // barras de acelerador e trim (como antes)
+    this.thrBar.style.height = `${t.throttle * 100}%`;
+    this.thrBar.classList.toggle("rev", t.gear === "R");
+    this.thrTxt.textContent = `${Math.round(t.throttle * 100)}%`;
+    this.trimMark.style.bottom = t.tiltDeg > 0.5 ? "100%" : `${((t.trim + 1) / 2) * 100}%`;
+    this.trimMark.style.background = t.tiltDeg > 0.5 ? "#ff9d3d" : "";
+    this.trimTxt.textContent = t.tiltDeg > 0.5 ? `TILT ${t.tiltDeg.toFixed(0)}°` : `${t.trimDeg >= 0 ? "+" : ""}${t.trimDeg.toFixed(1)}°`;
 
     this.planing.classList.toggle("on", t.planing);
     this.engineChip.textContent = t.engine === "running" ? "MOTOR LIGADO" : t.engine === "cranking" ? "DANDO PARTIDA…" : "MOTOR DESLIGADO";

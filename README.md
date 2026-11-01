@@ -1,6 +1,8 @@
 # AQUA RUSH
 
-Jogo 3D de navegação aquática em mundo aberto para **mobile e navegador**. O núcleo do jogo é a sensação de pilotagem e a interação com a água.
+Jogo 3D de navegação aquática em mundo aberto para **mobile e navegador**.
+
+**▶ Jogar online (POC Babylon):** https://viniciusfantini.github.io/aquarush/ — funciona no navegador do computador e do celular (controles touch automáticos). O núcleo do jogo é a sensação de pilotagem e a interação com a água.
 
 O documento de premissas (GDD + arquitetura + plano de POC) está em [`docs/AQUA_RUSH_GDD_COMPLETO_v2.docx`](docs/AQUA_RUSH_GDD_COMPLETO_v2.docx). Há uma versão em texto puro, útil para busca, em [`docs/GDD_texto_extraido.txt`](docs/GDD_texto_extraido.txt).
 
@@ -10,7 +12,7 @@ O GDD (seção 10) pede a **mesma fatia jogável** em três tecnologias antes de
 
 | # | Tecnologia | Pasta | Status |
 |---|---|---|---|
-| 1 | **Babylon.js + TypeScript** (browser-first, sem instalar engine) | [`pocs/babylon`](pocs/babylon) | ✅ **v0.10.0 jogável**: física testada (95/96 critérios), água vidro, esteira na água, cavitação |
+| 1 | **Babylon.js + TypeScript** (browser-first, sem instalar engine) | [`pocs/babylon`](pocs/babylon) | ✅ **v0.10.1 online**: física testada (95/96 critérios), água vidro, esteira na água, cavitação |
 | 2 | Unity 6 LTS + URP | [`pocs/unity`](pocs/unity) | ⏳ planejada (Unity não instalado nesta máquina) |
 | 3 | Unreal Engine 5 | [`pocs/unreal`](pocs/unreal) | ⏳ planejada |
 
@@ -27,6 +29,7 @@ npm run dev          # http://localhost:5173  (também acessível na rede local,
 npm run test:sim     # roteiro físico do GDD A.12 (testes 1–6) sem navegador
 npm run typecheck
 npm run build        # gera dist/ (site estático)
+npm run deploy       # typecheck + testes + build e publica no GitHub Pages (branch gh-pages)
 ```
 
 Parâmetros de URL: `?q=low|med|high` (qualidade), `?webgpu=1`, `?touch=1` (força os controles touch).
@@ -65,6 +68,7 @@ pocs/unreal/         POC 3 — planejada
 |---|---|---|
 | 2026-10-31 | babylon 0.1.0 | POC 1: lago com margens, ilha, rio com correnteza, rochas, vegetação, píer e marina. Lancha com corpo rígido 6DOF, flutuação em 6 pontos, planeio emergente, trim físico, colisões. Água Gerstner compartilhada entre física e shader. Esteira, spray, câmeras externa e cockpit, HUD, teclado, gamepad e touch, áudio procedural. Testes físicos headless. |
 | 2026-10-31 | babylon 0.2.0 | Água **vidro (glass)** e presets de água. **Reflexo planar real** (lancha, margens e píer refletidos). **Esteira integrada à água**: um mapa de esteira deforma a superfície (braços do V de Kelvin, cristas e cavados), perturba os reflexos e gera espuma da hélice, do casco e da fervura. **Cavitação e ventilação da hélice** na física (perda de empuxo, RPM sobe), com fervura branca, bolhas, névoa, spray, aviso no HUD e som. **Lancha refeita**: casco com strakes e flare, cockpit rebaixado, para-brisa envolvente, guarda-mancebo, bancos estofados, plataformas e escada de banho, painel com velocímetro e conta-giros de ponteiro, motor de popa com capô, placa anticavitação, pé e skeg, **hélice de 3 pás com passo, torção e skew** e disco de borrão. Materiais PBR com ambiente. |
+| 2026-10-31 | babylon 0.10.1 | Acelerador e trim voltam a ser **barras** ao lado dos relógios. **Publicado online** no GitHub Pages (`npm run deploy`). |
 | 2026-10-31 | babylon 0.10.0 | **Peso real na física**: massa seca de 1030 kg + gasolina (0,74 kg/L, no tanque sob o piso) + ocupantes (80 kg, cada um no seu banco); cada peso age na sua posição (afunda, embica, aderna) e a inércia é recalculada. **O** alterna a lotação (só piloto, carona, 2 na popa, lotada) com os passageiros visíveis. Começa com **30 L** no tanque. **HUD novo**: relógios redondos com ponteiro e leitura digital dentro (velocidade, RPM com horímetro, combustível com **consumo L/h** e autonomia, temperatura, bateria, trim), sem sobreposição. |
 | 2026-10-31 | babylon 0.9.0 | **Instrumentos do motor** simulados: combustível (tanque de 120 L, consumo real; acabou, o motor morre), temperatura (termostato ~58 °C; sem água de refrigeração superaquece → proteção a 2000 rpm → desliga), bateria (12,6 V parado, 14,2 V carregando, cai na partida) e horímetro (salvo no navegador). **Painel real**: velocímetro e conta-giros com horímetro LCD, relógios de combustível, temperatura, voltímetro e trim, luzes de alarme, chave de ignição e interruptores. **Volante e manete funcionais**: volante com ¾ de volta para cada lado; manete lateral F/N/R que se move com a marcha e o acelerador, com botão de trim. **Piloto refeito** com braços por IK (mão esquerda no volante, direita na manete). HUD com quadro de instrumentos e alarmes. |
 | 2026-10-31 | babylon 0.8.1 | Tilt como no motor real: funciona **engatado e andando em baixa rotação** (água rasa); quem bloqueia é o **empuxo da hélice** (> 1800 N) ou a rotação/velocidade alta, não a marcha. |
