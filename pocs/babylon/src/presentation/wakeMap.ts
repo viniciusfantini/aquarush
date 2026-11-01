@@ -135,6 +135,26 @@ export class WakeMap {
       c.fill();
     }
 
+    // ---- escape borbulhando na lenta: manchas de espuma fina que sobem atrás da hélice ----
+    if (live.exh > 0.05) {
+      const t = performance.now() / 1000;
+      for (let k = 0; k < 7; k++) {
+        const ph = (t * 1.7 + k * 0.37) % 1;              // cada "bolha" nasce, abre e some
+        const ang = k * 2.4 + Math.floor(t * 1.7 + k * 0.37) * 1.3;
+        const rr = 0.25 + 0.5 * ((k * 0.61) % 1);
+        const fx = -live.rz, fz = live.rx;
+        const bx = live.sx - fx * 0.35 + Math.cos(ang) * rr, bz = live.sz - fz * 0.35 + Math.sin(ang) * rr;
+        const rad = (0.15 + 0.55 * ph) * ppm;
+        const a = live.exh * Math.sin(Math.PI * ph) * 0.55;
+        const g = c.createRadialGradient(X(bx), Y(bz), rad * 0.35, X(bx), Y(bz), rad);
+        g.addColorStop(0, `rgba(${(a * 160) | 0},0,0,1)`);
+        g.addColorStop(0.75, `rgba(${(a * 255) | 0},0,0,1)`);
+        g.addColorStop(1, "rgba(0,0,0,1)");
+        c.fillStyle = g;
+        c.beginPath(); c.arc(X(bx), Y(bz), rad, 0, Math.PI * 2); c.fill();
+      }
+    }
+
     // ---- borda do casco: espuma/"bigode" na proa e ao longo do costado ----
     const hullFoam = smoothstep(1.5, 9, live.v) * 0.7;
     if (hullFoam > 0.02) {

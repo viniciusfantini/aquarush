@@ -56,6 +56,8 @@ npm run dev            # abrir http://localhost:5173, F3 mostra a telemetria; wi
 | 2026-10-31 | Esteira vive na **simulação** (`sim/wake.ts`, `WakeField`); a física usa `WaterWithWake` (altura base + marolas com idade ≥ 3 s) e o visual desenha o mesmo histórico | Pedido do usuário: atravessar a própria esteira como na vida real. Custo medido: ~0,05 ms por passo |
 | 2026-10-31 | Som do motor em **AudioWorklet** (`presentation/engineWorklet.js`, JS puro importado com `?url`) | A síntese por pulsos de combustão com variação aleatória soa bem menos "eletrônica" que osciladores. Os osciladores antigos ficam como reserva. Validação offline: `node tests/engine-audio.check.mjs` (grava WAVs em `tests/out/`) |
 | 2026-10-31 | Ignição: `Speedboat.toggleIgnition()`, partida só em N; tecla P (pausa → Esc) | Pedido do usuário. Segue a trava de segurança de motores reais |
+| 2026-10-31 | Agarre lateral (`keelLift`) aplicado perto do CG + `yawDamping` alto, em vez de só arrasto lateral por ponto | O arrasto lateral distribuído criava efeito cata-vento: ao soltar o volante a lancha voltava para o lado oposto. Teste de regressão: "4 curva soltar" |
+| 2026-10-31 | Em N a hélice gira solta (arrastada pela água, inércia de 0,6 s) | Como num motor real com o câmbio desacoplado |
 | 2026-10-31 | Cavitação = f(carga × escorregamento) da hélice, com perda de até 30 % de empuxo | Aproximação documentada: aparece na arrancada e some em cruzeiro. Testada em `test:sim` |
 
 ## Ambiente do desenvolvedor

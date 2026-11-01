@@ -33,6 +33,17 @@ const peak = (a) => {
   }
   return bestF;
 };
+// centroide espectral (Hz): "brilho" do som — 2 tempos em lenta é bem mais agudo que 4 tempos
+const centroid = (a) => {
+  const N = 8192, seg = a.subarray(a.length - N);
+  let num = 0, den = 0;
+  for (let f = 20; f <= 4000; f += 20) {
+    let re = 0, im = 0;
+    for (let n = 0; n < N; n++) { const w = 2 * Math.PI * f * n / SR; re += seg[n] * Math.cos(w); im += seg[n] * Math.sin(w); }
+    const m = Math.hypot(re, im); num += f * m; den += m;
+  }
+  return num / den;
+};
 const wav = (name, a) => {
   const b = Buffer.alloc(44 + a.length * 2);
   b.write("RIFF", 0); b.writeUInt32LE(36 + a.length * 2, 4); b.write("WAVEfmt ", 8); b.writeUInt32LE(16, 16);
@@ -53,7 +64,7 @@ for (const [name, p] of cases) {
   const a = render(p, 2);
   const bad = a.some((x) => !Number.isFinite(x));
   const r = rms(a), f = peak(a);
-  console.log(`${name.padEnd(18)} rms=${r.toFixed(3)} pico=${f} Hz (queima esperada ${(p.rpm / 30).toFixed(0)} Hz) ${bad ? "NaN!" : ""}`);
+  console.log(`${name.padEnd(18)} rms=${r.toFixed(3)} centroide=${centroid(a).toFixed(0)} Hz pico=${f} Hz (queima esperada ${(p.rpm / 30).toFixed(0)} Hz) ${bad ? "NaN!" : ""}`);
   if (bad || r < 0.005 || r > 0.9) ok = false;
   wav(name, a);
 }

@@ -17,6 +17,7 @@ export interface WakeSample {
   v: number;                // velocidade na água (m/s)
   thr: number;              // acelerador efetivo
   boil: number;             // cavitação/ventilação 0..1
+  exh: number;              // gases de escape borbulhando (motor ligado, lancha devagar) 0..1
   age: number;              // s
 }
 
@@ -81,6 +82,7 @@ export class WakeField {
       v: Math.max(0, Math.abs(T.waterSpeed)),
       thr: T.gear === "N" ? 0 : T.throttle,
       boil: clamp(Math.max(T.cavitation, (1 - T.ventilation) * (T.throttle > 0.2 ? 1 : 0)), 0, 1) * (T.depth > 0.4 ? 1 : 0),
+      exh: T.engine === "running" && T.depth > 0.4 ? 1 - smoothstep(1.5, 5, Math.abs(T.waterSpeed)) : 0,
       age: 0,
     };
   }

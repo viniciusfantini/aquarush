@@ -24,7 +24,7 @@ import { BoatCamera } from "./presentation/cameras.ts";
 import { Hud } from "./presentation/hud.ts";
 import { EngineAudio } from "./presentation/audio.ts";
 
-const BUILD = "poc-babylon 0.5.0";
+const BUILD = "poc-babylon 0.6.0";
 /** Escala visual da rotação da hélice (proporcional ao RPM, abaixo do limite estroboscópico). */
 const PROP_VISUAL_SCALE = 0.12;
 
@@ -167,7 +167,7 @@ const boot = async () => {
     hud.setWater(p.key);
     hud.showToast(p.label);
   };
-  applyWater(2);
+  applyWater(1); // sempre começa em "1 — calma"
   document.getElementById("h-water")!.addEventListener("click", () => input.pushAction("waterNext"));
 
   // ---------------- laço: física em passo fixo + render interpolado ----------------

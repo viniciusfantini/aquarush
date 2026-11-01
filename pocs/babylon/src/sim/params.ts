@@ -58,6 +58,8 @@ export interface SpeedboatParams {
   dragLinear: number;      // N/(m/s) — termo linear (baixa velocidade)
   lateralQuad: number;     // N/(m/s)² — resistência lateral total (quilha/costado)
   lateralLinear: number;   // N/(m/s)
+  keelLift: number;        // N/(m/s)² — "agarre" lateral do casco (quilha/strakes) ∝ u·v_lateral
+  yawDamping: number;      // N·m/(rad/s) — amortecimento hidrodinâmico de guinada
   heaveDamping: number;    // N/(m/s) por ponto (amortecimento vertical)
   waveDragPeakRatio: number;// resistência de ondas no "hump" como fração do peso
   sternTrough: number;     // m — cavado do sistema de ondas do próprio casco na popa (no hump)
@@ -125,6 +127,8 @@ export const SPEEDBOAT: SpeedboatParams = {
   dragLinear: 50,
   lateralQuad: 1100,
   lateralLinear: 900,
+  keelLift: 1600,
+  yawDamping: 18000,
   heaveDamping: 1700,
   waveDragPeakRatio: 0.15,
   sternTrough: 0.32,

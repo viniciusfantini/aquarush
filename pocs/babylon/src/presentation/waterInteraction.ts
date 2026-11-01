@@ -178,7 +178,11 @@ export class WaterInteraction {
     this.bubbles.minEmitBox = new Vector3(-0.2, -0.15, -0.2); this.bubbles.maxEmitBox = new Vector3(0.2, 0.15, 0.2);
     this.bubbles.direction1 = new Vector3(-fwd.x * 2.5 - 0.6, 0.0, -fwd.z * 2.5 - 0.6).add(vel.scale(0.6));
     this.bubbles.direction2 = new Vector3(-fwd.x * 4 + 0.6, 0.6, -fwd.z * 4 + 0.6).add(vel.scale(0.8));
-    this.bubbles.emitRate = surf > prop.y ? (boil * 900 + T.throttle * 80 * smoothstep(0.5, 4, T.waterSpeed + T.throttle * 3)) : 0;
+    // + bolhas de escape na lenta: os gases saem pelo cubo da hélice e sobem em rajadas
+    const running = T.engine === "running" ? 1 : 0;
+    const exhIdle = running * hasWater * (1 - smoothstep(1.5, 5, Math.abs(T.waterSpeed)));
+    const puff = 0.55 + 0.45 * Math.sin(performance.now() / 1000 * 9.0) * Math.sin(performance.now() / 1000 * 3.1);
+    this.bubbles.emitRate = surf > prop.y ? (boil * 900 + T.throttle * 80 * smoothstep(0.5, 4, T.waterSpeed + T.throttle * 3) + exhIdle * 260 * puff) : 0;
 
     // ---------------- impactos ----------------
     const slam = Math.max(0, -boat.vel.y) * (T.wetFraction > 0 ? 1 : 0);

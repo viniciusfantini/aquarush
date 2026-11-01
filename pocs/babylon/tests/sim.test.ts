@@ -146,6 +146,23 @@ for (const [label, thr] of [["baixa", 0.25], ["alta", 1]] as const) {
   check(`4 curva ${label}`, `vel na curva (km/h)`, boat.telemetry.speedKmh, 3, v0, "km/h", 1);
 }
 
+// ---------- Teste 4b — soltar o volante depois da curva: não pode "voltar" para o outro lado ----------
+{
+  const water = mkWater(0);
+  const boat = new Speedboat(SPEEDBOAT, v3(0, 0.25, 0));
+  settle(boat, water);
+  run(boat, water, 20, { ...emptyInput(), gear: "F", throttle: 0.5 });
+  run(boat, water, 3, { ...emptyInput(), gear: "F", throttle: 0.5, steering: 1 });
+  const hdg = () => Math.atan2(boat.forward.x, boat.forward.z) * 57.2958;
+  let minYaw = 0, maxH = -1e9, endH = 0;
+  run(boat, water, 6, { ...emptyInput(), gear: "F", throttle: 0.5 }, openWater, () => {
+    minYaw = Math.min(minYaw, boat.angVel.y * 57.2958);
+    const h = hdg(); maxH = Math.max(maxH, h); endH = h;
+  });
+  check("4 curva soltar", "guinada inversa máx (°/s)", -minYaw, 0, 1.5, "°/s");
+  check("4 curva soltar", "rumo volta para o outro lado (°)", maxH - endH, 0, 1, "°");
+}
+
 // ---------- Teste 5 — desaceleração e ré ----------
 {
   const water = mkWater(0);
@@ -169,8 +186,13 @@ for (const [label, thr] of [["baixa", 0.25], ["alta", 1]] as const) {
   const b3 = new Speedboat(SPEEDBOAT, v3(0, 0.25, 0));
   settle(b3, water);
   run(b3, water, 20, { ...emptyInput(), gear: "F", throttle: 0.5 });
-  let tStop = -1;
-  run(b3, water, 90, { ...emptyInput(), gear: "N" }, openWater, (t) => { if (tStop < 0 && b3.telemetry.speedKmh < 1) tStop = t; });
+  let tStop = -1, freeRpm = 0;
+  run(b3, water, 90, { ...emptyInput(), gear: "N" }, openWater, (t) => {
+    if (tStop < 0 && b3.telemetry.speedKmh < 1) tStop = t;
+    if (Math.abs(t - 1.5) < 1e-3 + 1 / 240) freeRpm = b3.telemetry.propRpm;
+  });
+  check("5 manete", "N em movimento: hélice gira solta (rpm, 1,5 s após N)", freeRpm, 200, 2500, "rpm", 0);
+  check("5 manete", "N parado: hélice quase parada (rpm)", Math.abs(b3.telemetry.propRpm), 0, 30, "rpm", 0);
   check("5 manete", "N a partir de cruzeiro: empuxo (N)", Math.abs(b3.telemetry.thrustN), 0, 0, "N", 0);
   check("5 manete", "N: tempo até < 1 km/h (s)", tStop, 5, 80, "s", 1);
   run(b3, water, 30, { ...emptyInput(), gear: "F", throttle: 0 });

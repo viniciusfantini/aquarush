@@ -70,6 +70,7 @@ export class Speedboat {
   private crankTimer = 0;
   private lastContact = false;
   private cavitation = 0;
+  private propRpmState = 0;
 
   telemetry: BoatTelemetry;
   debugForces: ForceDebug[] = [];
@@ -150,6 +151,7 @@ export class Speedboat {
     // ---------------- flutuação + hidrodinâmica por ponto ----------------
     const areaSum = P.buoyancyPoints.reduce((s, b) => s + b.areaWeight, 0);
     let wetSum = 0;
+    let keelWet = 0;
     const subm = this.telemetry.submergedPoints;
     for (let i = 0; i < P.buoyancyPoints.length; i++) {
       const bp = P.buoyancyPoints[i];
@@ -177,7 +179,10 @@ export class Speedboat {
 
       // arrasto longitudinal (atrito do casco molhado) e lateral (quilha/costado) — em eixos locais
       const fLon = -(P.dragLinear * lr.z + P.dragFrictionQuad * Math.abs(lr.z) * lr.z) * wet * share;
+      // lateral: arrasto do costado + sustentação da quilha/strakes (∝ u·v_lat, como um perfil):
+      // em velocidade o casco "agarra" e quase não derrapa nas curvas
       const fLat = -(P.lateralLinear * lr.x + P.lateralQuad * Math.abs(lr.x) * lr.x) * wet * share;
+      keelWet += wet * share;
 
       // sustentação de planeio: placa com ângulo de ataque local (normal do fundo do casco)
       let fLift = 0;
@@ -194,6 +199,14 @@ export class Speedboat {
       fy = 0;
     }
     const wetFraction = clamp(wetSum, 0, 1);
+
+    // Sustentação lateral da quilha/strakes (∝ u·v_lateral, como um perfil): aplicada no centro de
+    // resistência lateral (≈ sob o CG em planeio) → o casco "agarra" e quase não derrapa, sem o
+    // efeito cata-vento que fazia a lancha voltar para o lado oposto ao soltar o volante.
+    if (keelWet > 0 && u > 0) {
+      const fk = -P.keelLift * u * relC.x * clamp(keelWet, 0, 1);
+      this.addForceAt(scale(right, fk), this.toWorld(v3(0, -0.15, 0.1)), "lift");
+    }
 
     // ---------------- resistência de ondas (hump) ----------------
     if (wetFraction > 0) {
@@ -246,7 +259,8 @@ export class Speedboat {
       const aLat = clamp(u * angLocal.y, -8, 8);
       const bankTorque = -P.bankCoef * aLat * wetFraction * clamp((u - 4) / 8, 0, 1);
       const rollDamp = -P.rollDamping * angLocal.z * wetFraction;
-      this.T = add(this.T, rotate(this.rot, v3(0, 0, bankTorque + rollDamp)));
+      const yawDamp = -P.yawDamping * angLocal.y * Math.min(1, wetFraction * 2);
+      this.T = add(this.T, rotate(this.rot, v3(0, yawDamp, bankTorque + rollDamp)));
     }
 
     // ---------------- arrasto aerodinâmico ----------------
@@ -294,7 +308,13 @@ export class Speedboat {
     t.cavitation = this.cavitation;
     t.propSlip = slip;
     t.rpm = this.updateRpm(dt, axial, ventilation);
-    t.propRpm = this.gear === "N" ? 0 : (this.gear === "R" ? -1 : 1) * t.rpm / 2.0; // redução 2:1
+    // hélice: engrenada gira com o motor (redução 2:1). Em N fica desacoplada e gira SOLTA,
+    // arrastada pela água (como um cata-vento), desacelerando junto com a lancha.
+    const PROP_PITCH_M = 0.48;
+    const engaged = this.gear !== "N";
+    const target = engaged ? (this.gear === "R" ? -1 : 1) * t.rpm / 2.0 : (axial / PROP_PITCH_M) * 60 * 0.55 * (propDepth > 0 ? 1 : 0.2);
+    this.propRpmState += (target - this.propRpmState) * (1 - Math.exp(-dt / (engaged ? 0.08 : 0.6)));
+    t.propRpm = this.propRpmState;
     t.fuelLph = this.engine === "running" ? 3 + 52 * Math.pow(this.throttleActual, 1.6) * (this.gear === "N" ? 0.3 : 1) : 0;
     t.engine = this.engine;
     t.distanceM += Math.hypot(this.pos.x - oldPos.x, this.pos.z - oldPos.z);
