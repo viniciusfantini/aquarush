@@ -24,7 +24,7 @@ import { BoatCamera } from "./presentation/cameras.ts";
 import { Hud } from "./presentation/hud.ts";
 import { EngineAudio } from "./presentation/audio.ts";
 
-const BUILD = "poc-babylon 0.8.0";
+const BUILD = "poc-babylon 0.8.1";
 /** Escala visual da rotação da hélice (proporcional ao RPM, abaixo do limite estroboscópico). */
 const PROP_VISUAL_SCALE = 0.12;
 
@@ -256,7 +256,7 @@ const boot = async () => {
     const ew = boatVis.engine.getWorldMatrix();
     fx.updateTelltale(boatVis.telltale.getAbsolutePosition().clone(), Vector3.TransformNormal(new Vector3(1, -0.15, -0.35), ew), T.rpm, new Vector3(boat.vel.x, boat.vel.y, boat.vel.z),
       T.engine === "running" && T.intakeSubmerged); // sem água na entrada do pé = sem esguicho
-    if (T.tiltBlocked && !tiltWarned) { hud.showToast("Tilt só com a lancha parada/devagar e em lenta"); tiltWarned = true; }
+    if (T.tiltBlocked && !tiltWarned) { hud.showToast("Tilt bloqueado: o empuxo da hélice segura o motor — reduza a rotação"); tiltWarned = true; }
     if (!T.tiltBlocked) tiltWarned = false;
     if (T.engine === "running" && !T.intakeSubmerged && T.tiltDeg > 5 && !intakeWarned) { hud.showToast("Motor recolhido: sem água de refrigeração!"); intakeWarned = true; }
     if (T.intakeSubmerged) intakeWarned = false;

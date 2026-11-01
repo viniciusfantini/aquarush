@@ -79,6 +79,7 @@ export class Speedboat {
   private immersion = 1;
   private revLimiting = false;
   private limiterPhase = 0;
+  private lastThrust = 0;
   /** posição atual da hélice no mundo (gira com trim/tilt) */
   propWorld: Vec3 = v3();
   /** recolhimento (rad) além do fim do trim */
@@ -269,6 +270,7 @@ export class Speedboat {
     this.cavitation += (cavTarget - this.cavitation) * (1 - Math.exp(-dt / 0.15));
     thrust *= Math.pow(immersion, 1.5) * (1 - 0.5 * aeration) * (1 - 0.3 * this.cavitation);
     if (thrust !== 0) this.addForceAt(scale(tDir, thrust), propW, "thrust");
+    this.lastThrust = thrust;
 
     // rabeta como "flap": trim gera sustentação/afundamento de popa proporcional a u²
     if (propDepth > 0 && u > 0) {
@@ -369,8 +371,14 @@ export class Speedboat {
     const trimIn = clamp(input.trim, -1, 1);
     this.tiltBlocked = false;
     if (trimIn > 0 && this.trim >= 1) {
-      if (Math.abs(u) < P.tiltMaxSpeed && this.rpm < P.tiltMaxRpm) this.tilt = Math.min(P.tiltMax, this.tilt + trimIn * P.tiltRate * dt);
-      else this.tiltBlocked = true;
+      // O que impede o tilt é a CARGA no pé: o empuxo da hélice (e a água em velocidade alta) segura o
+      // motor para baixo e o cilindro hidráulico não vence. Engatado em baixa rotação funciona
+      // (navegação em água rasa), mais devagar quanto maior o empuxo.
+      const thrustLoad = Math.abs(this.lastThrust) / P.tiltMaxThrust;
+      if (thrustLoad < 1 && this.rpm < P.tiltMaxRpm && Math.abs(u) < P.tiltMaxSpeed) {
+        const rate = P.tiltRate * (1 - 0.7 * thrustLoad) * trimIn;
+        this.tilt = Math.min(P.tiltMax, this.tilt + rate * dt);
+      } else this.tiltBlocked = true;
     } else if (trimIn < 0 && this.tilt > 0) {
       this.tilt = Math.max(0, this.tilt + trimIn * P.tiltRate * dt);
     } else {

@@ -231,6 +231,15 @@ for (const [label, thr] of [["baixa", 0.25], ["alta", 1]] as const) {
   run(boat, water, 20, { ...emptyInput(), gear: "F", throttle: 0.6, trim: 1 });
   check("tilt", "trim máx em movimento: tilt bloqueado (°)", boat.telemetry.tiltDeg, 0, 0.01, "°");
   check("tilt", "trim máx em movimento: hélice na água (imersão)", boat.telemetry.propImmersion, 0.9, 1, "", 2);
+  // engatado em baixa rotação e andando (água rasa): o tilt funciona
+  {
+    const b4 = new Speedboat(SPEEDBOAT, v3(0, 0.25, 0));
+    settle(b4, water); b4.trim = 1;
+    run(b4, water, 20, { ...emptyInput(), gear: "F", throttle: 0.15 });
+    const vKmh = b4.telemetry.speedKmh;
+    run(b4, water, 2, { ...emptyInput(), gear: "F", throttle: 0.15, trim: 1 });
+    check("tilt", `engatado devagar (${vKmh.toFixed(0)} km/h): tilt sobe (°)`, b4.telemetry.tiltDeg, 5, 60, "°", 1);
+  }
   // parado, em N, segurando trim +: recolhe e a hélice sai da água
   run(boat, water, 30, { ...emptyInput(), gear: "N" });
   run(boat, water, 8, { ...emptyInput(), gear: "N", trim: 1 });

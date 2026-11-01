@@ -51,7 +51,8 @@ export interface SpeedboatParams {
   trimUp: number;          // rad (trim positivo máximo — eleva a proa)
   tiltMax: number;         // rad acima do fim do trim (recolher o motor: hélice sai da água)
   tiltRate: number;        // rad/s
-  tiltMaxSpeed: number;    // m/s — acima disso o tilt é bloqueado (como nos motores reais)
+  tiltMaxThrust: number;   // N — empuxo acima do qual o cilindro de tilt não vence a força da hélice
+  tiltMaxSpeed: number;    // m/s — carga da água no pé em velocidade alta também impede
   tiltMaxRpm: number;      // rpm — idem
   drivePivot: Vec3;        // pivô do trim/tilt no espelho de popa (local)
   intakePos: Vec3;         // entrada d'água de refrigeração (no pé do motor, local, motor sem trim)
@@ -129,7 +130,8 @@ export const SPEEDBOAT: SpeedboatParams = {
   trimUp: 10 * DEG,
   tiltMax: 60 * DEG,
   tiltRate: 14 * DEG,
-  tiltMaxSpeed: 2.5,
+  tiltMaxThrust: 1800,
+  tiltMaxSpeed: 8,
   tiltMaxRpm: 2200,
   drivePivot: v3(0, 0.28, -2.99),
   intakePos: v3(0, -0.62, -3.35),
