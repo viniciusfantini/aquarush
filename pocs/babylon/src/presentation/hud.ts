@@ -14,6 +14,7 @@ export class Hud {
   private trimTxt = $("h-trim");
   private gear = $("h-gear");
   private planing = $("h-planing");
+  private engineChip = $("h-engine");
   private cav = $("h-cav");
   private vent = $("h-vent");
   private water = $("h-water");
@@ -39,6 +40,8 @@ export class Hud {
     this.gear.textContent = t.gear;
     this.gear.className = "gear g-" + t.gear;
     this.planing.classList.toggle("on", t.planing);
+    this.engineChip.textContent = t.engine === "running" ? "MOTOR LIGADO" : t.engine === "cranking" ? "DANDO PARTIDA…" : "MOTOR DESLIGADO";
+    this.engineChip.className = "chip " + (t.engine === "running" ? "on" : t.engine === "cranking" ? "crank" : "off");
     this.cav.classList.toggle("warn", t.cavitation > 0.25);
     this.vent.classList.toggle("warn", t.ventilation < 0.75 && t.throttle > 0.15);
     if (this.debugOn) {

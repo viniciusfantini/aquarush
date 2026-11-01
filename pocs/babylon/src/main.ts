@@ -13,6 +13,7 @@ import { Speedboat } from "./sim/boat.ts";
 import { SPEEDBOAT } from "./sim/params.ts";
 import { GerstnerWater, WAVE_PRESETS } from "./sim/water.ts";
 import { buildWorld, RIVER_CURRENT } from "./sim/world.ts";
+import { WakeField, WaterWithWake } from "./sim/wake.ts";
 import { v3 } from "./sim/math.ts";
 import { InputManager, attachTouchControls, type Action } from "./platform/input.ts";
 import { WaterVisual } from "./presentation/waterMaterial.ts";
@@ -23,7 +24,7 @@ import { BoatCamera } from "./presentation/cameras.ts";
 import { Hud } from "./presentation/hud.ts";
 import { EngineAudio } from "./presentation/audio.ts";
 
-const BUILD = "poc-babylon 0.4.1";
+const BUILD = "poc-babylon 0.5.0";
 /** Escala visual da rotação da hélice (proporcional ao RPM, abaixo do limite estroboscópico). */
 const PROP_VISUAL_SCALE = 0.12;
 
@@ -91,6 +92,9 @@ const boot = async () => {
   const water = new GerstnerWater({ waves: WAVE_PRESETS.lago, groundHeight: world.groundHeight, currents: [RIVER_CURRENT] });
   const spawnPos = () => v3(world.spawn.x, 0.25, world.spawn.z);
   const boat = new Speedboat(SPEEDBOAT, spawnPos(), world.spawn.heading);
+  // a física enxerga a água + as marolas da esteira (a lancha sente a esteira ao cruzá-la)
+  const wakeField = new WakeField();
+  const physWater = new WaterWithWake(water, wakeField);
 
   // ---------------- cena ----------------
   const terrain = buildTerrain(scene, { terrainSubdiv: cfg.quality.terrainSubdiv, trees: cfg.quality.trees });
@@ -118,7 +122,7 @@ const boot = async () => {
     depth.getDepthMap().renderList = list;
   }
 
-  const fx = new WaterInteraction(scene, { particles: cfg.quality.particles, wakeTexture: cfg.quality.wakeTexture });
+  const fx = new WaterInteraction(scene, wakeField, { particles: cfg.quality.particles, wakeTexture: cfg.quality.wakeTexture });
   const waterVis = new WaterVisual(scene, {
     resolution: cfg.quality.waterResolution, innerExtent: 80, outerExtent: 2600, depth, wake: fx.wake, reflectionSize: cfg.quality.reflection,
   });
@@ -188,9 +192,13 @@ const boot = async () => {
       for (const m of boatVis.meshes) if (/^pilot|^capBrim/.test(m.name)) m.setEnabled(mode !== "cockpit");
     }
     else if (a === "lights") { lights = input.toggleLights(); setNavLights(boatVis, lights); hud.setLights(lights); }
-    else if (a === "reset") { input.setGear("N"); boat.reset(spawnPos(), world.spawn.heading); snap(curPos, curRot); snap(prevPos, prevRot); hud.showToast("Reposicionado no píer"); }
+    else if (a === "reset") { input.setGear("N"); wakeField.reset(); boat.engine = "running"; boat.reset(spawnPos(), world.spawn.heading); snap(curPos, curRot); snap(prevPos, prevRot); hud.showToast("Reposicionado no píer"); }
     else if (a === "debug") hud.toggleDebug();
     else if (a === "help") hud.toggleHelp();
+    else if (a === "ignition") {
+      const r = boat.toggleIgnition();
+      hud.showToast(r === "stopped" ? "Motor desligado" : r === "starting" ? "Dando partida…" : r === "needNeutral" ? "Coloque em N para dar partida" : "Dando partida…");
+    }
     else if (a === "pause") { paused = !paused; hud.showToast(paused ? "Pausado" : "Continuando"); }
     else if (a === "waterNext") applyWater(waterPreset + 1);
     else if (a.startsWith("water")) applyWater(Number(a.slice(5)));
@@ -209,7 +217,8 @@ const boot = async () => {
       while (acc >= PHYSICS_DT && n < MAX_SUBSTEPS) {
         prevPos.copyFrom(curPos); prevRot.copyFrom(curRot);
         water.time += PHYSICS_DT;
-        boat.step(PHYSICS_DT, vin, water, world);
+        boat.step(PHYSICS_DT, vin, physWater, world);
+        wakeField.update(PHYSICS_DT, boat);
         snap(curPos, curRot);
         acc -= PHYSICS_DT;
         n++;
@@ -248,7 +257,7 @@ const boot = async () => {
     if (T.gear !== lastGear) { audio.clunk(T.gear !== "N"); lastGear = T.gear; }
     audio.update({
       rpm: T.rpm, throttle: T.throttle, speed: Math.hypot(boat.vel.x, boat.vel.z), boil: Math.max(T.cavitation, 1 - T.ventilation),
-      inGear: T.gear !== "N", propInWater: T.ventilation > 0.5, cockpit: cam.mode === "cockpit",
+      inGear: T.gear !== "N", propInWater: T.ventilation > 0.5, cockpit: cam.mode === "cockpit", engine: T.engine,
     });
     hud.update(T, fpsSmooth, {
       "física (ms/frame)": physMs.toFixed(2),

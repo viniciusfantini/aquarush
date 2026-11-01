@@ -5,7 +5,7 @@
 import { type VehicleInput, type GearCommand, emptyInput } from "../gameplay/vehicleInput.ts";
 import { approach, clamp } from "../sim/math.ts";
 
-export type Action = "camera" | "lights" | "reset" | "debug" | "help" | "pause" | "water0" | "water1" | "water2" | "water3" | "waterNext";
+export type Action = "camera" | "lights" | "reset" | "debug" | "help" | "pause" | "ignition" | "water0" | "water1" | "water2" | "water3" | "waterNext";
 
 /**
  * Manete única (como numa lancha real), com detentes  R ← N → F:
@@ -50,7 +50,7 @@ export class InputManager {
       this.keys.add(e.code);
       this.lastDevice = "teclado";
       const map: Record<string, Action> = {
-        KeyC: "camera", KeyL: "lights", KeyR: "reset", F3: "debug", KeyH: "help", KeyP: "pause",
+        KeyC: "camera", KeyL: "lights", KeyR: "reset", F3: "debug", KeyH: "help", KeyP: "ignition", Escape: "pause",
         Digit0: "water0", Digit1: "water1", Digit2: "water2", Digit3: "water3", KeyG: "water0", KeyV: "waterNext",
       };
       const a = map[e.code];
@@ -85,7 +85,7 @@ export class InputManager {
       const ax = gp.axes[0] ?? 0;
       gpSteer = Math.abs(ax) > 0.12 ? (ax - Math.sign(ax) * 0.12) / 0.88 : 0;
       gpTrim = (pressed(5) ? 1 : 0) - (pressed(4) ? 1 : 0);
-      const edges: [number, Action][] = [[3, "camera"], [2, "lights"], [8, "reset"], [9, "pause"]];
+      const edges: [number, Action][] = [[3, "camera"], [2, "lights"], [8, "reset"], [9, "pause"], [1, "ignition"]];
       for (const [i, a] of edges) {
         const now = pressed(i);
         if (now && !this.gpPrev[i]) this.actions.push(a);
@@ -199,5 +199,6 @@ export const attachTouchControls = (root: HTMLElement, input: InputManager): voi
   tap("#t-cam", "camera");
   tap("#t-lights", "lights");
   tap("#t-reset", "reset");
+  tap("#t-ign", "ignition");
   root.querySelector<HTMLElement>("#t-neutral")!.addEventListener("click", () => setLever(NEUTRAL));
 };

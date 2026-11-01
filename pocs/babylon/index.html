@@ -41,6 +41,8 @@
     .chip { font-size: 12px; letter-spacing: 0.08em; padding: 5px 10px; border-radius: 999px; background: var(--panel); color: var(--dim); }
     .chip.on { color: #04222a; background: var(--accent); }
     #h-lights.on { background: #7dff9b; }
+    #h-engine.off { color: #fff; background: #b3261e; }
+    #h-engine.crank { color: #2a0400; background: #ffd34d; }
     .chip.warn { color: #2a0400; background: #ffb13d; animation: blink 0.35s steps(2) infinite; }
     @keyframes blink { 50% { background: #ff5a4e; } }
     #status .chip.btn { pointer-events: auto; cursor: pointer; color: var(--fg); border: 1px solid rgba(255,255,255,0.3); }
@@ -76,7 +78,7 @@
     .tbtn.on { background: var(--accent); color: #04222a; }
     #t-trim-up { right: 104px; bottom: 170px; } #t-trim-down { right: 104px; bottom: 108px; }
     #t-neutral { right: 104px; bottom: 46px; }
-    #t-cam { right: 18px; top: 16px; } #t-lights { right: 80px; top: 16px; } #t-reset { right: 142px; top: 16px; }
+    #t-cam { right: 18px; top: 16px; } #t-lights { right: 80px; top: 16px; } #t-reset { right: 142px; top: 16px; } #t-ign { right: 204px; top: 16px; }
   </style>
 </head>
 <body>
@@ -85,6 +87,7 @@
   <div id="ui">
     <div id="status">
       <div class="chip" id="h-cam">EXTERNA</div>
+      <div class="chip on" id="h-engine">MOTOR LIGADO</div>
       <div class="chip" id="h-planing">PLANEIO</div>
       <div class="chip" id="h-lights">LUZES</div>
       <div class="chip" id="h-cav">CAVITAÇÃO</div>
@@ -100,7 +103,8 @@
       <div><kbd>E</kbd> trim + (proa sobe) · <kbd>Q</kbd> trim − (proa desce)</div>
       <div><kbd>C</kbd> câmera · <kbd>L</kbd> luzes · <kbd>R</kbd> reposicionar</div>
       <div><kbd>0</kbd>/<kbd>G</kbd> água vidro · <kbd>1</kbd> calma · <kbd>2</kbd> lago · <kbd>3</kbd> forte · <kbd>V</kbd> alterna</div>
-      <div><kbd>F3</kbd> telemetria · <kbd>P</kbd> pausa · <kbd>H</kbd> ajuda</div>
+      <div><kbd>P</kbd> liga/desliga o motor (partida só em <b>N</b>) · <kbd>Esc</kbd> pausa</div>
+      <div><kbd>F3</kbd> telemetria · <kbd>H</kbd> ajuda</div>
       <div>Mouse: arraste para orbitar a câmera</div>
       <div>Gamepad: RT/LT, analógico, LB/RB trim, Y câmera</div>
     </div>
@@ -126,6 +130,7 @@
     <div class="touch tbtn" id="t-cam">CAM</div>
     <div class="touch tbtn" id="t-lights">LUZ</div>
     <div class="touch tbtn" id="t-reset">↺</div>
+    <div class="touch tbtn" id="t-ign">⏻</div>
   </div>
   <script type="module" src="/src/main.ts"></script>
 </body>

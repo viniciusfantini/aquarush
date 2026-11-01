@@ -1,4 +1,5 @@
 declare const process: { exitCode?: number };
+declare const performance: { now(): number };
 // Roteiro padronizado da POC (GDD A.12, testes 1–6) executado SEM navegador,
 // direto no módulo de simulação. Uso: `npm run test:sim` (Node >= 22.18, type stripping nativo).
 // Saída: tabela de medições + PASS/FAIL por critério. Código de saída != 0 se algo falhar.
@@ -10,6 +11,7 @@ import type { PhysicsWorld } from "../src/sim/world.ts";
 import { buildWorld } from "../src/sim/world.ts";
 import { emptyInput, type VehicleInput } from "../src/gameplay/vehicleInput.ts";
 import { v3, len } from "../src/sim/math.ts";
+import { WakeField, WaterWithWake } from "../src/sim/wake.ts";
 
 const DT = 1 / 120;
 const openWater: PhysicsWorld = { groundHeight: () => -50, spheres: [], boxes: [] };
@@ -196,6 +198,54 @@ for (const [label, thr] of [["baixa", 0.25], ["alta", 1]] as const) {
   const bc = new Speedboat(SPEEDBOAT, v3(0, 0.25, 0));
   run(bc, wc, 60, emptyInput());
   check("6 correnteza", "deriva com correnteza 1.6 m/s (m/s)", len(v3(bc.vel.x, 0, bc.vel.z)), 1.2, 1.7, "m/s");
+}
+
+// ---------- Ignição (P): desligar / partida só em N ----------
+{
+  const water = mkWater(0);
+  const boat = new Speedboat(SPEEDBOAT, v3(0, 0.25, 0));
+  settle(boat, water);
+  run(boat, water, 15, { ...emptyInput(), gear: "F", throttle: 0.5 });
+  check("ignição", "desligar em movimento", boat.toggleIgnition() === "stopped" ? 1 : 0, 1, 1, "", 0);
+  run(boat, water, 3, { ...emptyInput(), gear: "F", throttle: 1 });
+  check("ignição", "desligado: empuxo mesmo acelerando (N)", Math.abs(boat.telemetry.thrustN), 0, 0, "N", 0);
+  check("ignição", "desligado: RPM após 3 s", boat.telemetry.rpm, 0, 50, "rpm", 0);
+  check("ignição", "partida engatado é recusada", boat.toggleIgnition() === "needNeutral" ? 1 : 0, 1, 1, "", 0);
+  run(boat, water, 1, { ...emptyInput(), gear: "N" });
+  check("ignição", "partida em N", boat.toggleIgnition() === "starting" ? 1 : 0, 1, 1, "", 0);
+  run(boat, water, 3, { ...emptyInput(), gear: "N" });
+  check("ignição", "motor pegou (lenta)", boat.telemetry.engine === "running" && boat.telemetry.rpm > 600 && boat.telemetry.rpm < 1200 ? 1 : 0, 1, 1, "", 0);
+}
+
+// ---------- Esteira: cruzar a própria marola (a física sente a esteira) ----------
+{
+  const cross = (withWake: boolean) => {
+    const water = mkWater(0);
+    const field = new WakeField();
+    const phys = withWake ? new WaterWithWake(water, field) : water;
+    const boat = new Speedboat(SPEEDBOAT, v3(0, 0.25, 0));
+    let maxAcc = 0, maxPitchRate = 0, lastVy = 0, t = 0, steps = 0;
+    const t0 = performance.now();
+    const phase = (tt: number) => tt < 14 ? { ...emptyInput(), gear: "F" as const, throttle: 0.5 }
+      : tt < 20 ? { ...emptyInput(), gear: "F" as const, throttle: 0.5, steering: 1 } : { ...emptyInput(), gear: "F" as const, throttle: 0.5 };
+    for (let i = 0; i < 40 / DT; i++) {
+      water.time += DT; t += DT;
+      boat.step(DT, phase(t), phys, openWater);
+      field.update(DT, boat);
+      steps++;
+      if (t > 20) {
+        maxAcc = Math.max(maxAcc, Math.abs(boat.vel.y - lastVy) / DT);
+        maxPitchRate = Math.max(maxPitchRate, Math.abs(boat.angVel.x) + Math.abs(boat.angVel.z));
+      }
+      lastVy = boat.vel.y;
+    }
+    return { maxAcc, maxPitchRate, msPerStep: (performance.now() - t0) / steps, samples: field.samples.length };
+  };
+  const calm = cross(false), wake = cross(true);
+  check("esteira", "aceleração vertical máx sem esteira (m/s²)", calm.maxAcc, 0, 100, "m/s²", 2);
+  check("esteira", "aceleração vertical máx cruzando a esteira (m/s²)", wake.maxAcc, calm.maxAcc * 1.5 + 0.5, 200, "m/s²", 2);
+  check("esteira", "rotação (pitch+roll) máx cruzando (rad/s)", wake.maxPitchRate, calm.maxPitchRate * 1.3, 20, "rad/s", 3);
+  check("esteira", "custo da física com esteira (ms/passo)", wake.msPerStep, 0, 0.5, "ms", 3);
 }
 
 // ---------- Colisões no lago real ----------

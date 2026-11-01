@@ -17,6 +17,7 @@ const RHO = 1000;     // água doce, kg/m³
 const RHO_AIR = 1.2;
 
 export type Gear = "F" | "N" | "R";
+export type EngineState = "off" | "cranking" | "running";
 
 export interface BoatTelemetry {
   speedKmh: number;      // velocidade real sobre o fundo (plano horizontal)
@@ -41,6 +42,7 @@ export interface BoatTelemetry {
   distanceM: number;
   collisions: number;
   lastImpact: number;    // N (intensidade do último impacto)
+  engine: EngineState;   // motor desligado / dando partida / funcionando
   depth: number;         // profundidade sob o casco
   submergedPoints: boolean[];
 }
@@ -63,6 +65,9 @@ export class Speedboat {
   private shiftTimer = 0;
   private wantGear: Gear = "N";
   private rpm = 750;
+  /** Estado do motor (ignição). */
+  engine: EngineState = "running";
+  private crankTimer = 0;
   private lastContact = false;
   private cavitation = 0;
 
@@ -81,7 +86,7 @@ export class Speedboat {
     this.rpm = params.idleRpm;
     this.telemetry = {
       speedKmh: 0, waterSpeed: 0, rpm: params.idleRpm, throttle: 0, throttleCmd: 0, trim: 0, trimDeg: 0, steerDeg: 0,
-      gear: "N", pitchDeg: 0, rollDeg: 0, wetFraction: 0, planing: false, thrustN: 0, ventilation: 1, cavitation: 0, propSlip: 0, propRpm: 0, fuelLph: 0,
+      gear: "N", pitchDeg: 0, rollDeg: 0, wetFraction: 0, planing: false, thrustN: 0, ventilation: 1, cavitation: 0, propSlip: 0, propRpm: 0, engine: "running", fuelLph: 0,
       distanceM: 0, collisions: 0, lastImpact: 0, depth: 0, submergedPoints: params.buoyancyPoints.map(() => false),
     };
   }
@@ -209,7 +214,9 @@ export class Speedboat {
     const vProp = rotateInv(this.rot, sub(this.pointVelocity(propW), water.getCurrent(propW.x, propW.z)));
     const axial = dot(vProp, tDirLocal);
     let thrust = 0;
-    if (this.gear === "F") {
+    if (this.engine !== "running") {
+      thrust = 0; // motor desligado/dando partida: hélice não empurra
+    } else if (this.gear === "F") {
       thrust = P.maxThrust * this.engineLoad() * Math.max(0, 1 - axial / P.propPitchSpeed);
     } else if (this.gear === "R") {
       thrust = -P.maxThrust * P.reverseThrustFactor * this.engineLoad() * clamp(1 + axial / (P.propPitchSpeed * 0.6), 0, 1.3);
@@ -218,7 +225,7 @@ export class Speedboat {
     // ré a toda, hélice "patinando") forma bolhas de vapor -> perde empuxo e a rotação sobe.
     const slip = this.gear === "N" ? 0 : clamp(1 - Math.abs(axial) / P.propPitchSpeed, 0, 1);
     const load = Math.abs(thrust) / P.maxThrust;
-    const cavTarget = propDepth > 0 ? clamp((load * slip - 0.55) / 0.25, 0, 1) : 0;
+    const cavTarget = propDepth > 0 && this.engine === "running" ? clamp((load * slip - 0.55) / 0.25, 0, 1) : 0;
     this.cavitation += (cavTarget - this.cavitation) * (1 - Math.exp(-dt / 0.15));
     thrust *= ventilation * (1 - 0.3 * this.cavitation);
     if (thrust !== 0) this.addForceAt(scale(tDir, thrust), propW, "thrust");
@@ -288,7 +295,8 @@ export class Speedboat {
     t.propSlip = slip;
     t.rpm = this.updateRpm(dt, axial, ventilation);
     t.propRpm = this.gear === "N" ? 0 : (this.gear === "R" ? -1 : 1) * t.rpm / 2.0; // redução 2:1
-    t.fuelLph = 3 + 52 * Math.pow(this.throttleActual, 1.6) * (this.gear === "N" ? 0.3 : 1);
+    t.fuelLph = this.engine === "running" ? 3 + 52 * Math.pow(this.throttleActual, 1.6) * (this.gear === "N" ? 0.3 : 1) : 0;
+    t.engine = this.engine;
     t.distanceM += Math.hypot(this.pos.x - oldPos.x, this.pos.z - oldPos.z);
     t.depth = water.getDepth(this.pos.x, this.pos.z);
     if (impact > 0) t.lastImpact = impact;
@@ -319,8 +327,21 @@ export class Speedboat {
       this.shiftTimer -= dt;
       if (this.shiftTimer <= 0 && this.throttleActual < 0.12) this.gear = this.wantGear;
     }
-    const target = this.gear === "N" ? 0 : cmd;
+    const target = this.gear === "N" || this.engine !== "running" ? 0 : cmd;
     this.throttleActual += (target - this.throttleActual) * (1 - Math.exp(-dt / P.engineResponse));
+  }
+
+  /**
+   * Ignição (tecla P): desliga o motor ou dá partida. Por segurança (como nos motores reais),
+   * a partida só funciona em NEUTRO. Retorna o que aconteceu.
+   */
+  toggleIgnition(): "stopped" | "starting" | "needNeutral" | "busy" {
+    if (this.engine === "running") { this.engine = "off"; return "stopped"; }
+    if (this.engine === "cranking") return "busy";
+    if (this.gear !== "N") return "needNeutral";
+    this.engine = "cranking";
+    this.crankTimer = 0.9 + Math.random() * 0.4;
+    return "starting";
   }
 
   /** Carga do motor 0..1 incluindo a marcha lenta engrenada. */
@@ -337,6 +358,18 @@ export class Speedboat {
     const load = this.gear === "N" ? 1 : lerp(0.68, 1.0, clamp(Math.abs(axial) / (P.propPitchSpeed * 0.75), 0, 1));
     const freeRev = 1 + (1 - ventilation) * 0.25 + this.cavitation * 0.12;
     const target = P.idleRpm + (P.maxRpm - P.idleRpm) * Math.pow(thr, 0.85) * load * freeRev;
+    if (this.engine === "off") {
+      this.rpm += (0 - this.rpm) * (1 - Math.exp(-dt / 0.45)); // motor parando
+      if (this.rpm < 5) this.rpm = 0;
+      return this.rpm;
+    }
+    if (this.engine === "cranking") {
+      // motor de arranque: ~250 rpm com a oscilação das compressões, depois "pega"
+      this.crankTimer -= dt;
+      this.rpm += (250 - this.rpm) * (1 - Math.exp(-dt / 0.12));
+      if (this.crankTimer <= 0) { this.engine = "running"; this.rpm = 1150; }
+      return this.rpm;
+    }
     this.rpm += (Math.min(target, P.maxRpm * 1.08) - this.rpm) * (1 - Math.exp(-dt / 0.35));
     return this.rpm;
   }

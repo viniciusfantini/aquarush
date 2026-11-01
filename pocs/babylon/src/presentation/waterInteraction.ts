@@ -7,6 +7,7 @@ import type { GerstnerWater } from "../sim/water.ts";
 import type { Speedboat } from "../sim/boat.ts";
 import { v3, clamp, smoothstep } from "../sim/math.ts";
 import { WakeMap } from "./wakeMap.ts";
+import type { WakeField } from "../sim/wake.ts";
 
 const softDot = (scene: Scene, name: string, hard = 0.4): DynamicTexture => {
   const s = 64;
@@ -61,8 +62,11 @@ export class WaterInteraction {
   private readonly telltale: ParticleSystem;
   private lastImpact = 0;
 
-  constructor(scene: Scene, quality: { particles: number; wakeTexture: number }) {
-    this.wake = new WakeMap(scene, { size: quality.wakeTexture, worldSize: 192 });
+  private readonly field: WakeField;
+
+  constructor(scene: Scene, field: WakeField, quality: { particles: number; wakeTexture: number }) {
+    this.field = field;
+    this.wake = new WakeMap(scene, field, { size: quality.wakeTexture, worldSize: 320 });
     const drops = dropletTex(scene);
     const dot = softDot(scene, "softDot");
     const mk = (name: string, cap: number, tex: DynamicTexture, group = 1) => {
@@ -126,7 +130,8 @@ export class WaterInteraction {
 
   update(dt: number, boat: Speedboat, water: GerstnerWater): void {
     const T = boat.telemetry;
-    this.wake.update(dt, boat);
+    void dt;
+    this.wake.update(boat.pos.x, boat.pos.z, this.field.sampleBoat(boat));
 
     const fwd = boat.forward, right = boat.right;
     const vel = new Vector3(boat.vel.x, 0, boat.vel.z);
@@ -152,12 +157,14 @@ export class WaterInteraction {
     // ---------------- hélice: rooster tail, cavitação, ventilação ----------------
     const prop = boat.toWorld(boat.params.propPos);
     const surf = water.getHeight(prop.x, prop.z);
-    const boil = clamp(Math.max(T.cavitation, (1 - T.ventilation) * smoothstep(0.15, 0.4, T.throttle)), 0, 1);
+    // só há água para ferver/espirrar se houver profundidade sob a hélice (encalhado na areia: nada)
+    const hasWater = smoothstep(0.15, 0.5, water.getDepth(prop.x, prop.z));
+    const boil = clamp(Math.max(T.cavitation, (1 - T.ventilation) * smoothstep(0.15, 0.4, T.throttle)), 0, 1) * hasWater;
     this.rooster.emitter = new Vector3(prop.x, surf, prop.z);
     const rv = clamp(T.waterSpeed * 0.3, 0, 7) + boil * 3;
     this.rooster.direction1 = new Vector3(-fwd.x * 0.8 + right.x * 0.3, 1.1, -fwd.z * 0.8 + right.z * 0.3).scale(rv);
     this.rooster.direction2 = new Vector3(-fwd.x * 1.2 - right.x * 0.3, 1.7, -fwd.z * 1.2 - right.z * 0.3).scale(rv);
-    this.rooster.emitRate = T.thrustN > 500 ? smoothstep(6, 20, T.waterSpeed) * 600 * T.throttle + boil * 500 : boil * 300;
+    this.rooster.emitRate = hasWater * (T.thrustN > 500 ? smoothstep(6, 20, T.waterSpeed) * 600 * T.throttle + boil * 500 : boil * 300);
 
     // névoa/espuma subindo da popa quando a hélice cavita ou ventila
     this.mist.emitter = new Vector3(prop.x, surf + 0.1, prop.z);

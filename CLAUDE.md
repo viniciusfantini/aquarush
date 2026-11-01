@@ -53,6 +53,9 @@ npm run dev            # abrir http://localhost:5173, F3 mostra a telemetria; wi
 | 2026-10-31 | `VehicleInput.gear` (F/N/R) + `throttle` acima da lenta; a manete com detentes fica em `platform/input.ts` | Pedido do usuário: toques trocam a marcha (F→N→R), segurar acelera, soltar volta à lenta engrenada. A sim garante a passagem por N (`shiftTime`) e a lenta engrenada (`idleThrustFraction`). `brake`/`reverse` ficaram obsoletos |
 | 2026-10-31 | Som de motor **procedural** (Web Audio, sem samples), modelando um 4T de 4 cilindros: onda periódica no ciclo de 720° (fundamental = RPM/120, ordens de queima = RPM/30) | Leve, sem assets, e acompanha o RPM e a carga reais da simulação. Sem nome de marca no jogo (o usuário citou Yamaha como referência de som) |
 | 2026-10-31 | O adesivo do capô diz "60", mas a física continua com 150 hp (`params.ts`) | Pendente de decisão do usuário: trocar a física para 60 hp muda a velocidade final e o planeio |
+| 2026-10-31 | Esteira vive na **simulação** (`sim/wake.ts`, `WakeField`); a física usa `WaterWithWake` (altura base + marolas com idade ≥ 3 s) e o visual desenha o mesmo histórico | Pedido do usuário: atravessar a própria esteira como na vida real. Custo medido: ~0,05 ms por passo |
+| 2026-10-31 | Som do motor em **AudioWorklet** (`presentation/engineWorklet.js`, JS puro importado com `?url`) | A síntese por pulsos de combustão com variação aleatória soa bem menos "eletrônica" que osciladores. Os osciladores antigos ficam como reserva. Validação offline: `node tests/engine-audio.check.mjs` (grava WAVs em `tests/out/`) |
+| 2026-10-31 | Ignição: `Speedboat.toggleIgnition()`, partida só em N; tecla P (pausa → Esc) | Pedido do usuário. Segue a trava de segurança de motores reais |
 | 2026-10-31 | Cavitação = f(carga × escorregamento) da hélice, com perda de até 30 % de empuxo | Aproximação documentada: aparece na arrancada e some em cruzeiro. Testada em `test:sim` |
 
 ## Ambiente do desenvolvedor

@@ -13,6 +13,8 @@
 //  • Esguicho de refrigeração: fio d'água constante com o motor ligado.
 //  • Água (velocidade), cavitação (chiado áspero) e "clunk" das trocas de marcha.
 
+import engineWorkletUrl from "./engineWorklet.js?url";
+
 const makeNoise = (ctx: AudioContext): AudioBuffer => {
   const len = ctx.sampleRate * 2;
   const buf = ctx.createBuffer(1, len, ctx.sampleRate);
@@ -60,7 +62,8 @@ export interface AudioState {
   boil: number;           // cavitação/ventilação 0..1
   inGear: boolean;
   propInWater: boolean;
-  cockpit: boolean;       // câmera no cockpit (mais perto do motor? não: mais longe e com casco no meio)
+  cockpit: boolean;       // câmera no cockpit (casco entre o ouvinte e o motor)
+  engine: "off" | "cranking" | "running";
 }
 
 export class EngineAudio {
@@ -91,6 +94,11 @@ export class EngineAudio {
   private cavGain!: GainNode;
   private cavLfo!: OscillatorNode;
   private noise!: AudioBuffer;
+  // motor por síntese física (AudioWorklet); osciladores antigos ficam como reserva
+  private worklet: AudioWorkletNode | null = null;
+  private workletGain!: GainNode;
+  private starterGain!: GainNode;
+  private starterLfo!: OscillatorNode;
   muted = false;
 
   start(): void {
@@ -172,6 +180,30 @@ export class EngineAudio {
     this.cavLfo.start();
     this.cavGain = ctx.createGain(); this.cavGain.gain.value = 0;
     noiseSrc().connect(cavHP).connect(cavAM).connect(this.cavGain).connect(this.master);
+
+    // ---- motor de arranque (partida): zumbido elétrico + engrenagem, pulsando nas compressões ----
+    const st1 = ctx.createOscillator(); st1.type = "sawtooth"; st1.frequency.value = 1150;
+    const st2 = ctx.createOscillator(); st2.type = "square"; st2.frequency.value = 93;
+    const stBP = ctx.createBiquadFilter(); stBP.type = "bandpass"; stBP.frequency.value = 1100; stBP.Q.value = 2;
+    const stAM = ctx.createGain(); stAM.gain.value = 0.6;
+    this.starterLfo = ctx.createOscillator(); this.starterLfo.type = "sine"; this.starterLfo.frequency.value = 8;
+    const stDepth = ctx.createGain(); stDepth.gain.value = 0.4;
+    this.starterLfo.connect(stDepth).connect(stAM.gain);
+    this.starterGain = ctx.createGain(); this.starterGain.gain.value = 0;
+    st1.connect(stBP); st2.connect(stBP);
+    stBP.connect(stAM).connect(this.starterGain).connect(this.master);
+    st1.start(); st2.start(); this.starterLfo.start();
+
+    // ---- motor por síntese física (explosões → tubos de escape → cubo da hélice) ----
+    this.workletGain = ctx.createGain(); this.workletGain.gain.value = 0;
+    const cowl = ctx.createBiquadFilter(); cowl.type = "peaking"; cowl.frequency.value = 700; cowl.Q.value = 1.1; cowl.gain.value = 3;
+    this.workletGain.connect(cowl).connect(this.master);
+    ctx.audioWorklet.addModule(engineWorkletUrl).then(() => {
+      const node = new AudioWorkletNode(ctx, "aqua-engine", { numberOfInputs: 0, outputChannelCount: [1] });
+      node.connect(this.workletGain);
+      this.worklet = node;
+      console.info("[AquaRush] áudio do motor: síntese física (AudioWorklet)");
+    }).catch((e) => console.warn("[AquaRush] AudioWorklet indisponível, usando síntese simples", e));
   }
 
   update(st: AudioState): void {
@@ -185,35 +217,44 @@ export class EngineAudio {
     const cam = rpm / 120;     // ciclo completo de 4 tempos
     const firing = rpm / 30;   // 4 cilindros, 4 tempos: 2 explosões por volta
     const dist = st.cockpit ? 0.8 : 1;
+    const running = st.engine === "running";
+    const useW = this.worklet !== null;
+    if (this.worklet) {
+      this.worklet.port.postMessage({ rpm: st.rpm, load, combustion: running ? 1 : 0, wet: st.propInWater ? 1 : 0, volume: 1 });
+      this.workletGain.gain.setTargetAtTime(m * dist * 0.55, t, 0.05);
+    }
+    const legacy = useW || !running ? 0 : 1; // osciladores antigos só sem worklet
+    this.starterGain.gain.setTargetAtTime(m * (st.engine === "cranking" ? 0.09 : 0), t, 0.03);
+    this.starterLfo.frequency.setTargetAtTime(Math.max(st.rpm, 60) / 30, t, 0.05);
 
     // bloco: lenta suave e baixa; com carga o filtro abre e o som "encorpa"
     this.block.frequency.setTargetAtTime(cam, t, 0.04);
     this.blockLP.frequency.setTargetAtTime(220 + 900 * r + 1600 * load * (0.4 + 0.6 * r), t, 0.06);
     this.cowlRes.frequency.setTargetAtTime(520 + 500 * r, t, 0.1);
-    this.blockGain.gain.setTargetAtTime(m * dist * (0.05 + 0.1 * r + 0.07 * load), t, 0.08);
+    this.blockGain.gain.setTargetAtTime(legacy * m * dist * (0.05 + 0.1 * r + 0.07 * load), t, 0.08);
 
     // escape no cubo: borbulha em lenta; abafa com a hélice na água
     this.exhPulse.frequency.setTargetAtTime(firing, t, 0.04);
     this.exhBP.frequency.setTargetAtTime(90 + 0.05 * rpm, t, 0.08);
     const wet = st.propInWater ? 1 : 1.8;
-    this.exhGain.gain.setTargetAtTime(m * dist * (0.13 + 0.12 * load) * wet, t, 0.08);
+    this.exhGain.gain.setTargetAtTime(legacy * m * dist * (0.13 + 0.12 * load) * wet, t, 0.08);
 
     // válvulas: tique por volta do comando (cada cilindro), mais evidente em lenta
     this.valvePulse.frequency.setTargetAtTime(cam * 4, t, 0.04);
-    this.valveGain.gain.setTargetAtTime(m * dist * 0.035 * (1 - 0.7 * r), t, 0.1);
+    this.valveGain.gain.setTargetAtTime(legacy * m * dist * 0.035 * (1 - 0.7 * r), t, 0.1);
 
     // rabeta: dentes do pinhão (~ 13) × rotação do virabrequim
     this.gearOsc.frequency.setTargetAtTime((rpm / 60) * 13, t, 0.05);
-    this.gearGain.gain.setTargetAtTime(m * (st.inGear ? 0.006 + 0.014 * load * r : 0), t, 0.1);
+    this.gearGain.gain.setTargetAtTime(m * (st.inGear && running ? 0.004 + 0.01 * load * r : 0), t, 0.1);
 
     // admissão (ar entrando no capô quando acelera forte)
     this.intakeBP.frequency.setTargetAtTime(900 + 1400 * r, t, 0.1);
-    this.intakeGain.gain.setTargetAtTime(m * dist * 0.03 * load * r, t, 0.08);
+    this.intakeGain.gain.setTargetAtTime(legacy * m * dist * 0.03 * load * r, t, 0.08);
 
     // água, esguicho, cavitação
     this.waterGain.gain.setTargetAtTime(m * Math.min(st.speed / 22, 1) * 0.11, t, 0.15);
     this.waterFilter.frequency.setTargetAtTime(400 + st.speed * 40, t, 0.2);
-    this.telltaleGain.gain.setTargetAtTime(m * (0.004 + 0.009 * r) * (st.cockpit ? 0.5 : 1), t, 0.2);
+    this.telltaleGain.gain.setTargetAtTime(running ? m * (0.004 + 0.009 * r) * (st.cockpit ? 0.5 : 1) : 0, t, 0.2);
     this.cavGain.gain.setTargetAtTime(m * Math.min(st.boil, 1) * 0.14 * (0.3 + load), t, 0.05);
     this.cavLfo.frequency.setTargetAtTime(20 + rpm / 120, t, 0.1);
   }

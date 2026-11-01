@@ -87,6 +87,7 @@ uniform vec3 uCamFwd;
 uniform sampler2D uWake;
 uniform vec3 uWakeInfo;
 uniform float uWakeHeight;
+uniform float uWakeTexel;
 uniform float uUseRefl;
 uniform sampler2D uRefl;
 uniform mat4 uReflVP;
@@ -128,7 +129,7 @@ void main() {
   vec3 V = toCam / dist;
 
   // ---- esteira: normal a partir do gradiente de altura + espuma ----
-  float px = uWakeInfo.z / 512.0;
+  float px = uWakeTexel;
   float we = wakeEdge(vWorld.xz);
   vec4 w0 = wakeTex(vWorld.xz);
   float hL = wakeTex(vWorld.xz - vec2(px, 0.0)).g - wakeTex(vWorld.xz - vec2(px, 0.0)).b;
@@ -263,7 +264,7 @@ export class WaterVisual {
       uniforms: [
         "viewProjection", "uCamPos", "uGridOffset", "uTime", "wA", "wB", "uFade", "uSunDir", "uSunColor", "uDeep",
         "uShallow", "uSkyHorizon", "uSkyZenith", "uFogColor", "uFogDensity", "uUseDepth", "uScreen", "uNearFar", "uCamFwd",
-        "uRipple", "uWakeInfo", "uWakeHeight", "uUseRefl", "uReflVP",
+        "uRipple", "uWakeInfo", "uWakeHeight", "uWakeTexel", "uUseRefl", "uReflVP",
       ],
       samplers: ["uDepthMap", "uWake", "uRefl"],
       needAlphaBlending: true,
@@ -336,6 +337,7 @@ export class WaterVisual {
     m.setVector3("uCamFwd", camera.getForwardRay(1).direction);
     m.setVector3("uWakeInfo", new Vector3(this.wake.originX, this.wake.originZ, this.wake.worldSize));
     m.setFloat("uWakeHeight", WAKE_HEIGHT_SCALE);
+    m.setFloat("uWakeTexel", (this.wake.worldSize / this.wake.size) * 1.5);
     m.setFloat("uUseRefl", this.reflection ? 1 : 0);
     if (this.reflection) {
       this.mirror.multiplyToRef(camera.getViewMatrix(), this.reflView);
