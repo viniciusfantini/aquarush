@@ -583,9 +583,21 @@ for (const [label, thr] of [["baixa", 0.25], ["alta", 1]] as const) {
     return maxB;
   };
   check("porão", "água calma, ré a toda 30 s: a popa afunda e entra um pouco pelos drenos (L)", over(0.35, { ...emptyInput(), gear: "R", throttle: 1 }, 30), 0, 15, "L", 1);
-  check("porão", "lago, ré a 50 % 30 s: entra pelo espelho e a bomba dá conta (L)", over(1, { ...emptyInput(), gear: "R", throttle: 0.5 }, 30), 1, 30, "L", 1);
-  check("porão", "ondas fortes, ré lenta 60 s: respingos, a bomba dá conta (L)", over(2.5, { ...emptyInput(), gear: "R" }, 60), 0.5, 30, "L", 1);
-  check("porão", "ondas fortes, ré a 50 %: a popa afunda nas ondas e alaga em 30 s (L)", over(2.5, { ...emptyInput(), gear: "R", throttle: 0.5 }, 30), 300, 900, "L", 0);
+  check("porão", "lago, ré a 50 % 30 s (devagar): quase nada passa pelo espelho (L)", over(1, { ...emptyInput(), gear: "R", throttle: 0.5 }, 30), 0, 30, "L", 1);
+  check("porão", "lago, ré a toda CONTRA as marolas 30 s: a água empilha no espelho, entra e fica (L)", over(1, { ...emptyInput(), gear: "R", throttle: 1 }, 30), 60, 400, "L", 0);
+  // ré a toda: o espelho (placa reta) segura a velocidade; a favor das marolas a popa não embarca
+  {
+    const w = mkWater(0.35);
+    const r = new Speedboat(SPEEDBOAT, v3(0, 0.25, 0));
+    run(r, w, 20, { ...emptyInput(), gear: "R", throttle: 1 });
+    check("porão", "ré a toda em água calma: velocidade limitada pelo espelho (km/h)", r.telemetry.speedKmh, 7, 13, "km/h", 1);
+    const w2 = mkWater(1);
+    const f = new Speedboat(SPEEDBOAT, v3(0, 0.25, 0), Math.PI);
+    run(f, w2, 30, { ...emptyInput(), gear: "R", throttle: 1 });
+    check("porão", "lago, ré a toda A FAVOR das marolas 30 s: a popa não embarca (L)", f.bilgeL, 0, 15, "L", 1);
+  }
+  check("porão", "ondas fortes, ré lenta 60 s: a marola passa pelo espelho (L)", over(2.5, { ...emptyInput(), gear: "R" }, 60), 10, 150, "L", 1);
+  check("porão", "ondas fortes, ré a 50 %: a popa afunda nas ondas e alaga em 30 s (L)", over(2.5, { ...emptyInput(), gear: "R", throttle: 0.5 }, 30), 1000, 8200, "L", 0);
   // bote: sem bomba elétrica
   const d = new Speedboat(DINGHY, v3(0, 0.25, 0));
   d.hullDamage = 0.3;
@@ -640,7 +652,7 @@ for (const [label, thr] of [["baixa", 0.25], ["alta", 1]] as const) {
   const strong1500 = inWaves(1500, 2.5);
   check("afundar", "1.500 L com ondas fortes, 3 min: a água solta faz o barco virar ou afundar", strong1500.capsized || strong1500.telemetry.sunk ? 1 : 0, 1, 1, "", 0);
   const strong1000 = inWaves(1000, 2.5);
-  check("afundar", "1.000 L com ondas fortes, 3 min: a popa baixa embarca água (L a mais)", strong1000.bilgeL - 1000, 200, 7000, "L", 0);
+  check("afundar", "1.000 L com ondas fortes, 3 min: a popa baixa embarca água (+200 L, ou vira/afunda)", strong1000.capsized || strong1000.telemetry.sunk || strong1000.bilgeL > 1200 ? 1 : 0, 1, 1, "", 0);
   check("afundar", "furo de 60 %: pesado, mas não afunda nem alaga", !hole.telemetry.sunk && !hole.telemetry.swamped ? 1 : 0, 1, 1, "", 0);
 }
 
@@ -721,7 +733,7 @@ for (const [label, thr] of [["baixa", 0.25], ["alta", 1]] as const) {
     let minD = 99;
     run(b, water, 60, { ...emptyInput(), gear: "F", throttle: thr, steering: 0.3 }, w, () => { minD = Math.min(minD, -groundHeight(b.pos.x, b.pos.z)); });
     check("lago", `${P.kind}: mar forte, círculo a ${thr * 100}% — sempre em água funda (m)`, minD, 5, 8, "m", 1);
-    check("lago", `${P.kind}: mar forte, círculo a ${thr * 100}% — água no porão (L, respingos)`, b.bilgeL, 0, 40, "L", 1);
+    check("lago", `${P.kind}: mar forte, círculo a ${thr * 100}% — água no porão (L, respingos e cantos de ré nas curvas)`, b.bilgeL, 0, 150, "L", 1);
     check("lago", `${P.kind}: mar forte, 1 min em círculo a ${thr * 100}% no meio do lago — avaria do motor (%)`, b.engineDamage * 100, 0, 0, "%", 0);
   }
 }

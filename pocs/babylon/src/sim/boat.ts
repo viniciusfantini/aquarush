@@ -174,7 +174,9 @@ export class Speedboat {
   private bilgeAuto = false;
   private bilgePumpA = 0;
   /** entrada pelo furo (L/s, negativo = escoando) e por cima da borda (L/s) no último passo */
-  bilgeHole = 0; bilgeOver = 0;
+  bilgeHole = 0; bilgeOver = 0; bilgeScoop = 0;
+  /** água que sobe contra o espelho andando de ré (m) */
+  private transomPile = 0;
   /** afundou: o peso (com a água de dentro) passou do empuxo máximo do casco */
   sunk = false;
   private cavitation = 0;
@@ -469,6 +471,22 @@ export class Speedboat {
       this.T = add(this.T, rotate(this.rot, v3(0, yawDamp, bankTorque + rollDamp)));
     }
 
+    // ---------------- espelho de popa andando de ré ----------------
+    // De ré o espelho (placa reta) vai na frente: arrasto de corpo rombudo ½·ρ·Cd·A·u² na área molhada dele
+    // (segura a ré em ~10 km/h, como numa lancha real) — e a água "empilha" contra ele (ver updateBilge).
+    {
+      this.transomPile = 0;
+      if (u < -0.05) {
+        const P2 = this.params;
+        const tb = this.toWorld(v3(0, this.keelLocalY, -P2.length / 2 + 0.05));
+        const depth = clamp(water.getHeight(tb.x, tb.z) - tb.y, 0, 0.8);
+        const area = P2.beam * 0.85 * depth * 0.7;             // fundo em V: ~70 % do retângulo
+        const f = 0.5 * RHO * 1.0 * area * u * u;
+        if (f > 0) this.addForceAt(rotate(this.rot, v3(0, 0, f)), this.toWorld(v3(0, this.keelLocalY + depth * 0.5, -P2.length / 2)), "contact");
+        this.transomPile = (u * u) / (2 * G) * 0.6;             // água que sobe contra o espelho (estagnação)
+      }
+    }
+
     // ---------------- ar: arrasto + vento (vento aparente = vento − velocidade do barco) ----------------
     // longitudinal (área frontal, `airDragCdA`) no CG, como antes; lateral (costado + para-brisa) no centro
     // vélico `windage.center` — à frente e acima do CG: o barco deriva, adorna e a proa cai a sotavento
@@ -694,10 +712,25 @@ export class Speedboat {
         const dh = water.getHeight(sp.x, sp.z) - sp.y - insideAbove;
         if (dh > 0) { const q = 0.6 * B.scupperM2 * Math.sqrt(2 * G * dh) * 1000; this.bilgeOver += q; }
       }
-      const tw = this.toWorld(v3(0, B.transomY, -P.length / 2 + 0.05));
-      const ht = water.getHeight(tw.x, tw.z) - tw.y;
-      freeboard = Math.min(freeboard, -ht);
-      this.bilgeOver += 0.35 * weir(ht, B.transomW);
+      // espelho de popa em 6 trechos: no meio o rebaixo do motor (transomY, poço do motor), nos lados o convés de
+      // popa até os cantos (borda). Respingo pequeno no rebaixo fica no poço; lâmina maior passa da antepara.
+      // Dando ré o espelho é uma pá (Q = Cd·largura·lâmina·v) e a água empilha contra ele (u²/2g).
+      this.bilgeScoop = 0;
+      const NT = 6, tHalf = P.beam / 2 - 0.05, tSeg = (2 * tHalf) / NT;
+      for (let i = 0; i < NT; i++) {
+        const x = -tHalf + (i + 0.5) * tSeg;
+        const notch = Math.abs(x) < B.transomW / 2;
+        const tw = this.toWorld(v3(x, notch ? B.transomY : P.gunwaleY, -P.length / 2 + 0.05));
+        const ht = water.getHeight(tw.x, tw.z) - tw.y + this.transomPile;
+        freeboard = Math.min(freeboard, -ht);
+        const well = notch ? 0.35 + 0.65 * smoothstep(0.03, 0.12, ht) : 1;
+        this.bilgeOver += well * weir(ht, tSeg);
+        if (ht > 0) {
+          const vl = rotateInv(this.rot, this.pointVelocity(tw));
+          const q = 0.8 * tSeg * Math.min(ht, 0.3) * Math.max(0, -vl.z) * 1000;
+          this.bilgeScoop += q; this.bilgeOver += q;
+        }
+      }
       inflow = this.bilgeHole + this.bilgeOver;
     }
     // ---- bomba: boia/interruptor, curva vazão x altura, tensão ----
