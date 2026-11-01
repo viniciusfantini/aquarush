@@ -3,7 +3,7 @@
 // Tudo procedural (sem assets). Os comandos ficam no MOTOR: a cana do leme gira o motor inteiro
 // (direção), a manopla gira com o acelerador e a alavanca de câmbio fica na lateral do capô.
 
-import { type Scene, Mesh, MeshBuilder, StandardMaterial, PBRMaterial, Color3, TransformNode, Vector3 } from "@babylonjs/core";
+import { type Scene, Mesh, MeshBuilder, StandardMaterial, PBRMaterial, Color3, TransformNode, Vector3, SpotLight } from "@babylonjs/core";
 import { DINGHY } from "../sim/params.ts";
 import type { BoatTelemetry } from "../sim/boat.ts";
 import type { VehicleInput } from "../gameplay/vehicleInput.ts";
@@ -41,6 +41,10 @@ export interface DinghyControls {
   /** apoio da mão direita (coxa) */
   leverGrip: TransformNode;
   update(dt: number, t: BoatTelemetry, input: VehicleInput, maxSteerDeg: number): void;
+  /** lanterna de mão do piloto (o bote não tem luzes de navegação fixas) */
+  setLantern(on: boolean): void;
+  /** piloto caiu na água: some a lanterna */
+  pilotAboard: boolean;
 }
 
 export const buildDinghy = (scene: Scene): BoatVisual & { controls: DinghyControls } => {
@@ -134,21 +138,7 @@ export const buildDinghy = (scene: Scene): BoatVisual & { controls: DinghyContro
   cockpitLid.parent = root;
   cockpitLid.alphaIndex = 0;
 
-  // ---------- luzes de navegação (portáteis) ----------
-  const mkLight = (name: string, c: Color3, pos: Vector3, d = 0.05) => {
-    const m = new StandardMaterial(name, scene);
-    m.diffuseColor = c.scale(0.5); m.specularColor = new Color3(0.8, 0.8, 0.8); m.emissiveColor = Color3.Black();
-    const s = MeshBuilder.CreateSphere(name + "Mesh", { diameter: d, segments: 8 }, scene);
-    s.position.copyFrom(pos); s.material = m; s.parent = root; meshes.push(s);
-    return m;
-  };
-  const yb = TUBE_Y + 0.17 + TUBE_R + 0.03;
-  const lights = {
-    port: mkLight("navPort", new Color3(1, 0.05, 0.05), new Vector3(-0.03, yb, Z_BOW - 0.05)),
-    star: mkLight("navStar", new Color3(0.05, 1, 0.2), new Vector3(0.03, yb, Z_BOW - 0.05)),
-    stern: mkLight("navStern", new Color3(1, 1, 1), new Vector3(-TUBE_X, 0.95, -1.3), 0.06),
-  };
-  add(MeshBuilder.CreateCylinder("lightPole", { height: 0.6, diameter: 0.02 }, scene), steel).position.set(-TUBE_X, TUBE_Y + TUBE_R + 0.3, -1.3);
+  // (sem luzes de navegação fixas: no bote, no máximo uma lanterna na mão do piloto — ver controls.setLantern)
 
   // ---------- motor de popa 15 hp com cana do leme (pivô = DINGHY.drivePivot) ----------
   const pv = DINGHY.drivePivot;
@@ -230,11 +220,32 @@ export const buildDinghy = (scene: Scene): BoatVisual & { controls: DinghyContro
   const pullHandle = add(MeshBuilder.CreateCapsule("pullHandle", { radius: 0.012, height: 0.08, orientation: new Vector3(1, 0, 0) }, scene), blackMatte, engine);
   pullHandle.position.set(0.04, 0.4, 0.035);
 
-  // apoio da mão direita do piloto (coxa direita)
+  // mão direita do piloto: na coxa ou segurando a lanterna à frente
   const thighRest = new TransformNode("thighRest", scene);
   thighRest.parent = root;
   const hs = DINGHY.seats.helm;
-  thighRest.position.set(hs.x + 0.12, DINGHY_FLOOR + 0.6, hs.z + 0.3);
+  const restR = new Vector3(hs.x + 0.12, DINGHY_FLOOR + 0.6, hs.z + 0.3);
+  const holdR = new Vector3(hs.x + 0.16, DINGHY_FLOOR + 0.92, hs.z + 0.5);
+  thighRest.position.copyFrom(restR);
+  // lanterna de mão (corpo amarelo, lente) + foco de luz para a frente
+  const lanternMat = pbr(scene, "lanternBody", new Color3(0.95, 0.75, 0.1), 0, 0.4);
+  const lensMat = new StandardMaterial("lanternLens", scene);
+  lensMat.diffuseColor = new Color3(0.9, 0.9, 0.8); lensMat.emissiveColor = Color3.Black();
+  const lantern = new TransformNode("lantern", scene);
+  lantern.parent = thighRest;
+  lantern.rotation.x = 0.12;
+  const lBody = add(MeshBuilder.CreateCylinder("lanternBodyM", { height: 0.2, diameterTop: 0.075, diameterBottom: 0.045, tessellation: 14 }, scene), lanternMat, lantern);
+  lBody.rotation.x = Math.PI / 2; lBody.position.z = 0.05;
+  const lens = add(MeshBuilder.CreateDisc("lanternLensM", { radius: 0.034, tessellation: 18 }, scene), lensMat, lantern);
+  lens.position.z = 0.152; lens.rotation.y = Math.PI;
+  const beam = new SpotLight("lanternBeam", new Vector3(0, 0, 0.16), new Vector3(0, -0.05, 1), 0.55, 8, scene);
+  beam.parent = lantern;
+  beam.diffuse = new Color3(1, 0.95, 0.82);
+  beam.intensity = 6;
+  beam.range = 60;
+  beam.setEnabled(false);
+  lantern.setEnabled(false);
+  let lanternOn = false;
   // mão esquerda: manopla da cana (ou a coxa esquerda quando o motor está levantado)
   const leftRest = new TransformNode("leftRest", scene);
   leftRest.parent = root;
@@ -248,7 +259,13 @@ export const buildDinghy = (scene: Scene): BoatVisual & { controls: DinghyContro
     meshes: [],
     wheelGrip: leftHand,
     leverGrip: thighRest,
+    pilotAboard: true,
+    setLantern(on) { lanternOn = on; },
     update(dt, t) {
+      const show = lanternOn && controls.pilotAboard;
+      lantern.setEnabled(show); beam.setEnabled(show);
+      lensMat.emissiveColor = show ? new Color3(1, 0.97, 0.85) : Color3.Black();
+      thighRest.position = Vector3.Lerp(thighRest.position, show ? holdR : restR, Math.min(1, dt * 6));
       // manopla do acelerador gira com o acelerador real; câmbio F/N/R com o motor
       twist += (t.throttle * 1.6 - twist) * Math.min(1, dt * 12);
       grip.rotation.z = -twist;
@@ -265,5 +282,5 @@ export const buildDinghy = (scene: Scene): BoatVisual & { controls: DinghyContro
       leftHand.position = Vector3.Lerp(leftHand.position, tgt, Math.min(1, dt * 10));
     },
   };
-  return { root, engine, propeller, telltale, propBlur, lights, cockpitLid, meshes, controls };
+  return { root, engine, propeller, telltale, propBlur, lights: null, cockpitLid, meshes, controls };
 };

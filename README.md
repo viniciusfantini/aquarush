@@ -12,7 +12,7 @@ O GDD (seção 10) pede a **mesma fatia jogável** em três tecnologias antes de
 
 | # | Tecnologia | Pasta | Status |
 |---|---|---|---|
-| 1 | **Babylon.js + TypeScript** (browser-first, sem instalar engine) | [`pocs/babylon`](pocs/babylon) | ✅ **v0.13.0 online**: lancha 150 hp ou **bote de apoio 15 hp** (escolha na abertura), física testada (137/138 critérios), água vidro, esteira na água, cavitação |
+| 1 | **Babylon.js + TypeScript** (browser-first, sem instalar engine) | [`pocs/babylon`](pocs/babylon) | ✅ **v0.14.0 online**: lancha 150 hp ou **bote de apoio 15 hp** (escolhidos no menu com prévia no lago), física testada (146/147 critérios), barco que vira e pessoas boiando de colete, água vidro, esteira na água, cavitação |
 | 2 | Unity 6 LTS + URP | [`pocs/unity`](pocs/unity) | ⏳ planejada (Unity não instalado nesta máquina) |
 | 3 | Unreal Engine 5 | [`pocs/unreal`](pocs/unreal) | ⏳ planejada |
 
@@ -34,7 +34,7 @@ npm run deploy       # typecheck + testes + build e publica no GitHub Pages (bra
 
 Parâmetros de URL: `?barco=lancha|bote` (pula a tela de escolha), `?q=low|med|high` (qualidade), `?webgpu=1`, `?touch=1` (força os controles touch).
 
-Na abertura você escolhe o barco: **Lancha AR-6** (6 m, 150 hp, volante, manete, power trim, partida na chave) ou **Bote de apoio AR-3** (3,1 m, 15 hp, até 3 pessoas, cana do leme no motor, partida na corda, trim manual). O chip **TROCAR BARCO** recarrega com o outro.
+Na abertura, o **menu já fica no lago**: a embarcação escolhida boia no píer e a câmera gira em volta dela (prévia real, com a mesma física). Escolha **Lancha AR-6** (6 m, 150 hp, volante, manete, power trim, partida na chave, luzes de navegação; tanque de 120 L, começa com 3 L) ou **Bote de apoio AR-3** (3,1 m, 15 hp, até 3 pessoas, cana do leme no motor, partida na corda, trim manual, lanterna de mão; tanque portátil de 10 L, começa com 1 L) e toque **PILOTAR**. O chip **TROCAR BARCO** volta ao menu sem recarregar.
 
 ### Controles
 
@@ -47,8 +47,8 @@ Na abertura você escolhe o barco: **Lancha AR-6** (6 m, 150 hp, volante, manete
 | **Bote: trim manual** (só parado) | toque **E/Q**: pino 1 · 2 · 3; **E** no pino 3 levanta o motor todo (tilt); **Q** abaixa | RB / LB | TRIM+ / TRIM− |
 | **Recolher o motor (tilt)** | segure **E** no fim do trim, em **baixa rotação** (pode estar engatado e andando devagar); **Q** baixa | segure RB | segure TRIM+ |
 | Câmera externa ↔ cockpit | C | Y | CAM |
-| Luzes de navegação | L | X | LUZ |
-| Reposicionar no píer (volta a 3 L) | R | Back | ↺ |
+| Luzes de navegação (lancha) · lanterna de mão do piloto (bote) | L | X | LUZ |
+| Reposicionar no píer (lancha 3 L, bote 1 L; desvira o barco e todos voltam a bordo) | R | Back | ↺ |
 | Ocupantes (peso e posição) | O | | chip OCUPANTES |
 | Água: vidro / calma / lago / forte | 0 (ou G) / 1 / 2 / 3 · V alterna | | toque no chip “ÁGUA” |
 | **Ligar/desligar o motor** (partida só em N; no bote, cada P é uma puxada na corda) | P | B | ⏻ |
@@ -71,6 +71,7 @@ pocs/unreal/         POC 3 — planejada
 |---|---|---|
 | 2026-10-31 | babylon 0.1.0 | POC 1: lago com margens, ilha, rio com correnteza, rochas, vegetação, píer e marina. Lancha com corpo rígido 6DOF, flutuação em 6 pontos, planeio emergente, trim físico, colisões. Água Gerstner compartilhada entre física e shader. Esteira, spray, câmeras externa e cockpit, HUD, teclado, gamepad e touch, áudio procedural. Testes físicos headless. |
 | 2026-10-31 | babylon 0.2.0 | Água **vidro (glass)** e presets de água. **Reflexo planar real** (lancha, margens e píer refletidos). **Esteira integrada à água**: um mapa de esteira deforma a superfície (braços do V de Kelvin, cristas e cavados), perturba os reflexos e gera espuma da hélice, do casco e da fervura. **Cavitação e ventilação da hélice** na física (perda de empuxo, RPM sobe), com fervura branca, bolhas, névoa, spray, aviso no HUD e som. **Lancha refeita**: casco com strakes e flare, cockpit rebaixado, para-brisa envolvente, guarda-mancebo, bancos estofados, plataformas e escada de banho, painel com velocímetro e conta-giros de ponteiro, motor de popa com capô, placa anticavitação, pé e skeg, **hélice de 3 pás com passo, torção e skew** e disco de borrão. Materiais PBR com ambiente. |
+| 2026-11-01 | babylon 0.14.0 | **Barco virado**: deitado além de ~75° por 0,4 s, o corta-circuito desliga o motor e os ocupantes caem para o lado em que o barco deitou; o peso deles sai do barco. Na água cada pessoa **boia de colete** (centro do colete na linha d'água, postura reclinada, braços remando), sobe e desce com as ondas, é levada pela correnteza, não atravessa o casco e não se sobrepõe aos outros. R desvira e põe todos a bordo. **Menu no lago** com prévia da embarcação (câmera girando; o barco boia com a física real) e troca de barco sem recarregar. **Bote**: sem luzes de navegação; **L** acende uma lanterna de mão (o piloto ergue a mão direita com a lanterna e um foco de luz aponta para a frente); tanque de **10 L**, começa com **1 L**. |
 | 2026-11-01 | babylon 0.13.0 | **Bote de apoio AR-3** (escolha na abertura): RIB de 3,1 m, 118 kg seco, motor de popa 15 hp bicilíndrico com **cana do leme** (o motor inteiro gira; manopla do acelerador e alavanca de câmbio no motor, animadas), até 3 pessoas (banco de popa e banco do meio), tanque portátil de 12 L, **partida na corda** (sem bateria; motor frio pode pedir 2–3 puxadas), **trim manual** em 3 furos (−4°, 0°, +4°) + tilt total de 70°, tudo **só com o bote parado** e com movimento progressivo (~0,8 s por furo, ~1,5 s para levantar). Dinâmica: ~44 km/h só com o piloto (0→30 em 3,4 s), ~33 km/h lotado, curva fechada com a cana sem emborcar; consumo 0,6–5,5 L/h. Som de bicilíndrico (escape mais curto) e som da corda. HUD do bote sem temperatura e bateria (o motor de cana não tem esses instrumentos). |
 | 2026-11-01 | babylon 0.12.0 | **Bateria que descarrega de verdade**: cada partida (170 A) e a bomba do trim/tilt gastam carga; a resistência interna sobe com a descarga, então a tensão despenca na partida e o arranque gira mais devagar. Com 65 % ainda pega; com ~40 % gira fraco e costuma não pegar; com 10 % só estala o solenoide. Navegando, o alternador recarrega (~5 %/min). A carga/descarga roda **10× acelerada** (bateria de 50 Ah) para o efeito aparecer numa sessão. **Apito de autoteste** ("piiii", ~1 s) ao ligar a chave, antes do arranque girar. Começa com **3 L** no tanque; aviso de combustível baixo pisca no HUD com os litros restantes, acende o LED no painel e aparece um aviso ao ligar. O relógio da bateria mostra o % de carga. |
 | 2026-11-01 | babylon 0.11.0 | **iPhone nítido**: a resolução segue a densidade real da tela (até 2× em `med`, 1,5× em `low`, 2,5× em `high`). Antes o celular renderizava a 1/1,5 do pixel CSS (no iPhone, 1/4,5 da resolução nativa). iPhone/iPad começam em `med` (reflexo, espuma, sombras). **Resolução dinâmica**: cai 10 % por vez se o FPS ficar abaixo de 40 e volta acima de 57 (F3 mostra a resolução). **Motor recolhido**: a direção agora gira o motor no próprio eixo (que inclina com o tilt), como no suporte real; antes ele girava em torno da vertical do barco e varria o pé para os lados. A física usa a mesma ordem (tilt por fora, direção por dentro). |

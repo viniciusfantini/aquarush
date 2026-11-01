@@ -15,7 +15,8 @@ export interface BoatVisual {
   propeller: TransformNode;   // gira com a rotação real da hélice
   telltale: TransformNode;    // bico do esguicho de refrigeração (jato sai em +X local, para fora)
   propBlur: PBRMaterial;      // disco de borrão (alpha ∝ rotação)
-  lights: { port: StandardMaterial; star: StandardMaterial; stern: StandardMaterial };
+  /** luzes de navegação (null = barco sem luzes fixas, como o bote) */
+  lights: { port: StandardMaterial; star: StandardMaterial; stern: StandardMaterial } | null;
   /** Tampa invisível do cockpit (só profundidade): impede a água de aparecer dentro do barco. */
   cockpitLid: Mesh;
   meshes: Mesh[];
@@ -418,6 +419,7 @@ export const buildPropeller = (scene: Scene, engine: TransformNode, pos: Vector3
 };
 
 export const setNavLights = (v: BoatVisual, on: boolean): void => {
+  if (!v.lights) return;
   v.lights.port.emissiveColor = on ? new Color3(1, 0.05, 0.05) : Color3.Black();
   v.lights.star.emissiveColor = on ? new Color3(0.1, 1, 0.25) : Color3.Black();
   v.lights.stern.emissiveColor = on ? new Color3(1, 1, 1) : Color3.Black();

@@ -40,8 +40,14 @@ const solveElbow = (s: Vector3, t: Vector3, l1: number, l2: number, pole: Vector
 
 export interface Pilot {
   meshes: Mesh[];
+  /** nó da pessoa: filho do barco (sentada) ou solto no mundo (na água) */
+  group: TransformNode;
   /** alvos das mãos no espaço local da lancha */
   update(leftHand: Vector3, rightHand: Vector3): void;
+  /** na água: centro do colete em `pos` (mundo), virada para `yaw`; braços abertos remando */
+  float(pos: Vector3, yaw: number, t: number): void;
+  /** de volta ao banco */
+  board(root: TransformNode): void;
 }
 
 export interface PersonOpts {
@@ -55,8 +61,10 @@ export interface PersonOpts {
 /** Pessoa sentada (proporções humanas, braços por IK). */
 export const buildPerson = (scene: Scene, root: TransformNode, o: PersonOpts): Pilot => {
   const meshes: Mesh[] = [];
-  const add = (m: Mesh, mat: PBRMaterial) => { m.material = mat; m.parent = root; m.isPickable = false; meshes.push(m); return m; };
   const k = o.prefix;
+  const group = new TransformNode(k + "Group", root.getScene());
+  group.parent = root;
+  const add = (m: Mesh, mat: PBRMaterial) => { m.material = mat; m.parent = group; m.isPickable = false; meshes.push(m); return m; };
   const skin = pbr(scene, k + "Skin", o.skin, 0.55);
   const shirt = pbr(scene, k + "Shirt", o.shirt, 0.7);
   const vest = pbr(scene, k + "VestM", o.vest, 0.55);
@@ -130,9 +138,29 @@ export const buildPerson = (scene: Scene, root: TransformNode, o: PersonOpts): P
     hand.push(h);
   }
   const L1 = 0.3, L2 = 0.29;
+  // centro do colete (local do barco) — é o ponto que boia na linha d'água
+  const anchor = new Vector3(X, FLOOR + 0.78, -0.29 + DZ);
+  const q = new Quaternion();
 
-  return {
+  const api: Pilot = {
     meshes,
+    group,
+    float(pos: Vector3, yaw: number, t: number) {
+      if (group.parent) group.parent = null;
+      // postura "HELP" do colete: reclinada ~30° para trás, pernas encolhidas (a pose sentada serve)
+      Quaternion.FromEulerAnglesToRef(-0.5 + 0.05 * Math.sin(t * 1.3), yaw, 0.04 * Math.sin(t * 0.9), q);
+      group.rotationQuaternion = q;
+      const off = anchor.applyRotationQuaternion(q);
+      group.position.copyFrom(pos.subtract(off));
+      // braços abertos, remando devagar
+      const sw = 0.06 * Math.sin(t * 2.2);
+      api.update(new Vector3(X - 0.42, FLOOR + 0.82 + sw, -0.1 + DZ), new Vector3(X + 0.42, FLOOR + 0.82 - sw, -0.1 + DZ));
+    },
+    board(root2: TransformNode) {
+      group.parent = root2;
+      group.position.setAll(0);
+      group.rotationQuaternion = Quaternion.Identity();
+    },
     update(leftHand: Vector3, rightHand: Vector3) {
       const targets = [leftHand, rightHand];
       const shoulders = [shL, shR];
@@ -150,6 +178,7 @@ export const buildPerson = (scene: Scene, root: TransformNode, o: PersonOpts): P
       }
     },
   };
+  return api;
 };
 
 /** Piloto no posto de boreste (mãos controladas por IK no volante e na manete). */
@@ -169,6 +198,9 @@ export const buildPassenger = (scene: Scene, root: TransformNode, x: number, zc:
   ][look % 3];
   const p = buildPerson(scene, root, { x, zc, prefix, floor, vest: new Color3(0.95, 0.4, 0.05), shorts: new Color3(0.2, 0.3, 0.45), ...looks });
   const DZ = zc + 0.22;
-  p.update(new Vector3(x - 0.12, FLOOR + 0.6, 0.06 + DZ), new Vector3(x + 0.12, FLOOR + 0.6, 0.06 + DZ));
+  const rest = () => p.update(new Vector3(x - 0.12, FLOOR + 0.6, 0.06 + DZ), new Vector3(x + 0.12, FLOOR + 0.6, 0.06 + DZ));
+  rest();
+  const board = p.board;
+  p.board = (r) => { board(r); rest(); };
   return p;
 };

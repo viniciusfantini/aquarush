@@ -10,7 +10,7 @@ import {
 import type { IWaterSurface } from "./water.ts";
 import { G } from "./water.ts";
 import type { PhysicsWorld } from "./world.ts";
-import type { SpeedboatParams, Occupant } from "./params.ts";
+import type { SpeedboatParams, Occupant, SeatId } from "./params.ts";
 import { PERSON_KG } from "./params.ts";
 import { ENGINE_SYSTEMS } from "./engineSystems.ts";
 import type { VehicleInput } from "../gameplay/vehicleInput.ts";
@@ -49,6 +49,8 @@ export interface BoatTelemetry {
   fuelLph: number;       // consumo estimado (L/h)
   distanceM: number;
   collisions: number;
+  capsized: boolean;     // barco virou (kill switch desliga o motor; ocupantes caem na água)
+  swimmers: number;      // pessoas na água
   lastImpact: number;    // N (intensidade do último impacto)
   engine: EngineState;   // motor desligado / dando partida / funcionando
   // instrumentos (sistemas do motor)
@@ -61,7 +63,7 @@ export interface BoatTelemetry {
   protectMode: boolean;  // superaquecido: rotação limitada
   lowFuel: boolean;
   chargeWarn: boolean;
-  stall: "" | "fuel" | "overheat"; // último motivo de o motor ter morrido sozinho
+  stall: "" | "fuel" | "overheat" | "capsize"; // último motivo de o motor ter morrido sozinho
   buzzer: boolean;       // alarme do motor apitando (autoteste da chave)
   starterRpm: number;    // rotação do motor de arranque (0 = só o "clique" do solenoide)
   startFail: "" | "weak" | "dead" | "pull"; // última partida que não pegou (bateria fraca / sem força / corda)
@@ -72,6 +74,13 @@ export interface BoatTelemetry {
   depth: number;         // profundidade sob o casco
   submergedPoints: boolean[];
 }
+
+/**
+ * Pessoa na água (caiu quando o barco virou). Boia com o colete salva-vidas: o colete segura o
+ * peito na linha d'água (postura "HELP", pernas encolhidas), o arrasto da água freia o corpo e a
+ * correnteza/ondas o carregam. Modelo de 1 ponto (posição = centro do colete).
+ */
+export interface Swimmer { seat: SeatId; mass: number; pos: Vec3; vel: Vec3; yaw: number }
 
 export interface ForceDebug { p: Vec3; f: Vec3; kind: "buoy" | "lift" | "thrust" | "contact" }
 
@@ -118,6 +127,11 @@ export class Speedboat {
   private manualBlockT = 0;
   /** partida na corda: esta puxada vai pegar? */
   private pullCatch = false;
+  /** Pessoas que caíram na água (barco virado). */
+  swimmers: Swimmer[] = [];
+  /** barco virado: ocupantes ejetados, motor desligado pelo corta-circuito (kill switch) */
+  capsized = false;
+  private capsizeT = 0;
   /** Ocupantes (posição = banco). Padrão: só o piloto. */
   occupants: Occupant[] = [{ seat: "helm", mass: PERSON_KG }];
   totalMass = 0;
@@ -171,7 +185,7 @@ export class Speedboat {
     this.telemetry = {
       speedKmh: 0, waterSpeed: 0, rpm: params.idleRpm, throttle: 0, throttleCmd: 0, trim: 0, trimDeg: 0, tiltDeg: 0, tiltBlocked: false, intakeSubmerged: true, steerDeg: 0,
       gear: "N", pitchDeg: 0, rollDeg: 0, wetFraction: 0, planing: false, thrustN: 0, ventilation: 1, cavitation: 0, propImmersion: 1, revLimiter: false, propSlip: 0, propRpm: 0, engine: "running", fuelL: 0, fuelFrac: 1, coolantC: 45, batteryV: 12.6, engineHours: 0, overheatWarn: false, protectMode: false, lowFuel: false, chargeWarn: false, stall: "", trimMotorA: 0, fuelLph: 0, buzzer: false, starterRpm: 0, startFail: "", batterySoc: 0.92, trimPin: 0, pullStart: !params.electricStart,
-      distanceM: 0, collisions: 0, lastImpact: 0, depth: 0, submergedPoints: params.buoyancyPoints.map(() => false),
+      distanceM: 0, collisions: 0, capsized: false, swimmers: 0, lastImpact: 0, depth: 0, submergedPoints: params.buoyancyPoints.map(() => false),
     };
   }
 
@@ -186,6 +200,7 @@ export class Speedboat {
     this.trim = 0;
     this.tilt = 0;
     this.tiltWanted = false;
+    this.capsized = false; this.capsizeT = 0; this.swimmers = [];
     this.trimPin = Math.max(0, Math.min(1, this.params.trimPins.length - 1));
     this.manualAngle = this.params.trimPins[this.trimPin] ?? 0;
     this.gear = this.wantGear = "N";
@@ -448,6 +463,9 @@ export class Speedboat {
     t.batterySoc = sys.batterySoc;
     t.distanceM += Math.hypot(this.pos.x - oldPos.x, this.pos.z - oldPos.z);
     t.depth = water.getDepth(this.pos.x, this.pos.z);
+    this.updateCapsize(dt, water, world);
+    t.capsized = this.capsized;
+    t.swimmers = this.swimmers.length;
     if (impact > 0) t.lastImpact = impact;
   }
 
@@ -517,6 +535,60 @@ export class Speedboat {
     if (this.systems.protect) target = Math.min(target, 0.3);   // modo de proteção
     if (this.systems.starving) target = Math.min(target, 0.05); // engasgando sem combustível
     this.throttleActual += (target - this.throttleActual) * (1 - Math.exp(-dt / P.engineResponse));
+  }
+
+  /**
+   * Emborcamento: com o barco deitado além de ~75° (up.y < 0,25) por 0,4 s, ninguém se segura —
+   * os ocupantes caem na água com a velocidade que tinham, o peso deles sai do barco e o motor
+   * desliga (cordão do corta-circuito preso ao piloto). Na água, cada pessoa boia pelo colete.
+   */
+  private updateCapsize(dt: number, water: IWaterSurface, world: PhysicsWorld): void {
+    const upY = this.up.y;
+    this.capsizeT = upY < 0.25 ? this.capsizeT + dt : 0;
+    if (!this.capsized && this.capsizeT > 0.4) {
+      this.capsized = true;
+      if (this.engine !== "off") { this.engine = "off"; this.telemetry.stall = "capsize"; }
+      const fwd = this.forward, right = this.right;
+      // caem para o lado em que o barco deitou (bordo que afundou), afastando-se do casco
+      const rollSide = right.y < 0 ? 1 : -1;
+      for (const o of this.occupants) {
+        const seat = this.params.seats[o.seat];
+        const p = this.toWorld(seat);
+        const side = Math.abs(seat.x) > 0.1 ? Math.sign(seat.x) : rollSide;
+        const out = v3(right.x * side, 0, right.z * side);
+        const ol = Math.hypot(out.x, out.z) || 1;
+        this.swimmers.push({ seat: o.seat, mass: o.mass, pos: p, vel: addScaled(this.pointVelocity(p), v3(out.x / ol, 0.5, out.z / ol), 1.6), yaw: Math.atan2(fwd.x, fwd.z) });
+      }
+      this.occupants = [];
+    }
+    for (const s of this.swimmers) {
+      const h = water.getHeight(s.pos.x, s.pos.z);
+      const cur = water.getCurrent(s.pos.x, s.pos.z);
+      // colete: empuxo até o centro do colete ficar ~5 cm abaixo da superfície; no ar, só gravidade
+      const dSub = clamp(h - 0.05 - s.pos.y, -0.5, 0.6);
+      const inWater = h - s.pos.y > -0.3;
+      const ay = -G + (dSub > -0.3 ? (G + 60 * dSub) : 0) - (inWater ? 4 * s.vel.y : 0);
+      // arrasto do corpo na água (puxa para a velocidade da correnteza)
+      const kd = inWater ? 1.6 : 0.05;
+      s.vel = v3(s.vel.x + (cur.x - s.vel.x) * kd * dt, s.vel.y + ay * dt, s.vel.z + (cur.z - s.vel.z) * kd * dt);
+      s.pos = addScaled(s.pos, s.vel, dt);
+      // não atravessa o casco: dentro da projeção do barco, empurra para o bordo mais próximo
+      const L = rotateInv(this.rot, sub(s.pos, this.pos));
+      const hx = this.params.beam / 2 + 0.3, hz = this.params.length / 2 + 0.15;
+      if (Math.abs(L.x) < hx && Math.abs(L.z) < hz && Math.abs(L.y) < 1.2) {
+        const px = (hx - Math.abs(L.x)) * (Math.sign(L.x) || 1);
+        const push = rotate(this.rot, v3(px, 0, 0));
+        s.pos = v3(s.pos.x + push.x * 6 * dt, s.pos.y, s.pos.z + push.z * 6 * dt);
+      }
+      // pessoas não se sobrepõem (~0,6 m entre os centros)
+      for (const o of this.swimmers) {
+        if (o === s) continue;
+        const dx = s.pos.x - o.pos.x, dz = s.pos.z - o.pos.z, d = Math.hypot(dx, dz);
+        if (d < 0.6) { const k = ((0.6 - d) / (d || 1)) * 3 * dt; s.pos = v3(s.pos.x + dx * k + (d ? 0 : 0.01), s.pos.y, s.pos.z + dz * k); }
+      }
+      const g = world.groundHeight(s.pos.x, s.pos.z) + 0.25; // raso: fica sentado no fundo
+      if (s.pos.y < g) { s.pos = v3(s.pos.x, g, s.pos.z); s.vel = v3(s.vel.x * 0.9, Math.max(0, s.vel.y), s.vel.z * 0.9); }
+    }
   }
 
   /**

@@ -42,6 +42,14 @@ export class BoatCamera {
     });
   }
 
+  /** Prévia do menu: gira devagar em volta do barco, um pouco de cima. */
+  spin(dt: number, yawRate: number, pitch: number): void {
+    this.orbitYaw += yawRate * dt;
+    this.orbitPitch += (pitch - this.orbitPitch) * Math.min(1, dt * 2);
+    this.idle = 0;
+  }
+  resetOrbit(): void { this.orbitYaw = 0; this.orbitPitch = 0; this.first = true; }
+
   toggle(): CamMode {
     this.mode = this.mode === "externa" ? "cockpit" : "externa";
     this.orbitYaw = 0; this.orbitPitch = 0;

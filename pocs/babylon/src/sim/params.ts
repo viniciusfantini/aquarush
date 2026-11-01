@@ -217,7 +217,7 @@ export const DINGHY: SpeedboatParams = {
   trimPins: [-4 * DEG, 0, 4 * DEG],
   manualTrimMaxSpeed: 0.7, // ~2,5 km/h: na prática, parado
   electricStart: false,
-  tankLiters: 12,
+  tankLiters: 10,  // tanque portátil (máx. 10 L)
   fuelIdleLph: 0.6,
   fuelMaxLph: 5.5,
   cylinders: 2,

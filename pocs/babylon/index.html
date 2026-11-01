@@ -23,6 +23,19 @@
     .pick-b { width: min(300px, calc(100vw - 32px)); display: grid; gap: 6px; padding: 16px; border-radius: 14px; border: 1px solid rgba(255,255,255,0.25); background: rgba(41, 211, 194, 0.08); color: var(--fg); font: inherit; letter-spacing: 0.02em; text-align: left; cursor: pointer; }
     .pick-b:hover, .pick-b:focus-visible { background: rgba(41, 211, 194, 0.22); border-color: var(--accent); outline: none; }
     .pick-b b { font-size: 17px; }
+    .pick-b.sel { background: rgba(41, 211, 194, 0.3); border-color: var(--accent); box-shadow: 0 0 0 2px rgba(41, 211, 194, 0.35); }
+    #menu { position: fixed; inset: 0; z-index: 4; display: flex; flex-direction: column; justify-content: space-between; padding: 18px 16px 22px; pointer-events: none; }
+    #menu.hidden { display: none; }
+    #menu .menu-top { text-align: center; text-shadow: 0 1px 6px rgba(0,0,0,0.55); }
+    #menu .brand { font-size: 30px; letter-spacing: 0.32em; }
+    #menu .pick-t { color: var(--fg); margin-top: 6px; }
+    #menu .menu-bottom { display: grid; gap: 14px; justify-items: center; pointer-events: auto; }
+    #menu .pick-b { background: rgba(8, 20, 30, 0.62); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
+    #menu .pick-b.sel { background: rgba(14, 70, 72, 0.78); }
+    #menu-play { font: inherit; font-size: 16px; letter-spacing: 0.2em; padding: 12px 34px; border-radius: 999px; border: none; background: var(--accent); color: #04222a; font-weight: 700; cursor: pointer; }
+    #menu-play:hover, #menu-play:focus-visible { filter: brightness(1.1); outline: none; }
+    body.menu-mode #ui { display: none; }
+    @media (max-height: 520px) { #menu .pick-b span:last-child { display: none; } #menu .brand { font-size: 22px; } }
     .pick-b span { font-size: 12.5px; color: var(--dim); letter-spacing: 0; }
     #loading-msg { font-size: 12px; letter-spacing: 0.15em; color: var(--dim); min-height: 1em; }
 
@@ -108,14 +121,17 @@
   <canvas id="game"></canvas>
   <div id="loading">
     <div class="brand">AQUA RUSH</div>
-    <div id="pick" class="hidden">
-      <div class="pick-t">Escolha o barco</div>
+    <div id="loading-msg">carregando o lago…</div>
+  </div>
+  <div id="menu" class="hidden">
+    <div class="menu-top"><div class="brand">AQUA RUSH</div><div class="pick-t">Escolha a embarcação — a prévia está no lago</div></div>
+    <div class="menu-bottom">
       <div class="pick-row">
-        <button class="pick-b" data-kind="lancha"><b>Lancha AR-6</b><span>6 m · 150 hp · até 4 pessoas</span><span>volante, manete, power trim elétrico, partida na chave</span></button>
-        <button class="pick-b" data-kind="bote"><b>Bote de apoio AR-3</b><span>3,1 m · 15 hp · até 3 pessoas</span><span>cana do leme no motor, partida na corda, trim manual (3 furos + tilt)</span></button>
+        <button class="pick-b" data-kind="lancha"><b>Lancha AR-6</b><span>6 m · 150 hp · até 4 pessoas · tanque 120 L (começa com 3 L)</span><span>volante, manete, power trim elétrico, partida na chave, luzes de navegação</span></button>
+        <button class="pick-b" data-kind="bote"><b>Bote de apoio AR-3</b><span>3,1 m · 15 hp · até 3 pessoas · tanque 10 L (começa com 1 L)</span><span>cana do leme no motor, partida na corda, trim manual (3 furos + tilt), lanterna de mão</span></button>
       </div>
+      <button id="menu-play">PILOTAR ▶</button>
     </div>
-    <div id="loading-msg"></div>
   </div>
   <div id="ui">
     <div id="leftcol">
@@ -141,7 +157,7 @@
       <div>toque <kbd>W</kbd>/<kbd>↑</kbd> → <b>N</b>, de novo → <b>F</b> (frente lenta) · <b>segure</b> para acelerar</div>
       <div><kbd>A</kbd><kbd>D</kbd>/<kbd>←</kbd><kbd>→</kbd> direção</div>
       <div id="help-trim"><kbd>E</kbd> trim + (proa sobe) · <kbd>Q</kbd> trim − (proa desce)</div>
-      <div><kbd>C</kbd> câmera · <kbd>L</kbd> luzes · <kbd>R</kbd> reposicionar (3 L)</div>
+      <div><kbd>C</kbd> câmera · <span id="help-lights"><kbd>L</kbd> luzes</span> · <kbd>R</kbd> <span id="help-reset">reposicionar (3 L)</span></div>
       <div id="help-occ"><kbd>O</kbd> ocupantes (1 · carona · 2 na popa · 4) — mudam o peso e o equilíbrio</div>
       <div><kbd>0</kbd>/<kbd>G</kbd> água vidro · <kbd>1</kbd> calma · <kbd>2</kbd> lago · <kbd>3</kbd> forte · <kbd>V</kbd> alterna</div>
       <div id="help-ign"><kbd>P</kbd> liga/desliga o motor (partida só em <b>N</b>) · <kbd>Esc</kbd> pausa</div>

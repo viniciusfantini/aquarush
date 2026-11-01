@@ -10,7 +10,7 @@ import { GerstnerWater, WAVE_PRESETS, type CurrentZone } from "../src/sim/water.
 import type { PhysicsWorld } from "../src/sim/world.ts";
 import { buildWorld } from "../src/sim/world.ts";
 import { emptyInput, type VehicleInput } from "../src/gameplay/vehicleInput.ts";
-import { v3, len } from "../src/sim/math.ts";
+import { v3, len, qFromAxisAngle } from "../src/sim/math.ts";
 import { WakeField, WaterWithWake } from "../src/sim/wake.ts";
 
 const DT = 1 / 120;
@@ -451,6 +451,28 @@ for (const [label, thr] of [["baixa", 0.25], ["alta", 1]] as const) {
   let pulls = 0;
   while (pb.telemetry.engine !== "running" && pulls < 12) { pulls++; pb.toggleIgnition(); run(pb, water, 1.2, emptyInput()); }
   check("bote", "corda: pegou em até 12 puxadas", pb.telemetry.engine === "running" ? pulls : 99, 1, 12, "puxadas", 0);
+}
+
+// ---------- Emborcamento: pessoas caem e boiam com o colete ----------
+{
+  const water = mkWater(0); // água parada: mede o equilíbrio do colete (com ondas a pessoa sobe e desce junto)
+  const b = new Speedboat(DINGHY, v3(0, 0.2, 0));
+  b.occupants = [{ seat: "helm", mass: PERSON_KG }, { seat: "passenger", mass: PERSON_KG }];
+  run(b, water, 3, emptyInput());
+  check("emborcamento", "de pé: ninguém cai", b.swimmers.length, 0, 0, "", 0);
+  const m0 = b.totalMass;
+  b.rot = qFromAxisAngle(v3(0, 0, 1), 2.6);
+  run(b, water, 12, emptyInput());
+  check("emborcamento", "virou: detectado", b.telemetry.capsized ? 1 : 0, 1, 1, "", 0);
+  check("emborcamento", "virou: 2 pessoas na água", b.swimmers.length, 2, 2, "", 0);
+  check("emborcamento", "virou: motor desligado (kill switch)", b.telemetry.engine === "off" && b.telemetry.stall === "capsize" ? 1 : 0, 1, 1, "", 0);
+  check("emborcamento", "peso das pessoas saiu do barco (kg)", m0 - b.totalMass, 159, 161, "kg", 0);
+  const dy = b.swimmers.map((s) => s.pos.y - water.getHeight(s.pos.x, s.pos.z));
+  check("emborcamento", "colete: centro do colete na linha d'água (m)", Math.max(...dy.map(Math.abs)), 0, 0.2, "m", 2);
+  check("emborcamento", "pessoas fora do casco: distância mín. do centro (m)", Math.min(...b.swimmers.map((s) => Math.hypot(s.pos.x - b.pos.x, s.pos.z - b.pos.z))), DINGHY.beam / 2 + 0.2, 6, "m", 2);
+  check("emborcamento", "pessoas paradas boiando (m/s)", Math.max(...b.swimmers.map((s) => Math.abs(s.vel.y))), 0, 0.4, "m/s", 2);
+  b.reset(v3(0, 0.2, 0), 0);
+  check("emborcamento", "R: ninguém na água e barco de pé", b.swimmers.length === 0 && !b.capsized ? 1 : 0, 1, 1, "", 0);
 }
 
 // ---------- Carga: gasolina e ocupantes (quantidade e posição) ----------

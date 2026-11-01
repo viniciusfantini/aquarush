@@ -111,7 +111,7 @@ export class EngineAudio {
   private pumpGain!: GainNode;
   muted = false;
   /** 4 = motor de 4 cilindros (lancha 150 hp); 2 = bicilíndrico (bote 15 hp) */
-  readonly cylinders: number;
+  cylinders: number;
   constructor(cylinders = 4) { this.cylinders = cylinders; }
 
   /** Puxada na corda de partida: "zzzip" da corda + catraca do arranque manual. */

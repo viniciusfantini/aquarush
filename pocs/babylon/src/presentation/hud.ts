@@ -84,13 +84,15 @@ class RoundGauge {
   }
 }
 
+export interface HudOpts { speedMax: number; temp: boolean; battery: boolean; trimPins: number }
+
 export class Hud {
-  private speedG: RoundGauge;
-  private rpmG: RoundGauge;
-  private fuelG: RoundGauge;
-  private tempG: RoundGauge | null;
-  private voltG: RoundGauge | null;
-  private readonly pins: number;
+  private speedG!: RoundGauge;
+  private rpmG!: RoundGauge;
+  private fuelG!: RoundGauge;
+  private tempG: RoundGauge | null = null;
+  private voltG: RoundGauge | null = null;
+  private pins = 0;
   private thrBar = $("h-thr-bar");
   private thrTxt = $("h-thr");
   private trimMark = $("h-trim-mark");
@@ -114,8 +116,12 @@ export class Hud {
   debugOn = false;
 
   /** opts: barco com/sem painel de instrumentos (bote de cana não tem temperatura nem bateria) */
-  constructor(opts: { speedMax: number; temp: boolean; battery: boolean; trimPins: number } = { speedMax: 100, temp: true, battery: true, trimPins: 0 }) {
+  constructor(opts?: HudOpts) { this.configure(opts); }
+
+  /** (Re)monta os relógios para o barco escolhido. */
+  configure(opts: HudOpts = { speedMax: 100, temp: true, battery: true, trimPins: 0 }): void {
     const big = $("g-big"), small = $("g-small");
+    big.innerHTML = ""; small.innerHTML = "";
     this.pins = opts.trimPins;
     const sm = opts.speedMax;
     this.speedG = new RoundGauge(big, { title: "km/h", min: 0, max: sm, labels: Array.from({ length: 6 }, (_, i) => (sm / 5) * i), minor: sm / 20, big: true });
@@ -185,7 +191,7 @@ export class Hud {
   setCamera(name: string): void { this.cam.textContent = name === "cockpit" ? "COCKPIT" : "EXTERNA"; }
   setWater(name: string): void { this.water.textContent = "ÁGUA: " + name.toUpperCase(); }
   setOccupants(txt: string): void { this.occ.textContent = "OCUPANTES: " + txt.toUpperCase(); }
-  setLights(on: boolean): void { this.lights.classList.toggle("on", on); }
+  setLights(on: boolean, label = "LUZES"): void { this.lights.classList.toggle("on", on); this.lights.textContent = label; }
   toggleDebug(): void { this.debugOn = !this.debugOn; this.debug.style.display = this.debugOn ? "block" : "none"; }
   toggleHelp(force?: boolean): void { this.help.classList.toggle("hidden", force === undefined ? undefined : !force); }
 

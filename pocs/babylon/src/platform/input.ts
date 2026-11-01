@@ -139,6 +139,7 @@ export class InputManager {
   }
 
   toggleLights(): boolean { this.lights = !this.lights; return this.lights; }
+  setLights(on: boolean): void { this.lights = on; }
 }
 
 /** Controles touch: joystick de direção (esquerda), alavanca de acelerador (direita), botões. */
