@@ -2,26 +2,47 @@
 // Teclado e gamepad no desktop; joystick/acelerador/botões virtuais no touch.
 // Também expõe "ações" pontuais (câmera, luzes, reset, ondas, debug).
 
-import { type VehicleInput, emptyInput } from "../gameplay/vehicleInput.ts";
+import { type VehicleInput, type GearCommand, emptyInput } from "../gameplay/vehicleInput.ts";
 import { approach, clamp } from "../sim/math.ts";
 
 export type Action = "camera" | "lights" | "reset" | "debug" | "help" | "pause" | "water0" | "water1" | "water2" | "water3" | "waterNext";
+
+/**
+ * Manete única (como numa lancha real), com detentes  R ← N → F:
+ *  - toque "para frente" (W/↑, RT, D-pad ↑): R → N → F (lenta engrenada). Segurar em F acelera.
+ *  - toque "para trás"  (S/↓, LT, D-pad ↓): F → N → R (lenta engrenada). Segurar em R acelera em ré.
+ *  - soltar: o acelerador volta à lenta, mas a marcha continua engatada (a lancha segue devagar).
+ * Um toque que TROCOU de marcha só acelera se continuar segurado por mais de HOLD_TO_THROTTLE.
+ */
+const HOLD_TO_THROTTLE = 0.45; // s
+const GEAR_STEP: Record<GearCommand, { up: GearCommand; down: GearCommand }> = {
+  R: { up: "N", down: "R" },
+  N: { up: "F", down: "R" },
+  F: { up: "F", down: "N" },
+};
 
 export class InputManager {
   readonly state: VehicleInput = emptyInput();
   private keys = new Set<string>();
   private actions: Action[] = [];
-  private kbThrottle = 0;
-  private kbBrake = 0;
+  /** marcha atual da manete */
+  gear: GearCommand = "N";
+  private leverThrottle = 0; // acelerador acima da lenta, na marcha atual
   private kbSteer = 0;
+  private prevUp = false;
+  private prevDown = false;
+  private holdTime = 0;
+  private pressShifted = false;
   // touch
   touchSteer = 0;
-  touchThrottle = 0;   // alavanca: permanece onde o dedo soltou
-  touchBrake = 0;
   touchTrim = 0;
+  /** alavanca touch (quando ativa, define marcha e acelerador diretamente) */
+  touchLever: { gear: GearCommand; throttle: number } | null = null;
   private lights = false;
   lastDevice: "teclado" | "gamepad" | "touch" = "teclado";
   private gpPrev: boolean[] = [];
+  /** chamado quando a marcha da manete muda (HUD/toast) */
+  onGearChange: ((g: GearCommand) => void) | null = null;
 
   constructor(target: Window) {
     target.addEventListener("keydown", (e) => {
@@ -43,26 +64,24 @@ export class InputManager {
   pushAction(a: Action): void { this.actions.push(a); }
   consumeActions(): Action[] { const a = this.actions; this.actions = []; return a; }
 
+  /** Força uma marcha (reset, botão N, alavanca touch). */
+  setGear(g: GearCommand): void {
+    if (g !== this.gear) { this.gear = g; this.onGearChange?.(g); }
+    this.leverThrottle = 0;
+  }
+
   private k(...codes: string[]): boolean { return codes.some((c) => this.keys.has(c)); }
 
   update(dt: number): VehicleInput {
-    // ---- teclado: acelerador progressivo (rampa) ----
-    const up = this.k("KeyW", "ArrowUp"), down = this.k("KeyS", "ArrowDown");
-    this.kbThrottle = approach(this.kbThrottle, up ? 1 : 0, (up ? 0.9 : 1.6) * dt);
-    this.kbBrake = approach(this.kbBrake, down ? 1 : 0, (down ? 1.5 : 3) * dt);
-    const steerT = (this.k("KeyD", "ArrowRight") ? 1 : 0) - (this.k("KeyA", "ArrowLeft") ? 1 : 0);
-    this.kbSteer = approach(this.kbSteer, steerT, (steerT === 0 ? 4 : 2.8) * dt);
-    const kbTrim = (this.k("KeyE") ? 1 : 0) - (this.k("KeyQ") ? 1 : 0);
-
     // ---- gamepad (mapeamento "standard") ----
-    let gpThrottle = 0, gpBrake = 0, gpSteer = 0, gpTrim = 0;
+    let gpUp = 0, gpDown = 0, gpSteer = 0, gpTrim = 0;
     const pads = typeof navigator !== "undefined" && navigator.getGamepads ? navigator.getGamepads() : [];
     for (const gp of pads) {
       if (!gp || gp.mapping !== "standard") continue;
       const b = (i: number) => gp.buttons[i]?.value ?? 0;
       const pressed = (i: number) => gp.buttons[i]?.pressed ?? false;
-      gpThrottle = Math.max(gpThrottle, b(7));
-      gpBrake = Math.max(gpBrake, b(6));
+      gpUp = Math.max(b(7), pressed(12) ? 1 : 0);
+      gpDown = Math.max(b(6), pressed(13) ? 1 : 0);
       const ax = gp.axes[0] ?? 0;
       gpSteer = Math.abs(ax) > 0.12 ? (ax - Math.sign(ax) * 0.12) / 0.88 : 0;
       gpTrim = (pressed(5) ? 1 : 0) - (pressed(4) ? 1 : 0);
@@ -72,18 +91,51 @@ export class InputManager {
         if (now && !this.gpPrev[i]) this.actions.push(a);
         this.gpPrev[i] = now;
       }
-      if (gpThrottle + gpBrake + Math.abs(gpSteer) > 0.05) this.lastDevice = "gamepad";
+      if (gpUp + gpDown + Math.abs(gpSteer) > 0.05) this.lastDevice = "gamepad";
       break;
     }
 
+    // ---- manete: toques trocam a marcha, segurar acelera ----
+    const upAmt = Math.max(this.k("KeyW", "ArrowUp") ? 1 : 0, gpUp);
+    const downAmt = Math.max(this.k("KeyS", "ArrowDown") ? 1 : 0, gpDown);
+    const up = upAmt > 0.3, down = downAmt > 0.3;
+    if (up && !this.prevUp) this.press("up");
+    if (down && !this.prevDown) this.press("down");
+    if (!up && !down) { this.holdTime = 0; this.pressShifted = false; } else this.holdTime += dt;
+    this.prevUp = up; this.prevDown = down;
+
+    const holding = (this.gear === "F" && up) || (this.gear === "R" && down);
+    const amt = this.gear === "F" ? upAmt : downAmt;
+    const canRamp = holding && (!this.pressShifted || this.holdTime > HOLD_TO_THROTTLE);
+    this.leverThrottle = approach(this.leverThrottle, canRamp ? amt : 0, (canRamp ? 0.9 : 1.6) * dt);
+
+    // ---- direção e trim ----
+    const steerT = (this.k("KeyD", "ArrowRight") ? 1 : 0) - (this.k("KeyA", "ArrowLeft") ? 1 : 0);
+    this.kbSteer = approach(this.kbSteer, steerT, (steerT === 0 ? 4 : 2.8) * dt);
+    const kbTrim = (this.k("KeyE") ? 1 : 0) - (this.k("KeyQ") ? 1 : 0);
+
     const s = this.state;
-    s.throttle = clamp(Math.max(this.kbThrottle, gpThrottle, this.touchThrottle), 0, 1);
-    s.brake = clamp(Math.max(this.kbBrake, gpBrake, this.touchBrake), 0, 1);
+    if (this.touchLever) {
+      if (this.touchLever.gear !== this.gear) { this.gear = this.touchLever.gear; this.onGearChange?.(this.gear); }
+      s.throttle = this.touchLever.throttle;
+    } else {
+      s.throttle = clamp(this.leverThrottle, 0, 1);
+    }
+    s.gear = this.gear;
+    s.brake = 0;
+    s.reverse = this.gear === "R";
     s.steering = clamp(this.kbSteer + gpSteer + this.touchSteer, -1, 1);
     s.trim = clamp(kbTrim + gpTrim + this.touchTrim, -1, 1);
-    s.reverse = false;
     s.navigationLights = this.lights;
     return s;
+  }
+
+  private press(dir: "up" | "down"): void {
+    this.touchLever = null; // teclado/gamepad assumem a manete
+    const next = GEAR_STEP[this.gear][dir];
+    this.pressShifted = next !== this.gear;
+    this.holdTime = 0;
+    if (this.pressShifted) this.setGear(next);
   }
 
   toggleLights(): boolean { this.lights = !this.lights; return this.lights; }
@@ -110,16 +162,18 @@ export const attachTouchControls = (root: HTMLElement, input: InputManager): voi
   stick.addEventListener("pointerup", stickEnd);
   stick.addEventListener("pointercancel", stickEnd);
 
-  // alavanca: metade superior = frente (0..1), faixa inferior = ré/freio
+  // alavanca com detentes: topo = frente a toda, faixa central = N, base = ré.
+  // Logo acima/abaixo do N fica a marcha lenta engrenada (anda devagar).
   const lever = root.querySelector<HTMLElement>("#t-lever")!;
   const handle = root.querySelector<HTMLElement>("#t-handle")!;
-  const NEUTRAL = 0.78; // posição (0 topo .. 1 base) do neutro
+  const NEUTRAL = 0.62, DEAD = 0.035, IDLE = 0.07; // posições (0 topo .. 1 base)
   let leverId: number | null = null;
   const setLever = (pos: number) => {
     pos = clamp(pos, 0, 1);
-    if (pos <= NEUTRAL) { input.touchThrottle = clamp((NEUTRAL - pos) / (NEUTRAL - 0.04), 0, 1); input.touchBrake = 0; }
-    else { input.touchThrottle = 0; input.touchBrake = clamp((pos - NEUTRAL) / (1 - NEUTRAL - 0.03), 0, 1); }
-    if (Math.abs(pos - NEUTRAL) < 0.03) { input.touchThrottle = 0; input.touchBrake = 0; }
+    const d = pos - NEUTRAL;
+    if (Math.abs(d) < DEAD) { input.touchLever = { gear: "N", throttle: 0 }; pos = NEUTRAL; }
+    else if (d < 0) input.touchLever = { gear: "F", throttle: clamp((-d - IDLE) / (NEUTRAL - IDLE - 0.03), 0, 1) };
+    else input.touchLever = { gear: "R", throttle: clamp((d - IDLE) / (1 - NEUTRAL - IDLE - 0.03), 0, 1) };
     handle.style.top = `${pos * 100}%`;
   };
   setLever(NEUTRAL);

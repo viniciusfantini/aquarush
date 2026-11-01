@@ -23,7 +23,7 @@ import { BoatCamera } from "./presentation/cameras.ts";
 import { Hud } from "./presentation/hud.ts";
 import { EngineAudio } from "./presentation/audio.ts";
 
-const BUILD = "poc-babylon 0.2.1";
+const BUILD = "poc-babylon 0.3.0";
 /** Escala visual da rotação da hélice (proporcional ao RPM, abaixo do limite estroboscópico). */
 const PROP_VISUAL_SCALE = 0.12;
 
@@ -151,6 +151,9 @@ const boot = async () => {
   window.addEventListener("keydown", startAudio);
   window.addEventListener("pointerdown", startAudio);
 
+  const GEAR_MSG = { F: "F — frente engatada (lenta)", N: "N — neutro (sem empuxo)", R: "R — ré engatada (lenta)" } as const;
+  input.onGearChange = (g) => hud.showToast(GEAR_MSG[g]);
+
   let waterPreset = 2;
   const applyWater = (i: number) => {
     waterPreset = (i + WATER_PRESETS.length) % WATER_PRESETS.length;
@@ -184,7 +187,7 @@ const boot = async () => {
       for (const m of boatVis.meshes) if (/^pilot|^capBrim/.test(m.name)) m.setEnabled(mode !== "cockpit");
     }
     else if (a === "lights") { lights = input.toggleLights(); setNavLights(boatVis, lights); hud.setLights(lights); }
-    else if (a === "reset") { boat.reset(spawnPos(), world.spawn.heading); snap(curPos, curRot); snap(prevPos, prevRot); hud.showToast("Reposicionado no píer"); }
+    else if (a === "reset") { input.setGear("N"); boat.reset(spawnPos(), world.spawn.heading); snap(curPos, curRot); snap(prevPos, prevRot); hud.showToast("Reposicionado no píer"); }
     else if (a === "debug") hud.toggleDebug();
     else if (a === "help") hud.toggleHelp();
     else if (a === "pause") { paused = !paused; hud.showToast(paused ? "Pausado" : "Continuando"); }

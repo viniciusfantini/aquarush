@@ -37,6 +37,7 @@ export interface SpeedboatParams {
   idleRpm: number;
   maxRpm: number;
   shiftTime: number;       // s (tempo em neutro ao trocar de marcha)
+  idleThrustFraction: number; // fração do empuxo máx. em marcha lenta ENGRENADA (lancha anda devagar)
 
   // Direção
   maxSteerLow: number;     // rad (baixa velocidade)
@@ -105,7 +106,8 @@ export const SPEEDBOAT: SpeedboatParams = {
   engineResponse: 0.3,
   idleRpm: 750,
   maxRpm: 5800,
-  shiftTime: 0.35,
+  shiftTime: 0.45,
+  idleThrustFraction: 0.04,
 
   maxSteerLow: 32 * DEG,
   maxSteerHigh: 11 * DEG,

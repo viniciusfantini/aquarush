@@ -50,6 +50,7 @@ npm run dev            # abrir http://localhost:5173, F3 mostra a telemetria; wi
 | 2026-10-31 | A esteira é um **mapa top-down** (canvas → textura) lido pelo shader da água, não uma malha por cima | Ela precisa deformar a água, distorcer o reflexo e gerar espuma de verdade. Canais: R = espuma, G − B = altura |
 | 2026-10-31 | Reflexo planar com render target próprio (estilo WaterMaterial), em `med`/`high` | Água vidro exige refletir a lancha e as margens. Em `low` fica o céu analítico |
 | 2026-10-31 | "Tampa" do cockpit só de profundidade (`alphaIndex` 0 < água 10) | Evita água aparecendo dentro do barco sem precisar de stencil |
+| 2026-10-31 | `VehicleInput.gear` (F/N/R) + `throttle` acima da lenta; a manete com detentes fica em `platform/input.ts` | Pedido do usuário: toques trocam a marcha (F→N→R), segurar acelera, soltar volta à lenta engrenada. A sim garante a passagem por N (`shiftTime`) e a lenta engrenada (`idleThrustFraction`). `brake`/`reverse` ficaram obsoletos |
 | 2026-10-31 | Cavitação = f(carga × escorregamento) da hélice, com perda de até 30 % de empuxo | Aproximação documentada: aparece na arrancada e some em cruzeiro. Testada em `test:sim` |
 
 ## Ambiente do desenvolvedor

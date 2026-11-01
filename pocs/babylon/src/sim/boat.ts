@@ -59,9 +59,9 @@ export class Speedboat {
   private throttleActual = 0;
   private steer = 0;           // rad
   trim = 0;                    // -1..1
-  gear: Gear = "F";
+  gear: Gear = "N";
   private shiftTimer = 0;
-  private wantGear: Gear = "F";
+  private wantGear: Gear = "N";
   private rpm = 750;
   private lastContact = false;
   private cavitation = 0;
@@ -81,7 +81,7 @@ export class Speedboat {
     this.rpm = params.idleRpm;
     this.telemetry = {
       speedKmh: 0, waterSpeed: 0, rpm: params.idleRpm, throttle: 0, throttleCmd: 0, trim: 0, trimDeg: 0, steerDeg: 0,
-      gear: "F", pitchDeg: 0, rollDeg: 0, wetFraction: 0, planing: false, thrustN: 0, ventilation: 1, cavitation: 0, propSlip: 0, propRpm: 0, fuelLph: 0,
+      gear: "N", pitchDeg: 0, rollDeg: 0, wetFraction: 0, planing: false, thrustN: 0, ventilation: 1, cavitation: 0, propSlip: 0, propRpm: 0, fuelLph: 0,
       distanceM: 0, collisions: 0, lastImpact: 0, depth: 0, submergedPoints: params.buoyancyPoints.map(() => false),
     };
   }
@@ -95,7 +95,8 @@ export class Speedboat {
     this.throttleActual = 0;
     this.steer = 0;
     this.trim = 0;
-    this.gear = this.wantGear = "F";
+    this.gear = this.wantGear = "N";
+    this.shiftTimer = 0;
   }
 
   get forward(): Vec3 { return rotate(this.rot, v3(0, 0, 1)); }
@@ -209,9 +210,9 @@ export class Speedboat {
     const axial = dot(vProp, tDirLocal);
     let thrust = 0;
     if (this.gear === "F") {
-      thrust = P.maxThrust * this.throttleActual * Math.max(0, 1 - axial / P.propPitchSpeed);
+      thrust = P.maxThrust * this.engineLoad() * Math.max(0, 1 - axial / P.propPitchSpeed);
     } else if (this.gear === "R") {
-      thrust = -P.maxThrust * P.reverseThrustFactor * this.throttleActual * clamp(1 + axial / (P.propPitchSpeed * 0.6), 0, 1.3);
+      thrust = -P.maxThrust * P.reverseThrustFactor * this.engineLoad() * clamp(1 + axial / (P.propPitchSpeed * 0.6), 0, 1.3);
     }
     // Cavitação (aproximação documentada): carga alta com escorregamento alto (arrancada,
     // ré a toda, hélice "patinando") forma bolhas de vapor -> perde empuxo e a rotação sobe.
@@ -302,30 +303,30 @@ export class Speedboat {
     // trim (comando é taxa)
     this.trim = clamp(this.trim + clamp(input.trim, -1, 1) * P.trimRate * dt, -1, 1);
 
-    // marcha e acelerador: freio/reverso em movimento, ré quando parado
-    let cmd = clamp(input.throttle, 0, 1);
-    let desired: Gear = "F";
-    if (input.reverse) {
-      desired = "R";
-      cmd = Math.max(cmd, input.brake);
-    } else if (input.brake > 0.05) {
-      desired = "R";
-      cmd = input.brake;
-      if (input.throttle > 0.05) { desired = "F"; cmd = input.throttle; }
-    } else if (cmd < 0.02 && this.gear === "R") {
-      desired = "R"; // mantém ré engatada em marcha lenta até acelerar
-    }
-    if (desired !== this.gear) {
-      if (this.wantGear !== desired) { this.wantGear = desired; this.shiftTimer = P.shiftTime; }
-      // passa por neutro com acelerador em marcha lenta
-      this.gear = "N";
+    // Manete com detentes F / N / R (GDD: frente, neutro e ré). A troca SEMPRE passa por N:
+    // corta o acelerador, espera `shiftTime` em neutro (embreagem da rabeta) e só então engrena.
+    // Engrenado com acelerador 0 = marcha lenta engrenada (a lancha anda devagar).
+    const desired: Gear = input.gear;
+    const cmd = clamp(input.throttle, 0, 1);
+    if (desired !== this.wantGear) {
+      this.wantGear = desired;
+      if (this.gear !== desired) {
+        this.gear = "N";
+        this.shiftTimer = desired === "N" ? 0 : P.shiftTime;
+      }
     }
     if (this.gear === "N" && this.wantGear !== "N") {
       this.shiftTimer -= dt;
-      if (this.shiftTimer <= 0 && this.throttleActual < 0.15) this.gear = this.wantGear;
+      if (this.shiftTimer <= 0 && this.throttleActual < 0.12) this.gear = this.wantGear;
     }
     const target = this.gear === "N" ? 0 : cmd;
     this.throttleActual += (target - this.throttleActual) * (1 - Math.exp(-dt / P.engineResponse));
+  }
+
+  /** Carga do motor 0..1 incluindo a marcha lenta engrenada. */
+  private engineLoad(): number {
+    const f = this.params.idleThrustFraction;
+    return f + (1 - f) * this.throttleActual;
   }
 
   private updateRpm(dt: number, axial: number, ventilation: number): number {

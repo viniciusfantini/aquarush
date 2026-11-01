@@ -79,7 +79,7 @@ let topSpeed = 0;
   const water = mkWater(0);
   const boat = new Speedboat(SPEEDBOAT, v3(0, 0.25, 0));
   settle(boat, water);
-  const inp = { ...emptyInput(), throttle: 1 };
+  const inp = { ...emptyInput(), gear: "F" as const, throttle: 1 };
   let t30 = -1, t60 = -1, maxPitch = 0, tMaxPitch = 0, planeAt = -1, maxCav = 0;
   run(boat, water, 45, inp, openWater, (t) => {
     if (t < 1.5) maxCav = Math.max(maxCav, boat.telemetry.cavitation);
@@ -110,7 +110,7 @@ let topSpeed = 0;
     const boat = new Speedboat(SPEEDBOAT, v3(0, 0.25, 0));
     settle(boat, water);
     boat.trim = trimCmd;
-    run(boat, water, 40, { ...emptyInput(), throttle: 0.85 });
+    run(boat, water, 40, { ...emptyInput(), gear: "F", throttle: 0.85 });
     rows.push({ trim: trimCmd, speed: boat.telemetry.speedKmh, pitch: boat.telemetry.pitchDeg, fuel: boat.telemetry.fuelLph });
   }
   const [neg, neu, pos] = rows;
@@ -128,10 +128,10 @@ for (const [label, thr] of [["baixa", 0.25], ["alta", 1]] as const) {
   const water = mkWater(0);
   const boat = new Speedboat(SPEEDBOAT, v3(0, 0.25, 0));
   settle(boat, water);
-  run(boat, water, 25, { ...emptyInput(), throttle: thr });
+  run(boat, water, 25, { ...emptyInput(), gear: "F", throttle: thr });
   const v0 = boat.telemetry.speedKmh;
   let rollSum = 0, n = 0, radSum = 0;
-  run(boat, water, 12, { ...emptyInput(), throttle: thr, steering: 1 }, openWater, (t) => {
+  run(boat, water, 12, { ...emptyInput(), gear: "F", throttle: thr, steering: 1 }, openWater, (t) => {
     if (t < 5) return;
     const yaw = Math.abs(boat.angVel.y);
     rollSum += boat.telemetry.rollDeg; n++;
@@ -149,19 +149,33 @@ for (const [label, thr] of [["baixa", 0.25], ["alta", 1]] as const) {
   const water = mkWater(0);
   const boat = new Speedboat(SPEEDBOAT, v3(0, 0.25, 0));
   settle(boat, water);
-  run(boat, water, 30, { ...emptyInput(), throttle: 1 });
+  run(boat, water, 30, { ...emptyInput(), gear: "F", throttle: 1 });
   let tCoast = -1;
   run(boat, water, 30, emptyInput(), openWater, (t) => { if (tCoast < 0 && boat.telemetry.speedKmh < 10) tCoast = t; });
   check("5 desaceleração", "soltar acelerador: topo→10 km/h (s)", tCoast, 3, 20, "s");
 
   const b2 = new Speedboat(SPEEDBOAT, v3(0, 0.25, 0));
   settle(b2, water);
-  run(b2, water, 30, { ...emptyInput(), throttle: 1 });
+  run(b2, water, 30, { ...emptyInput(), gear: "F", throttle: 1 });
   let tBrake = -1;
-  run(b2, water, 30, { ...emptyInput(), brake: 1 }, openWater, (t) => { if (tBrake < 0 && b2.telemetry.speedKmh < 10) tBrake = t; });
-  check("5 desaceleração", "freio/reverso: topo→10 km/h (s)", tBrake, 1, tCoast - 0.5, "s");
-  check("5 ré", "marcha após frear", b2.gear === "R" ? 1 : 0, 1, 1, "", 0);
-  check("5 ré", "velocidade em ré (km/h, longitudinal)", -b2.telemetry.waterSpeed * 3.6, 5, 30, "km/h", 1);
+  run(b2, water, 30, { ...emptyInput(), gear: "R", throttle: 1 }, openWater, (t) => { if (tBrake < 0 && b2.telemetry.speedKmh < 10) tBrake = t; });
+  check("5 desaceleração", "ré a toda (reverso): topo→10 km/h (s)", tBrake, 1, tCoast - 0.5, "s");
+  check("5 ré", "marcha após engatar ré", b2.gear === "R" ? 1 : 0, 1, 1, "", 0);
+  check("5 ré", "velocidade em ré a toda (km/h, longitudinal)", -b2.telemetry.waterSpeed * 3.6, 5, 30, "km/h", 1);
+
+  // Manete F / N / R: N = sem empuxo (desliza e para); lenta engrenada = anda devagar
+  const b3 = new Speedboat(SPEEDBOAT, v3(0, 0.25, 0));
+  settle(b3, water);
+  run(b3, water, 20, { ...emptyInput(), gear: "F", throttle: 0.5 });
+  let tStop = -1;
+  run(b3, water, 90, { ...emptyInput(), gear: "N" }, openWater, (t) => { if (tStop < 0 && b3.telemetry.speedKmh < 1) tStop = t; });
+  check("5 manete", "N a partir de cruzeiro: empuxo (N)", Math.abs(b3.telemetry.thrustN), 0, 0, "N", 0);
+  check("5 manete", "N: tempo até < 1 km/h (s)", tStop, 5, 80, "s", 1);
+  run(b3, water, 30, { ...emptyInput(), gear: "F", throttle: 0 });
+  check("5 manete", "F em lenta engrenada (km/h)", b3.telemetry.speedKmh, 2.5, 9, "km/h", 1);
+  check("5 manete", "F lenta: RPM", b3.telemetry.rpm, 600, 1100, "rpm", 0);
+  run(b3, water, 40, { ...emptyInput(), gear: "R", throttle: 0 });
+  check("5 manete", "R em lenta: anda para trás (km/h)", -b3.telemetry.waterSpeed * 3.6, 1, 6, "km/h", 1);
 }
 
 // ---------- Teste 6 — ondas fortes e correnteza ----------
@@ -169,7 +183,7 @@ for (const [label, thr] of [["baixa", 0.25], ["alta", 1]] as const) {
   const water = mkWater(2.5);
   const boat = new Speedboat(SPEEDBOAT, v3(0, 0.25, 0));
   let maxRoll = 0, maxPitch = 0;
-  run(boat, water, 40, { ...emptyInput(), throttle: 0.8, steering: 0.3 }, openWater, () => {
+  run(boat, water, 40, { ...emptyInput(), gear: "F", throttle: 0.8, steering: 0.3 }, openWater, () => {
     maxRoll = Math.max(maxRoll, Math.abs(boat.telemetry.rollDeg));
     maxPitch = Math.max(maxPitch, Math.abs(boat.telemetry.pitchDeg));
   });
@@ -195,7 +209,7 @@ for (const [label, thr] of [["baixa", 0.25], ["alta", 1]] as const) {
   // vai reto para o sul (margem) a toda: deve encalhar sem atravessar o terreno
   boat.reset(v3(world.spawn.x + 30, 0.3, world.spawn.z), Math.PI);
   let minClear = 1e9;
-  run(boat, water, 25, { ...emptyInput(), throttle: 1 }, world, () => {
+  run(boat, water, 25, { ...emptyInput(), gear: "F", throttle: 1 }, world, () => {
     minClear = Math.min(minClear, boat.pos.y - world.groundHeight(boat.pos.x, boat.pos.z));
   });
   check("lago", "encalhe: folga mínima CG→terreno (m)", minClear, -0.2, 5, "m", 3);
