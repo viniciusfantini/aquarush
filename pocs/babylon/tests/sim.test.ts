@@ -8,7 +8,8 @@ import { Speedboat } from "../src/sim/boat.ts";
 import { SPEEDBOAT, DINGHY, PERSON_KG, type Occupant } from "../src/sim/params.ts";
 import { GerstnerWater, WAVE_PRESETS, type CurrentZone } from "../src/sim/water.ts";
 import type { PhysicsWorld } from "../src/sim/world.ts";
-import { buildWorld, RAMP, groundHeight, fromFrame } from "../src/sim/world.ts";
+import { buildWorld, RAMP, groundHeight, fromFrame, ROAD_SAMPLES, LOT } from "../src/sim/world.ts";
+import { STATION, stationObstacles, fuelBayState } from "../src/sim/station.ts";
 import { buildTrailer, trailerLoadState, attachWinch } from "../src/sim/trailer.ts";
 import { TowRig, TOW_SPECS } from "../src/sim/towVehicle.ts";
 import { emptyInput, type VehicleInput } from "../src/gameplay/vehicleInput.ts";
@@ -676,6 +677,47 @@ for (const [label, thr] of [["baixa", 0.25], ["alta", 1]] as const) {
   const tilt0 = b.telemetry.tiltDeg;
   for (let i = 0; i < 3 / DT; i++) b.carriedStep(DT, 1, water);
   check("reboque", "E/Q mexem no trim/tilt com o barco preso (°)", b.telemetry.trimDeg + b.telemetry.tiltDeg - tilt0, 5, 80, "°", 1);
+}
+
+// ---------- Estrada, pátio e posto ----------
+{
+  const S = ROAD_SAMPLES;
+  let g = 0; for (let i = 1; i < S.length; i++) g = Math.max(g, Math.abs(S[i].y - S[i - 1].y) / Math.hypot(S[i].x - S[i - 1].x, S[i].z - S[i - 1].z));
+  check("estrada", "rampa máxima da estrada (%)", g * 100, 0, 9.5, "%", 1);
+  let step = 0; for (let z = RAMP.z0; z > RAMP.z0 - 30; z -= 0.5) step = Math.max(step, Math.abs(groundHeight(RAMP.x, z - 0.5) - groundHeight(RAMP.x, z)) / 0.5);
+  check("estrada", "emenda rampa → estrada sem degrau (% máx)", step * 100, 0, 14, "%", 1);
+  let lotStep = 0; for (let x = LOT.cx + LOT.hx + 12; x > LOT.cx + LOT.hx - 4; x -= 0.5) lotStep = Math.max(lotStep, Math.abs(groundHeight(x - 0.5, -311.4) - groundHeight(x, -311.4)) / 0.5);
+  check("estrada", "entrada do pátio sem degrau (% máx)", lotStep * 100, 0, 10, "%", 1);
+  for (const kind of ["lancha", "bote"] as const) {
+    const tr = buildTrailer(kind === "lancha" ? SPEEDBOAT : DINGHY);
+    const rig = new TowRig(tr, TOW_SPECS[kind === "lancha" ? "pickup" : "car"], groundHeight);
+    rig.obstacles = stationObstacles();
+    const lane = STATION.pumps[1].lanes[1], pumpX = STATION.pumps[1].x;
+    const path = [...S.filter((p) => p.x > -128).map((p) => ({ x: p.x, z: p.z })), { x: -134, z: lane }, { x: pumpX + 4, z: lane }, { x: pumpX - 20, z: lane }];
+    let idx = 0, at = -1, blocked = 0;
+    for (let i = 0; i < 120 / DT && at < 0; i++) {
+      const c = rig.carPose();
+      while (idx < path.length - 1 && Math.hypot(path[idx].x - c.x, path[idx].z - c.z) < 7) idx++;
+      const p = path[idx];
+      let err = Math.atan2(p.x - c.x, p.z - c.z) - rig.yaw; while (err > Math.PI) err -= 2 * Math.PI; while (err < -Math.PI) err += 2 * Math.PI;
+      const nearPump = Math.abs(c.z - lane) < 2 && c.x < pumpX + 8, stop = nearPump && Math.abs(c.x - pumpX) < 0.8;
+      const vWant = nearPump ? (stop ? 0 : 1.2) : 6;
+      rig.update(DT, { up: rig.v < vWant ? 0.7 : 0, down: rig.v > 0.05 && (rig.v > vWant + 0.5 || stop) ? 1 : 0, steer: Math.max(-1, Math.min(1, err * 2.5)) });
+      if (rig.blocked) blocked += DT;
+      if (fuelBayState(c, Math.abs(rig.v)).ok) at = i * DT;
+    }
+    check("posto", `${kind}: da rampa até a bomba pela estrada (s)`, at, 20, 110, "s", 1);
+    check("posto", `${kind}: sem bater no caminho (s bloqueado)`, blocked, 0, 0, "s", 1);
+  }
+  // batida num prédio: o veículo para encostado, não atravessa
+  const tr = buildTrailer(DINGHY);
+  const rig = new TowRig(tr, TOW_SPECS.car, groundHeight);
+  rig.obstacles = stationObstacles();
+  rig.placeAt(STATION.shop.x + STATION.shop.w / 2 + 6, STATION.shop.z, -Math.PI / 2); // de frente para a loja
+  for (let i = 0; i < 6 / DT; i++) rig.update(DT, { up: 1, down: 0, steer: 0 });
+  const c = rig.carPose();
+  check("posto", "carro contra a loja: para encostado (m da fachada)", c.x - (STATION.shop.x + STATION.shop.w / 2), 2.0, 3.5, "m", 2);
+  check("posto", "bomba: longe dela não abastece", fuelBayState({ x: 0, z: 0, yaw: 0 }, 0).near ? 0 : 1, 1, 1, "", 0);
 }
 
 // ---------- Carga: gasolina e ocupantes (quantidade e posição) ----------

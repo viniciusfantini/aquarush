@@ -17,6 +17,8 @@ import { buildWorld, RIVER_CURRENT, RAMP } from "./sim/world.ts";
 import { buildTrailer, trailerLoadState, attachWinch, seatedBoatLocal, type TrailerLayout } from "./sim/trailer.ts";
 import { TowRig, TOW_SPECS, type Pose } from "./sim/towVehicle.ts";
 import { buildRamp, buildTrailerMesh, buildTowVehicle } from "./presentation/ramp.ts";
+import { buildRoadAndLot, buildStation } from "./presentation/station.ts";
+import { STATION, stationObstacles, fuelBayState } from "./sim/station.ts";
 import { WakeField, WaterWithWake } from "./sim/wake.ts";
 import { v3 } from "./sim/math.ts";
 import { emptyInput } from "./gameplay/vehicleInput.ts";
@@ -32,7 +34,7 @@ import { BoatCamera } from "./presentation/cameras.ts";
 import { Hud } from "./presentation/hud.ts";
 import { EngineAudio } from "./presentation/audio.ts";
 
-const BUILD = "poc-babylon 0.20.0";
+const BUILD = "poc-babylon 0.21.0";
 /** Escala visual da rotação da hélice (proporcional ao RPM, abaixo do limite estroboscópico). */
 const PROP_VISUAL_SCALE = 0.12;
 
@@ -141,7 +143,8 @@ const boot = async () => {
   const trees = buildTrees(scene, cfg.quality.trees);
   const pierMeshes = buildPier(scene, world.pier);
   const buoys = pierMeshes.filter((m) => m.name === "buoy");
-  const rampMeshes = buildRamp(scene);
+  const rampMeshes = [...buildRamp(scene), ...buildRoadAndLot(scene, cfg.quality.terrainSubdiv)];
+  const stationMeshes = buildStation(scene);
 
   // ---------------- as duas embarcações (as duas ficam prontas; só a escolhida aparece) ----------------
   const makeVessel = (kind: VesselKind): Vessel => {
@@ -191,7 +194,7 @@ const boot = async () => {
   const vessels: Record<VesselKind, Vessel> = { lancha: makeVessel("lancha"), bote: makeVessel("bote") };
   let V = vessels[urlKind === "bote" ? "bote" : "lancha"];
   const allBoatMeshes = [...vessels.lancha.vis.meshes, ...vessels.bote.vis.meshes].filter((m) => m.name !== "propDisc");
-  const staticExtras = [...rampMeshes, ...vessels.lancha.trailerMeshes, ...vessels.bote.trailerMeshes];
+  const staticExtras = [...rampMeshes, ...stationMeshes, ...vessels.lancha.trailerMeshes, ...vessels.bote.trailerMeshes];
 
   // ambiente para os materiais PBR (céu + margens, renderizado uma vez)
   const probe = new ReflectionProbe("envProbe", 128, scene);
@@ -299,13 +302,41 @@ const boot = async () => {
   let strapT = 0;
   const boatOnTrailer = new Matrix(); // pose do barco no referencial da carretinha (fixa enquanto preso)
   const poseMatrix = (p: Pose) => Matrix.Compose(Vector3.One(), Quaternion.FromEulerAngles(p.pitch, p.yaw, 0), new Vector3(p.x, p.y, p.z));
-  const placeRig = () => {
-    const c = V.rig.carPose(), t = V.rig.trailerPose();
-    V.carRoot.position.set(c.x, c.y, c.z); V.carRoot.rotationQuaternion = Quaternion.FromEulerAngles(c.pitch, c.yaw, 0);
-    V.trailerRoot.position.set(t.x, t.y, t.z); V.trailerRoot.rotationQuaternion = Quaternion.FromEulerAngles(t.pitch, t.yaw, 0);
-    V.trailer.collider.pose = t; // os colisores da carretinha acompanham o veículo
+  const placeRigOf = (X: Vessel) => {
+    const c = X.rig.carPose(), t = X.rig.trailerPose();
+    X.carRoot.position.set(c.x, c.y, c.z); X.carRoot.rotationQuaternion = Quaternion.FromEulerAngles(c.pitch, c.yaw, 0);
+    X.trailerRoot.position.set(t.x, t.y, t.z); X.trailerRoot.rotationQuaternion = Quaternion.FromEulerAngles(t.pitch, t.yaw, 0);
+    X.trailer.collider.pose = t; // os colisores da carretinha acompanham o veículo
+  };
+  const placeRig = () => placeRigOf(V);
+  /**
+   * O OUTRO barco fica estacionado no pátio, na carretinha, engatado no veículo dele (só visual + obstáculo).
+   * Pessoas escondidas (estão no bar/loja); motor levantado para o transporte.
+   */
+  const parkInLot = (X: Vessel) => {
+    const pk = STATION.parking;
+    X.rig.placeAt(pk.x, pk.z, pk.yaw);
+    placeRigOf(X);
+    for (const n of X.trailerNodes) n.setEnabled(true);
+    X.vis.root.setEnabled(true);
+    for (const p of [X.pilot, ...Object.values(X.pax)]) { p.board(X.vis.root); p.group.setEnabled(false); }
+    const seat = seatedBoatLocal(X.P, X.trailer, 0);
+    const m = Matrix.Compose(Vector3.One(), Quaternion.RotationYawPitchRoll(Math.PI, 0, 0), new Vector3(0, seat.y, seat.z)).multiply(poseMatrix(X.rig.trailerPose()));
+    const sc = new Vector3(), q = new Quaternion(), tr = new Vector3();
+    m.decompose(sc, q, tr);
+    X.vis.root.position.copyFrom(tr); X.vis.root.rotationQuaternion = q;
+    X.vis.engine.rotationQuaternion = Quaternion.RotationAxis(Vector3.Right(), X.P.tiltMax * 0.85); // motor levantado
+    X.vis.propBlur.alpha = 0;
+  };
+  /** Obstáculos do veículo ativo: prédios, ilhas, colunas e o conjunto estacionado do outro barco. */
+  const setObstacles = () => {
+    const other = vessels[V.kind === "lancha" ? "bote" : "lancha"];
+    V.rig.obstacles = [...stationObstacles(), other.rig.carObb(), other.rig.trailerObb()];
   };
   const setPeopleVisible = (on: boolean) => { for (const p of [V.pilot, ...Object.values(V.pax)]) p.group.setEnabled(on); };
+  // ---- abastecimento no posto ----
+  let fueling = false, fuelAdded = 0;
+  const FUEL_RATE = { lancha: 1.5, bote: 0.4 } as const; // L/s (bomba de posto ~ 40 L/min; galão portátil mais devagar)
   /** Passa o comando para o veículo: o barco fica preso na carretinha (cinta + bunks) e as pessoas vão para o carro. */
   const startDriving = () => {
     const b = V.boat;
@@ -353,18 +384,19 @@ const boot = async () => {
   const activate = (kind: VesselKind) => {
     if (V.kind !== kind) {
       try { localStorage.setItem(V.hoursKey, String(V.boat.systems.engineHours)); } catch { /* sem storage */ }
-      V.vis.root.setEnabled(false);
-      for (const n of V.trailerNodes) n.setEnabled(false);
       for (const p of [V.pilot, ...Object.values(V.pax)]) p.board(V.vis.root);
     }
     V = vessels[kind];
+    parkInLot(vessels[kind === "lancha" ? "bote" : "lancha"]); // o outro conjunto fica no pátio do posto
     V.vis.root.setEnabled(true);
     // carretinha deste barco na rampa (visual + colisores do berço, postes-guia e batente)
     for (const n of V.trailerNodes) n.setEnabled(true);
     world.trailers = [V.trailer.collider];
     trailerDone = false;
     if (driving) { for (const p of [vessels.lancha, vessels.bote]) for (const q of [p.pilot, ...Object.values(p.pax)]) q.group.setEnabled(true); }
-    driving = false; strapT = 0; V.rig.reset(); placeRig();
+    driving = false; strapT = 0; V.rig.reset(); placeRig(); setObstacles();
+    fueling = false;
+    for (const p of [V.pilot, ...Object.values(V.pax)]) p.group.setEnabled(true);
     const isBote = kind === "bote";
     hud.configure(isBote ? { speedMax: 60, temp: false, battery: false, trimPins: V.P.trimPins.length, gear: "dial" } : { speedMax: 100, temp: true, battery: true, trimPins: 0, gear: "bar" });
     document.getElementById("help-trim")!.innerHTML = isBote
@@ -442,6 +474,18 @@ const boot = async () => {
     if (mode === "menu") return; // no menu os atalhos do jogo ficam desligados
     const boat = V.boat;
     if (a === "unhitch") { unhitch(); return; }
+    if (a === "fuel") {
+      if (!driving) { hud.showToast("Para abastecer: leve o barco na carretinha até o posto e pare o carro ao lado da bomba"); return; }
+      if (fueling) { fueling = false; hud.showToast(`Abastecimento interrompido: +${fuelAdded.toFixed(1)} L`); return; }
+      const bay = fuelBayState(V.rig.carPose(), Math.abs(V.rig.v));
+      if (!bay.near) { hud.showToast("Nenhuma bomba aqui — o posto fica no fim da estrada"); return; }
+      if (!bay.ok) { hud.showToast(`Bomba: ${bay.why}`); return; }
+      if (boat.engine !== "off") { hud.showToast("Desligue o motor do barco (P) para abastecer"); return; }
+      if (boat.systems.fuelL >= boat.systems.p.tankLiters - 0.05) { hud.showToast("O tanque já está cheio"); return; }
+      fueling = true; fuelAdded = 0;
+      hud.showToast("Abastecendo…");
+      return;
+    }
     if (driving && a === "occupants") { hud.showToast("Com o barco na carretinha não dá para trocar a lotação"); return; }
     if (driving && a === "camera") return;
     if (a === "camera") {
@@ -584,15 +628,26 @@ const boot = async () => {
     if (!ld.overBunks && !boat.winchStrap) trailerDone = false;
     // cinta presa por ~1,5 s com o barco no berço → o comando passa para o veículo
     if (!driving && mode === "game" && boat.winchStrap && ld.overBunks) { strapT += dtReal; if (strapT > 1.5) startDriving(); } else if (!driving) strapT = 0;
+    // posto: guia para parar ao lado da bomba e abastecimento (só com o carro parado e o motor do barco desligado)
+    const bay = driving ? fuelBayState(V.rig.carPose(), Math.abs(V.rig.v)) : { near: false, ok: false, pump: null, why: "" };
+    if (fueling) {
+      const sysF = boat.systems, room = sysF.p.tankLiters - sysF.fuelL;
+      if (!bay.ok || boat.engine !== "off" || !driving) { fueling = false; hud.showToast(`Abastecimento interrompido: +${fuelAdded.toFixed(1)} L`); }
+      else if (room <= 0.01) { fueling = false; hud.showToast(`Tanque cheio! +${fuelAdded.toFixed(1)} L — ${sysF.fuelL.toFixed(0)} L no tanque`); }
+      else { const d = Math.min(room, FUEL_RATE[V.kind] * dtReal); sysF.fuelL += d; fuelAdded += d; T.fuelL = sysF.fuelL; T.fuelFrac = sysF.fuelFrac; }
+    }
     if (driving) {
       trailerChip.classList.add("show", "ok");
       const art = Math.abs(V.rig.articulation) * 180 / Math.PI;
-      trailerChip.textContent = `${V.kind === "lancha" ? "CAMINHONETE" : "CARRO"} · ${(Math.abs(V.rig.v) * 3.6).toFixed(0)} km/h${V.rig.v < -0.05 ? " (ré)" : ""} · carretinha ${art.toFixed(0)}°${art > 60 ? " — CANIVETE!" : ""}${V.rig.wheelsInWater ? " · RODAS NA ÁGUA: pare e solte o barco (U)" : ""}`;
+      trailerChip.textContent = fueling ? `ABASTECENDO · +${fuelAdded.toFixed(1)} L · ${boat.systems.fuelL.toFixed(1)}/${boat.systems.p.tankLiters} L`
+        : bay.near ? (bay.ok ? (boat.engine !== "off" ? "BOMBA: desligue o motor do barco (P) e abasteça (F)" : "BOMBA: parado certo — F abastece o barco") : `BOMBA: ${bay.why}`)
+        : `${V.kind === "lancha" ? "CAMINHONETE" : "CARRO"} · ${(Math.abs(V.rig.v) * 3.6).toFixed(0)} km/h${V.rig.v < -0.05 ? " (ré)" : ""} · carretinha ${art.toFixed(0)}°${art > 60 ? " — CANIVETE!" : ""}${V.rig.wheelsInWater ? " · RODAS NA ÁGUA: pare e solte o barco (U)" : ""}${V.rig.blocked ? " · BATEU!" : ""}`;
     }
     // barra de atalhos do momento (teclas + botões tocáveis)
     {
       const K: [string, string, Action | null][] = [];
       if (mode !== "game") { /* menu: sem barra */ }
+      else if (driving && bay.ok) K.push(["F", fueling ? "PARAR de abastecer" : "ABASTECER o barco", "fuel"], ["P", T.engine === "running" ? "desligar motor" : "motor desligado ✓", T.engine === "running" ? "ignition" : null], ["W", "sair", null], ["U", "desengatar", "unhitch"]);
       else if (driving) K.push(["W", "frente", null], ["S", "freio / ré", null], ["A D", "direção", null], ["E Q", "motor (tilt)", null], ["P", T.engine === "running" ? "desligar motor" : V.kind === "bote" ? "corda" : "ligar motor", "ignition"], ["U", "DESENGATAR o barco", "unhitch"], ["R", "píer", "reset"]);
       else if (T.capsized || boat.swimmers.length) K.push(["R", "recomeçar no píer", "reset"]);
       else if (boat.winchStrap) K.push(["U", "DESENGATAR (soltar a cinta)", "unhitch"], ["E Q", "motor (tilt)", null]);

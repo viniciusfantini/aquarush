@@ -8,6 +8,7 @@
 //  • alturas e inclinações vêm do mesmo relevo da física (groundHeight).
 
 import type { TrailerLayout } from "./trailer.ts";
+import { obbOverlap, type Obb } from "./station.ts";
 import { RAMP } from "./world.ts";
 import { clamp, approach, v3, qMul, qFromAxisAngle, rotateInv, type Vec3 } from "./math.ts";
 
@@ -47,6 +48,10 @@ export class TowRig {
   v = 0; steer = 0;
   /** rodas traseiras na água (a ré trava) */
   wheelsInWater = false;
+  /** obstáculos (prédios, bombas, outro veículo estacionado): o veículo/carretinha param ao encostar */
+  obstacles: Obb[] = [];
+  /** encostou num obstáculo neste passo */
+  blocked = false;
   /** eixo da carretinha (XZ) */
   ax = 0; az = 0;
   private readonly hitchToAxle: number;
@@ -83,6 +88,7 @@ export class TowRig {
 
   update(dt: number, cmd: DriveCommand): void {
     const S = this.spec;
+    const prev = { rx: this.rx, rz: this.rz, yaw: this.yaw, ax: this.ax, az: this.az };
     this.steer = approach(this.steer, clamp(cmd.steer, -1, 1) * S.maxSteer, 1.6 * dt);
     // inclinação sob o veículo (rampa): componente do peso ao longo do rumo
     const fx = this.rx + Math.sin(this.yaw) * S.wheelbase, fz = this.rz + Math.cos(this.yaw) * S.wheelbase;
@@ -117,6 +123,37 @@ export class TowRig {
       this.ax = h.x - Math.sin(yt) * this.hitchToAxle;
       this.az = h.z - Math.cos(yt) * this.hitchToAxle;
     }
+    // obstáculos: se o veículo ou a carretinha encostam, volta à posição anterior e para (batida leve)
+    this.blocked = false;
+    if (this.obstacles.length) {
+      const mine = [this.carObb(), this.trailerObb()];
+      if (this.obstacles.some((o) => mine.some((m) => obbOverlap(m, o)))) {
+        Object.assign(this, prev);
+        this.v = 0;
+        this.blocked = true;
+      }
+    }
+  }
+
+  /** Retângulo do veículo no chão (para colisões). */
+  carObb(): Obb {
+    const c = this.carPose(), S = this.spec;
+    // o centro da carroceria fica ~entre os eixos; comprimento total um pouco maior que o entre-eixos
+    return { x: c.x, z: c.z, hw: S.width / 2, hl: S.length / 2, yaw: this.yaw };
+  }
+  /** Retângulo da carretinha + barco (do guincho à traseira). */
+  trailerObb(): Obb {
+    const t = this.trailerPose(), L = this.t.length;
+    return { x: t.x + Math.sin(t.yaw) * L / 2, z: t.z + Math.cos(t.yaw) * L / 2, hw: Math.max(this.t.frameW, this.t.postX * 2) / 2, hl: L / 2 + 0.3, yaw: t.yaw };
+  }
+
+  /** Estaciona numa vaga: veículo de frente para `yaw`, centro em (x, z), carretinha alinhada atrás. */
+  placeAt(x: number, z: number, yaw: number): void {
+    const S = this.spec;
+    this.yaw = yaw; this.v = 0; this.steer = 0;
+    this.rx = x - Math.sin(yaw) * S.wheelbase / 2; this.rz = z - Math.cos(yaw) * S.wheelbase / 2;
+    const h = this.hitch;
+    this.ax = h.x - Math.sin(yaw) * this.hitchToAxle; this.az = h.z - Math.cos(yaw) * this.hitchToAxle;
   }
 
   /** Pose do veículo: centro entre os eixos no chão; pitch > 0 = nariz para baixo (convenção Babylon). */

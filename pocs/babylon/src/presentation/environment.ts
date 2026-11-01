@@ -5,7 +5,8 @@ import {
   type Scene, Mesh, MeshBuilder, StandardMaterial, Color3, Color4, VertexBuffer, VertexData, Matrix, Quaternion, Vector3,
   DynamicTexture, Texture,
 } from "@babylonjs/core";
-import { groundHeight, rng, slopeAt, fbm, RIVER, riverCenterX, type SphereCollider, type PierLayout } from "../sim/world.ts";
+import { groundHeight, rng, slopeAt, fbm, RIVER, riverCenterX, onRoadOrLot, ROAD, type SphereCollider, type PierLayout } from "../sim/world.ts";
+import { signMat } from "./station.ts";
 import { clamp, smoothstep } from "../sim/math.ts";
 
 export interface EnvQuality { terrainSubdiv: number; trees: number }
@@ -40,7 +41,8 @@ export const buildTerrain = (scene: Scene, q: EnvQuality): Mesh => {
   for (let i = 0; i < pos.length; i += 3) {
     const x = pos[i], z = pos[i + 2] + 200;
     const h = groundHeight(x, z);
-    pos[i + 1] = h;
+    // sob a estrada/pátio a malha grossa fica rebaixada: as malhas finas deles (station.ts) cobrem
+    pos[i + 1] = onRoadOrLot(x, z, ROAD.shoulder + 4) ? h - 1.2 : h;
     const sl = slopeAt(x, z);
     const n = fbm(x / 30, z / 30, 2) * 0.5 + 0.5;
     let c: Color3;
@@ -134,6 +136,7 @@ export const buildTrees = (scene: Scene, count: number): Mesh => {
     if (h < 2.2 || h > 30) continue;
     if (slopeAt(x, z) > 0.6) continue;
     if (z > RIVER.z0 - 40 && Math.abs(x - riverCenterX(z)) < RIVER.width) continue;
+    if (onRoadOrLot(x, z, 9)) continue; // estrada, pátio e posto livres
     // aglomera em manchas (floresta) usando ruído
     if (fbm(x / 90, z / 90, 2) < -0.15 && rand() > 0.15) continue;
     const s = 0.7 + rand() * 0.8;
@@ -182,6 +185,27 @@ export const buildPier = (scene: Scene, pier: PierLayout): Mesh[] => {
   roofMat.diffuseColor = new Color3(0.6, 0.18, 0.12);
   roof.material = roofMat;
   meshes.push(hut, roof);
+  // ---- bar & restaurante (a cabana da marina): placa, janelas, deck com mesas e guarda-sóis ----
+  const hx = hut.position.x, hz = hut.position.z, front = hz + 2.5; // fachada para o lago (+Z)
+  const sign = MeshBuilder.CreatePlane("barSign", { width: 4.6, height: 0.9 }, scene);
+  sign.material = signMat(scene, "barSignT", "BAR & RESTAURANTE", "peixe frito · porções · bebidas", "#5a1d10", "#ffd8a8", 1024, 200);
+  sign.position.set(hx, shoreH + 2.75, front + 0.03); sign.rotation.y = Math.PI; meshes.push(sign);
+  const glassM = new StandardMaterial("barGlass", scene); glassM.diffuseColor = new Color3(0.2, 0.28, 0.32); glassM.specularColor = new Color3(0.5, 0.5, 0.5);
+  for (const dx of [-2.3, 2.3]) { const w = MeshBuilder.CreatePlane("barWindow", { width: 1.6, height: 1.1 }, scene); w.material = glassM; w.position.set(hx + dx, shoreH + 1.5, front + 0.02); w.rotation.y = Math.PI; meshes.push(w); }
+  const doorM = new StandardMaterial("barDoor", scene); doorM.diffuseColor = new Color3(0.35, 0.22, 0.12);
+  const door = MeshBuilder.CreatePlane("barDoorM", { width: 1.1, height: 2.1 }, scene); door.material = doorM; door.position.set(hx, shoreH + 1.05, front + 0.02); door.rotation.y = Math.PI; meshes.push(door);
+  const barDeck = MeshBuilder.CreateBox("barDeck", { width: 9, height: 0.2, depth: 4.5 }, scene);
+  barDeck.material = wood; barDeck.position.set(hx, shoreH + 0.1, front + 2.6); meshes.push(barDeck);
+  const clothM = new StandardMaterial("umbrella", scene); clothM.diffuseColor = new Color3(0.95, 0.55, 0.12);
+  const tableM = new StandardMaterial("barTable", scene); tableM.diffuseColor = new Color3(0.93, 0.92, 0.88);
+  for (const dx of [-3, 0, 3]) {
+    const tx = hx + dx, tz = front + 2.9;
+    const top = MeshBuilder.CreateCylinder("barTableTop", { height: 0.05, diameter: 0.9 }, scene); top.material = tableM; top.position.set(tx, shoreH + 0.95, tz); meshes.push(top);
+    const leg = MeshBuilder.CreateCylinder("barTableLeg", { height: 0.75, diameter: 0.08 }, scene); leg.material = tableM; leg.position.set(tx, shoreH + 0.57, tz); meshes.push(leg);
+    const pole = MeshBuilder.CreateCylinder("umbPole", { height: 2.0, diameter: 0.05 }, scene); pole.material = tableM; pole.position.set(tx, shoreH + 1.2, tz); meshes.push(pole);
+    const umb = MeshBuilder.CreateCylinder("umbrellaTop", { height: 0.45, diameterTop: 0.05, diameterBottom: 2.3, tessellation: 12 }, scene); umb.material = clothM; umb.position.set(tx, shoreH + 2.2, tz); meshes.push(umb);
+    for (const sx of [-1, 1]) { const ch = MeshBuilder.CreateBox("barChair", { width: 0.45, height: 0.45, depth: 0.45 }, scene); ch.material = tableM; ch.position.set(tx + sx * 0.75, shoreH + 0.43, tz); meshes.push(ch); }
+  }
   // boias de sinalização na ponta do píer
   const buoyMat = new StandardMaterial("buoyMat", scene);
   buoyMat.diffuseColor = new Color3(0.95, 0.35, 0.05);
