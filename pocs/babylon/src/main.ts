@@ -12,6 +12,7 @@ import { SkyMaterial } from "@babylonjs/materials/sky/skyMaterial";
 import { readUrlConfig, PHYSICS_DT, MAX_SUBSTEPS } from "./core/config.ts";
 import { Speedboat, NEUTRAL_REV_LIMIT } from "./sim/boat.ts";
 import { JUMP_AH, JUMP_MAX_A } from "./sim/engineSystems.ts";
+import { Wind, MS_TO_KNOTS } from "./sim/wind.ts";
 import { VESSELS, PERSON_KG, type VesselKind, type SeatId, type SpeedboatParams } from "./sim/params.ts";
 import { GerstnerWater, WAVE_PRESETS } from "./sim/water.ts";
 import { buildWorld, RIVER_CURRENT, RAMP, fromFrame } from "./sim/world.ts";
@@ -39,7 +40,7 @@ import { BoatCamera } from "./presentation/cameras.ts";
 import { Hud } from "./presentation/hud.ts";
 import { EngineAudio } from "./presentation/audio.ts";
 
-const BUILD = "poc-babylon 0.35.0";
+const BUILD = "poc-babylon 0.36.0";
 /** Escala visual da rotação da hélice (proporcional ao RPM, abaixo do limite estroboscópico). */
 const PROP_VISUAL_SCALE = 0.12;
 
@@ -286,17 +287,31 @@ const boot = async () => {
   };
   document.getElementById("h-occ")!.addEventListener("click", () => input.pushAction("occupants"));
 
+  // vento (T): 5 níveis; ele também levanta o mar — o estado efetivo é o maior entre o preset de água e o do vento
+  const wind = new Wind();
   let waterPreset = 2;
+  const applyEnv = () => {
+    const p = WATER_PRESETS[waterPreset], w = wind.def;
+    water.intensity = Math.max(p.waves, w.waves);
+    waterVis.ripple = Math.max(p.ripple, w.ripple);
+  };
   const applyWater = (i: number, toast = true) => {
     waterPreset = (i + WATER_PRESETS.length) % WATER_PRESETS.length;
     const p = WATER_PRESETS[waterPreset];
-    water.intensity = p.waves;
-    waterVis.ripple = p.ripple;
+    applyEnv();
     hud.setWater(p.key);
-    if (toast) hud.showToast(p.label);
+    if (toast) hud.showToast(p.label + (wind.def.waves > p.waves ? ` (o ${wind.def.key === "tempestade" ? "vento de tempestade" : "vento " + wind.def.key} mantém o mar mais agitado)` : ""));
+  };
+  const applyWind = (i: number, toast = true) => {
+    wind.setLevel(i);
+    applyEnv();
+    hud.setWind(wind.def.key);
+    if (toast) hud.showToast(`Vento: ${wind.def.label}${wind.def.speed > 0 ? " — empurra o barco (deriva), adorna e levanta o mar" : ""} · T muda`);
   };
   applyWater(1, false); // sempre começa em "1 — calma"
+  applyWind(0, false);  // e sem vento
   document.getElementById("h-water")!.addEventListener("click", () => input.pushAction("waterNext"));
+  document.getElementById("h-wind")!.addEventListener("click", () => input.pushAction("wind"));
 
   // ---------------- estado do laço ----------------
   let acc = 0;
@@ -307,7 +322,7 @@ const boot = async () => {
   const prevRot = new Quaternion(), curRot = new Quaternion();
   const snap = (dst: Vector3, q: Quaternion) => { const b = V.boat; dst.set(b.pos.x, b.pos.y, b.pos.z); q.set(b.rot.x, b.rot.y, b.rot.z, b.rot.w); };
   let fpsSmooth = 60, resT = 0;
-  let lastStartFail = "", lowFuelWarned = false, trimRelayWarned = false, neutralRevWarned = false, lastJumperOff = 0, lastJumperTrips = 0, lastAnchorState = "recolhida", lastBilgeAlarm = false;
+  let lastStartFail = "", lowFuelWarned = false, trimRelayWarned = false, neutralRevWarned = false, lastJumperOff = 0, lastJumperTrips = 0, lastAnchorState = "recolhida", lastBilgeAlarm = false, windHudT = 0;
   const qTilt = new Quaternion(), qSteer = new Quaternion();
   let lastGear = V.boat.telemetry.gear;
   let tiltWarned = false, intakeWarned = false, capsizeWarned = false;
@@ -603,17 +618,7 @@ const boot = async () => {
       hud.setLights(lights, V.dinghy ? "LANTERNA" : "LUZES");
     }
     else if (a === "reset") resetBoat();
-    else if (a === "ramp") {
-      // treino: reposiciona o barco 14 m atrás da carretinha, de proa para a rampa, motor ligado em N
-      resetBoat(false);
-      const tr = V.trailer;
-      boat.reset(v3(tr.cx + 0.3, 0.25, tr.zRear + 14), Math.PI); // (reset solta as amarras do píer)
-      moorWhere = "";
-      boat.engine = "running";
-      snap(curPos, curRot); snap(prevPos, prevRot);
-      cam.resetOrbit();
-      hud.showToast(V.kind === "lancha" ? "Rampa: levante o motor (E: trim todo + um pouco de tilt), depois suba devagar, de proa e alinhado" : "Rampa: passe o motor para o pino 3 (E), depois suba devagar, de proa e alinhado");
-    }
+    else if (a === "wind") applyWind(wind.level + 1);
     else if (a === "occupants") applyOccupants(occIdx + 1);
     else if (a === "jump") {
       const sys = boat.systems;
@@ -686,6 +691,7 @@ const boot = async () => {
         prevPos.copyFrom(curPos); prevRot.copyFrom(curRot);
         water.time += PHYSICS_DT;
         simTime += PHYSICS_DT;
+        wind.update(PHYSICS_DT); world.wind = wind.v;
         boat.step(PHYSICS_DT, vin, physWater, world);
         buoyField.step(PHYSICS_DT, boat);
         if (carCmd) V.rig.update(PHYSICS_DT, carCmd);
@@ -803,9 +809,9 @@ const boot = async () => {
       else if (carOnly) K.push(["W", "frente", null], ["S", "freio / ré", null], ["A D", "direção", null], ["I", V.rig.coupled ? "desacoplar carretinha" : "ACOPLAR carretinha", "couple"], ["U", "VOLTAR ao barco", "unhitch"], ["B", "buzina", "horn"], ["R", "píer", "reset"]);
       else if (boat.mooringLines.length) K.push(["M", "SOLTAR as amarras", "moor"], ...(moorWhere === "píer" ? [["O", "embarque", "occupants"] as [string, string, Action]] : []), ["K", "ir para o carro", "car"], ["P", T.engine === "running" ? "desligar motor" : V.kind === "bote" ? "corda" : "ligar motor", "ignition"], ["C", "câmera", "camera"]);
       else if (boat.winchStrap) K.push(["U", trailerInWater() ? "SOLTAR a cinta" : "comando ao carro", "unhitch"], ["P", T.engine === "running" ? "desligar motor" : V.kind === "bote" ? "corda" : "ligar motor", "ignition"], ["E Q", "motor (tilt)", null]);
-      else if (ld.near) K.push(["E", V.kind === "lancha" ? "levantar o motor" : "pino / tilt", null], ["W S", "marcha / acelerar", null], ["A D", "direção", null], ["T", "recomeçar a rampa", "ramp"]);
+      else if (ld.near) K.push(["E", V.kind === "lancha" ? "levantar o motor" : "pino / tilt", null], ["W S", "marcha / acelerar", null], ["A D", "direção", null], ["T", `vento: ${wind.def.key}`, "wind"]);
       else if (T.anchorOut > 0) K.push(["+", "pagar cabo", null], ["−", "recolher âncora", null], ["P", T.engine === "running" ? "desligar motor" : V.kind === "bote" ? "corda" : "ligar motor", "ignition"], ["C", "câmera", "camera"]);
-      else K.push(["T", "rampa e carretinha", "ramp"], ["P", V.kind === "bote" ? "corda (partida)" : "liga/desliga", "ignition"], ["+ −", "âncora", null], ["C", "câmera", "camera"], ["H", "ajuda", "help"]);
+      else K.push(["T", `vento: ${wind.def.key}`, "wind"], ["P", V.kind === "bote" ? "corda (partida)" : "liga/desliga", "ignition"], ["+ −", "âncora", null], ["C", "câmera", "camera"], ["H", "ajuda", "help"]);
       // bateria zerada (lancha): botão para conectar o booster de partida
       if (mode === "game" && boat.systems.p.hasBattery && !T.capsized && !driving && !carOnly && (T.jumper || T.engine !== "running" || T.batterySoc < 0.3))
         K.unshift(["J", T.jumper ? `desconectar jump start (${(T.jumpCharge * JUMP_AH).toFixed(1)} Ah)` : `${T.batterySoc < 0.08 ? "CONECTAR" : "conectar"} jump start (${(T.jumpCharge * JUMP_AH).toFixed(1)} Ah)`, "jump"]);
@@ -881,13 +887,14 @@ const boot = async () => {
     if (T.gear !== lastGear) { audio.clunk(T.gear !== "N"); lastGear = T.gear; }
     audio.update({
       rpm: T.rpm, throttle: T.throttle, speed: Math.hypot(boat.vel.x, boat.vel.z), boil: Math.max(T.cavitation, 1 - T.ventilation),
-      inGear: T.gear !== "N", propInWater: T.propImmersion > 0.5, revLimiter: T.revLimiter, cockpit: cam.mode === "cockpit", engine: T.engine, trimMotorA: T.trimMotorA, trimRelay: T.trimRelay, bilgeAlarm: mode === "game" && T.bilgeAlarm, bilgeFlowLps: T.bilgeFlowLps, windlassA: T.windlassA, anchorRelay: T.anchorRelay, buzzer: T.buzzer, starterRpm: T.starterRpm, pullStart: T.pullStart,
+      inGear: T.gear !== "N", propInWater: T.propImmersion > 0.5, revLimiter: T.revLimiter, cockpit: cam.mode === "cockpit", engine: T.engine, trimMotorA: T.trimMotorA, trimRelay: T.trimRelay, bilgeAlarm: mode === "game" && T.bilgeAlarm, bilgeFlowLps: T.bilgeFlowLps, windlassA: T.windlassA, apparentWind: T.apparentWind, anchorRelay: T.anchorRelay, buzzer: T.buzzer, starterRpm: T.starterRpm, pullStart: T.pullStart,
     });
     // buzina: do veículo quando você está nele; senão do barco (segurar B, ou toque no botão = 0,22 s)
     hornPulse = Math.max(0, hornPulse - dtReal);
     // buzina elétrica da lancha: tom e volume caem com a tensão da bateria (o bote tem buzina de ar; o carro, bateria própria)
     audio.setHorn(mode === "game" && (input.hornHeld || hornPulse > 0), driving || carOnly ? "car" : V.kind, !driving && !carOnly && V.boat.systems.p.hasBattery ? T.batteryV : 12.6);
     if (lights && V.vis.lights) setNavLights(V.vis, true, T.batteryV); // luzes de navegação: brilho pela tensão
+    if ((windHudT -= dtReal) <= 0) { windHudT = 0.25; hud.updateWind(wind.speed * MS_TO_KNOTS, wind.dirFrom - Math.atan2(boat.forward.x, boat.forward.z)); }
     hud.update(T, fpsSmooth, {
       "física (ms/frame)": physMs.toFixed(2),
       "resolução": `${engine.getRenderWidth()}×${engine.getRenderHeight()} (${pixelRatio.toFixed(2)}×)`,

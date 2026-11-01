@@ -6,6 +6,7 @@ declare const performance: { now(): number };
 
 import { Speedboat, NEUTRAL_REV_LIMIT } from "../src/sim/boat.ts";
 import { JUMP_AH } from "../src/sim/engineSystems.ts";
+import { Wind, WIND_LEVELS } from "../src/sim/wind.ts";
 import { SPEEDBOAT, DINGHY, PERSON_KG, type Occupant } from "../src/sim/params.ts";
 import { GerstnerWater, WAVE_PRESETS, type CurrentZone } from "../src/sim/water.ts";
 import type { PhysicsWorld } from "../src/sim/world.ts";
@@ -560,6 +561,52 @@ for (const [label, thr] of [["baixa", 0.25], ["alta", 1]] as const) {
   d.hullDamage = 0.3;
   run(d, water, 60, emptyInput());
   check("porão", "bote (sem bomba): 1 min com furo (L)", d.telemetry.bilgeL, 15, 25, "L", 1);
+}
+
+// ---------- Vento: 5 níveis, deriva, banda, âncora ----------
+{
+  const water = mkWater(0);
+  const drifts: number[] = [];
+  for (let L = 0; L < WIND_LEVELS.length; L++) {
+    const wind = new Wind(); wind.setLevel(L);
+    const world: PhysicsWorld = { groundHeight: () => -4, spheres: [], boxes: [], wind: wind.v };
+    const b = new Speedboat(SPEEDBOAT, v3(0, 0.25, 0));
+    let minS = 1e9, maxS = 0, maxRoll = 0;
+    run(b, water, 60, { ...emptyInput(), gear: "N" }, world, (t) => {
+      wind.update(DT); world.wind = wind.v;
+      if (t > 5) { minS = Math.min(minS, wind.speed); maxS = Math.max(maxS, wind.speed); maxRoll = Math.max(maxRoll, Math.abs(b.telemetry.rollDeg)); }
+    });
+    const drift = Math.hypot(b.vel.x, b.vel.z);
+    drifts.push(drift);
+    if (L === 0) check("vento", "sem vento: o barco parado não deriva (m/s)", drift, 0, 0.02, "m/s", 3);
+    else check("vento", `${WIND_LEVELS[L].key}: rajadas entre (m/s)`, maxS - minS, WIND_LEVELS[L].speed * 0.2, WIND_LEVELS[L].speed * 0.9, "m/s", 1);
+    if (L === WIND_LEVELS.length - 1) {
+      check("vento", "tempestade: deriva da lancha parada (m/s, ~3–5 % do vento)", drift, 0.6, 1.8, "m/s", 2);
+      // regime (depois de a proa cair a sotavento): deslocamento entre 150 e 210 s contra a direção média do vento
+      run(b, water, 90, { ...emptyInput(), gear: "N" }, world, () => { wind.update(DT); world.wind = wind.v; });
+      const p0 = { ...b.pos };
+      run(b, water, 60, { ...emptyInput(), gear: "N" }, world, () => { wind.update(DT); world.wind = wind.v; });
+      const dx = b.pos.x - p0.x, dz = b.pos.z - p0.z, mx = Math.sin(wind.dirTo), mz = Math.cos(wind.dirTo);
+      const ang = Math.abs(Math.atan2(dx * mz - dz * mx, dx * mx + dz * mz)) * 57.3;
+      check("vento", "tempestade, em regime: deriva a favor do vento (desvio, °)", ang, 0, 20, "°", 0);
+      check("vento", "tempestade, em regime: velocidade de deriva (m/s)", Math.hypot(dx, dz) / 60, 0.8, 2.0, "m/s", 2);
+      check("vento", "tempestade: banda pelo vento de través (°)", maxRoll, 1.2, 8, "°", 1);
+    }
+  }
+  check("vento", "deriva cresce com o nível (fraco < moderado < forte < tempestade)", drifts[1] < drifts[2] && drifts[2] < drifts[3] && drifts[3] < drifts[4] ? 1 : 0, 1, 1, "", 0);
+  // âncora na tempestade: com filame ~5:1 segura; com pouco cabo garra
+  const ok = (rode: number) => {
+    const wind = new Wind(); wind.setLevel(4);
+    const world: PhysicsWorld = { groundHeight: () => -4, spheres: [], boxes: [], wind: wind.v };
+    const a = new Speedboat(SPEEDBOAT, v3(0, 0.25, 0), wind.dirTo + Math.PI);
+    const inp = { ...emptyInput(), gear: "N" as const, anchor: 0 };
+    run(a, water, 100, inp, world, () => { wind.update(DT); world.wind = wind.v; inp.anchor = a.anchor.out < rode ? 1 : 0; });
+    const d0 = a.anchor.dragged;
+    run(a, water, 60, { ...emptyInput(), gear: "N" }, world, () => { wind.update(DT); world.wind = wind.v; });
+    return a.anchor.dragged - d0;
+  };
+  check("vento", "tempestade ancorada com 24 m em 4,6 m (~5:1): quanto arou em 1 min (m)", ok(24), 0, 0.3, "m", 2);
+  check("vento", "tempestade ancorada com 6 m (~1,3:1): garra em 1 min (m)", ok(6), 1, 80, "m", 1);
 }
 
 // ---------- Aceleração em neutro (botão da manete segurado em N) ----------

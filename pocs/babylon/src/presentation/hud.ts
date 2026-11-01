@@ -281,6 +281,14 @@ export class Hud {
 
   setCamera(name: string): void { this.cam.textContent = name === "cockpit" ? "COCKPIT" : "EXTERNA"; }
   setWater(name: string): void { this.water.textContent = "ÁGUA: " + name.toUpperCase(); }
+  private windChip = $("h-wind");
+  private windName = "nenhum";
+  setWind(name: string): void { this.windName = name; this.windChip.classList.toggle("on", name !== "nenhum"); this.windChip.textContent = "VENTO: " + name.toUpperCase(); }
+  /** vento atual: nós e seta de onde ele vem, relativa à proa (↑ = vento de proa) */
+  updateWind(knots: number, relFromRad: number): void {
+    if (this.windName === "nenhum") return;
+    this.windChip.innerHTML = `VENTO: ${this.windName.toUpperCase()} ${knots.toFixed(0)} nós <span style="display:inline-block;transform:rotate(${(relFromRad * 180) / Math.PI + 180}deg)">↑</span>`;
+  }
   setOccupants(txt: string): void { this.occ.textContent = "OCUPANTES: " + txt.toUpperCase(); }
   setLights(on: boolean, label = "LUZES"): void { this.lights.classList.toggle("on", on); this.lights.textContent = label; }
   toggleDebug(): void { this.debugOn = !this.debugOn; this.debug.style.display = this.debugOn ? "block" : "none"; }

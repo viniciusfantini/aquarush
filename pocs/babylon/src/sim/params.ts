@@ -106,7 +106,9 @@ export interface SpeedboatParams {
   bowWave: number;         // m — onda de proa do próprio casco (no hump)
   bankCoef: number;        // N·m por m/s² de aceleração lateral — inclinação para dentro da curva (casco em V)
   rollDamping: number;     // N·m/(rad/s) — amortecimento hidrodinâmico de rolagem (casco molhado)
-  airDragCdA: number;      // m²
+  airDragCdA: number;      // m² (frontal)
+  /** área vélica lateral (Cd·A, m²) e o centro de pressão do vento (local) */
+  windage: { sideCdA: number; center: Vec3 };
 }
 
 const hl = 0.72; // meia-distância transversal dos pontos de flutuação
@@ -219,6 +221,8 @@ export const SPEEDBOAT: SpeedboatParams = {
   bankCoef: 1800,
   rollDamping: 15000,
   airDragCdA: 1.6,
+  // costado ~0,8 m acima d'água × 6 m + para-brisa e piloto ≈ 4,5 m² (Cd ~1); centro um pouco à frente do meio
+  windage: { sideCdA: 4.5, center: v3(0, 0.75, 0.5) },
 };
 
 // ---------------------------------------------------------------------------------------------
@@ -322,6 +326,7 @@ export const DINGHY: SpeedboatParams = {
   bankCoef: 160,
   rollDamping: 450,
   airDragCdA: 0.9,
+  windage: { sideCdA: 1.9, center: v3(0, 0.45, 0.2) },
 };
 
 export const VESSELS: Record<VesselKind, SpeedboatParams> = { lancha: SPEEDBOAT, bote: DINGHY };

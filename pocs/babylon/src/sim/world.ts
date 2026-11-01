@@ -30,6 +30,8 @@ export interface PhysicsWorld {
   spheres: SphereCollider[];
   boxes: BoxCollider[];
   trailers?: TrailerCollider[];
+  /** vento atual (m/s, plano XZ) — atualizado pelo modelo `Wind` (sim/wind.ts); ausente = sem vento */
+  wind?: Vec3;
 }
 
 /** rotação da pose (Hamilton, igual à Babylon: yaw em Y e depois pitch no X local) */

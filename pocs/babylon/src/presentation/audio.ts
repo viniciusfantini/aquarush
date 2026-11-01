@@ -73,6 +73,7 @@ export interface AudioState {
   bilgeAlarm?: boolean;   // alarme de porão (bipe intermitente)
   bilgeFlowLps?: number;  // jato da bomba de porão caindo na água
   windlassA?: number;     // molinete da âncora (A)
+  apparentWind?: number;  // vento aparente (m/s): chiado do vento
   anchorRelay?: boolean;  // molinete sem força: só o relé
 }
 
@@ -118,6 +119,8 @@ export class EngineAudio {
   private bilgeGain!: GainNode;
   private winchOsc!: OscillatorNode;
   private winchGain!: GainNode;
+  private windGain!: GainNode;
+  private windLP!: BiquadFilterNode;
   muted = false;
   /** 4 = motor de 4 cilindros (lancha 150 hp); 2 = bicilíndrico (bote 15 hp) */
   cylinders: number;
@@ -288,6 +291,10 @@ export class EngineAudio {
     const bgBP = ctx.createBiquadFilter(); bgBP.type = "bandpass"; bgBP.frequency.value = 1400; bgBP.Q.value = 0.7;
     this.bilgeGain = ctx.createGain(); this.bilgeGain.gain.value = 0;
     noiseSrc().connect(bgBP).connect(this.bilgeGain).connect(this.master);
+    // ---- vento: chiado grave que abre com a velocidade (rajadas) ----
+    this.windLP = ctx.createBiquadFilter(); this.windLP.type = "lowpass"; this.windLP.frequency.value = 300; this.windLP.Q.value = 0.8;
+    this.windGain = ctx.createGain(); this.windGain.gain.value = 0;
+    noiseSrc().connect(this.windLP).connect(this.windGain).connect(this.master);
     // ---- molinete da âncora: motor DC grave + engrenagem ----
     this.winchOsc = ctx.createOscillator(); this.winchOsc.type = "sawtooth"; this.winchOsc.frequency.value = 140;
     const wBP = ctx.createBiquadFilter(); wBP.type = "bandpass"; wBP.frequency.value = 520; wBP.Q.value = 1.1;
@@ -337,6 +344,9 @@ export class EngineAudio {
     // alarme de porão: 0,25 s ligado a cada 0,6 s
     this.alarmGain.gain.setTargetAtTime(m * (st.bilgeAlarm && t % 0.6 < 0.25 ? 0.035 : 0), t, 0.005);
     this.bilgeGain.gain.setTargetAtTime(m * Math.min(0.06, 0.05 * (st.bilgeFlowLps ?? 0)), t, 0.1);
+    const aw = st.apparentWind ?? 0;
+    this.windGain.gain.setTargetAtTime(m * Math.min(0.12, 0.00025 * aw * aw), t, 0.3);
+    this.windLP.frequency.setTargetAtTime(250 + 45 * aw, t, 0.3);
     const wa = st.windlassA ?? 0;
     this.winchGain.gain.setTargetAtTime(m * (wa > 2 ? 0.05 : 0), t, 0.04);
     this.winchOsc.frequency.setTargetAtTime(wa > 70 ? 105 : wa > 40 ? 125 : 150, t, 0.1); // com carga o motor DC pesa

@@ -96,6 +96,7 @@ export interface BoatTelemetry {
   anchorTension: number; // tração no cabo (N)
   anchorRelay: boolean;  // molinete sem força: só o relé estala
   windlassA: number;     // corrente do molinete (A)
+  apparentWind: number;  // vento aparente sobre o barco (m/s)
   neutralRev: boolean;   // acelerando em neutro (botão de aceleração em neutro segurado)
   depth: number;         // profundidade sob o casco
   draftHull: number;     // calado do casco (m abaixo da superfície no ponto mais fundo do fundo)
@@ -246,7 +247,7 @@ export class Speedboat {
     this.telemetry = {
       speedKmh: 0, waterSpeed: 0, rpm: params.idleRpm, throttle: 0, throttleCmd: 0, trim: 0, trimDeg: 0, tiltDeg: 0, tiltBlocked: false, intakeSubmerged: true, steerDeg: 0,
       gear: "N", pitchDeg: 0, rollDeg: 0, wetFraction: 0, planing: false, thrustN: 0, ventilation: 1, cavitation: 0, propImmersion: 1, revLimiter: false, propSlip: 0, propRpm: 0, engine: "running", fuelL: 0, fuelFrac: 1, coolantC: 45, batteryV: 12.6, engineHours: 0, overheatWarn: false, protectMode: false, lowFuel: false, chargeWarn: false, stall: "", trimMotorA: 0, trimRelay: false, jumper: false, jumpCharge: 1, batteryA: 0, bilgeL: 0, bilgeInflowLps: 0, bilgePump: false, bilgeFlowLps: 0, bilgeAlarm: false,
-      anchorOut: 0, anchorState: "recolhida", anchorDepth: 0, anchorScope: 0, anchorTension: 0, anchorRelay: false, windlassA: 0, neutralRev: false, fuelLph: 0, buzzer: false, starterRpm: 0, startFail: "", batterySoc: 0.92, trimPin: 0, pullStart: !params.electricStart,
+      anchorOut: 0, anchorState: "recolhida", anchorDepth: 0, anchorScope: 0, anchorTension: 0, anchorRelay: false, windlassA: 0, apparentWind: 0, neutralRev: false, fuelLph: 0, buzzer: false, starterRpm: 0, startFail: "", batterySoc: 0.92, trimPin: 0, pullStart: !params.electricStart,
       distanceM: 0, collisions: 0, draftHull: 0, draftMotor: 0, capsized: false, swimmers: 0, hullDamage: 0, engineDamage: 0, damageEvent: "", damageCount: 0, lastImpact: 0, depth: 0, submergedPoints: params.buoyancyPoints.map(() => false),
     };
   }
@@ -459,9 +460,20 @@ export class Speedboat {
       this.T = add(this.T, rotate(this.rot, v3(0, yawDamp, bankTorque + rollDamp)));
     }
 
-    // ---------------- arrasto aerodinâmico ----------------
-    const vAir = len(this.vel);
-    if (vAir > 0.01) this.F = addScaled(this.F, this.vel, -0.5 * RHO_AIR * P.airDragCdA * vAir);
+    // ---------------- ar: arrasto + vento (vento aparente = vento − velocidade do barco) ----------------
+    // longitudinal (área frontal, `airDragCdA`) no CG, como antes; lateral (costado + para-brisa) no centro
+    // vélico `windage.center` — à frente e acima do CG: o barco deriva, adorna e a proa cai a sotavento
+    {
+      const wv = world.wind ?? v3();
+      const rl = rotateInv(this.rot, v3(wv.x - this.vel.x, -this.vel.y, wv.z - this.vel.z));
+      const sp = len(rl);
+      if (sp > 0.01) {
+        const q = 0.5 * RHO_AIR * sp;
+        this.F = add(this.F, rotate(this.rot, v3(0, 0, q * P.airDragCdA * rl.z)));
+        this.addForceAt(rotate(this.rot, v3(q * P.windage.sideCdA * rl.x, 0, 0)), this.toWorld(P.windage.center), "contact");
+      }
+      this.telemetry.apparentWind = sp;
+    }
 
     // ---------------- âncora (o cabo entra como mola em collide) ----------------
     {
