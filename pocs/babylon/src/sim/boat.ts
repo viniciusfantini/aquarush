@@ -657,20 +657,42 @@ export class Speedboat {
   /** Oficina: zera as avarias (usado no reset do píer/rampa). */
   repair(): void { this.hullDamage = 0; this.engineDamage = 0; this.hullEpisode = 0; this.engineHitting = false; }
 
-  /** Trim/tilt com o barco fora da física (preso na carretinha): a bomba/mão continuam funcionando. */
-  trimWhileCarried(dt: number, trimIn: number): void {
-    const inp = { ...NO_PILOT, trim: trimIn, gear: this.wantGear };
-    this.updateControls(dt, inp, 0);
-    this.systems.update(dt, { engine: this.engine, rpm: this.rpm, fuelLph: 0, load: 0, intakeSubmerged: false, lightsOn: false, trimMotorA: this.trimMotorA });
+  /**
+   * Barco preso na carretinha (pose imposta pelo reboque): o MOTOR continua funcionando — partida/desliga,
+   * trim/tilt, lenta, sistemas (combustível, temperatura, bateria). Acelerador e direção ficam com o
+   * veículo (o motor fica em lenta, na marcha em que estava). Fora d'água a entrada de refrigeração não
+   * pega água: o motor esquenta como no mundo real (alarme → proteção → desliga).
+   */
+  carriedStep(dt: number, trimIn: number, water: IWaterSurface): void {
     const P = this.params, t = this.telemetry;
+    this.updateControls(dt, { ...NO_PILOT, trim: trimIn, gear: this.wantGear }, 0);
     const trimAngle = P.trimMode === "manual" ? this.manualAngle : this.trim >= 0 ? this.trim * P.trimUp : -this.trim * P.trimDown;
+    const q = qFromAxisAngle(v3(1, 0, 0), trimAngle + this.tilt);
+    const propW = this.toWorld(add(P.drivePivot, rotate(q, sub(P.propPos, P.drivePivot))));
+    const intakeW = this.toWorld(add(P.drivePivot, rotate(q, sub(P.intakePos, P.drivePivot))));
+    this.propWorld = propW;
+    const propDepth = water.getHeight(propW.x, propW.z) - propW.y;
+    this.immersion = clamp((propDepth + P.propRadius) / (2 * P.propRadius), 0, 1);
+    const intakeSubmerged = water.getHeight(intakeW.x, intakeW.z) - intakeW.y > 0.02;
+    t.rpm = this.updateRpm(dt, 0, 1); // lenta
+    const engaged = this.gear !== "N" && this.engine === "running";
+    this.propRpmState += ((engaged ? (this.gear === "R" ? -1 : 1) * t.rpm / 2 : 0) - this.propRpmState) * (1 - Math.exp(-dt / (engaged ? 0.08 : 3.5)));
+    t.fuelLph = this.engine === "running" ? P.fuelIdleLph : 0;
+    this.systems.update(dt, { engine: this.engine, rpm: t.rpm, fuelLph: t.fuelLph, load: 0, intakeSubmerged, lightsOn: false, trimMotorA: this.trimMotorA });
+    const sys = this.systems;
+    if (sys.stallReason && this.engine === "running") { this.engine = "off"; t.stall = sys.stallReason; }
     t.trim = this.trim; t.trimDeg = trimAngle * 57.2958; t.tiltDeg = this.tilt * 57.2958;
     t.tiltBlocked = this.tiltBlocked || this.manualBlockT > 0;
     t.trimPin = P.trimMode === "manual" ? (this.tiltWanted ? P.trimPins.length + 1 : this.trimPin + 1) : 0;
-    t.trimMotorA = this.trimMotorA; t.batteryV = this.systems.batteryV; t.batterySoc = this.systems.batterySoc;
+    t.trimMotorA = this.trimMotorA; t.batteryV = sys.batteryV; t.batterySoc = sys.batterySoc;
+    t.fuelL = sys.fuelL; t.fuelFrac = sys.fuelFrac; t.coolantC = sys.coolantC; t.engineHours = sys.engineHours;
+    t.overheatWarn = sys.overheatWarn; t.protectMode = sys.protect; t.lowFuel = sys.lowFuel; t.chargeWarn = sys.chargeWarn;
+    t.buzzer = this.selfTestT > 0; t.starterRpm = this.engine === "cranking" ? this.rpm : 0;
+    t.intakeSubmerged = intakeSubmerged; t.propImmersion = this.immersion; t.propRpm = this.propRpmState;
     t.hullDamage = this.hullDamage; t.engineDamage = this.engineDamage;
     t.speedKmh = Math.hypot(this.vel.x, this.vel.z) * 3.6;
-    t.engine = this.engine; t.rpm = this.rpm = 0; t.propRpm = 0; t.throttle = 0; t.thrustN = 0;
+    t.engine = this.engine; t.gear = this.gear; t.throttle = 0; t.thrustN = 0; t.cavitation = 0; t.ventilation = 1;
+    t.depth = water.getDepth(this.pos.x, this.pos.z);
   }
 
   /**

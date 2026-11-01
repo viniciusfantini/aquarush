@@ -32,7 +32,7 @@ import { BoatCamera } from "./presentation/cameras.ts";
 import { Hud } from "./presentation/hud.ts";
 import { EngineAudio } from "./presentation/audio.ts";
 
-const BUILD = "poc-babylon 0.19.0";
+const BUILD = "poc-babylon 0.20.0";
 /** Escala visual da rotação da hélice (proporcional ao RPM, abaixo do limite estroboscópico). */
 const PROP_VISUAL_SCALE = 0.12;
 
@@ -309,7 +309,7 @@ const boot = async () => {
   /** Passa o comando para o veículo: o barco fica preso na carretinha (cinta + bunks) e as pessoas vão para o carro. */
   const startDriving = () => {
     const b = V.boat;
-    b.engine = "off";
+    // (o motor do barco fica como estava: P, E/Q e luzes continuam; acelerador e direção passam ao veículo)
     // o guincho puxa o barco até a proa encostar e ele assenta centralizado no berço (mesmo se entrou
     // flutuando numa carretinha funda): pose fixa no referencial da carretinha durante o reboque
     const seat = seatedBoatLocal(b.params, V.trailer, 0);
@@ -318,7 +318,7 @@ const boot = async () => {
     setPeopleVisible(false);
     if (cam.mode === "cockpit") { cam.toggle(); hud.setCamera(cam.mode); setCockpitHead(false); }
     cam.resetOrbit();
-    hud.showToast(`Barco preso. Agora você dirige ${V.kind === "lancha" ? "a caminhonete" : "o carro"}: W frente · S freio/ré · A/D direção (R volta ao píer)`);
+    hud.showToast(`Barco preso. Acelerador e direção agora são ${V.kind === "lancha" ? "da caminhonete" : "do carro"} (W/S/A/D); o motor do barco continua no P e no E/Q. U desengata`);
   };
   /** Desengata: solta a cinta; se estiver dirigindo, o comando volta para o barco (a carretinha fica onde está). */
   const unhitch = () => {
@@ -442,7 +442,7 @@ const boot = async () => {
     if (mode === "menu") return; // no menu os atalhos do jogo ficam desligados
     const boat = V.boat;
     if (a === "unhitch") { unhitch(); return; }
-    if (driving && (a === "ignition" || a === "occupants" || a === "lights")) { hud.showToast("Você está no veículo — U desengata o barco, R volta ao píer, T à rampa"); return; }
+    if (driving && a === "occupants") { hud.showToast("Com o barco na carretinha não dá para trocar a lotação"); return; }
     if (driving && a === "camera") return;
     if (a === "camera") {
       if (V.pilot.group.parent !== V.vis.root) { hud.showToast("O piloto está na água"); return; }
@@ -507,7 +507,7 @@ const boot = async () => {
         prevPos.copyFrom(curPos); prevRot.copyFrom(curRot);
         water.time += PHYSICS_DT; simTime += PHYSICS_DT;
         V.rig.update(PHYSICS_DT, cmd);
-        boat.trimWhileCarried(PHYSICS_DT, cmd.trim);
+        boat.carriedStep(PHYSICS_DT, cmd.trim, physWater);
         const mb = boatOnTrailer.multiply(poseMatrix(V.rig.trailerPose()));
         const sc = new Vector3(), q = new Quaternion(), tr = new Vector3();
         mb.decompose(sc, q, tr);
@@ -593,7 +593,7 @@ const boot = async () => {
     {
       const K: [string, string, Action | null][] = [];
       if (mode !== "game") { /* menu: sem barra */ }
-      else if (driving) K.push(["W", "frente", null], ["S", "freio / ré", null], ["A D", "direção", null], ["E Q", "motor (tilt)", null], ["U", "DESENGATAR o barco", "unhitch"], ["R", "píer", "reset"]);
+      else if (driving) K.push(["W", "frente", null], ["S", "freio / ré", null], ["A D", "direção", null], ["E Q", "motor (tilt)", null], ["P", T.engine === "running" ? "desligar motor" : V.kind === "bote" ? "corda" : "ligar motor", "ignition"], ["U", "DESENGATAR o barco", "unhitch"], ["R", "píer", "reset"]);
       else if (T.capsized || boat.swimmers.length) K.push(["R", "recomeçar no píer", "reset"]);
       else if (boat.winchStrap) K.push(["U", "DESENGATAR (soltar a cinta)", "unhitch"], ["E Q", "motor (tilt)", null]);
       else if (ld.near) K.push(["E", V.kind === "lancha" ? "levantar o motor" : "pino / tilt", null], ["W S", "marcha / acelerar", null], ["A D", "direção", null], ["T", "recomeçar a rampa", "ramp"]);

@@ -655,6 +655,29 @@ for (const [label, thr] of [["baixa", 0.25], ["alta", 1]] as const) {
   }
 }
 
+// ---------- Motor com o barco preso na carretinha ----------
+{
+  const water = mkWater(0);
+  const b = new Speedboat(SPEEDBOAT, v3(0, 3, 0), Math.PI); // fora d'água (em terra, na carretinha)
+  b.engine = "running";
+  for (let i = 0; i < 2 / DT; i++) b.carriedStep(DT, 0, water);
+  check("reboque", "motor continua ligado ao prender o barco", b.telemetry.engine === "running" ? 1 : 0, 1, 1, "", 0);
+  check("reboque", "lenta com o barco preso (rpm)", b.telemetry.rpm, 600, 1200, "rpm", 0);
+  check("reboque", "fora d'água: sem água de refrigeração", b.telemetry.intakeSubmerged ? 0 : 1, 1, 1, "", 0);
+  check("reboque", "P desliga com o barco preso", b.toggleIgnition() === "stopped" ? 1 : 0, 1, 1, "", 0);
+  for (let i = 0; i < 1 / DT; i++) b.carriedStep(DT, 0, water);
+  b.toggleIgnition();
+  for (let i = 0; i < 4 / DT; i++) b.carriedStep(DT, 0, water);
+  check("reboque", "P dá partida com o barco preso (autoteste + arranque)", b.telemetry.engine === "running" ? 1 : 0, 1, 1, "", 0);
+  const c0 = b.telemetry.coolantC;
+  for (let i = 0; i < 30 / DT; i++) b.carriedStep(DT, 0, water);
+  check("reboque", "fora d'água o motor esquenta (°C em 30 s)", b.telemetry.coolantC - c0, 5, 60, "°C", 1);
+  check("reboque", "quente demais: não dá partida", (b.engine === "running" && b.toggleIgnition() === "stopped" ? 1 : 1) && b.toggleIgnition() === "hot" ? 1 : 0, 1, 1, "", 0);
+  const tilt0 = b.telemetry.tiltDeg;
+  for (let i = 0; i < 3 / DT; i++) b.carriedStep(DT, 1, water);
+  check("reboque", "E/Q mexem no trim/tilt com o barco preso (°)", b.telemetry.trimDeg + b.telemetry.tiltDeg - tilt0, 5, 80, "°", 1);
+}
+
 // ---------- Carga: gasolina e ocupantes (quantidade e posição) ----------
 {
   const water = mkWater(0);
