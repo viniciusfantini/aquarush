@@ -1,0 +1,533 @@
+AQUA RUSH
+GAME DESIGN DOCUMENT + ARQUITETURA TÉCNICA + PLANO DE POC
+Jogo aquático 3D de mundo aberto • Mobile + navegador
+Versão 1.0 | 31 de outubro de 2026Documento-base para comparar três tecnologias antes de escolher a engine definitiva.
+1. Visão do produto
+AQUA RUSH é um jogo 3D de navegação aquática em mundo aberto, com foco em pilotagem divertida, água visualmente convincente, exploração, atividades recreativas, missões e progressão econômica. O jogador escolhe uma embarcação, entra diretamente na água, explora rios, lagoas e cânions conectados, realiza atividades e melhora seus veículos.
+1.1 Direção aprovada
+Decisão
+Definição
+Gráficos
+Balanced: realistas e atraentes, mas escaláveis para celulares intermediários.
+Plataformas
+Mobile e navegador; compartilhar regras e conteúdo sempre que possível.
+Câmeras
+Terceira pessoa e cockpit, com alternância durante a navegação.
+Experiência
+Mundo aberto com missões opcionais e progressão estruturada.
+Prioridade
+A sensação de pilotagem e a interação com a água são o núcleo do jogo.
+1.2 Pilares de experiência
+Liberdade: navegar sem ficar preso a pistas ou corridas lineares.
+Sensação: aceleração, planeio, trim, ondas, spray e esteira devem comunicar peso e velocidade.
+Descoberta: rios, lagoas, cânions, píeres e passagens navegáveis conectados.
+Progressão: ganhar dinheiro, abastecer, melhorar motores e desbloquear atividades.
+Acessibilidade: controles simples no celular, com opção de pilotagem avançada.
+2. Loop principal de jogo
+Escolher embarcação e aparecer na água, próximo a uma marina ou píer.
+Explorar livremente o mapa e descobrir pontos de interesse.
+Percorrer distância para receber uma recompensa-base por quilômetro.
+Atracar em píeres para iniciar passeios e atividades aquáticas.
+Concluir missões, desafios e passeios para receber recompensas adicionais.
+Usar dinheiro para combustível, manutenção, motores, casco e personalização.
+Desbloquear novas regiões, embarcações e atividades.
+A economia deve recompensar exploração sem incentivar exploração automática ou repetitiva. Missões, descobertas e qualidade do passeio devem complementar a recompensa por distância.
+3. Embarcações e controles
+Embarcação
+Controles e comportamento
+Lancha rápida
+Acelerador progressivo, direção, frente/ré, trim positivo e negativo, planeio, consumo, flutuação e danos.
+Moto aquática
+Acelerador, direção, freio/reverso, ré e trim; resposta ágil, saltos e comportamento específico.
+Airboat
+Propulsão por hélice aérea, direção por lemes, navegação em águas rasas e comportamento distinto.
+As três embarcações devem compartilhar contratos e sistemas comuns, mas possuir controladores e parâmetros físicos próprios. Não basta trocar o modelo 3D: massa, potência, arrasto, direção, propulsão e resposta às ondas devem ser diferentes.
+4. Mundo e atividades
+4.1 Regiões planejadas
+Região
+Identidade e mecânicas
+Lago principal
+Área inicial, marina, píeres e águas relativamente tranquilas.
+Rio dos cânions
+Curvas, paredões, correnteza e passagens estreitas.
+Lagoa tropical
+Vegetação, enseadas e águas rasas.
+Rio selvagem
+Pedras, troncos e obstáculos.
+Pântano
+Área especialmente adequada ao airboat.
+Região aberta
+Mais vento e ondulação.
+Cânion extremo
+Desafios de navegação e precisão.
+O mapa deve ser uma rede hidrográfica conectada, com streaming de cenário e transições sem telas de carregamento perceptíveis.
+4.2 Atividades
+Wakeboard: passageiro rebocado, manobras e avaliação do passeio.
+Esqui aquático: passageiro precisa manter equilíbrio e completar percurso.
+Boia inflável tipo pneu: velocidade, curvas e risco de queda.
+Parasail: reboque com paraquedas e controle de altura/rota.
+Banana boat: passeio em grupo.
+Passeio turístico: levar passageiros a destinos.
+Desafios: radar de velocidade, percurso sem colisão, exploração e recordes.
+5. Água e física náutica
+A meta é combinar uma superfície visual de alta qualidade com simulação física otimizada. Não é necessário simular moléculas de água. A física deve ser consistente, previsível e suficientemente convincente.
+5.1 Subsistemas
+Subsistema
+Responsabilidade
+Water Rendering
+Superfície, cor, transparência, reflexos, espuma e aparência das ondas.
+Water Physics
+Altura e normal da superfície, ondas direcionais, correnteza e profundidade.
+Water Interaction
+Esteiras, spray, respingos, impactos e efeitos locais gerados pelas embarcações.
+5.2 Física de casco
+Flutuação por múltiplos pontos distribuídos pelo casco.
+Forças de arrasto e resistência dependentes da velocidade e da condição de navegação.
+Propulsão aplicada no ponto físico correto, considerando motor, hélice e direção.
+Planeio e mudança de atitude da proa conforme aceleração e velocidade.
+Inclinação em curvas e resposta a ondas/impactos.
+Correnteza de rios e influência do vento.
+Profundidade e águas rasas afetando desempenho e navegação.
+5.3 Trim
+Comando
+Efeito pretendido
+Trim negativo
+Tendência de baixar a proa; resposta depende de velocidade e casco.
+Trim neutro
+Atitude de referência.
+Trim positivo
+Tendência de elevar a proa; pode melhorar ou prejudicar desempenho conforme o ajuste.
+O trim não deve ser apenas uma rotação visual. Ele deve alterar a geometria/força de propulsão e a atitude física da embarcação.
+5.4 Porão e danos
+Água acumulada em litros, com causas como dano, impacto ou evento de inundação.
+A água adiciona massa e afeta flutuação e estabilidade.
+Bomba de porão com capacidade em litros por minuto e comando manual; opção automática como upgrade.
+Danos no casco, hélice, motor e superaquecimento devem afetar o desempenho.
+6. HUD e interface
+Indicador/controle
+Comportamento
+Velocidade
+km/h, calculada a partir da velocidade real do veículo.
+RPM
+Telemetria estimada ou calculada pelo modelo do motor.
+Combustível
+Consumo proporcional à carga e ao motor.
+Acelerador
+Valor real de entrada.
+Trim
+Posição atual e comandos de ajuste.
+Água no porão
+Volume atual e alerta configurável.
+Bomba de porão
+Acionamento manual e indicação de funcionamento.
+Luzes de navegação
+Estado ligado/desligado e efeitos visuais.
+Câmera
+Alternância entre terceira pessoa e cockpit.
+A interface deve adaptar-se a orientação e tamanho de tela. No celular, oferecer joystick/volante virtual, acelerador progressivo e botões contextuais. No navegador desktop, teclado e gamepad.
+7. Clima, tempo e ambiente
+Ciclo contínuo de dia/noite, incluindo amanhecer e pôr do sol.
+Chuva, vento, neblina e tempestades.
+Vento influenciando deriva e formação de ondas.
+Chuva e clima afetando visibilidade e aparência da água.
+Luzes de navegação necessárias durante a noite.
+8. Economia, progressão e missões
+8.1 Fontes de recompensa
+Ação
+Valor inicial ilustrativo
+Distância navegada
+$100 por km
+Passeio turístico
+$500
+Wakeboard
+$350
+Parasail
+$600
+Banana boat
+$750
+Desafio de velocidade
+$1.000
+Descoberta de região
+$2.000
+Valores são placeholders para testar ritmo de progressão, não preços finais. A economia deverá ser balanceada após testes.
+8.2 Gastos e upgrades
+Motores: potência, aceleração, velocidade e consumo.
+Hélices e transmissão: eficiência e resposta.
+Casco: estabilidade e hidrodinâmica.
+Tanque: autonomia.
+Bomba de porão: capacidade.
+Personalização: pintura, adesivos, bancos, iluminação e detalhes.
+8.3 Modelo de missão
+Mission  id  name  description  startLocation  objective  completionConditions  reward  optionalTimeLimit  state: Locked | Available | Active | Completed
+Missão inicial
+Objetivo
+Recompensa de teste
+Primeira navegação
+Percorrer 1 km
+$100
+Explorador
+Encontrar nova região
+$500
+Velocidade
+Atingir 80 km/h
+$300
+Passeio turístico
+Levar passageiro ao destino
+$600
+Domínio da água
+Completar percurso sem colisões
+$750
+9. Arquitetura de software
+Separar regras de jogo da apresentação e dos dispositivos. A física e a economia não devem depender do HUD ou da plataforma.
+Camada
+Módulos
+Core
+Game bootstrap, estado do jogo, eventos, configuração, salvamento.
+Simulation
+Water surface, boat physics, weather, current, buoyancy.
+Gameplay
+Vehicle controllers, fuel, damage, missions, economy, interactions.
+Presentation
+HUD, câmeras, áudio, partículas, animações e VFX.
+Platform/Services
+Input adapters, perfis de qualidade, cloud save, ranking e telemetria.
+9.1 Estrutura de pastas
+Assets/  _Project/    Art/{Boats,Environment,Materials,VFX}    Audio/    Prefabs/    Scenes/{Bootstrap,MainMenu,PrototypeLake}    Scripts/{Core,Vehicles,Water,Weather,Camera,Input,             Economy,Missions,UI,Save}    Settings/    Data/  ThirdParty/Documentation/Builds/README.md
+9.2 Contrato de entrada
+public struct VehicleInput{    public float Throttle;    public float Steering;    public float Trim;    public bool Brake;    public bool Reverse;    public bool BilgePump;    public bool NavigationLights;}
+Adaptadores de entrada traduzem touchscreen, teclado e gamepad para VehicleInput. Os controladores não devem conhecer o dispositivo de origem.
+9.3 Controladores
+SpeedboatController: lancha, trim, planeio e propulsão.
+JetSkiController: resposta ágil, freio/reverso e saltos.
+AirboatController: hélice aérea e lemes.
+Sistemas compartilhados: combustível, danos, HUD, câmeras e persistência.
+10. POC comparativa em três plataformas
+Objetivo: construir a mesma fatia jogável mínima em três tecnologias, usando o mesmo escopo e critérios de aceitação. A POC não é para comparar trailers ou demos prontas: cada opção deverá implementar a mesma lancha, lago, água, controles e HUD.
+Opção
+Papel na comparação
+Pontos fortes
+Riscos/atenção
+Unity 6 + URP
+Candidata principal multiplataforma
+C#; pipeline mobile; ecossistema amplo; build nativa e Web.
+Qualidade da água e limitações/performance Web precisam ser medidas.
+Unreal Engine
+Referência de qualidade visual
+Renderização avançada; ferramentas de ambiente; física e VFX robustos.
+Maior custo de performance/complexidade; navegador pode exigir streaming em vez de build Web nativa.
+Babylon.js + WebGPU/WebGL
+Candidata browser-first
+Web nativa; distribuição por URL; integração direta com tecnologias web.
+Mais trabalho para alcançar a mesma fidelidade e simulação de casco; compatibilidade varia por dispositivo.
+Nota: a versão exata da engine e a disponibilidade de recursos devem ser confirmadas no início da POC. Não presumir que uma build Web, mobile e desktop terá desempenho equivalente.
+10.1 Escopo idêntico nas três POCs
+Uma cena de lago com dimensões equivalentes, margens, rochas simples e um píer.
+Uma lancha provisória com massa, dimensões e potência documentadas.
+Flutuação em seis pontos ou método equivalente documentado.
+Aceleração, direção, desaceleração, ré e trim funcional.
+Ondas matemáticas direcionais e correnteza simples.
+Esteira e spray visíveis, mesmo que simplificados.
+Câmera externa e cockpit com alternância.
+HUD: velocidade, RPM estimado, acelerador e trim.
+Controle por teclado/gamepad e interface touch básica.
+Build executável na plataforma-alvo de cada opção.
+10.2 Estratégia de publicação por tecnologia
+Tecnologia
+Alvo da POC
+Unity
+Windows Editor/desktop + build Web + Android de teste, se viável no tempo.
+Unreal
+Windows desktop + Android de teste; avaliar navegador via Pixel Streaming e registrar custo/latência.
+Babylon.js
+Navegador desktop e mobile; testar WebGL e WebGPU com fallback quando disponível.
+Para comparar as três no requisito 'mobile + navegador', registrar claramente se a experiência roda localmente no navegador ou se é transmitida por streaming remoto. Streaming não equivale a uma build Web nativa.
+11. Matriz de avaliação da POC
+Pontuar cada critério de 1 a 5, com vídeo e medições reproduzíveis. Aplicar pesos para refletir a prioridade do produto.
+Critério
+Peso
+Como medir
+Sensação de pilotagem
+25%
+Resposta de aceleração, direção, trim, estabilidade e controle.
+Água e interação
+20%
+Ondas, flutuação, esteira, spray e consistência física.
+Desempenho mobile
+15%
+FPS, frame time, memória, aquecimento e estabilidade.
+Desempenho Web
+15%
+Tempo de carregamento, FPS, memória, compatibilidade e input.
+Qualidade visual
+10%
+Água, iluminação, materiais, cenário e câmera.
+Velocidade de desenvolvimento
+10%
+Horas para implementar, debugar e iterar.
+Evolução/manutenção
+5%
+Modularidade, documentação, tooling e facilidade de ampliar.
+Registrar aparelho, navegador, sistema operacional, resolução, qualidade gráfica e versão do build. Não comparar FPS sem controlar as condições.
+12. Metas e critérios de aceitação do protótipo
+Teste
+Resultado esperado
+Lancha parada
+Flutua sem afundar ou oscilar de forma descontrolada.
+Aceleração
+Velocidade aumenta progressivamente e proa responde.
+Direção
+Raio de curva muda de forma coerente com velocidade.
+Trim
+Altera atitude e comportamento, não apenas a malha visual.
+Desaceleração
+Arrasto reduz velocidade naturalmente.
+Ondas
+Casco acompanha altura e inclinação da superfície.
+Câmeras
+Alternância cockpit/externa funcional.
+HUD
+Valores vêm do estado real da simulação.
+Web
+Abre, aceita controles e mantém estabilidade.
+Mobile
+Controles touch utilizáveis e desempenho registrado.
+Metas iniciais de desempenho: 30 FPS estáveis em celular intermediário; 60 FPS desejáveis em aparelhos avançados e desktop Web. São metas, não garantias.
+13. Roadmap de produção após a POC
+Fase
+Entrega
+P0
+Fundação, projeto, cena de teste e lancha básica.
+P1
+Física de casco, trim, planeio, ondas e correnteza.
+P2
+Lago, cânion, píer, água visual, spray, esteira e iluminação.
+P3
+HUD completo, controles touch e câmeras.
+P4
+Missões, economia, combustível, danos e salvamento.
+P5
+Builds mobile/Web, otimização e testes.
+Depois do protótipo
+Moto aquática, airboat, passageiros, atividades, mapa maior, clima avançado e multiplayer.
+Estimativa orientativa: 4–8 semanas para um protótipo inicial com desenvolvedor experiente e assistência de IA, dependendo dos assets, integração e profundidade da física. A POC comparativa deve ser timeboxed e não deve virar três jogos completos.
+14. Tarefa 001 — instruções para o agente de IA
+Usar este briefing inicialmente na POC Unity. Depois, adaptar o mesmo escopo e critérios para Unreal e Babylon.js.
+AQUA RUSH — TASK 001Objetivo: criar a fundação e o primeiro protótipo de navegação.1. Inspecione o projeto existente antes de alterar arquivos.2. Configure Unity 6 LTS + URP + Input System.3. Crie a estrutura de pastas documentada.4. Crie a cena PrototypeLake com lago, margens, rochas, vegetação simples, píer e luz diurna.5. Crie uma lancha provisória com Rigidbody, colliders e seis pontos de flutuação.6. Implemente aceleração progressiva, direção, ré, arrasto, trim e planeio.7. Crie IWaterSurface com consultas de altura, normal e correnteza.8. Implemente ondas direcionais matemáticas compartilhadas pela física e visual.9. Crie VehicleInput independente de touchscreen, teclado e gamepad.10. Implemente câmera externa e cockpit.11. Crie HUD com velocidade, RPM estimado, acelerador, trim e marcha.12. Não implementar ainda economia, multiplayer ou mapa completo.Critérios de aceite:- Sem erros de compilação.- Cena executável.- Lancha flutua, acelera, vira e desacelera.- Trim altera a atitude física.- Planeio perceptível.- Câmeras alternam.- HUD lê dados reais.- Controles funcionam.- Documentação lista o que foi implementado e testado.Não declarar funcionalidades concluídas sem executar testes. Não usar Translate para simular a navegação. Usar forças e torques físicos. Entregar arquivos reais, instruções de execução e limitações conhecidas.
+15. Próximas decisões e governança
+Definir o computador e os dispositivos físicos disponíveis para testes.
+Fixar versões das engines, plugins e pacotes no início da POC.
+Criar repositório Git separado para cada implementação ou pastas/repositórios claramente isolados.
+Usar o mesmo modelo provisório, dimensões, parâmetros e roteiro de teste nas três tecnologias.
+Fazer uma revisão comparativa antes de escolher a tecnologia definitiva.
+Só então investir em assets finais, mapa extenso e sistemas avançados.
+16. Links oficiais para consulta
+Unity: https://unity.com/
+Unity releases/support: https://unity.com/releases/unity-6/support
+Unreal Engine: https://www.unrealengine.com/
+Unreal Pixel Streaming: https://dev.epicgames.com/documentation/en-us/unreal-engine/pixel-streaming-in-unreal-engine
+Babylon.js: https://www.babylonjs.com/
+Babylon.js documentation: https://doc.babylonjs.com/
+AQUA RUSH — Explore. Navegue. Ganhe. Evolua.
+ANEXO A — ESPECIFICAÇÃO COMPLETA DOS SISTEMAS
+Este anexo complementa o documento-base e transforma os pontos discutidos em requisitos explícitos. Os valores econômicos e metas de desempenho são parâmetros iniciais de protótipo, não decisões finais de balanceamento.
+A.1 Experiência do jogador e estrutura do mundo
+O jogador escolhe uma embarcação no início e surge diretamente na água, próximo de uma marina ou píer. Não deve ser obrigado a passar por uma sequência longa de menus ou por uma corrida linear. A navegação livre é o modo central; missões, atividades e desafios ficam disponíveis como oportunidades distribuídas pelo mapa.
+O mundo é composto por rios, lagoas, canais, áreas alagadas e cânions interligados por rotas navegáveis.
+O mapa deve favorecer exploração e descoberta: enseadas, atalhos, píeres, áreas rasas, obstáculos e pontos panorâmicos.
+A navegação deve permitir entrar e sair de atividades sem quebrar a sensação de continuidade do mundo.
+O cenário deve ser preparado para streaming/setorização, evitando carregar todo o mundo de uma só vez.
+A progressão pode liberar novas regiões, embarcações, atividades e opções de personalização.
+A.2 Embarcações — requisitos detalhados
+Lancha rápida
+Acelerador progressivo, direção, marcha à frente, neutro e ré.
+Trim positivo e negativo com efeito físico sobre atitude, contato do casco com a água, aceleração e eficiência.
+Transição perceptível entre deslocamento em baixa velocidade e planeio.
+Resposta de proa à aceleração e desaceleração, inclinação em curvas e reação a ondas.
+Consumo relacionado à carga do motor, velocidade e configuração.
+Danos em casco, hélice e motor devem alterar desempenho, vibração, estabilidade ou velocidade máxima.
+Moto aquática
+Resposta mais ágil e menor inércia que a lancha.
+Acelerador, direção, freio/reverso e marcha à ré conforme o modelo de propulsão escolhido.
+Trim ou ajuste equivalente, manobras rápidas, saltos e aterrissagens.
+Comportamento próprio em ondas, curvas fechadas e colisões; não reutilizar simplesmente a física da lancha.
+Airboat / aerobarco
+Propulsão por hélice aérea, sem depender de hélice submersa.
+Direção por lemes no fluxo de ar, com resposta diferente de uma lancha convencional.
+Capacidade de navegar em águas rasas e áreas pantanosas.
+Aceleração, inércia, frenagem e curvas devem refletir a ausência de propulsão aquática convencional.
+As embarcações devem compartilhar interfaces de combustível, dano, telemetria, input, câmera e salvamento, mas manter controladores e parâmetros próprios. Trocar apenas o modelo 3D não atende ao requisito.
+A.3 Física náutica e interação com a água
+Flutuação por múltiplos pontos distribuídos pelo casco; na POC da lancha, usar seis pontos (proa, centro e popa, ambos os lados) ou método equivalente documentado.
+Consultar altura e normal da superfície da água para calcular empuxo e orientação local.
+Ondas direcionais matemáticas compartilhadas entre a representação visual e a consulta física, evitando que o barco atravesse ondas visualmente incompatíveis.
+Correnteza por região, com intensidade e direção configuráveis; vento pode influenciar deriva e ondas.
+Arrasto dependente da velocidade, área molhada e estado de planeio.
+Propulsão aplicada em posição física coerente, produzindo torque e resposta de proa.
+Profundidade e águas rasas podem limitar velocidade, causar contato com o fundo ou gerar penalidades.
+Colisões com margens, rochas, píeres, troncos e outros objetos devem produzir resposta física e dano configurável.
+Esteira, espuma, spray e respingos devem ser efeitos de interação associados à velocidade e ao movimento, com níveis de detalhe ajustáveis.
+Separar a água em três subsistemas: Water Rendering (aparência, materiais, reflexos, transparência e espuma), Water Physics (altura, normal, ondas, correnteza e profundidade) e Water Interaction (esteiras, spray, respingos e impactos).
+A.4 Trim, planeio e comportamento de casco
+Trim negativo tende a baixar a proa; trim positivo tende a elevá-la. A resposta deve variar com velocidade, casco e distribuição de massa.
+Trim neutro representa a configuração de referência.
+Trim deve afetar forças e atitude simuladas, não apenas inclinar o modelo visual.
+O planeio deve surgir da combinação de velocidade, empuxo, arrasto e geometria do casco, e não de uma animação arbitrária.
+Em curvas rápidas, o casco deve inclinar e a embarcação deve apresentar alteração de trajetória coerente com velocidade e direção.
+A.5 Combustível, porão, danos e manutenção
+Combustível consumido proporcionalmente à carga do motor e ao tempo de operação; upgrades podem alterar potência, eficiência e autonomia.
+Água no porão é registrada em litros e pode surgir por dano, colisão ou eventos específicos.
+A água acumulada adiciona massa, modifica flutuação, estabilidade e desempenho; não deve ser apenas uma barra visual.
+Bomba de porão tem capacidade em litros por minuto, comando manual e indicação de funcionamento. Uma opção automática pode ser desbloqueada como upgrade.
+Dano de casco pode aumentar entrada de água e alterar hidrodinâmica.
+Dano de hélice pode reduzir eficiência, gerar vibração ou limitar aceleração.
+Dano de motor pode reduzir potência e provocar superaquecimento.
+Superaquecimento deve ser consequência de condições de operação ou dano, com alertas e possíveis limitações.
+Manutenção e reparo podem ser realizados em marinas ou pontos de serviço, usando a economia do jogo.
+A.6 HUD, controles e câmeras
+HUD apresenta velocidade em km/h, RPM, combustível, acelerador, trim, água no porão, estado da bomba, luzes de navegação, dinheiro, distância percorrida e danos.
+Velocidade deve ser calculada a partir da velocidade real do veículo; RPM pode ser telemetria do modelo de motor ou estimativa documentada.
+No celular: acelerador progressivo, direção por joystick/volante virtual e botões contextuais para ré, trim, bomba, luzes e câmera.
+No navegador/desktop: teclado e gamepad; mapear os mesmos comandos lógicos usados no mobile.
+O contrato VehicleInput deve abstrair a origem do comando para que os controladores não dependam de touchscreen, teclado ou gamepad.
+Câmera externa em terceira pessoa e câmera de cockpit, alternáveis durante a navegação.
+Câmera externa deve permitir enquadrar a embarcação e a esteira; cockpit deve priorizar leitura de instrumentos e sensação de pilotagem.
+Interface adaptável a diferentes resoluções e orientações, com opções de escala e posicionamento de controles.
+A.7 Clima, iluminação e ambiente
+Ciclo contínuo de dia e noite, com transições de amanhecer e pôr do sol.
+Chuva, vento, neblina e tempestades como condições ambientais configuráveis.
+Vento influencia deriva, sensação de navegação e formação/intensidade das ondas.
+Chuva e clima alteram visibilidade e aparência da superfície da água.
+Luzes de navegação devem ser funcionais e visíveis à noite.
+Condições climáticas podem ser usadas em missões e desafios, desde que não prejudiquem injustamente o controle no mobile.
+A.8 Atividades, passageiros e missões
+Píeres e pontos de interesse funcionam como locais de embarque e início de atividades.
+Wakeboard: rebocar passageiro, completar percurso e executar manobras; avaliar controle, velocidade e qualidade do passeio.
+Esqui aquático: manter velocidade e trajetória adequadas para o passageiro completar o percurso.
+Boia inflável tipo pneu: curvas e mudanças de velocidade criam desafio e risco de queda.
+Parasail: rebocar passageiro com paraquedas, com controle de altura e rota.
+Banana boat: transportar grupo de passageiros e completar passeio.
+Passeio turístico: levar passageiros a destinos ou pontos panorâmicos.
+Desafios adicionais: radar de velocidade, percurso sem colisão, exploração, precisão de navegação e recordes.
+Cada atividade deve ter ponto de início, objetivo, condições de conclusão, falha/abandono e recompensa.
+A.9 Economia, progressão e personalização
+A economia deve combinar recompensa por distância com pagamentos por missão, passeio, descoberta e desafio. A remuneração por quilômetro é uma recompensa-base, não a única forma eficiente de ganhar dinheiro.
+Fontes: distância navegada, passeios, wakeboard, esqui, boia, parasail, banana boat, desafios e descoberta de regiões.
+Gastos: combustível, reparos, manutenção, upgrades e aquisição/desbloqueio de embarcações.
+Upgrades de motor alteram potência, aceleração, velocidade e consumo.
+Hélice/transmissão alteram eficiência e resposta.
+Casco altera estabilidade e comportamento hidrodinâmico.
+Tanque aumenta autonomia; bomba de porão aumenta capacidade de drenagem.
+Personalização inclui pintura, adesivos, bancos, iluminação e detalhes visuais.
+Valores de recompensa apresentados no documento-base são placeholders para testar ritmo de progressão; balancear após telemetria e testes.
+A.10 Recursos sociais, viralização e retenção
+Radar de velocidade para registrar velocidade máxima em pontos ou trechos específicos.
+Registro de recordes pessoais e rankings, com regras claras e prevenção básica contra resultados inválidos.
+Modo cinematográfico para controlar câmera, enquadramento e captura de momentos da navegação, facilitando a criação de vídeos curtos.
+Eventos temporários e desafios recorrentes para incentivar retorno ao jogo.
+Conquistas por exploração, pilotagem, atividades, distância e domínio das embarcações.
+Compartilhamento de resultados e melhores momentos, respeitando as capacidades de cada plataforma.
+Multiplayer é uma possibilidade futura e deve ser considerado na arquitetura de dados e separação de sistemas, mas não será implementado na POC inicial.
+A.11 Arquitetura técnica — requisitos adicionais
+Core: inicialização, estado global, eventos, configurações e salvamento.
+Simulation: superfície da água, física de embarcações, flutuação, correnteza e clima.
+Gameplay: controladores, combustível, danos, missões, economia, passageiros e interações.
+Presentation: HUD, câmeras, áudio, animações, partículas e efeitos visuais.
+Platform/Services: adaptadores de input, perfis de qualidade, cloud save, ranking e telemetria.
+Manter regras de jogo independentes de interface e plataforma sempre que possível.
+Preparar identificadores persistentes para jogador, embarcação, missão, atividade e recorde, sem construir backend multiplayer na primeira fase.
+Usar perfis de qualidade escaláveis: baixo, médio e alto, ajustando resolução, distância de visão, sombras, reflexos, partículas e densidade de cenário.
+Registrar versões de engine, pacotes, assets e parâmetros da simulação para reproduzir os testes.
+A.12 POC — roteiro padronizado de execução
+As três implementações devem receber o mesmo escopo, dimensões aproximadas, modelo provisório, massa, potência, parâmetros de ondas e roteiro de pilotagem. Registrar os resultados em condições comparáveis.
+Teste 1 — estabilidade: deixar a lancha parada por 60 segundos e registrar oscilação, afundamento e estabilidade.
+Teste 2 — aceleração: acelerar de 0 até velocidade-alvo e registrar tempo, velocidade e atitude da proa.
+Teste 3 — trim: repetir trecho com trim negativo, neutro e positivo; comparar atitude, velocidade e consumo estimado.
+Teste 4 — curva: executar curvas em baixa e alta velocidade e observar inclinação, raio e estabilidade.
+Teste 5 — desaceleração e ré: soltar acelerador, aplicar freio/reverso e testar manobra para trás.
+Teste 6 — ondas/correnteza: atravessar área com ondas e correnteza, verificando resposta física e visual.
+Teste 7 — câmera/HUD: alternar cockpit e terceira pessoa e validar dados apresentados.
+Teste 8 — input: repetir controles em teclado/gamepad e touch.
+Teste 9 — desempenho: medir FPS, frame time, memória, carregamento, aquecimento e estabilidade.
+Teste 10 — compatibilidade: registrar aparelho, navegador, sistema operacional, resolução, qualidade e versão do build.
+A.13 Comparação das três tecnologias — interpretação
+Unity 6 + URP: candidata equilibrada para mobile e desktop, com caminho de build Web a ser medido. A qualidade da água, tamanho do build e desempenho real no navegador são riscos a validar.
+Unreal Engine: referência para qualidade visual e ferramentas de ambiente. A POC deve separar claramente build local de streaming remoto; Pixel Streaming não é uma build Web nativa.
+Babylon.js: opção browser-first, com distribuição por URL e suporte a WebGL/WebGPU conforme dispositivo. Deve ser avaliada a quantidade de trabalho necessária para física, interação e visual equivalentes.
+Não escolher tecnologia por uma demo visual isolada. A decisão deve ponderar pilotagem, água, desempenho mobile/Web, qualidade, velocidade de desenvolvimento e manutenção.
+Não desenvolver três jogos completos: limitar escopo e duração, comparar evidências e então escolher uma tecnologia principal.
+A.14 Fora do escopo da primeira POC
+Multiplayer funcional, matchmaking, salas e sincronização em rede.
+Mapa aberto completo, streaming definitivo de grandes regiões e conteúdo final.
+Economia totalmente balanceada, loja final e monetização.
+Todos os modelos finais de embarcação e animações de passageiros.
+Sistema completo de eventos ao vivo, ranking online e backend de compartilhamento.
+Clima extremo com simulação complexa; na POC, usar implementação simples suficiente para validar arquitetura.
+A.15 Critérios gerais de qualidade e definição de pronto
+Nenhuma funcionalidade deve ser marcada como concluída sem teste executado e resultado registrado.
+A física não deve ser simulada movendo o barco com Translate; usar forças, torques e um modelo físico documentado.
+O HUD deve ler o estado real da simulação, não valores decorativos independentes.
+A build deve iniciar, permitir pilotagem e apresentar limitações conhecidas documentadas.
+O projeto deve incluir instruções de instalação, execução, build e reprodução dos testes.
+Desempenho deve ser medido em dispositivos reais; metas de 30 FPS em celular intermediário e 60 FPS em aparelhos avançados/desktop são objetivos iniciais, não garantias.
+A decisão final da engine só ocorre depois da comparação das três POCs.
+ANEXO B — LISTA MESTRA DE FUNCIONALIDADES
+Área
+Funcionalidade
+Prioridade
+Navegação
+Mundo aquático conectado e exploração livre
+Produto
+Veículos
+Lancha com física, trim e planeio
+POC
+Veículos
+Moto aquática com controlador próprio
+Pós-POC
+Veículos
+Airboat com hélice aérea e lemes
+Pós-POC
+Água
+Flutuação, ondas, correnteza e profundidade
+POC
+Água
+Esteira, spray, espuma e respingos
+POC simplificada
+Câmera
+Terceira pessoa e cockpit alternáveis
+POC
+Interface
+HUD e input touch/teclado/gamepad
+POC
+Sistemas
+Combustível, danos, porão e bomba
+Protótipo
+Atividades
+Wakeboard, esqui, boia, parasail e banana boat
+Produto
+Atividades
+Passeios turísticos e passageiros
+Produto
+Progressão
+Recompensas, missões, upgrades e personalização
+Protótipo
+Ambiente
+Dia/noite, chuva, vento, neblina e tempestade
+Evolução
+Social
+Radar, recordes, rankings, eventos e conquistas
+Evolução
+Captura
+Modo cinematográfico para vídeos
+Evolução
+Online
+Arquitetura preparada para multiplayer futuro
+Arquitetura
+Online
+Multiplayer implementado
+Fora da POC
+Plataformas
+Mobile e navegador
+Requisito central
+Tecnologia
+POCs Unity, Unreal e Babylon.js
+Decisão técnica

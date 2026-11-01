@@ -1,0 +1,16 @@
+node_modules/
+dist/
+*.log
+.DS_Store
+Thumbs.db
+desktop.ini
+~$*.docx
+# Unity / Unreal (futuras POCs)
+pocs/unity/**/[Ll]ibrary/
+pocs/unity/**/[Tt]emp/
+pocs/unity/**/[Bb]uild*/
+pocs/unity/**/[Ll]ogs/
+pocs/unreal/**/Binaries/
+pocs/unreal/**/Intermediate/
+pocs/unreal/**/Saved/
+pocs/unreal/**/DerivedDataCache/

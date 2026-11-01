@@ -1,0 +1,22 @@
+{
+  "name": "aquarush-poc-babylon",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "AQUA RUSH — POC 1 (Babylon.js, browser-first)",
+  "scripts": {
+    "dev": "vite --host",
+    "build": "vite build",
+    "preview": "vite preview --host",
+    "typecheck": "tsc --noEmit",
+    "test:sim": "node tests/sim.test.ts"
+  },
+  "dependencies": {
+    "@babylonjs/core": "9.33.1",
+    "@babylonjs/materials": "9.33.1"
+  },
+  "devDependencies": {
+    "typescript": "7.0.2",
+    "vite": "8.3.5"
+  }
+}
