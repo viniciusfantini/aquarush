@@ -79,7 +79,7 @@ export class BoatCamera {
       this.cam.setTarget(this.look);
     } else {
       this.cam.fov = 1.15;
-      const head = Vector3.TransformCoordinates(new Vector3(0.5, 1.24, -0.18), Matrix.Compose(Vector3.One(), boatRot, boatPos));
+      const head = Vector3.TransformCoordinates(new Vector3(0.5, 1.24, -0.06), Matrix.Compose(Vector3.One(), boatRot, boatPos));
       this.cam.position.copyFrom(head);
       const yawQ = Quaternion.RotationAxis(Vector3.Up(), this.orbitYaw * 1.5);
       const pitchQ = Quaternion.RotationAxis(Vector3.Right(), 0.2 + this.orbitPitch * 0.6);

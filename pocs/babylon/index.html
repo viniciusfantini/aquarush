@@ -47,6 +47,17 @@
     @keyframes blink { 50% { background: #ff5a4e; } }
     #status .chip.btn { pointer-events: auto; cursor: pointer; color: var(--fg); border: 1px solid rgba(255,255,255,0.3); }
     #status { pointer-events: auto; }
+    #instr { position: absolute; right: 18px; bottom: 172px; padding: 8px 12px; display: grid; gap: 4px; min-width: 170px; font-size: 12px; }
+    #instr .ins { display: grid; grid-template-columns: 52px 1fr auto; align-items: center; gap: 8px; color: var(--dim); }
+    #instr .ins:not(:first-child) { grid-template-columns: 52px 1fr; }
+    #instr .ins:not(:first-child) b { text-align: right; }
+    #instr b { color: var(--fg); font-variant-numeric: tabular-nums; font-weight: 600; }
+    #instr .bar { height: 7px; border-radius: 4px; background: rgba(255,255,255,0.15); overflow: hidden; }
+    #h-fuel-bar { height: 100%; width: 100%; background: var(--accent); }
+    #h-fuel-bar.low { background: #ffb13d; }
+    #instr b.hot { color: #ff5a4e; }
+    #h-hot:not(.warn), #h-lowfuel:not(.warn), #h-charge:not(.warn) { display: none; }
+    #ui.touch-on #instr { right: auto; left: 50%; transform: translateX(-50%); bottom: 112px; grid-auto-flow: column; grid-template-columns: none; min-width: 0; }
     #h-build { position: absolute; left: 18px; bottom: 10px; font-size: 11px; color: var(--dim); }
 
     #h-debug { display: none; position: absolute; left: 18px; top: 52px; padding: 10px 14px; font-size: 12px; min-width: 250px; }
@@ -92,6 +103,9 @@
       <div class="chip" id="h-lights">LUZES</div>
       <div class="chip" id="h-cav">CAVITAÇÃO</div>
       <div class="chip" id="h-vent">VENTILAÇÃO</div>
+      <div class="chip" id="h-hot">SUPERAQUECIMENTO</div>
+      <div class="chip" id="h-lowfuel">COMBUSTÍVEL BAIXO</div>
+      <div class="chip" id="h-charge">BATERIA</div>
       <div class="chip btn" id="h-water">ÁGUA: LAGO</div>
     </div>
     <div id="h-debug" class="panel"></div>
@@ -109,6 +123,12 @@
       <div>Gamepad: RT/LT, analógico, LB/RB trim, Y câmera</div>
     </div>
     <div id="h-toast"></div>
+    <div id="instr" class="panel">
+      <div class="ins"><span>COMB.</span><div class="bar"><div id="h-fuel-bar"></div></div><b id="h-fuel">100%</b></div>
+      <div class="ins"><span>TEMP</span><b id="h-temp">--°C</b></div>
+      <div class="ins"><span>BAT</span><b id="h-volt">--V</b></div>
+      <div class="ins"><span>HORAS</span><b id="h-hours">0000.0</b></div>
+    </div>
     <div id="dash" class="panel">
       <div class="vbar"><div class="track"><div id="h-thr-bar"></div></div><b id="h-thr">0%</b>ACEL</div>
       <div class="vbar"><div class="track trim"><div id="h-trim-mark"></div></div><b id="h-trim">0.0°</b>TRIM</div>

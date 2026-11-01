@@ -289,6 +289,42 @@ for (const [label, thr] of [["baixa", 0.25], ["alta", 1]] as const) {
   check("ignição", "motor pegou (lenta)", boat.telemetry.engine === "running" && boat.telemetry.rpm > 600 && boat.telemetry.rpm < 1200 ? 1 : 0, 1, 1, "", 0);
 }
 
+// ---------- Sistemas do motor: combustível, temperatura, bateria, horímetro ----------
+{
+  const water = mkWater(0);
+  const boat = new Speedboat(SPEEDBOAT, v3(0, 0.25, 0));
+  const sys = boat.systems;
+  const f0 = sys.fuelL, h0 = sys.engineHours;
+  run(boat, water, 120, { ...emptyInput(), gear: "F", throttle: 1 });
+  const used = f0 - sys.fuelL;
+  check("sistemas", "consumo a toda em 2 min (L)", used, 1.2, 2.2, "L", 2);
+  check("sistemas", "horímetro em 2 min (h)", sys.engineHours - h0, 0.0333, 0.0334, "h", 4);
+  check("sistemas", "temperatura em regime (°C)", boat.telemetry.coolantC, 55, 68, "°C", 1);
+  check("sistemas", "bateria carregando em rotação (V)", boat.telemetry.batteryV, 13.6, 14.4, "V", 2);
+  // recolhido e ligado: sem água de refrigeração → superaquece, entra em proteção e desliga
+  const b2 = new Speedboat(SPEEDBOAT, v3(0, 0.25, 0));
+  b2.trim = 1; b2.tilt = SPEEDBOAT.tiltMax;
+  let tProtect = -1, tStall = -1;
+  let triedHot = "";
+  run(b2, water, 240, { ...emptyInput(), gear: "N", throttle: 0 }, openWater, (t) => {
+    if (tProtect < 0 && b2.telemetry.protectMode) tProtect = t;
+    if (tStall < 0 && b2.telemetry.engine === "off") { tStall = t; triedHot = b2.toggleIgnition(); }
+  });
+  check("sistemas", "recolhido ligado: entra em proteção (s)", tProtect, 10, 120, "s", 0);
+  check("sistemas", "recolhido ligado: motor desliga sozinho (s)", tStall, tProtect, 220, "s", 0);
+  check("sistemas", "motivo do desligamento = superaquecimento", b2.telemetry.stall === "overheat" ? 1 : 0, 1, 1, "", 0);
+  check("sistemas", "partida recusada logo após superaquecer", triedHot === "hot" ? 1 : 0, 1, 1, "", 0);
+  check("sistemas", "após 3 min desligado esfria abaixo da proteção (°C)", b2.telemetry.coolantC, 26, 90, "°C", 1);
+  // sem combustível: o motor morre e não pega
+  const b3 = new Speedboat(SPEEDBOAT, v3(0, 0.25, 0));
+  b3.systems.fuelL = 0.05;
+  run(b3, water, 120, { ...emptyInput(), gear: "F", throttle: 0.6 });
+  check("sistemas", "sem combustível: motor parou", b3.telemetry.engine === "off" && b3.telemetry.stall === "fuel" ? 1 : 0, 1, 1, "", 0);
+  run(b3, water, 1, { ...emptyInput(), gear: "N" });
+  check("sistemas", "sem combustível: partida recusada", b3.toggleIgnition() === "noFuel" ? 1 : 0, 1, 1, "", 0);
+  check("sistemas", "desligado: bateria em repouso (V)", b3.telemetry.batteryV, 12.2, 12.8, "V", 2);
+}
+
 // ---------- Esteira: cruzar a própria marola (a física sente a esteira) ----------
 {
   const cross = (withWake: boolean) => {

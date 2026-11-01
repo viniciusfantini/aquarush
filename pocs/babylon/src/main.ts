@@ -18,13 +18,15 @@ import { v3 } from "./sim/math.ts";
 import { InputManager, attachTouchControls, type Action } from "./platform/input.ts";
 import { WaterVisual } from "./presentation/waterMaterial.ts";
 import { buildTerrain, buildRocks, buildTrees, buildPier } from "./presentation/environment.ts";
-import { buildBoat, setNavLights, needleAngle } from "./presentation/boatMesh.ts";
+import { buildBoat, setNavLights } from "./presentation/boatMesh.ts";
+import { buildHelm, toRootLocal } from "./presentation/helm.ts";
+import { buildPilot } from "./presentation/pilot.ts";
 import { WaterInteraction } from "./presentation/waterInteraction.ts";
 import { BoatCamera } from "./presentation/cameras.ts";
 import { Hud } from "./presentation/hud.ts";
 import { EngineAudio } from "./presentation/audio.ts";
 
-const BUILD = "poc-babylon 0.8.1";
+const BUILD = "poc-babylon 0.9.0";
 /** Escala visual da rotação da hélice (proporcional ao RPM, abaixo do limite estroboscópico). */
 const PROP_VISUAL_SCALE = 0.12;
 
@@ -103,7 +105,14 @@ const boot = async () => {
   const pierMeshes = buildPier(scene, world.pier);
   const buoys = pierMeshes.filter((m) => m.name === "buoy");
   const boatVis = buildBoat(scene);
+  const helm = buildHelm(scene, boatVis.root);
+  const pilot = buildPilot(scene, boatVis.root);
+  boatVis.meshes.push(...helm.meshes, ...pilot.meshes);
   const boatMeshes = boatVis.meshes.filter((m) => m.name !== "propDisc");
+  // horímetro persistente (por navegador)
+  const HOURS_KEY = "aquarush.engineHours";
+  try { const h = Number(localStorage.getItem(HOURS_KEY)); boat.systems.engineHours = Number.isFinite(h) && h > 0 ? h : 37.2; } catch { boat.systems.engineHours = 37.2; }
+  let hoursSaveT = 0;
 
   // ambiente para os materiais PBR (céu + margens, renderizado uma vez)
   const probe = new ReflectionProbe("envProbe", 128, scene);
@@ -181,6 +190,7 @@ const boot = async () => {
   let fpsSmooth = 60;
   let lastGear = boat.telemetry.gear;
   let tiltWarned = false, intakeWarned = false;
+  let lastStall = "";
   const skegMesh = boatVis.meshes.find((m) => m.name === "skeg")!;
   let physMs = 0;
 
@@ -191,15 +201,16 @@ const boot = async () => {
       const mode = cam.toggle();
       hud.setCamera(mode);
       // no cockpit a câmera fica na cabeça do piloto: esconde cabeça/tronco (mãos e pernas continuam visíveis)
-      for (const m of boatVis.meshes) if (/^pilot|^capBrim/.test(m.name)) m.setEnabled(mode !== "cockpit");
+      for (const m of boatVis.meshes) if (/^pilot(Head|Jaw|Nose|Ear|Hair|Cap|Glasses|Neck)/.test(m.name)) m.setEnabled(mode !== "cockpit");
     }
     else if (a === "lights") { lights = input.toggleLights(); setNavLights(boatVis, lights); hud.setLights(lights); }
-    else if (a === "reset") { input.setGear("N"); wakeField.reset(); boat.engine = "running"; boat.reset(spawnPos(), world.spawn.heading); snap(curPos, curRot); snap(prevPos, prevRot); hud.showToast("Reposicionado no píer"); }
+    else if (a === "reset") { input.setGear("N"); wakeField.reset(); boat.engine = "running"; boat.systems.refuel(); boat.systems.coolantC = Math.min(boat.systems.coolantC, 60); boat.reset(spawnPos(), world.spawn.heading); snap(curPos, curRot); snap(prevPos, prevRot); hud.showToast("Reposicionado no píer — tanque cheio"); }
     else if (a === "debug") hud.toggleDebug();
     else if (a === "help") hud.toggleHelp();
     else if (a === "ignition") {
       const r = boat.toggleIgnition();
-      hud.showToast(r === "stopped" ? "Motor desligado" : r === "starting" ? "Dando partida…" : r === "needNeutral" ? "Coloque em N para dar partida" : "Dando partida…");
+      const msg: Record<string, string> = { stopped: "Motor desligado", starting: "Dando partida…", busy: "Dando partida…", needNeutral: "Coloque em N para dar partida", noFuel: "Sem combustível — R para voltar ao píer e abastecer", lowBattery: "Bateria fraca: o motor de arranque não gira", hot: "Motor quente demais — espere esfriar" };
+      hud.showToast(msg[r]);
     }
     else if (a === "pause") { paused = !paused; hud.showToast(paused ? "Pausado" : "Continuando"); }
     else if (a === "waterNext") applyWater(waterPreset + 1);
@@ -238,9 +249,11 @@ const boot = async () => {
     const T = boat.telemetry;
     boatVis.engine.rotation.y = -T.steerDeg * Math.PI / 180;
     boatVis.engine.rotation.x = (T.trimDeg + T.tiltDeg) * Math.PI / 180;
-    boatVis.wheel.rotation.z = -T.steerDeg * Math.PI / 180 * 5;
-    boatVis.speedNeedle.rotation.z = needleAngle(T.speedKmh, 100);
-    boatVis.rpmNeedle.rotation.z = needleAngle(T.rpm / 1000, 7);
+    helm.update(dtReal, T, input.state, SPEEDBOAT.maxSteerLow * 180 / Math.PI);
+    pilot.update(toRootLocal(helm.wheelGrip, boatVis.root), toRootLocal(helm.leverGrip, boatVis.root));
+    if (T.stall && T.stall !== lastStall) hud.showToast(T.stall === "fuel" ? "O motor morreu: acabou o combustível" : "O motor desligou: superaquecimento");
+    lastStall = T.stall;
+    if ((hoursSaveT += dtReal) > 10) { hoursSaveT = 0; try { localStorage.setItem(HOURS_KEY, String(boat.systems.engineHours)); } catch { /* sem storage */ } }
     // hélice: velocidade visual PROPORCIONAL ao RPM real (escala fixa de 0,12). A rotação real (até ~48 voltas/s)
     // daria efeito estroboscópico a 60 FPS (a hélice pareceria parada ou girando ao contrário).
     if (!paused) boatVis.propeller.rotation.z += (T.propRpm / 60) * PROP_VISUAL_SCALE * 2 * Math.PI * dtReal;

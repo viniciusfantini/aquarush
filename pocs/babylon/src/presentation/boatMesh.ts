@@ -15,9 +15,6 @@ export interface BoatVisual {
   propeller: TransformNode;   // gira com a rotação real da hélice
   telltale: TransformNode;    // bico do esguicho de refrigeração (jato sai em +X local, para fora)
   propBlur: PBRMaterial;      // disco de borrão (alpha ∝ rotação)
-  wheel: TransformNode;       // volante (gira com a direção)
-  speedNeedle: TransformNode;
-  rpmNeedle: TransformNode;
   lights: { port: StandardMaterial; star: StandardMaterial; stern: StandardMaterial };
   /** Tampa invisível do cockpit (só profundidade): impede a água de aparecer dentro do barco. */
   cockpitLid: Mesh;
@@ -97,30 +94,6 @@ const pbr = (scene: Scene, name: string, color: Color3, metallic: number, roughn
   if (clearCoat > 0) { m.clearCoat.isEnabled = true; m.clearCoat.intensity = clearCoat; m.clearCoat.roughness = 0.05; }
   m.environmentIntensity = 0.9;
   return m;
-};
-
-const dialTexture = (scene: Scene, name: string, max: number, step: number, label: string): DynamicTexture => {
-  const S = 256;
-  const t = new DynamicTexture(name, { width: S, height: S }, scene, true);
-  const c = t.getContext() as CanvasRenderingContext2D;
-  c.fillStyle = "#0b0d10"; c.fillRect(0, 0, S, S);
-  c.beginPath(); c.arc(S / 2, S / 2, S * 0.48, 0, Math.PI * 2); c.fillStyle = "#14181d"; c.fill();
-  c.lineWidth = 6; c.strokeStyle = "#c9d2da"; c.stroke();
-  const a0 = Math.PI * 0.75, a1 = Math.PI * 2.25;
-  for (let v = 0; v <= max + 1e-6; v += step / 2) {
-    const major = Math.abs(v / step - Math.round(v / step)) < 1e-6;
-    const a = a0 + (v / max) * (a1 - a0);
-    const r0 = S * (major ? 0.36 : 0.4), r1 = S * 0.45;
-    c.beginPath(); c.moveTo(S / 2 + Math.cos(a) * r0, S / 2 + Math.sin(a) * r0); c.lineTo(S / 2 + Math.cos(a) * r1, S / 2 + Math.sin(a) * r1);
-    c.lineWidth = major ? 5 : 2; c.strokeStyle = v > max * 0.85 ? "#ff5a4e" : "#f2f5f7"; c.stroke();
-    if (major) {
-      c.fillStyle = "#f2f5f7"; c.font = "bold 26px sans-serif"; c.textAlign = "center"; c.textBaseline = "middle";
-      c.fillText(String(Math.round(v)), S / 2 + Math.cos(a) * S * 0.27, S / 2 + Math.sin(a) * S * 0.27);
-    }
-  }
-  c.fillStyle = "#9fb0bd"; c.font = "18px sans-serif"; c.textAlign = "center"; c.fillText(label, S / 2, S * 0.72);
-  t.update();
-  return t;
 };
 
 // ---------------- construção ----------------
@@ -235,77 +208,29 @@ export const buildBoat = (scene: Scene): BoatVisual => {
   add(MeshBuilder.CreateTube("wsBase", { path: base, radius: 0.014, tessellation: 6 }, scene), blackMatte);
   for (const i of [0, 8, 16]) add(MeshBuilder.CreateTube("wsPost", { path: [base[i], top[i]], radius: 0.014, tessellation: 6 }, scene), steel);
 
-  // ---------- consoles, painel, volante, instrumentos ----------
+  // ---------- console do passageiro (o posto do piloto fica em helm.ts) ----------
   const helmX = 0.5;
-  const helm = add(roundedBox("helmConsole", scene, 0.62, 0.7, 0.55, 0.09), gelcoat);
-  helm.position.set(helmX, FLOOR + 0.35, 0.78);
-  colorize(helm, () => WHITE);
   const pax = add(roundedBox("paxConsole", scene, 0.55, 0.58, 0.5, 0.09), gelcoat);
   pax.position.set(-0.5, FLOOR + 0.29, 0.8);
   colorize(pax, () => WHITE);
-
-  const dash = new TransformNode("dash", scene);
-  dash.parent = root;
-  dash.position.set(helmX, FLOOR + 0.76, 0.55);
-  dash.rotation.x = 0.55; // topo inclinado para o piloto
-  const panel = add(roundedBox("dashPanel", scene, 0.6, 0.3, 0.04, 0.03), blackGloss, dash);
-  panel.position.z = 0.02;
-  const gauge = (name: string, x: number, tex: DynamicTexture) => {
-    const face = MeshBuilder.CreatePlane(name, { size: 0.15 }, scene);
-    const fm = new StandardMaterial(name + "Mat", scene);
-    fm.diffuseTexture = tex; fm.emissiveTexture = tex; fm.emissiveColor = new Color3(0.5, 0.5, 0.5);
-    fm.specularColor = new Color3(0.4, 0.4, 0.4);
-    add(face, fm, dash);
-    face.position.set(x, 0.01, -0.002);
-    const bezel = add(MeshBuilder.CreateTorus(name + "Bezel", { diameter: 0.152, thickness: 0.012, tessellation: 24 }, scene), steel, dash);
-    bezel.rotation.x = Math.PI / 2;
-    bezel.position.set(x, 0.01, -0.004);
-    const pivot = new TransformNode(name + "Pivot", scene);
-    pivot.parent = dash;
-    pivot.position.set(x, 0.01, -0.008);
-    const needle = add(MeshBuilder.CreateBox(name + "Needle", { width: 0.005, height: 0.06, depth: 0.003 }, scene), pbr(scene, "needle", new Color3(1, 0.3, 0.1), 0, 0.4), pivot);
-    needle.position.y = 0.025;
-    const nm = needle.material as PBRMaterial; nm.emissiveColor = new Color3(0.8, 0.2, 0.05);
-    return pivot;
-  };
-  const speedNeedle = gauge("speedo", -0.14, dialTexture(scene, "speedoTex", 100, 20, "km/h"));
-  const rpmNeedle = gauge("tacho", 0.14, dialTexture(scene, "tachoTex", 7, 1, "x1000 rpm"));
-
-  const wheelMount = new TransformNode("wheelMount", scene);
-  wheelMount.parent = root;
-  wheelMount.position.set(helmX, FLOOR + 0.86, 0.42);
-  wheelMount.rotation.x = 0.55;
-  add(MeshBuilder.CreateCylinder("column", { height: 0.18, diameter: 0.04 }, scene), blackMatte, wheelMount).rotation.x = Math.PI / 2;
-  const wheel = new TransformNode("wheel", scene);
-  wheel.parent = wheelMount;
-  wheel.position.z = -0.09;
-  const rim = add(MeshBuilder.CreateTorus("wheelRim", { diameter: 0.36, thickness: 0.03, tessellation: 32 }, scene), blackMatte, wheel);
-  rim.rotation.x = Math.PI / 2;
-  add(MeshBuilder.CreateCylinder("hub", { height: 0.04, diameter: 0.07 }, scene), steel, wheel).rotation.x = Math.PI / 2;
-  for (let i = 0; i < 3; i++) {
-    const a = (i / 3) * Math.PI * 2 + Math.PI / 2;
-    const spoke = add(MeshBuilder.CreateBox("spoke", { width: 0.16, height: 0.018, depth: 0.012 }, scene), steel, wheel);
-    spoke.position.set(Math.cos(a) * 0.09, Math.sin(a) * 0.09, 0);
-    spoke.rotation.z = a;
-  }
-  const throttleLever = add(MeshBuilder.CreateBox("throttle", { width: 0.03, height: 0.16, depth: 0.03 }, scene), steel);
-  throttleLever.position.set(helmX + 0.36, FLOOR + 0.72, 0.62);
-  throttleLever.rotation.x = 0.4;
+  const glovebox = add(roundedBox("paxGlovebox", scene, 0.42, 0.18, 0.01, 0.03), blackGloss);
+  glovebox.position.set(-0.5, FLOOR + 0.42, 0.548);
+  add(MeshBuilder.CreateTube("paxGrab", { path: [new Vector3(-0.68, FLOOR + 0.62, 0.6), new Vector3(-0.68, FLOOR + 0.7, 0.58), new Vector3(-0.32, FLOOR + 0.7, 0.58), new Vector3(-0.32, FLOOR + 0.62, 0.6)], radius: 0.012, tessellation: 8 }, scene), steel);
 
   // ---------- bancos ----------
-  const seat = (x: number) => {
-    add(MeshBuilder.CreateCylinder("pedestal", { height: 0.32, diameter: 0.09 }, scene), steel).position.set(x, FLOOR + 0.16, -0.22);
+  const seat = (x: number, dz: number) => {
+    add(MeshBuilder.CreateCylinder("pedestal", { height: 0.32, diameter: 0.09 }, scene), steel).position.set(x, FLOOR + 0.16, -0.22 + dz);
     const cushion = add(roundedBox("cushion", scene, 0.52, 0.12, 0.5, 0.05), vinyl);
-    cushion.position.set(x, FLOOR + 0.38, -0.22);
+    cushion.position.set(x, FLOOR + 0.38, -0.22 + dz);
     const back = add(roundedBox("seatBack", scene, 0.52, 0.48, 0.11, 0.05), vinyl);
-    back.position.set(x, FLOOR + 0.66, -0.5);
+    back.position.set(x, FLOOR + 0.66, -0.5 + dz);
     back.rotation.x = -0.18;
     const shell = add(roundedBox("seatShell", scene, 0.54, 0.4, 0.05, 0.04), vinylNavy);
-    shell.position.set(x, FLOOR + 0.64, -0.575);
+    shell.position.set(x, FLOOR + 0.64, -0.575 + dz);
     shell.rotation.x = -0.18;
   };
-  seat(helmX);
-  seat(-0.5);
+  seat(helmX, 0.14); // banco do piloto mais perto do console (braços confortáveis)
+  seat(-0.5, 0);
   const benchW = inBeam(-2.2) * 2 - 0.06;
   add(roundedBox("benchCushion", scene, benchW, 0.13, 0.5, 0.05), vinyl).position.set(0, FLOOR + 0.36, -2.15);
   add(roundedBox("benchBase", scene, benchW, 0.3, 0.46, 0.04), gelcoat).position.set(0, FLOOR + 0.15, -2.15);
@@ -356,23 +281,7 @@ export const buildBoat = (scene: Scene): BoatVisual => {
   };
   add(MeshBuilder.CreateCylinder("lightPole", { height: 0.82, diameter: 0.025 }, scene), steel).position.set(0, sheerY(-2.62) + 0.43, -2.62);
 
-  // ---------- piloto ----------
-  const skin = pbr(scene, "skin", new Color3(0.82, 0.62, 0.48), 0, 0.6);
-  const vest = pbr(scene, "vest", new Color3(1, 0.42, 0.05), 0, 0.5);
-  const shorts = pbr(scene, "shorts", new Color3(0.12, 0.2, 0.32), 0, 0.7);
-  const torso = add(MeshBuilder.CreateCapsule("pilotTorso", { radius: 0.17, height: 0.62 }, scene), vest);
-  torso.position.set(helmX, FLOOR + 0.74, -0.3);
-  torso.rotation.x = 0.12;
-  add(MeshBuilder.CreateSphere("pilotHead", { diameter: 0.24, segments: 12 }, scene), skin).position.set(helmX, FLOOR + 1.16, -0.25);
-  const capM = add(MeshBuilder.CreateSphere("pilotCap", { diameter: 0.255, segments: 10, slice: 0.5 }, scene), vinylNavy);
-  capM.position.set(helmX, FLOOR + 1.19, -0.25);
-  add(MeshBuilder.CreateBox("capBrim", { width: 0.2, height: 0.012, depth: 0.12 }, scene), vinylNavy).position.set(helmX, FLOOR + 1.2, -0.12);
-  for (const side of [-1, 1]) {
-    const sh = new Vector3(helmX + side * 0.18, FLOOR + 0.92, -0.28);
-    const hand = new Vector3(helmX + side * 0.14, FLOOR + 0.84, 0.34);
-    add(MeshBuilder.CreateTube("arm", { path: [sh, Vector3.Lerp(sh, hand, 0.5).add(new Vector3(side * 0.05, -0.08, 0)), hand], radius: 0.045, tessellation: 8, cap: Mesh.CAP_ALL }, scene), skin);
-    add(MeshBuilder.CreateTube("leg", { path: [new Vector3(helmX + side * 0.1, FLOOR + 0.44, -0.2), new Vector3(helmX + side * 0.1, FLOOR + 0.44, 0.15), new Vector3(helmX + side * 0.1, FLOOR + 0.05, 0.25)], radius: 0.06, tessellation: 8, cap: Mesh.CAP_ALL }, scene), shorts);
-  }
+  // (piloto: presentation/pilot.ts)
 
   // ---------- motor de popa (pivô no espelho) ----------
   const engine = new TransformNode("enginePivot", scene);
@@ -492,7 +401,7 @@ export const buildBoat = (scene: Scene): BoatVisual => {
   meshes.push(disc);
 
   for (const m of meshes) m.isPickable = false;
-  return { root, engine, propeller, telltale, propBlur, wheel, speedNeedle, rpmNeedle, lights, cockpitLid, meshes };
+  return { root, engine, propeller, telltale, propBlur, lights, cockpitLid, meshes };
 };
 
 export const setNavLights = (v: BoatVisual, on: boolean): void => {
@@ -500,10 +409,3 @@ export const setNavLights = (v: BoatVisual, on: boolean): void => {
   v.lights.star.emissiveColor = on ? new Color3(0.1, 1, 0.25) : Color3.Black();
   v.lights.stern.emissiveColor = on ? new Color3(1, 1, 1) : Color3.Black();
 };
-
-/** Ângulo do ponteiro (rad) para valor/máx: 135° → 405° do mostrador. */
-export const needleAngle = (value: number, max: number): number => {
-  const f = Math.min(Math.max(value / max, 0), 1.02);
-  return Math.PI * 0.75 + f * Math.PI * 1.5 - Math.PI / 2;
-};
-

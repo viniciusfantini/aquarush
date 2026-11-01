@@ -12,6 +12,7 @@ import { G } from "./water.ts";
 import type { PhysicsWorld } from "./world.ts";
 import type { SpeedboatParams } from "./params.ts";
 import type { VehicleInput } from "../gameplay/vehicleInput.ts";
+import { EngineSystems } from "./engineSystems.ts";
 
 const RHO = 1000;     // água doce, kg/m³
 const RHO_AIR = 1.2;
@@ -48,6 +49,17 @@ export interface BoatTelemetry {
   collisions: number;
   lastImpact: number;    // N (intensidade do último impacto)
   engine: EngineState;   // motor desligado / dando partida / funcionando
+  // instrumentos (sistemas do motor)
+  fuelL: number;
+  fuelFrac: number;
+  coolantC: number;
+  batteryV: number;
+  engineHours: number;
+  overheatWarn: boolean;
+  protectMode: boolean;  // superaquecido: rotação limitada
+  lowFuel: boolean;
+  chargeWarn: boolean;
+  stall: "" | "fuel" | "overheat"; // último motivo de o motor ter morrido sozinho
   depth: number;         // profundidade sob o casco
   submergedPoints: boolean[];
 }
@@ -80,6 +92,8 @@ export class Speedboat {
   private revLimiting = false;
   private limiterPhase = 0;
   private lastThrust = 0;
+  /** combustível, arrefecimento, bateria e horímetro */
+  readonly systems = new EngineSystems();
   /** posição atual da hélice no mundo (gira com trim/tilt) */
   propWorld: Vec3 = v3();
   /** recolhimento (rad) além do fim do trim */
@@ -101,7 +115,7 @@ export class Speedboat {
     this.rpm = params.idleRpm;
     this.telemetry = {
       speedKmh: 0, waterSpeed: 0, rpm: params.idleRpm, throttle: 0, throttleCmd: 0, trim: 0, trimDeg: 0, tiltDeg: 0, tiltBlocked: false, intakeSubmerged: true, steerDeg: 0,
-      gear: "N", pitchDeg: 0, rollDeg: 0, wetFraction: 0, planing: false, thrustN: 0, ventilation: 1, cavitation: 0, propImmersion: 1, revLimiter: false, propSlip: 0, propRpm: 0, engine: "running", fuelLph: 0,
+      gear: "N", pitchDeg: 0, rollDeg: 0, wetFraction: 0, planing: false, thrustN: 0, ventilation: 1, cavitation: 0, propImmersion: 1, revLimiter: false, propSlip: 0, propRpm: 0, engine: "running", fuelL: 0, fuelFrac: 1, coolantC: 45, batteryV: 12.6, engineHours: 0, overheatWarn: false, protectMode: false, lowFuel: false, chargeWarn: false, stall: "", fuelLph: 0,
       distanceM: 0, collisions: 0, lastImpact: 0, depth: 0, submergedPoints: params.buoyancyPoints.map(() => false),
     };
   }
@@ -352,6 +366,13 @@ export class Speedboat {
     t.propRpm = this.propRpmState;
     t.fuelLph = this.engine === "running" ? 3 + 52 * Math.pow(this.throttleActual, 1.6) * (this.gear === "N" ? 0.3 : 1) : 0;
     t.engine = this.engine;
+    // sistemas do motor: combustível, temperatura, bateria, horímetro
+    const sys = this.systems;
+    sys.update(dt, { engine: this.engine, rpm: t.rpm, fuelLph: t.fuelLph, load: this.throttleActual, intakeSubmerged, lightsOn: input.navigationLights });
+    if (sys.stallReason && this.engine === "running") { this.engine = "off"; t.stall = sys.stallReason; }
+    t.fuelL = sys.fuelL; t.fuelFrac = sys.fuelFrac; t.coolantC = sys.coolantC; t.batteryV = sys.batteryV;
+    t.engineHours = sys.engineHours; t.overheatWarn = sys.overheatWarn; t.protectMode = sys.protect;
+    t.lowFuel = sys.lowFuel; t.chargeWarn = sys.chargeWarn;
     t.distanceM += Math.hypot(this.pos.x - oldPos.x, this.pos.z - oldPos.z);
     t.depth = water.getDepth(this.pos.x, this.pos.z);
     if (impact > 0) t.lastImpact = impact;
@@ -401,7 +422,9 @@ export class Speedboat {
       this.shiftTimer -= dt;
       if (this.shiftTimer <= 0 && this.throttleActual < 0.12) this.gear = this.wantGear;
     }
-    const target = this.gear === "N" || this.engine !== "running" ? 0 : cmd;
+    let target = this.gear === "N" || this.engine !== "running" ? 0 : cmd;
+    if (this.systems.protect) target = Math.min(target, 0.3);   // modo de proteção
+    if (this.systems.starving) target = Math.min(target, 0.05); // engasgando sem combustível
     this.throttleActual += (target - this.throttleActual) * (1 - Math.exp(-dt / P.engineResponse));
   }
 
@@ -409,10 +432,15 @@ export class Speedboat {
    * Ignição (tecla P): desliga o motor ou dá partida. Por segurança (como nos motores reais),
    * a partida só funciona em NEUTRO. Retorna o que aconteceu.
    */
-  toggleIgnition(): "stopped" | "starting" | "needNeutral" | "busy" {
+  toggleIgnition(): "stopped" | "starting" | "needNeutral" | "busy" | "noFuel" | "lowBattery" | "hot" {
     if (this.engine === "running") { this.engine = "off"; return "stopped"; }
     if (this.engine === "cranking") return "busy";
     if (this.gear !== "N") return "needNeutral";
+    const why = this.systems.canStart();
+    if (why === "fuel") return "noFuel";
+    if (why === "battery") return "lowBattery";
+    if (why === "overheat") return "hot";
+    this.telemetry.stall = "";
     this.engine = "cranking";
     this.crankTimer = 0.9 + Math.random() * 0.4;
     return "starting";
@@ -435,6 +463,9 @@ export class Speedboat {
     const freeRev = 1 + (1 - ventilation) * 0.25 + this.cavitation * 0.12 + (this.gear === "N" ? 0 : (1 - this.immersion) * 0.3);
     let target = P.idleRpm + (P.maxRpm - P.idleRpm) * Math.pow(thr, 0.85) * load * freeRev;
     // limitador de giro: corta a ignição em pulsos quando passa do limite
+    // modo de proteção (superaquecimento): a central limita a rotação; falta de combustível: engasga
+    if (this.systems.protect) target = Math.min(target, this.systems.p.protectRpm);
+    if (this.systems.starving) target = Math.min(target, P.idleRpm * 0.8);
     this.revLimiting = this.engine === "running" && target > P.revLimitRpm;
     if (this.revLimiting) {
       this.limiterPhase += dt * 9;

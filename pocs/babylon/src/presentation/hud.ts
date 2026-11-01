@@ -15,6 +15,14 @@ export class Hud {
   private gear = $("h-gear");
   private planing = $("h-planing");
   private engineChip = $("h-engine");
+  private fuelBar = $("h-fuel-bar");
+  private fuelTxt = $("h-fuel");
+  private tempTxt = $("h-temp");
+  private voltTxt = $("h-volt");
+  private hoursTxt = $("h-hours");
+  private hotChip = $("h-hot");
+  private lowFuelChip = $("h-lowfuel");
+  private chargeChip = $("h-charge");
   private cav = $("h-cav");
   private vent = $("h-vent");
   private water = $("h-water");
@@ -44,6 +52,17 @@ export class Hud {
     this.engineChip.textContent = t.engine === "running" ? "MOTOR LIGADO" : t.engine === "cranking" ? "DANDO PARTIDA…" : "MOTOR DESLIGADO";
     this.engineChip.className = "chip " + (t.engine === "running" ? "on" : t.engine === "cranking" ? "crank" : "off");
     this.cav.classList.toggle("warn", t.cavitation > 0.25);
+    // instrumentos (sistemas do motor)
+    this.fuelBar.style.width = `${(t.fuelFrac * 100).toFixed(1)}%`;
+    this.fuelBar.classList.toggle("low", t.lowFuel);
+    this.fuelTxt.textContent = `${Math.round(t.fuelFrac * 100)}% · ${t.fuelL.toFixed(0)} L`;
+    this.tempTxt.textContent = `${t.coolantC.toFixed(0)}°C${t.protectMode ? " PROTEÇÃO" : ""}`;
+    this.tempTxt.classList.toggle("hot", t.overheatWarn);
+    this.voltTxt.textContent = `${t.batteryV.toFixed(1)} V`;
+    this.hoursTxt.textContent = `${t.engineHours.toFixed(1).padStart(6, "0")} h`;
+    this.hotChip.classList.toggle("warn", t.overheatWarn);
+    this.lowFuelChip.classList.toggle("warn", t.lowFuel);
+    this.chargeChip.classList.toggle("warn", t.chargeWarn && t.engine === "running");
     this.vent.classList.toggle("warn", t.ventilation < 0.75 && t.throttle > 0.15 && t.propImmersion > 0.2);
     if (this.debugOn) {
       const rows: [string, string][] = [

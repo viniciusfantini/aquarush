@@ -16,6 +16,8 @@ src/
     water.ts                IWaterSurface + GerstnerWater (altura, normal, correnteza, profundidade)
     world.ts                relevo do lago (função), rochas/píer (colisores), zona de correnteza
     params.ts               PARÂMETROS DOCUMENTADOS da lancha (contrato comum entre as 3 POCs)
+    engineSystems.ts        combustível, arrefecimento, bateria/alternador, horímetro
+    wake.ts                 histórico da esteira (física + visual)
     boat.ts                 corpo rígido 6DOF + SpeedboatController (forças e torques)
   gameplay/vehicleInput.ts  contrato VehicleInput (GDD 9.2)
   platform/input.ts         adaptadores teclado / gamepad / touch → VehicleInput
@@ -24,7 +26,9 @@ src/
     wakeMap.ts              mapa de esteira top-down (V de Kelvin, espuma da hélice, fervura de cavitação)
     waterInteraction.ts     orquestra o mapa de esteira + partículas (spray, rooster tail, bolhas, névoa)
     environment.ts          terreno, rochas, árvores, píer, marina
-    boatMesh.ts             lancha procedural detalhada (PBR), painel com ponteiros, motor e hélice de 3 pás
+    boatMesh.ts             lancha procedural detalhada (PBR), motor e hélice de 3 pás
+    helm.ts                 posto do piloto: painel com instrumentos, volante, manete F/N/R, chave
+    pilot.ts                piloto com braços por IK (mãos no volante e na manete)
     cameras.ts              externa (mola + órbita) e cockpit
     hud.ts                  HUD que lê só a telemetria real
     audio.ts                motor/água procedurais (Web Audio)
@@ -48,6 +52,7 @@ A lancha é um **corpo rígido 6DOF** (massa de 1200 kg, tensor de inércia diag
 | Tilt (recolher) | segurando trim+ no fim do curso, a rabeta gira até +60° em torno do pivô no espelho. Funciona **engatado e andando em baixa rotação** (modo água rasa). O que bloqueia é a **carga no pé**: empuxo > 1800 N, rotação > 2200 rpm ou mais de 29 km/h. A velocidade de recolhimento cai com o empuxo. A posição da hélice e da entrada d'água giram junto: a hélice sai da água (sem empuxo) e o esguicho para. Em velocidade/rotação alta o tilt é bloqueado, como no power trim real |
 | Trim | inclina o vetor de empuxo e age como flap da rabeta (força ∝ u² na popa). **Muda a atitude e a velocidade de fato** |
 | Manete F / N / R | a marcha pedida vem de `VehicleInput.gear`. Toda troca passa por N com 0,45 s (embreagem da rabeta) e só engrena com o acelerador em lenta. Em N o empuxo é zero. Engrenado em lenta, o motor dá 4 % do empuxo (≈ 5 km/h para frente e ≈ 3 km/h em ré) |
+| Sistemas do motor (v0.9) | **Combustível**: tanque de 120 L, consumo pela carga (3 L/h em lenta a ~55 L/h a toda); perto do fim o motor engasga e depois morre; sem combustível não pega. **Temperatura**: termostato ~58–64 °C (aquece em ~1–2 min); sem água na entrada do pé sobe ~2 °C/s → alarme a 85 °C, **proteção a 90 °C** (limita a 2000 rpm e 30 % de acelerador), **desliga a 115 °C**; desligado esfria devagar e só pega abaixo de 90 °C. **Bateria** de 75 Ah: 11,9–12,7 V em repouso, regulador 13,6–14,2 V com o alternador (> 900 rpm), queda de ~1,9 V na partida; abaixo de 15 % o arranque não gira. **Horímetro** soma o tempo ligado (salvo no navegador) |
 | Cavitação | índice = f(carga × escorregamento da hélice). Com carga alta e pouca velocidade (arrancada), perde até 30 % do empuxo e o RPM sobe. Some em cruzeiro |
 | Hélice × superfície (v0.8) | **imersão** = fração do disco (R = 0,19 m) dentro d'água; empuxo × imersão^1,5. **Aeração**: com o disco raso a hélice puxa ar e perde até 50 % a mais. **No ar**: sem carga, o motor sobe até o **limitador** (6100 rpm), que corta a ignição em pulsos (som de "bap-bap"). Em N a hélice gira solta: freada pela água quando imersa, quase sem freio no ar |
 | Agarre lateral do casco | sustentação lateral da quilha/strakes ∝ u·v_lateral, aplicada perto do CG (sem efeito cata-vento), mais amortecimento de guinada. A lancha derrapa ~7° numa curva forte e, ao soltar o volante, a guinada morre em ~0,7 s **sem voltar para o lado oposto** (antes voltava ~16°) |
@@ -123,12 +128,13 @@ Limitação: é uma síntese aproximada, não uma gravação. Validar o timbre d
 | Tilt | trim máx navegando: tilt bloqueado e hélice na água; parado: recolhe a 60°, entrada d'água fora, empuxo 0 acelerando; trim− baixa de volta a 0° |
 | Tilt engatado | a 12 km/h engatado (1480 rpm): o tilt sobe (12,7° em 2 s). Navegando a 49 km/h: bloqueado |
 | Hélice no ar/aflorando | recolhido acelerando: imersão 0, empuxo 0, rpm 5941 com limitador ativo. Meio disco submerso (imersão 0,51): empuxo = 32 % do submerso |
+| Sistemas do motor | 2 min a toda: 1,82 L, 0,0333 h no horímetro, 60,8 °C, 14,2 V. Recolhido e ligado: proteção aos 28 s, desliga sozinho aos 60 s, partida recusada quente, abaixo de 90 °C após 3 min. Sem combustível: morre e não pega; bateria em repouso 12,6 V |
 | Ignição | desliga em movimento; desligado, empuxo 0 mesmo acelerando; RPM vai a 0; partida engatado é recusada; em N dá partida e pega na lenta (750–1200 rpm) |
 | 5. Manete | de cruzeiro para N: empuxo 0 e < 1 km/h em 27 s; a hélice gira **solta** (~990 rpm 1,5 s depois do N) e para junto com a lancha. F em lenta: 5,0 km/h a 750 rpm. R em lenta: 2,8 km/h para trás. No navegador: 1 toque W = F a 4 km/h; segurar = 45 km/h; 1 toque S = N; 2º toque = R lenta; segurar S = ré acelerando |
 | 6. Ondas e correnteza | ondas fortes (×2,5): roll ≤ 30°, não emborca; deriva com correnteza de 1,6 m/s: 1,54 m/s |
 | Lago | flutua no spawn; a toda contra a margem, encalha e para sem atravessar o terreno |
 
-Resultado: **74/75 OK**, com 1 limitação conhecida (abaixo). Na v0.2 a hélice foi para 0,5 m atrás do espelho, como no modelo visual, e o esterço máximo em alta velocidade caiu de 13° para 11°.
+Resultado: **86/87 OK**, com 1 limitação conhecida (abaixo). Na v0.2 a hélice foi para 0,5 m atrás do espelho, como no modelo visual, e o esterço máximo em alta velocidade caiu de 13° para 11°.
 
 ### Navegador (Chrome, Windows 11, WebGL2, `q=med`, ~1370×896)
 
