@@ -886,6 +886,44 @@ for (const [label, thr] of [["baixa", 0.25], ["alta", 1]] as const) {
   check("canal", "boias laterais na água funda do canal", Math.min(...CHANNEL_MARKERS.map((m) => -groundHeight(m.x, m.z))), 1.5, 10, "m", 2);
 }
 
+// ---------- Motor baixando no chão (na carretinha) e desacoplar/acoplar a carretinha ----------
+{
+  const flat: PhysicsWorld = { groundHeight: () => 0, spheres: [], boxes: [] };
+  const water = mkWater(0);
+  for (const P of [SPEEDBOAT, DINGHY]) {
+    // barco na carretinha em terra (quilha na altura do berço, como no reboque), motor todo levantado; o piloto baixa
+    const b = new Speedboat(P, v3(0, buildTrailer(P).clear - Math.min(...P.bunkPoints.map((p) => p.y)), 0), 0);
+    b.tilt = P.tiltMax; if (P.trimMode === "power") b.trim = 1;
+    let minClear = 9;
+    const lower = (secs: number) => { for (let i = 0; i < secs / DT; i++) { b.carriedStep(DT, P.trimMode === "manual" && i % 30 === 0 ? -1 : P.trimMode === "manual" ? 0 : -1, water, flat); const tip = b.lowerUnitTip(); minClear = Math.min(minClear, tip.y); } };
+    lower(8);
+    check("carretinha", `${P.kind}: baixando o motor na carretinha, o pé não entra no chão (m)`, minClear, 0, 3, "m", 2);
+    check("carretinha", `${P.kind}: o motor para apoiado no chão (não abaixa todo, tilt °)`, b.tilt * 57.3, 1, P.tiltMax * 57.3, "°", 0);
+    check("carretinha", `${P.kind}: baixar o motor contra o chão avaria o pé (%)`, b.engineDamage * 100, 4, 100, "%", 0);
+    if (P.trimMode === "power") check("carretinha", `${P.kind}: segurar o botão de baixar contra o chão avaria mais (% em 8 s)`, b.engineDamage * 100, 30, 100, "%", 0);
+  }
+  // desacoplar e acoplar
+  const tr = buildTrailer(SPEEDBOAT);
+  const rig = new TowRig(tr, TOW_SPECS.pickup, () => 0);
+  rig.placeAt(0, 0, Math.PI / 2);
+  const t0 = rig.trailerPose();
+  check("carretinha", "I desacopla", rig.toggleCoupling() === "uncoupled" ? 1 : 0, 1, 1, "", 0);
+  for (let i = 0; i < 3 / DT; i++) rig.update(DT, { up: 1, down: 0, steer: 0 });
+  const t1 = rig.trailerPose();
+  check("carretinha", "desacoplada: o carro sai e a carretinha fica parada (m)", Math.hypot(t1.x - t0.x, t1.z - t0.z), 0, 0.001, "m", 3);
+  for (let i = 0; i < 3 / DT; i++) rig.update(DT, { up: 0, down: rig.v > 0.05 ? 1 : 0, steer: 0 }); // freia até parar
+  check("carretinha", "longe: não acopla", typeof rig.toggleCoupling() === "object" ? 1 : 0, 1, 1, "", 0);
+  // ré devagar e freia quando a bola chega no acoplador
+  for (let i = 0; i < 40 / DT && !(rig.couplerGap < 0.3 && Math.abs(rig.v) < 0.05); i++) {
+    const close = rig.couplerGap < 1.5;
+    rig.update(DT, { up: rig.v < -0.05 && (close || rig.v < -1.2) ? 1 : 0, down: rig.couplerGap > 0.3 && rig.v > (close ? -0.3 : -1.0) ? 0.5 : 0, steer: 0 });
+  }
+  check("carretinha", "de ré o carro para antes de atravessar a carretinha (bola a m)", rig.couplerGap, 0, 0.6, "m", 2);
+  check("carretinha", "encostado: I acopla de novo", rig.toggleCoupling() === "coupled" ? 1 : 0, 1, 1, "", 0);
+  for (let i = 0; i < 3 / DT; i++) rig.update(DT, { up: 1, down: 0, steer: 0 });
+  check("carretinha", "acoplada: a carretinha vem junto (m andados)", Math.hypot(rig.trailerPose().x - t0.x, rig.trailerPose().z - t0.z), 5, 100, "m", 1);
+}
+
 // ---------- Carga: gasolina e ocupantes (quantidade e posição) ----------
 {
   const water = mkWater(0);

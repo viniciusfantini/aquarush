@@ -59,6 +59,10 @@ export class TowRig {
   sliding = false;
   /** rodas traseiras na água (a ré trava) */
   wheelsInWater = false;
+  /** carretinha acoplada no engate do veículo? (I desacopla/acopla) */
+  coupled = true;
+  /** acoplador da carretinha parado no chão quando desacoplada (apoiado no macaquinho) */
+  private loose = { x: 0, z: 0 };
   /** obstáculos (prédios, bombas, outro veículo estacionado): o veículo/carretinha param ao encostar */
   obstacles: Obb[] = [];
   /** encostou num obstáculo neste passo */
@@ -82,11 +86,33 @@ export class TowRig {
     this.yaw = Math.PI; this.v = 0; this.steer = 0;
     this.rx = this.t.cx; this.rz = hz - this.spec.rearToHitch;
     this.ax = this.t.cx; this.az = hz + this.hitchToAxle;
+    this.coupled = true;
   }
 
-  get hitch(): { x: number; z: number } {
+  /** bola do engate do veículo */
+  get ball(): { x: number; z: number } {
     return { x: this.rx - Math.sin(this.yaw) * this.spec.rearToHitch, z: this.rz - Math.cos(this.yaw) * this.spec.rearToHitch };
   }
+  /** acoplador da carretinha (na bola quando acoplada; parado no chão quando solta) */
+  get hitch(): { x: number; z: number } { return this.coupled ? this.ball : this.loose; }
+
+  /**
+   * I: desacopla a carretinha (fica parada, apoiada no macaquinho) ou acopla de novo — para acoplar, a bola do
+   * engate tem de estar a ≤ 0,6 m do acoplador, com o veículo alinhado (±35°) e parado.
+   */
+  toggleCoupling(): "uncoupled" | "coupled" | { far: number } | "align" | "moving" {
+    if (this.coupled) { this.loose = { ...this.ball }; this.coupled = false; return "uncoupled"; }
+    const b = this.ball, d = Math.hypot(b.x - this.loose.x, b.z - this.loose.z);
+    if (Math.abs(this.v) > 0.3) return "moving";
+    if (d > 0.6) return { far: d };
+    const yt = Math.atan2(this.loose.x - this.ax, this.loose.z - this.az); // rumo eixo→acoplador
+    let e = yt - this.yaw; while (e > Math.PI) e -= 2 * Math.PI; while (e < -Math.PI) e += 2 * Math.PI;
+    if (Math.abs(e) > 35 * Math.PI / 180) return "align";
+    this.coupled = true;
+    return "coupled";
+  }
+  /** distância da bola do engate ao acoplador solto (m) — para guiar a ré */
+  get couplerGap(): number { const b = this.ball; return this.coupled ? 0 : Math.hypot(b.x - this.loose.x, b.z - this.loose.z); }
   /** ângulo entre veículo e carretinha (rad; 0 = alinhados) */
   get articulation(): number {
     const h = this.hitch;
@@ -135,8 +161,15 @@ export class TowRig {
     this.wheelSpin += (this.v * dt) / S.wheelR;
     this.rx += Math.sin(this.yaw) * this.v * dt;
     this.rz += Math.cos(this.yaw) * this.v * dt;
-    // carretinha: o eixo fica a distância fixa do engate, puxado/empurrado por ele (tractrix)
+    // carretinha: o eixo fica a distância fixa do engate, puxado/empurrado por ele (tractrix); solta, fica parada
     const h = this.hitch;
+    if (!this.coupled) {
+      // o veículo não atravessa a carretinha parada (nem os obstáculos)
+      this.blocked = false;
+      const car = this.carObb();
+      if ([...this.obstacles, this.trailerObb()].some((o) => obbOverlap(car, o))) { Object.assign(this, prev); this.v = 0; this.blocked = true; }
+      return;
+    }
     const dx = this.ax - h.x, dz = this.az - h.z, d = Math.hypot(dx, dz) || 1;
     const oax = this.ax, oaz = this.az;
     this.ax = h.x + (dx / d) * this.hitchToAxle;
@@ -145,7 +178,7 @@ export class TowRig {
     const tdir = (this.ax - oax) * -(dx / d) + (this.az - oaz) * -(dz / d);
     this.trailerWheelSpin += tdir / (this.t.kind === "lancha" ? 0.33 : 0.23);
     // canivete: o cabeçalho encosta no para-choque a ~80° — daí em diante a carretinha é arrastada junto
-    const art = this.articulation, lim = MAX_ARTICULATION;
+    const art = this.articulation, lim = MAX_ARTICULATION; // (só acoplada)
     if (Math.abs(art) > lim) {
       const yt = this.yaw + Math.sign(art) * lim; // rumo eixo→engate permitido
       this.ax = h.x - Math.sin(yt) * this.hitchToAxle;
@@ -178,7 +211,7 @@ export class TowRig {
   /** Estaciona numa vaga: veículo de frente para `yaw`, centro em (x, z), carretinha alinhada atrás. */
   placeAt(x: number, z: number, yaw: number): void {
     const S = this.spec;
-    this.yaw = yaw; this.v = 0; this.steer = 0;
+    this.yaw = yaw; this.v = 0; this.steer = 0; this.coupled = true;
     this.rx = x - Math.sin(yaw) * S.wheelbase / 2; this.rz = z - Math.cos(yaw) * S.wheelbase / 2;
     const h = this.hitch;
     this.ax = h.x - Math.sin(yaw) * this.hitchToAxle; this.az = h.z - Math.cos(yaw) * this.hitchToAxle;

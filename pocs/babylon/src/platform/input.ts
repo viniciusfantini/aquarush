@@ -5,7 +5,7 @@
 import { type VehicleInput, type GearCommand, emptyInput } from "../gameplay/vehicleInput.ts";
 import { approach, clamp } from "../sim/math.ts";
 
-export type Action = "camera" | "lights" | "reset" | "ramp" | "unhitch" | "fuel" | "moor" | "car" | "horn" | "debug" | "help" | "pause" | "ignition" | "occupants" | "water0" | "water1" | "water2" | "water3" | "waterNext";
+export type Action = "camera" | "lights" | "reset" | "ramp" | "unhitch" | "fuel" | "moor" | "car" | "horn" | "couple" | "debug" | "help" | "pause" | "ignition" | "occupants" | "water0" | "water1" | "water2" | "water3" | "waterNext";
 
 /**
  * Manete única (como numa lancha real), com detentes  R ← N → F:
@@ -50,7 +50,7 @@ export class InputManager {
       this.keys.add(e.code);
       this.lastDevice = "teclado";
       const map: Record<string, Action> = {
-        KeyC: "camera", KeyL: "lights", KeyR: "reset", KeyT: "ramp", KeyU: "unhitch", KeyF: "fuel", KeyM: "moor", KeyK: "car", KeyB: "horn", F3: "debug", KeyH: "help", KeyP: "ignition", Escape: "pause", KeyO: "occupants",
+        KeyC: "camera", KeyL: "lights", KeyR: "reset", KeyT: "ramp", KeyU: "unhitch", KeyF: "fuel", KeyM: "moor", KeyK: "car", KeyB: "horn", KeyI: "couple", F3: "debug", KeyH: "help", KeyP: "ignition", Escape: "pause", KeyO: "occupants",
         Digit0: "water0", Digit1: "water1", Digit2: "water2", Digit3: "water3", KeyG: "water0", KeyV: "waterNext",
       };
       const a = map[e.code];

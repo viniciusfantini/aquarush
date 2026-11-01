@@ -275,7 +275,9 @@ export class Speedboat {
     // sem ninguém no posto de pilotagem (caiu na água), os comandos não fazem nada: volante/cana soltos,
     // acelerador na lenta, trim parado (a marcha fica onde estava)
     if (!this.occupants.some((o) => o.seat === "helm")) input = { ...NO_PILOT, gear: this.wantGear };
+    const driveBefore = this.driveSnapshot();
     this.updateControls(dt, input, u);
+    this.limitDriveOnGround(dt, world, driveBefore, input.trim);
 
     // ---------------- gravidade ----------------
     // massa variável: casco seco no CG de referência + gasolina no tanque + ocupantes nos bancos.
@@ -593,6 +595,36 @@ export class Speedboat {
     const tip = v3(P.propPos.x, P.propPos.y - P.propRadius - 0.06, P.propPos.z + 0.15);
     return this.toWorld(add(P.drivePivot, rotate(q, sub(tip, P.drivePivot))));
   }
+  /** Ângulo atual do pé (trim + tilt) e estado para desfazer um movimento de trim/tilt. */
+  private driveSnapshot() {
+    const P = this.params;
+    const trimAngle = P.trimMode === "manual" ? this.manualAngle : this.trim >= 0 ? this.trim * P.trimUp : -this.trim * P.trimDown;
+    return { trim: this.trim, tilt: this.tilt, manual: this.manualAngle, angle: trimAngle + this.tilt };
+  }
+  private driveOnGroundT = 0;
+  private pushDamageAcc = 0;
+  /**
+   * Baixar o motor (trim/tilt) com o pé encostando no chão — barco na carretinha, encalhado ou em água rasa:
+   * o motor PARA no chão (não atravessa a terra nem a carretinha) e forçar contra o chão AVARIA o pé
+   * (5 % na batida + 12 %/s segurando o botão de baixar).
+   */
+  private limitDriveOnGround(dt: number, world: PhysicsWorld, before: { trim: number; tilt: number; manual: number; angle: number }, trimIn: number): void {
+    const now = this.driveSnapshot();
+    if (now.angle >= before.angle - 1e-7) { this.driveOnGroundT = Math.max(0, this.driveOnGroundT - dt); return; }
+    const tip = this.lowerUnitTip();
+    if (tip.y > world.groundHeight(tip.x, tip.z) + 0.04) { this.driveOnGroundT = Math.max(0, this.driveOnGroundT - dt); return; }
+    // encostou: desfaz o movimento (o motor fica apoiado no chão)
+    this.trim = before.trim; this.tilt = before.tilt; this.manualAngle = before.manual;
+    if (this.params.trimMode === "manual" && this.tilt > 0.02) this.tiltWanted = true; // (tilt manual: fica apoiado/travado)
+    const first = this.driveOnGroundT <= 0;
+    this.driveOnGroundT = 0.4;
+    // segurando o botão de baixar contra o chão: avaria acumulada (aplicada a cada 1 %)
+    if (trimIn < -0.05) this.pushDamageAcc += 0.12 * dt;
+    let amt = first ? 0.05 : 0;
+    if (this.pushDamageAcc >= 0.01) { amt += this.pushDamageAcc; this.pushDamageAcc = 0; }
+    if (amt > 0) this.addDamage("engine", amt, "Avaria no motor: baixou o motor contra o chão — levante (E)");
+  }
+
   /** Topo do capô do motor no mundo (para batidas no carro com o motor levantado). */
   cowlTop(): Vec3 {
     const P = this.params;
@@ -669,9 +701,11 @@ export class Speedboat {
    * veículo (o motor fica em lenta, na marcha em que estava). Fora d'água a entrada de refrigeração não
    * pega água: o motor esquenta como no mundo real (alarme → proteção → desliga).
    */
-  carriedStep(dt: number, trimIn: number, water: IWaterSurface): void {
+  carriedStep(dt: number, trimIn: number, water: IWaterSurface, world?: PhysicsWorld): void {
     const P = this.params, t = this.telemetry;
+    const driveBefore = this.driveSnapshot();
     this.updateControls(dt, { ...NO_PILOT, trim: trimIn, gear: this.wantGear }, 0);
+    if (world) this.limitDriveOnGround(dt, world, driveBefore, trimIn);
     const trimAngle = P.trimMode === "manual" ? this.manualAngle : this.trim >= 0 ? this.trim * P.trimUp : -this.trim * P.trimDown;
     const q = qFromAxisAngle(v3(1, 0, 0), trimAngle + this.tilt);
     const propW = this.toWorld(add(P.drivePivot, rotate(q, sub(P.propPos, P.drivePivot))));

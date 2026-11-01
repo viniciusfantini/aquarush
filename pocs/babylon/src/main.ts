@@ -36,7 +36,7 @@ import { BoatCamera } from "./presentation/cameras.ts";
 import { Hud } from "./presentation/hud.ts";
 import { EngineAudio } from "./presentation/audio.ts";
 
-const BUILD = "poc-babylon 0.26.0";
+const BUILD = "poc-babylon 0.27.0";
 /** Escala visual da rotação da hélice (proporcional ao RPM, abaixo do limite estroboscópico). */
 const PROP_VISUAL_SCALE = 0.12;
 
@@ -509,7 +509,17 @@ const boot = async () => {
     if (mode === "menu") return; // no menu os atalhos do jogo ficam desligados
     const boat = V.boat;
     if (a === "horn") { hornPulse = 0.22; return; } // toque curto (2 toques = 2 cliques/apertos)
-    if (a === "unhitch") { unhitch(); return; }
+    if (a === "unhitch") { if (carOnly) leaveCar(); else unhitch(); return; } // no carro: U volta o comando ao barco
+    if (a === "couple") {
+      if (!driving && !carOnly) { hud.showToast("I acopla/desacopla a carretinha quando você está no carro"); return; }
+      const r = V.rig.toggleCoupling();
+      if (r === "uncoupled") hud.showToast("Carretinha desacoplada (apoiada no macaquinho). Para acoplar: encoste a bola do engate de ré e aperte I");
+      else if (r === "coupled") hud.showToast("Carretinha acoplada ✓");
+      else if (r === "moving") hud.showToast("Pare o carro para acoplar");
+      else if (r === "align") hud.showToast("Alinhe o carro com a carretinha para acoplar");
+      else hud.showToast(`Encoste mais: a bola do engate está a ${r.far.toFixed(1)} m do acoplador`);
+      return;
+    }
     if (a === "moor") {
       if (carOnly) { hud.showToast("Você está no carro — K volta ao barco"); return; }
       if (boat.mooringLines.length) { boat.mooringLines = []; buoyField.release(); moorArmed = false; hud.showToast("Amarras soltas — afaste o barco"); moorWhere = ""; }
@@ -602,7 +612,7 @@ const boot = async () => {
         prevPos.copyFrom(curPos); prevRot.copyFrom(curRot);
         water.time += PHYSICS_DT; simTime += PHYSICS_DT;
         V.rig.update(PHYSICS_DT, cmd);
-        boat.carriedStep(PHYSICS_DT, cmd.trim, physWater);
+        boat.carriedStep(PHYSICS_DT, cmd.trim, physWater, world);
         const mb = boatOnTrailer.multiply(poseMatrix(V.rig.trailerPose()));
         const sc = new Vector3(), q = new Quaternion(), tr = new Vector3();
         mb.decompose(sc, q, tr);
@@ -714,7 +724,7 @@ const boot = async () => {
       // no carro com a carretinha vazia: velocidade e vaga
       const stall = parkedStall(V.rig.carObb(), V.rig.trailerObb(), Math.abs(V.rig.v));
       trailerChip.classList.add("show"); trailerChip.classList.toggle("ok", stall >= 0);
-      trailerChip.textContent = stall >= 0 ? `ESTACIONADO NA VAGA ${stall} ✓ · K volta ao barco`
+      trailerChip.textContent = !V.rig.coupled ? `CARRETINHA SOLTA · bola a ${V.rig.couplerGap.toFixed(1)} m do acoplador — encoste de ré e aperte I` : stall >= 0 ? `ESTACIONADO NA VAGA ${stall} ✓ · K volta ao barco`
         : `${V.kind === "lancha" ? "CAMINHONETE" : "CARRO"} (carretinha vazia) · ${(Math.abs(V.rig.v) * 3.6).toFixed(0)} km/h${V.rig.v < -0.05 ? " (ré)" : ""}${V.rig.blocked ? " · BATEU!" : ""} · vagas ao sul do pátio do posto`;
       if (stall >= 0 && stall !== lastStall2) hud.showToast(`Estacionado na vaga ${stall}! O barco continua amarrado (${moorWhere}).`);
       lastStall2 = stall;
@@ -722,7 +732,8 @@ const boot = async () => {
     if (driving) {
       trailerChip.classList.add("show", "ok");
       const art = Math.abs(V.rig.articulation) * 180 / Math.PI;
-      trailerChip.textContent = fueling ? `ABASTECENDO · +${fuelAdded.toFixed(1)} L · ${boat.systems.fuelL.toFixed(1)}/${boat.systems.p.tankLiters} L`
+      if (!V.rig.coupled) trailerChip.textContent = `CARRETINHA SOLTA · bola do engate a ${V.rig.couplerGap.toFixed(1)} m do acoplador — encoste de ré e aperte I${V.rig.blocked ? " · BATEU!" : ""}`;
+      else trailerChip.textContent = fueling ? `ABASTECENDO · +${fuelAdded.toFixed(1)} L · ${boat.systems.fuelL.toFixed(1)}/${boat.systems.p.tankLiters} L`
         : bay.near ? (bay.ok ? (boat.engine !== "off" ? "BOMBA: desligue o motor do barco (P) e abasteça (F)" : "BOMBA: parado certo — F abastece o barco") : `BOMBA: ${bay.why}`)
         : `${V.kind === "lancha" ? "CAMINHONETE" : "CARRO"} · ${(Math.abs(V.rig.v) * 3.6).toFixed(0)} km/h${V.rig.v < -0.05 ? " (ré)" : ""} · carretinha ${art.toFixed(0)}°${art > 60 ? " — CANIVETE!" : ""}${V.rig.wheelsInWater ? " · RODAS NA ÁGUA: pare e solte o barco (U)" : ""}${V.rig.blocked ? " · BATEU!" : ""}${T.tiltDeg < 25 && !V.rig.wheelsInWater ? " · LEVANTE O MOTOR (E) — o pé arrasta no chão!" : ""}`;
     }
@@ -731,9 +742,10 @@ const boot = async () => {
       const K: [string, string, Action | null][] = [];
       if (mode !== "game") { /* menu: sem barra */ }
       else if (driving && bay.ok) K.push(["F", fueling ? "PARAR de abastecer" : "ABASTECER o barco", "fuel"], ["P", T.engine === "running" ? "desligar motor" : "motor desligado ✓", T.engine === "running" ? "ignition" : null], ["W", "sair", null], ["U", "desengatar", "unhitch"]);
-      else if (driving) K.push(["W", "frente", null], ["S", "freio / ré", null], ["A D", "direção", null], ["E Q", "motor (tilt)", null], ["P", T.engine === "running" ? "desligar motor" : V.kind === "bote" ? "corda" : "ligar motor", "ignition"], ["U", "DESENGATAR o barco", "unhitch"], ["R", "píer", "reset"]);
+      else if (driving && !V.rig.coupled) K.push(["W", "frente", null], ["S", "freio / ré", null], ["A D", "direção", null], ["I", "ACOPLAR a carretinha", "couple"], ["U", "voltar ao barco", "unhitch"], ["B", "buzina", "horn"]);
+      else if (driving) K.push(["I", "desacoplar carretinha", "couple"], ["W", "frente", null], ["S", "freio / ré", null], ["A D", "direção", null], ["E Q", "motor (tilt)", null], ["P", T.engine === "running" ? "desligar motor" : V.kind === "bote" ? "corda" : "ligar motor", "ignition"], ["U", "DESENGATAR o barco", "unhitch"], ["R", "píer", "reset"]);
       else if (T.capsized || boat.swimmers.length) K.push(["R", "recomeçar no píer", "reset"]);
-      else if (carOnly) K.push(["W", "frente", null], ["S", "freio / ré", null], ["A D", "direção", null], ["B", "buzina", "horn"], ["K", "VOLTAR ao barco", "car"], ["R", "píer", "reset"]);
+      else if (carOnly) K.push(["W", "frente", null], ["S", "freio / ré", null], ["A D", "direção", null], ["I", V.rig.coupled ? "desacoplar carretinha" : "ACOPLAR carretinha", "couple"], ["U", "VOLTAR ao barco", "unhitch"], ["B", "buzina", "horn"], ["R", "píer", "reset"]);
       else if (boat.mooringLines.length) K.push(["M", "SOLTAR as amarras", "moor"], ["K", "ir para o carro", "car"], ["P", T.engine === "running" ? "desligar motor" : V.kind === "bote" ? "corda" : "ligar motor", "ignition"], ["C", "câmera", "camera"]);
       else if (boat.winchStrap) K.push(["U", "DESENGATAR (soltar a cinta)", "unhitch"], ["E Q", "motor (tilt)", null]);
       else if (ld.near) K.push(["E", V.kind === "lancha" ? "levantar o motor" : "pino / tilt", null], ["W S", "marcha / acelerar", null], ["A D", "direção", null], ["T", "recomeçar a rampa", "ramp"]);
@@ -741,7 +753,7 @@ const boot = async () => {
       const key = K.map((k) => k[0] + k[1]).join("|");
       if (key !== ctxKey) {
         ctxKey = key;
-        ctxBar.innerHTML = K.map(([k, label, act]) => `<button class="ctx${act === "unhitch" || act === "moor" || act === "car" ? " hot" : ""}"${act ? ` data-a="${act}"` : " disabled"}>${k.split(" ").map((x) => `<kbd>${x}</kbd>`).join("")} ${label}</button>`).join("");
+        ctxBar.innerHTML = K.map(([k, label, act]) => `<button class="ctx${act === "unhitch" || act === "moor" || act === "car" || (act === "couple" && !V.rig.coupled) ? " hot" : ""}"${act ? ` data-a="${act}"` : " disabled"}>${k.split(" ").map((x) => `<kbd>${x}</kbd>`).join("")} ${label}</button>`).join("");
       }
     }
     if (T.damageCount !== lastDamage) { if (mode === "game") hud.showToast(T.damageEvent + (T.engineDamage >= 0.95 ? " — MOTOR QUEBRADO" : "")); lastDamage = T.damageCount; }
@@ -768,8 +780,8 @@ const boot = async () => {
 
     if (mode === "menu") cam.spin(dtReal, 0.22, 0.12); // prévia: câmera girando devagar em volta do barco
     cam.distScale = (V.kind === "bote" ? 0.62 : 1) * (driving ? 1.35 : 1);
-    if (carOnly) {
-      // câmera segue o veículo
+    if (carOnly || (driving && !V.rig.coupled)) {
+      // câmera segue o veículo (no carro sem o barco ou com a carretinha solta)
       const cp = V.rig.carPose();
       cam.distScale = V.kind === "lancha" ? 1.25 : 1.0;
       cam.update(dtReal, new Vector3(cp.x, cp.y, cp.z), Quaternion.FromEulerAngles(cp.pitch, cp.yaw, 0), Math.abs(V.rig.v));
