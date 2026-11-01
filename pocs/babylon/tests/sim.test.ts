@@ -7,6 +7,7 @@ declare const performance: { now(): number };
 import { Speedboat, NEUTRAL_REV_LIMIT } from "../src/sim/boat.ts";
 import { JUMP_AH } from "../src/sim/engineSystems.ts";
 import { Wind, WIND_LEVELS } from "../src/sim/wind.ts";
+import { jetStreakLocal } from "../src/sim/bilgeJet.ts";
 import { SPEEDBOAT, DINGHY, PERSON_KG, type Occupant } from "../src/sim/params.ts";
 import { GerstnerWater, WAVE_PRESETS, type CurrentZone } from "../src/sim/water.ts";
 import type { PhysicsWorld } from "../src/sim/world.ts";
@@ -627,6 +628,24 @@ for (const [label, thr] of [["baixa", 0.25], ["alta", 1]] as const) {
   run(hole, mkWater(0), 600, emptyInput(), flat);
   check("afundar", "furo de 60 % por 10 min, sem bomba: equilíbrio (água iguala o nível de fora) (L)", hole.bilgeL, 400, 1300, "L", 0);
   check("afundar", "furo de 60 %: pesado, mas não afunda nem alaga", !hole.telemetry.sunk && !hole.telemetry.swamped ? 1 : 0, 1, 1, "", 0);
+}
+
+
+// ---------- Jato da bomba de porão (linha de emissão vista do barco) ----------
+{
+  const o = SPEEDBOAT.bilge.outlet, g = v3(0, -9.81, 0);
+  const stop = (p: { y: number }) => p.y <= -0.25; // linha d'água local
+  const still = jetStreakLocal(o, 1, 0.85, g, v3(0, 0, 0), stop);
+  const end = still[still.length - 1];
+  check("jato", "parado: sai para fora do costado de boreste (m além da saída)", end.x - o.x, 0.1, 0.5, "m", 2);
+  check("jato", "parado: não vai para a proa nem para a popa (m)", Math.abs(end.z - o.z), 0, 0.02, "m", 3);
+  check("jato", "parado: cai até a água (tempo de queda, s)", (still.length - 1) * 0.01, 0.15, 0.45, "s", 2);
+  const fast = jetStreakLocal(o, 1, 0.85, g, v3(0, 0, -8), stop); // andando a ~29 km/h: vento aparente de proa
+  const endF = fast[fast.length - 1];
+  check("jato", "andando: o vento aparente curva o jato para a POPA (m)", endF.z - o.z, -0.6, -0.05, "m", 2);
+  check("jato", "andando: continua saindo para fora (m)", endF.x - o.x, 0.05, 0.5, "m", 2);
+  const port = jetStreakLocal(v3(-o.x, o.y, o.z), -1, 0.85, g, v3(0, 0, 0), stop);
+  check("jato", "saída em bombordo: jato para bombordo (m)", port[port.length - 1].x - -o.x, -0.5, -0.1, "m", 2);
 }
 
 // ---------- Vento: 5 níveis, deriva, banda, âncora ----------

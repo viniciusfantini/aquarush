@@ -3,6 +3,8 @@
 
 import { type Scene, Mesh, MeshBuilder, StandardMaterial, PBRMaterial, Color3, Color4, TransformNode, Vector3, LinesMesh, Quaternion } from "@babylonjs/core";
 import type { Speedboat } from "../sim/boat.ts";
+import { v3, rotateInv } from "../sim/math.ts";
+import { jetStreakLocal } from "../sim/bilgeJet.ts";
 import type { SpeedboatParams } from "../sim/params.ts";
 import type { IWaterSurface } from "../sim/water.ts";
 
@@ -127,20 +129,28 @@ export class BoatGearVis {
       this.foam?.setEnabled(on);
       for (const d of this.drops) d.setEnabled(on);
       if (!on || !water) return;
-      const p0 = T.bilgeJetPos, v0 = T.bilgeJetVel;
-      // tempo até cruzar a superfície (marcha em passos de 5 ms; no máx. 1 s)
-      let tHit = 1;
-      for (let t = 0.005; t <= 1; t += 0.005) {
-        const x = p0.x + v0.x * t, y = p0.y + v0.y * t - 0.5 * G * t * t, z = p0.z + v0.z * t;
-        if (y <= water.getHeight(x, z)) { tHit = t; break; }
-      }
-      const at = (t: number) => new Vector3(p0.x + v0.x * t, p0.y + v0.y * t - 0.5 * G * t * t, p0.z + v0.z * t);
-      // velocidade relativa ao barco (o ar e a água "veem" o jato saindo do costado): a seção afina ao cair (continuidade)
-      const vRel0 = Math.max(0.3, Q / this.P.bilge.outletAreaM2);
+      // O jato visível é a LINHA DE EMISSÃO: gotas soltas em instantes diferentes, todas carregando a velocidade do
+      // barco. No referencial do barco: saem pela mangueira (v = Q/A, para fora e um pouco para baixo), caem com a
+      // gravidade e o vento aparente (barco andando) as empurra para a popa. Depois vão para o mundo pela pose atual.
+      const B = this.P.bilge, sx = Math.sign(B.outlet.x) || 1;
+      const vOut = Math.max(0.3, Q / B.outletAreaM2);
+      const rot = boat.rot;
+      const gL = rotateInv(rot, v3(0, -G, 0));
+      const airL = rotateInv(rot, v3(-boat.vel.x, 0, -boat.vel.z)); // ar parado visto do barco
+      const M = this.root.computeWorldMatrix(true); // pose deste quadro (já interpolada)
+      const DT = 0.01;
+      const local = jetStreakLocal(B.outlet, sx, vOut, gL, airL, (q) => { const w = Vector3.TransformCoordinates(new Vector3(q.x, q.y, q.z), M); return w.y <= water.getHeight(w.x, w.z); }, DT);
+      const pts = local.map((q) => Vector3.TransformCoordinates(new Vector3(q.x, q.y, q.z), M));
+      const tHit = Math.max(DT, (pts.length - 1) * DT);
+      const at = (t: number) => {
+        const f = Math.min(pts.length - 1, (t / Math.max(tHit, DT)) * (pts.length - 1)), j = Math.floor(f), u = f - j;
+        return Vector3.Lerp(pts[j], pts[Math.min(j + 1, pts.length - 1)], u);
+      };
+      // seção do jato pela continuidade: afina conforme acelera na queda
       for (let i = 0; i < JET_N; i++) {
         const t = (tHit * i) / (JET_N - 1);
         this.streamPath[i] = at(t);
-        const vRel = Math.hypot(vRel0, G * t);
+        const vRel = Math.hypot(vOut, G * t);
         this.streamR[i] = Math.min(0.03, Math.max(0.004, Math.sqrt(Q / (Math.PI * vRel)))) * (1 - 0.35 * (i / (JET_N - 1)));
       }
       MeshBuilder.CreateTube("", { path: this.streamPath, radiusFunction: (i) => this.streamR[i] ?? 0.004, instance: this.stream });
