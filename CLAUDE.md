@@ -60,6 +60,8 @@ npm run dev            # abrir http://localhost:5173, F3 mostra a telemetria; wi
 | 2026-10-31 | Agarre lateral (`keelLift`) aplicado perto do CG + `yawDamping` alto, em vez de só arrasto lateral por ponto | O arrasto lateral distribuído criava efeito cata-vento: ao soltar o volante a lancha voltava para o lado oposto. Teste de regressão: "4 curva soltar" |
 | 2026-10-31 | Em N a hélice gira solta (arrastada pela água, inércia de 0,6 s) | Como num motor real com o câmbio desacoplado |
 | 2026-10-31 | Instrumentos vêm de `sim/engineSystems.ts` (combustível, temperatura, bateria, horímetro); painel 3D em `presentation/helm.ts`, piloto com IK em `presentation/pilot.ts` | Regra do GDD: HUD e painel só leem telemetria real. O horímetro persiste em `localStorage` (`aquarush.engineHours`); R reposiciona e abastece |
+| 2026-10-31 | `params.mass` = massa **seca**; gasolina e ocupantes são cargas pontuais em `Speedboat.occupants` / `systems.fuelL`, com peso aplicado na posição e inércia por Steiner | Pedido do usuário: a física respeita peso e posição. O jogo começa com 30 L (os testes usam o tanque cheio por padrão) |
+| 2026-10-31 | HUD com relógios SVG (`RoundGauge` em `hud.ts`): ponteiro e leitura digital na faixa livre de baixo do mostrador | Pedido do usuário: relógios redondos com indicação digital, sem sobreposição |
 | 2026-10-31 | Cavitação = f(carga × escorregamento) da hélice, com perda de até 30 % de empuxo | Aproximação documentada: aparece na arrancada e some em cruzeiro. Testada em `test:sim` |
 
 ## Ambiente do desenvolvedor

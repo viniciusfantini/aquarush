@@ -10,7 +10,8 @@ import {
 import type { IWaterSurface } from "./water.ts";
 import { G } from "./water.ts";
 import type { PhysicsWorld } from "./world.ts";
-import type { SpeedboatParams } from "./params.ts";
+import type { SpeedboatParams, Occupant } from "./params.ts";
+import { PERSON_KG } from "./params.ts";
 import type { VehicleInput } from "../gameplay/vehicleInput.ts";
 import { EngineSystems } from "./engineSystems.ts";
 
@@ -94,6 +95,34 @@ export class Speedboat {
   private lastThrust = 0;
   /** combustível, arrefecimento, bateria e horímetro */
   readonly systems = new EngineSystems();
+  /** Ocupantes (posição = banco). Padrão: só o piloto. */
+  occupants: Occupant[] = [{ seat: "helm", mass: PERSON_KG }];
+  totalMass = 0;
+  private inertia: Vec3 = v3();
+  private loads: { mass: number; pos: Vec3 }[] = [];
+
+  /** Recalcula cargas, massa total e inércia (eixos do casco, teorema dos eixos paralelos). */
+  private updateMassProperties(): void {
+    const P = this.params;
+    this.loads = [{ mass: this.systems.fuelL * P.fuelDensity, pos: P.fuelTankPos }];
+    for (const o of this.occupants) this.loads.push({ mass: o.mass, pos: P.seats[o.seat] });
+    let m = P.mass, ix = P.inertia.x, iy = P.inertia.y, iz = P.inertia.z;
+    for (const L of this.loads) {
+      m += L.mass;
+      ix += L.mass * (L.pos.y * L.pos.y + L.pos.z * L.pos.z);
+      iy += L.mass * (L.pos.x * L.pos.x + L.pos.z * L.pos.z);
+      iz += L.mass * (L.pos.x * L.pos.x + L.pos.y * L.pos.y);
+    }
+    this.totalMass = m;
+    this.inertia = v3(ix, iy, iz);
+  }
+
+  /** Centro de massa combinado (local) — para telemetria/HUD. */
+  get cgLocal(): Vec3 {
+    let m = this.params.mass, x = 0, y = 0, z = 0;
+    for (const L of this.loads) { m += L.mass; x += L.mass * L.pos.x; y += L.mass * L.pos.y; z += L.mass * L.pos.z; }
+    return v3(x / m, y / m, z / m);
+  }
   /** posição atual da hélice no mundo (gira com trim/tilt) */
   propWorld: Vec3 = v3();
   /** recolhimento (rad) além do fim do trim */
@@ -168,11 +197,15 @@ export class Speedboat {
     this.updateControls(dt, input, u);
 
     // ---------------- gravidade ----------------
+    // massa variável: casco seco no CG de referência + gasolina no tanque + ocupantes nos bancos.
+    // Cada peso age NA SUA POSIÇÃO (gera torque → trim/banda); massa total e inércia (Steiner) atualizadas.
+    this.updateMassProperties();
     this.F = add(this.F, v3(0, -P.mass * G, 0));
+    for (const L of this.loads) this.addForceAt(v3(0, -L.mass * G, 0), this.toWorld(L.pos), "buoy");
 
     // Sistema de ondas do próprio casco (Kelvin): no "hump" (Froude ~0.5) a proa sobe numa
     // onda e a popa fica num cavado -> a proa empina antes do planeio. Some ao planar.
-    const W = P.mass * G;
+    const W = this.totalMass * G;
     const fn = Math.abs(u) / Math.sqrt(G * P.length); // número de Froude
     const hump = fn < 0.5 ? (fn / 0.5) ** 2 : Math.exp(-(fn - 0.5) * 0.5);
     const selfWave = hump * clamp(1 - (fn - 0.5) * 0.6, 0, 1);
@@ -314,8 +347,8 @@ export class Speedboat {
     const impact = this.collide(world);
 
     // ---------------- integração (Euler semi-implícito) ----------------
-    this.vel = addScaled(this.vel, this.F, dt / P.mass);
-    const I = P.inertia;
+    this.vel = addScaled(this.vel, this.F, dt / this.totalMass);
+    const I = this.inertia;
     const tl = rotateInv(this.rot, this.T);
     const Iw = v3(I.x * angLocal.x, I.y * angLocal.y, I.z * angLocal.z);
     const gyro = cross(angLocal, Iw);

@@ -5,7 +5,7 @@ declare const performance: { now(): number };
 // Saída: tabela de medições + PASS/FAIL por critério. Código de saída != 0 se algo falhar.
 
 import { Speedboat } from "../src/sim/boat.ts";
-import { SPEEDBOAT } from "../src/sim/params.ts";
+import { SPEEDBOAT, PERSON_KG, type Occupant } from "../src/sim/params.ts";
 import { GerstnerWater, WAVE_PRESETS, type CurrentZone } from "../src/sim/water.ts";
 import type { PhysicsWorld } from "../src/sim/world.ts";
 import { buildWorld } from "../src/sim/world.ts";
@@ -323,6 +323,41 @@ for (const [label, thr] of [["baixa", 0.25], ["alta", 1]] as const) {
   run(b3, water, 1, { ...emptyInput(), gear: "N" });
   check("sistemas", "sem combustível: partida recusada", b3.toggleIgnition() === "noFuel" ? 1 : 0, 1, 1, "", 0);
   check("sistemas", "desligado: bateria em repouso (V)", b3.telemetry.batteryV, 12.2, 12.8, "V", 2);
+}
+
+// ---------- Carga: gasolina e ocupantes (quantidade e posição) ----------
+{
+  const water = mkWater(0);
+  const P = (seat: Occupant["seat"]): Occupant => ({ seat, mass: PERSON_KG });
+  const setup = (occ: Occupant[], fuelL: number) => {
+    const b = new Speedboat(SPEEDBOAT, v3(0, 0.25, 0));
+    b.occupants = occ; b.systems.fuelL = fuelL;
+    run(b, water, 25, emptyInput());
+    return b;
+  };
+  const solo = setup([P("helm")], 30);
+  const full = setup([P("helm"), P("passenger"), P("rearLeft"), P("rearRight")], 120);
+  const aft = setup([P("helm"), P("rearLeft"), P("rearRight")], 30);
+  const bal = setup([P("helm"), P("passenger")], 30);
+  check("carga", "massa total só piloto + 30 L (kg)", solo.totalMass, 1130, 1135, "kg", 1);
+  check("carga", "massa total lotada + 120 L (kg)", full.totalMass, 1438, 1442, "kg", 1);
+  check("carga", "lotada afunda mais (Δ altura do CG, cm)", (solo.pos.y - full.pos.y) * 100, 2, 20, "cm", 1);
+  check("carga", "2 na popa: proa sobe (Δ pitch parado, °)", aft.telemetry.pitchDeg - solo.telemetry.pitchDeg, 0.3, 6, "°");
+  check("carga", "piloto sozinho em boreste: banda p/ boreste (°)", solo.telemetry.rollDeg, 0.15, 3, "°");
+  check("carga", "com carona em bombordo: banda menor (°)", Math.abs(bal.telemetry.rollDeg), 0, Math.abs(solo.telemetry.rollDeg) * 0.5, "°");
+  // desempenho: lotada acelera e corre menos
+  const perf = (occ: Occupant[], fuelL: number) => {
+    const b = new Speedboat(SPEEDBOAT, v3(0, 0.25, 0));
+    b.occupants = occ; b.systems.fuelL = fuelL;
+    settle(b, water);
+    let t60 = -1;
+    run(b, water, 40, { ...emptyInput(), gear: "F", throttle: 1 }, openWater, (t) => { if (t60 < 0 && b.telemetry.speedKmh >= 60) t60 = t; });
+    return { t60, vmax: b.telemetry.speedKmh };
+  };
+  const pSolo = perf([P("helm")], 30), pFull = perf([P("helm"), P("passenger"), P("rearLeft"), P("rearRight")], 120);
+  check("carga", "0→60 só piloto (s)", pSolo.t60, 3, 10, "s");
+  check("carga", "0→60 lotada é mais lento (s a mais)", pFull.t60 - pSolo.t60, 0.3, 20, "s");
+  check("carga", "vel. máx lotada menor (km/h a menos)", pSolo.vmax - pFull.vmax, 1, 30, "km/h", 1);
 }
 
 // ---------- Esteira: cruzar a própria marola (a física sente a esteira) ----------

@@ -5,9 +5,8 @@
 import { type Scene, Mesh, MeshBuilder, PBRMaterial, Color3, TransformNode, Vector3, Quaternion } from "@babylonjs/core";
 import { HELM_X } from "./helm.ts";
 
+
 const FLOOR = 0.02;
-/** deslocamento do piloto para a proa (banco do piloto mais perto do console) */
-const DZ = 0.14;
 
 const pbr = (scene: Scene, name: string, c: Color3, rough = 0.6): PBRMaterial => {
   const m = new PBRMaterial(name, scene);
@@ -45,54 +44,64 @@ export interface Pilot {
   update(leftHand: Vector3, rightHand: Vector3): void;
 }
 
-export const buildPilot = (scene: Scene, root: TransformNode): Pilot => {
+export interface PersonOpts {
+  x: number;            // centro do banco (local)
+  zc: number;           // centro do assento (local, z)
+  prefix: string;       // prefixo dos nomes das malhas ("pilot" = escondido na câmera de cockpit)
+  skin: Color3; shirt: Color3; vest: Color3; shorts: Color3; cap: Color3; hair: Color3;
+}
+
+/** Pessoa sentada (proporções humanas, braços por IK). */
+export const buildPerson = (scene: Scene, root: TransformNode, o: PersonOpts): Pilot => {
   const meshes: Mesh[] = [];
   const add = (m: Mesh, mat: PBRMaterial) => { m.material = mat; m.parent = root; m.isPickable = false; meshes.push(m); return m; };
-  const skin = pbr(scene, "pSkin", new Color3(0.78, 0.57, 0.43), 0.55);
-  const shirt = pbr(scene, "pShirt", new Color3(0.06, 0.45, 0.55), 0.7);
-  const vest = pbr(scene, "pVest", new Color3(0.95, 0.4, 0.05), 0.55);
-  const shorts = pbr(scene, "pShorts", new Color3(0.82, 0.78, 0.66), 0.8);
-  const shoe = pbr(scene, "pShoe", new Color3(0.92, 0.92, 0.9), 0.5);
-  const capM = pbr(scene, "pCap", new Color3(0.06, 0.12, 0.28), 0.6);
-  const glasses = pbr(scene, "pGlasses", new Color3(0.02, 0.02, 0.03), 0.08);
-  const hair = pbr(scene, "pHair", new Color3(0.18, 0.12, 0.08), 0.8);
+  const k = o.prefix;
+  const skin = pbr(scene, k + "Skin", o.skin, 0.55);
+  const shirt = pbr(scene, k + "Shirt", o.shirt, 0.7);
+  const vest = pbr(scene, k + "VestM", o.vest, 0.55);
+  const shorts = pbr(scene, k + "ShortsM", o.shorts, 0.8);
+  const shoe = pbr(scene, k + "ShoeM", new Color3(0.92, 0.92, 0.9), 0.5);
+  const capM = pbr(scene, k + "CapM", o.cap, 0.6);
+  const glasses = pbr(scene, k + "GlassesM", new Color3(0.02, 0.02, 0.03), 0.08);
+  const hair = pbr(scene, k + "HairM", o.hair, 0.8);
 
-  const X = HELM_X;
+  const X = o.x;
+  const DZ = o.zc + 0.22; // o modelo foi feito para um assento centrado em z = −0,22
   // ---- tronco (levemente reclinado) ----
   const hips = new Vector3(X, FLOOR + 0.53, -0.27 + DZ);
   const chest = new Vector3(X, FLOOR + 0.97, -0.31 + DZ);
-  const pelvis = add(MeshBuilder.CreateSphere("pilotPelvis", { diameter: 1, segments: 12 }, scene), shorts);
+  const pelvis = add(MeshBuilder.CreateSphere(k + "Pelvis", { diameter: 1, segments: 12 }, scene), shorts);
   pelvis.scaling.set(0.34, 0.2, 0.28); pelvis.position.copyFrom(hips);
-  const torso = add(MeshBuilder.CreateCapsule("pilotTorso", { radius: 0.5, height: 2.2, tessellation: 16 }, scene), shirt);
+  const torso = add(MeshBuilder.CreateCapsule(k + "Torso", { radius: 0.5, height: 2.2, tessellation: 16 }, scene), shirt);
   torso.scaling.set(0.34, 0.25, 0.22);
   torso.position.copyFrom(hips.add(chest).scale(0.5).add(new Vector3(0, 0.02, 0)));
   torso.rotation.x = -0.09;
-  const vestM = add(MeshBuilder.CreateCapsule("pilotVest", { radius: 0.5, height: 1.6, tessellation: 16 }, scene), vest);
+  const vestM = add(MeshBuilder.CreateCapsule(k + "Vest", { radius: 0.5, height: 1.6, tessellation: 16 }, scene), vest);
   vestM.scaling.set(0.36, 0.22, 0.24);
   vestM.position.copyFrom(torso.position.add(new Vector3(0, 0.07, 0.005)));
   vestM.rotation.x = -0.09;
   // ombros
   const shL = chest.add(new Vector3(-0.19, 0.0, 0.0)), shR = chest.add(new Vector3(0.19, 0.0, 0.0));
-  for (const s of [shL, shR]) add(MeshBuilder.CreateSphere("pilotShoulder", { diameter: 0.11, segments: 10 }, scene), shirt).position.copyFrom(s);
+  for (const s of [shL, shR]) add(MeshBuilder.CreateSphere(k + "Shoulder", { diameter: 0.11, segments: 10 }, scene), shirt).position.copyFrom(s);
   // pescoço, cabeça, boné, óculos
-  const neck = add(MeshBuilder.CreateCylinder("pilotNeck", { height: 0.08, diameter: 0.085 }, scene), skin);
+  const neck = add(MeshBuilder.CreateCylinder(k + "Neck", { height: 0.08, diameter: 0.085 }, scene), skin);
   neck.position.set(X, FLOOR + 1.05, -0.3 + DZ);
   const headC = new Vector3(X, FLOOR + 1.17, -0.29 + DZ);
-  const head = add(MeshBuilder.CreateSphere("pilotHead", { diameter: 1, segments: 16 }, scene), skin);
+  const head = add(MeshBuilder.CreateSphere(k + "Head", { diameter: 1, segments: 16 }, scene), skin);
   head.scaling.set(0.18, 0.225, 0.2); head.position.copyFrom(headC);
-  const jaw = add(MeshBuilder.CreateSphere("pilotJaw", { diameter: 1, segments: 12 }, scene), skin);
+  const jaw = add(MeshBuilder.CreateSphere(k + "Jaw", { diameter: 1, segments: 12 }, scene), skin);
   jaw.scaling.set(0.14, 0.1, 0.14); jaw.position.copyFrom(headC.add(new Vector3(0, -0.06, 0.035)));
-  const nose = add(MeshBuilder.CreateBox("pilotNose", { width: 0.022, height: 0.04, depth: 0.03 }, scene), skin);
+  const nose = add(MeshBuilder.CreateBox(k + "Nose", { width: 0.022, height: 0.04, depth: 0.03 }, scene), skin);
   nose.position.copyFrom(headC.add(new Vector3(0, -0.005, 0.1)));
-  for (const s of [-1, 1]) add(MeshBuilder.CreateSphere("pilotEar", { diameter: 0.045, segments: 8 }, scene), skin).position.copyFrom(headC.add(new Vector3(s * 0.09, 0, 0)));
-  const hairM = add(MeshBuilder.CreateSphere("pilotHair", { diameter: 1, segments: 12, slice: 0.55 }, scene), hair);
+  for (const s of [-1, 1]) add(MeshBuilder.CreateSphere(k + "Ear", { diameter: 0.045, segments: 8 }, scene), skin).position.copyFrom(headC.add(new Vector3(s * 0.09, 0, 0)));
+  const hairM = add(MeshBuilder.CreateSphere(k + "Hair", { diameter: 1, segments: 12, slice: 0.55 }, scene), hair);
   hairM.scaling.set(0.19, 0.2, 0.21); hairM.position.copyFrom(headC.add(new Vector3(0, 0.01, -0.01)));
-  const capDome = add(MeshBuilder.CreateSphere("pilotCap", { diameter: 1, segments: 14, slice: 0.5 }, scene), capM);
+  const capDome = add(MeshBuilder.CreateSphere(k + "Cap", { diameter: 1, segments: 14, slice: 0.5 }, scene), capM);
   capDome.scaling.set(0.195, 0.2, 0.215); capDome.position.copyFrom(headC.add(new Vector3(0, 0.035, 0)));
-  const brim = add(MeshBuilder.CreateCylinder("pilotCapBrim", { height: 0.01, diameter: 1, tessellation: 20, arc: 0.5 }, scene), capM);
+  const brim = add(MeshBuilder.CreateCylinder(k + "CapBrim", { height: 0.01, diameter: 1, tessellation: 20, arc: 0.5 }, scene), capM);
   brim.scaling.set(0.17, 1, 0.16); brim.rotation.y = Math.PI / 2 + Math.PI / 2; brim.rotation.x = 0.12;
   brim.position.copyFrom(headC.add(new Vector3(0, 0.045, 0.1)));
-  const shades = add(MeshBuilder.CreateBox("pilotGlasses", { width: 0.17, height: 0.035, depth: 0.012 }, scene), glasses);
+  const shades = add(MeshBuilder.CreateBox(k + "Glasses", { width: 0.17, height: 0.035, depth: 0.012 }, scene), glasses);
   shades.position.copyFrom(headC.add(new Vector3(0, 0.02, 0.098)));
 
   // ---- pernas (sentado: coxa para frente, canela para baixo) ----
@@ -100,10 +109,10 @@ export const buildPilot = (scene: Scene, root: TransformNode): Pilot => {
     const hip = new Vector3(X + s * 0.1, FLOOR + 0.5, -0.24 + DZ);
     const knee = new Vector3(X + s * 0.12, FLOOR + 0.52, 0.16 + DZ);
     const ankle = new Vector3(X + s * 0.13, FLOOR + 0.09, 0.27 + DZ);
-    setLimb(add(MeshBuilder.CreateCylinder("pilotThigh", { height: 1, diameterTop: 0.12, diameterBottom: 0.15, tessellation: 12 }, scene), shorts), knee, hip);
-    add(MeshBuilder.CreateSphere("pilotKnee", { diameter: 0.115, segments: 10 }, scene), skin).position.copyFrom(knee);
-    setLimb(add(MeshBuilder.CreateCylinder("pilotShin", { height: 1, diameterTop: 0.105, diameterBottom: 0.075, tessellation: 12 }, scene), skin), knee, ankle);
-    const foot = add(MeshBuilder.CreateCapsule("pilotShoe", { radius: 0.045, height: 0.25, orientation: new Vector3(0, 0, 1) }, scene), shoe);
+    setLimb(add(MeshBuilder.CreateCylinder(k + "Thigh", { height: 1, diameterTop: 0.12, diameterBottom: 0.15, tessellation: 12 }, scene), shorts), knee, hip);
+    add(MeshBuilder.CreateSphere(k + "Knee", { diameter: 0.115, segments: 10 }, scene), skin).position.copyFrom(knee);
+    setLimb(add(MeshBuilder.CreateCylinder(k + "Shin", { height: 1, diameterTop: 0.105, diameterBottom: 0.075, tessellation: 12 }, scene), skin), knee, ankle);
+    const foot = add(MeshBuilder.CreateCapsule(k + "Shoe", { radius: 0.045, height: 0.25, orientation: new Vector3(0, 0, 1) }, scene), shoe);
     foot.position.copyFrom(ankle.add(new Vector3(0, -0.04, 0.07)));
   }
 
@@ -139,4 +148,24 @@ export const buildPilot = (scene: Scene, root: TransformNode): Pilot => {
       }
     },
   };
+};
+
+/** Piloto no posto de boreste (mãos controladas por IK no volante e na manete). */
+export const buildPilot = (scene: Scene, root: TransformNode): Pilot => buildPerson(scene, root, {
+  x: HELM_X, zc: -0.08, prefix: "pilot",
+  skin: new Color3(0.78, 0.57, 0.43), shirt: new Color3(0.06, 0.45, 0.55), vest: new Color3(0.95, 0.4, 0.05),
+  shorts: new Color3(0.82, 0.78, 0.66), cap: new Color3(0.06, 0.12, 0.28), hair: new Color3(0.18, 0.12, 0.08),
+});
+
+/** Passageiro sentado com as mãos sobre as coxas. */
+export const buildPassenger = (scene: Scene, root: TransformNode, x: number, zc: number, prefix: string, look: number): Pilot => {
+  const looks = [
+    { skin: new Color3(0.55, 0.38, 0.27), shirt: new Color3(0.85, 0.2, 0.25), cap: new Color3(0.9, 0.9, 0.88), hair: new Color3(0.08, 0.06, 0.05) },
+    { skin: new Color3(0.86, 0.68, 0.55), shirt: new Color3(0.95, 0.85, 0.3), cap: new Color3(0.15, 0.5, 0.3), hair: new Color3(0.55, 0.38, 0.18) },
+    { skin: new Color3(0.68, 0.48, 0.35), shirt: new Color3(0.35, 0.3, 0.75), cap: new Color3(0.8, 0.35, 0.1), hair: new Color3(0.12, 0.08, 0.06) },
+  ][look % 3];
+  const p = buildPerson(scene, root, { x, zc, prefix, vest: new Color3(0.95, 0.4, 0.05), shorts: new Color3(0.2, 0.3, 0.45), ...looks });
+  const DZ = zc + 0.22;
+  p.update(new Vector3(x - 0.12, FLOOR + 0.6, 0.06 + DZ), new Vector3(x + 0.12, FLOOR + 0.6, 0.06 + DZ));
+  return p;
 };

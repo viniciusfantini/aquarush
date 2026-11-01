@@ -20,13 +20,14 @@ import { WaterVisual } from "./presentation/waterMaterial.ts";
 import { buildTerrain, buildRocks, buildTrees, buildPier } from "./presentation/environment.ts";
 import { buildBoat, setNavLights } from "./presentation/boatMesh.ts";
 import { buildHelm, toRootLocal } from "./presentation/helm.ts";
-import { buildPilot } from "./presentation/pilot.ts";
+import { buildPilot, buildPassenger } from "./presentation/pilot.ts";
+import { PERSON_KG, type SeatId } from "./sim/params.ts";
 import { WaterInteraction } from "./presentation/waterInteraction.ts";
 import { BoatCamera } from "./presentation/cameras.ts";
 import { Hud } from "./presentation/hud.ts";
 import { EngineAudio } from "./presentation/audio.ts";
 
-const BUILD = "poc-babylon 0.9.0";
+const BUILD = "poc-babylon 0.10.0";
 /** Escala visual da rotação da hélice (proporcional ao RPM, abaixo do limite estroboscópico). */
 const PROP_VISUAL_SCALE = 0.12;
 
@@ -108,6 +109,22 @@ const boot = async () => {
   const helm = buildHelm(scene, boatVis.root);
   const pilot = buildPilot(scene, boatVis.root);
   boatVis.meshes.push(...helm.meshes, ...pilot.meshes);
+  // passageiros (aparecem conforme a lotação escolhida; o peso de cada um entra na física)
+  const paxVis: Record<Exclude<SeatId, "helm">, ReturnType<typeof buildPassenger>> = {
+    passenger: buildPassenger(scene, boatVis.root, -0.5, -0.22, "paxA", 0),
+    rearLeft: buildPassenger(scene, boatVis.root, -0.45, -2.15, "paxB", 1),
+    rearRight: buildPassenger(scene, boatVis.root, 0.45, -2.15, "paxC", 2),
+  };
+  for (const p of Object.values(paxVis)) boatVis.meshes.push(...p.meshes);
+  const OCC_PRESETS: { label: string; seats: SeatId[] }[] = [
+    { label: "só o piloto", seats: ["helm"] },
+    { label: "piloto + carona", seats: ["helm", "passenger"] },
+    { label: "piloto + 2 na popa", seats: ["helm", "rearLeft", "rearRight"] },
+    { label: "lotada (4)", seats: ["helm", "passenger", "rearLeft", "rearRight"] },
+  ];
+  let occIdx = 0;
+  const START_FUEL_L = 30;
+  boat.systems.fuelL = START_FUEL_L;
   const boatMeshes = boatVis.meshes.filter((m) => m.name !== "propDisc");
   // horímetro persistente (por navegador)
   const HOURS_KEY = "aquarush.engineHours";
@@ -167,6 +184,17 @@ const boot = async () => {
   const GEAR_MSG = { F: "F — frente engatada (lenta)", N: "N — neutro (sem empuxo)", R: "R — ré engatada (lenta)" } as const;
   input.onGearChange = (g) => hud.showToast(GEAR_MSG[g]);
 
+  const applyOccupants = (i: number) => {
+    occIdx = (i + OCC_PRESETS.length) % OCC_PRESETS.length;
+    const pr = OCC_PRESETS[occIdx];
+    boat.occupants = pr.seats.map((seat) => ({ seat, mass: PERSON_KG }));
+    for (const [seat, p] of Object.entries(paxVis)) for (const m of p.meshes) m.setEnabled(pr.seats.includes(seat as SeatId));
+    hud.setOccupants(`${pr.seats.length} · ${pr.label}`);
+    hud.showToast(`Ocupantes: ${pr.label} (+${pr.seats.length * PERSON_KG} kg)`);
+  };
+  applyOccupants(0);
+  document.getElementById("h-occ")!.addEventListener("click", () => input.pushAction("occupants"));
+
   let waterPreset = 2;
   const applyWater = (i: number) => {
     waterPreset = (i + WATER_PRESETS.length) % WATER_PRESETS.length;
@@ -204,7 +232,8 @@ const boot = async () => {
       for (const m of boatVis.meshes) if (/^pilot(Head|Jaw|Nose|Ear|Hair|Cap|Glasses|Neck)/.test(m.name)) m.setEnabled(mode !== "cockpit");
     }
     else if (a === "lights") { lights = input.toggleLights(); setNavLights(boatVis, lights); hud.setLights(lights); }
-    else if (a === "reset") { input.setGear("N"); wakeField.reset(); boat.engine = "running"; boat.systems.refuel(); boat.systems.coolantC = Math.min(boat.systems.coolantC, 60); boat.reset(spawnPos(), world.spawn.heading); snap(curPos, curRot); snap(prevPos, prevRot); hud.showToast("Reposicionado no píer — tanque cheio"); }
+    else if (a === "reset") { input.setGear("N"); wakeField.reset(); boat.engine = "running"; boat.systems.fuelL = START_FUEL_L; boat.systems.coolantC = Math.min(boat.systems.coolantC, 60); boat.reset(spawnPos(), world.spawn.heading); snap(curPos, curRot); snap(prevPos, prevRot); hud.showToast(`Reposicionado no píer — ${START_FUEL_L} L no tanque`); }
+    else if (a === "occupants") applyOccupants(occIdx + 1);
     else if (a === "debug") hud.toggleDebug();
     else if (a === "help") hud.toggleHelp();
     else if (a === "ignition") {

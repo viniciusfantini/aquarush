@@ -16,28 +16,34 @@
     #loading { position: fixed; inset: 0; display: grid; place-items: center; background: #0b1a24; font-size: 18px; letter-spacing: 0.2em; transition: opacity 0.6s; z-index: 5; }
     #loading.done { opacity: 0; pointer-events: none; }
 
-    /* painel de instrumentos */
-    #dash { position: absolute; right: 18px; bottom: 18px; padding: 14px 18px; display: grid; grid-template-columns: auto auto auto; gap: 16px; align-items: end; }
-    .speed { text-align: right; min-width: 120px; }
-    #h-speed { font-size: 64px; font-weight: 700; line-height: 0.9; font-variant-numeric: tabular-nums; }
-    .unit { font-size: 13px; color: var(--dim); letter-spacing: 0.15em; }
-    .rpm { margin-top: 8px; width: 150px; }
-    .rpm .track { height: 8px; border-radius: 4px; background: rgba(255,255,255,0.15); overflow: hidden; }
-    #h-rpm-bar { height: 100%; width: 0; background: linear-gradient(90deg, var(--accent), #e7f27a); }
-    #h-rpm-bar.red { background: linear-gradient(90deg, var(--accent), var(--warn)); }
-    .rpm .lbl { display: flex; justify-content: space-between; font-size: 12px; color: var(--dim); margin-top: 3px; font-variant-numeric: tabular-nums; }
-    .vbar { display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: 11px; color: var(--dim); }
-    .vbar .track { position: relative; width: 14px; height: 96px; border-radius: 7px; background: rgba(255,255,255,0.15); overflow: hidden; }
-    #h-thr-bar { position: absolute; bottom: 0; left: 0; right: 0; background: var(--accent); }
-    #h-thr-bar.rev { background: var(--warn); }
-    #h-trim-mark { position: absolute; left: -3px; right: -3px; height: 4px; margin-bottom: -2px; background: #ffd34d; border-radius: 2px; }
-    .vbar .track.trim::after { content: ""; position: absolute; left: 0; right: 0; top: 50%; height: 1px; background: rgba(255,255,255,0.4); }
-    .vbar b { color: var(--fg); font-variant-numeric: tabular-nums; font-weight: 600; }
-    .gear { font-size: 28px; font-weight: 700; width: 40px; height: 40px; display: grid; place-items: center; border-radius: 10px; background: rgba(255,255,255,0.12); }
-    .gear.g-R { background: var(--warn); }
-    .gear.g-N { color: #ffd34d; }
+    /* relógios (SVG) — canto inferior direito, sem sobreposição */
+    #gauges { position: absolute; right: 14px; bottom: 12px; display: flex; gap: 10px; align-items: flex-end; padding: 10px 12px; }
+    #g-big { display: flex; gap: 8px; }
+    #g-small { display: grid; grid-template-columns: repeat(2, 84px); gap: 6px; }
+    .gauge.big { width: 156px; height: 156px; }
+    .gauge.small { width: 84px; height: 84px; }
+    .gauge .g-face { fill: rgba(6, 14, 22, 0.78); }
+    .gauge .g-rim { fill: none; stroke: rgba(210, 222, 232, 0.55); stroke-width: 1.6; }
+    .gauge .g-major { stroke: #f2f5f7; stroke-width: 1.6; }
+    .gauge .g-minor { stroke: rgba(242, 245, 247, 0.55); stroke-width: 0.7; }
+    .gauge .g-red { fill: none; stroke: #e0353a; stroke-width: 3.2; }
+    .gauge .g-num { fill: #e8eef3; font-size: 7.5px; font-weight: 600; text-anchor: middle; }
+    .gauge.small .g-num { font-size: 9px; }
+    .gauge .g-title { fill: rgba(232, 238, 243, 0.62); font-size: 6.2px; letter-spacing: 0.08em; text-anchor: middle; }
+    .gauge.small .g-title { font-size: 7.5px; }
+    #g-aut { font-size: 11px; color: #8fe3d8; text-align: center; margin-top: 4px; min-height: 14px; font-variant-numeric: tabular-nums; }
+    .gauge .g-l1 { fill: #ffffff; font-size: 15px; font-weight: 700; text-anchor: middle; font-variant-numeric: tabular-nums; }
+    .gauge.small .g-l1 { font-size: 11.5px; }
+    .gauge .g-l2 { fill: #8fe3d8; font-size: 6.6px; text-anchor: middle; font-variant-numeric: tabular-nums; }
+    .gauge.small .g-l2 { font-size: 6.8px; }
+    .gauge .g-needle { fill: #ff6a2a; }
+    .gauge .g-hub { fill: #20262d; stroke: #c9d2da; stroke-width: 1; }
+    .gauge.warn .g-face { fill: rgba(90, 10, 8, 0.82); }
+    .gauge.warn .g-l1 { fill: #ffd34d; }
+    @media (max-height: 680px) { #gauges { transform: scale(0.78); transform-origin: right bottom; } }
 
-    #status { position: absolute; left: 18px; top: 16px; display: flex; gap: 8px; flex-wrap: wrap; }
+    #leftcol { pointer-events: auto; position: absolute; left: 18px; top: 16px; display: flex; flex-direction: column; gap: 8px; max-width: calc(100% - 360px); }
+    #status { display: flex; gap: 8px; flex-wrap: wrap; }
     .chip { font-size: 12px; letter-spacing: 0.08em; padding: 5px 10px; border-radius: 999px; background: var(--panel); color: var(--dim); }
     .chip.on { color: #04222a; background: var(--accent); }
     #h-lights.on { background: #7dff9b; }
@@ -47,20 +53,10 @@
     @keyframes blink { 50% { background: #ff5a4e; } }
     #status .chip.btn { pointer-events: auto; cursor: pointer; color: var(--fg); border: 1px solid rgba(255,255,255,0.3); }
     #status { pointer-events: auto; }
-    #instr { position: absolute; right: 18px; bottom: 172px; padding: 8px 12px; display: grid; gap: 4px; min-width: 170px; font-size: 12px; }
-    #instr .ins { display: grid; grid-template-columns: 52px 1fr auto; align-items: center; gap: 8px; color: var(--dim); }
-    #instr .ins:not(:first-child) { grid-template-columns: 52px 1fr; }
-    #instr .ins:not(:first-child) b { text-align: right; }
-    #instr b { color: var(--fg); font-variant-numeric: tabular-nums; font-weight: 600; }
-    #instr .bar { height: 7px; border-radius: 4px; background: rgba(255,255,255,0.15); overflow: hidden; }
-    #h-fuel-bar { height: 100%; width: 100%; background: var(--accent); }
-    #h-fuel-bar.low { background: #ffb13d; }
-    #instr b.hot { color: #ff5a4e; }
-    #h-hot:not(.warn), #h-lowfuel:not(.warn), #h-charge:not(.warn) { display: none; }
-    #ui.touch-on #instr { right: auto; left: 50%; transform: translateX(-50%); bottom: 112px; grid-auto-flow: column; grid-template-columns: none; min-width: 0; }
+    #h-hot:not(.warn), #h-lowfuel:not(.warn), #h-charge:not(.warn), #h-cav:not(.warn), #h-vent:not(.warn) { display: none; }
     #h-build { position: absolute; left: 18px; bottom: 10px; font-size: 11px; color: var(--dim); }
 
-    #h-debug { display: none; position: absolute; left: 18px; top: 52px; padding: 10px 14px; font-size: 12px; min-width: 250px; }
+    #h-debug { display: none; padding: 10px 14px; font-size: 12px; width: 270px; }
     #h-debug div { display: flex; justify-content: space-between; gap: 16px; line-height: 1.55; }
     #h-debug span { color: var(--dim); }
     #h-debug b { font-weight: 600; font-variant-numeric: tabular-nums; }
@@ -77,10 +73,8 @@
     #ui:not(.touch-on) .touch { display: none !important; }
     #ui.touch-on .touch { display: block; pointer-events: auto; }
     #ui.touch-on #h-help { display: none; }
-    #ui.touch-on #dash { right: 50%; transform: translateX(50%); bottom: 10px; padding: 8px 12px; gap: 10px; }
-    #ui.touch-on #h-speed { font-size: 40px; }
-    #ui.touch-on .rpm { width: 110px; }
-    #ui.touch-on .vbar .track { height: 64px; }
+    #ui.touch-on #gauges { right: 50%; transform: translateX(50%) scale(0.62); transform-origin: center bottom; bottom: 4px; }
+    #ui.touch-on #leftcol { max-width: calc(100% - 280px); }
     #t-stick { position: absolute; left: max(16px, env(safe-area-inset-left)); bottom: 24px; width: 190px; height: 84px; border-radius: 42px; background: rgba(255,255,255,0.12); border: 1px solid rgba(255,255,255,0.25); touch-action: none; }
     #t-knob { position: absolute; left: 50%; top: 50%; width: 64px; height: 64px; margin: -32px 0 0 -32px; border-radius: 50%; background: rgba(255,255,255,0.55); }
     #t-lever { position: absolute; right: max(18px, env(safe-area-inset-right)); bottom: 24px; width: 70px; height: 220px; border-radius: 18px; background: linear-gradient(to bottom, rgba(41,211,194,0.45), rgba(41,211,194,0.12) 55%, rgba(255,255,255,0.18) 58.5%, rgba(255,255,255,0.18) 65.5%, rgba(255,90,78,0.15) 69%, rgba(255,90,78,0.45)); border: 1px solid rgba(255,255,255,0.25); touch-action: none; }
@@ -96,26 +90,30 @@
   <canvas id="game"></canvas>
   <div id="loading">AQUA RUSH</div>
   <div id="ui">
-    <div id="status">
-      <div class="chip" id="h-cam">EXTERNA</div>
-      <div class="chip on" id="h-engine">MOTOR LIGADO</div>
-      <div class="chip" id="h-planing">PLANEIO</div>
-      <div class="chip" id="h-lights">LUZES</div>
-      <div class="chip" id="h-cav">CAVITAÇÃO</div>
-      <div class="chip" id="h-vent">VENTILAÇÃO</div>
-      <div class="chip" id="h-hot">SUPERAQUECIMENTO</div>
-      <div class="chip" id="h-lowfuel">COMBUSTÍVEL BAIXO</div>
-      <div class="chip" id="h-charge">BATERIA</div>
-      <div class="chip btn" id="h-water">ÁGUA: LAGO</div>
+    <div id="leftcol">
+      <div id="status">
+        <div class="chip" id="h-cam">EXTERNA</div>
+        <div class="chip on" id="h-engine">MOTOR LIGADO</div>
+        <div class="chip" id="h-planing">PLANEIO</div>
+        <div class="chip" id="h-lights">LUZES</div>
+        <div class="chip" id="h-cav">CAVITAÇÃO</div>
+        <div class="chip" id="h-vent">VENTILAÇÃO</div>
+        <div class="chip" id="h-hot">SUPERAQUECIMENTO</div>
+        <div class="chip" id="h-lowfuel">COMBUSTÍVEL BAIXO</div>
+        <div class="chip" id="h-charge">BATERIA</div>
+        <div class="chip btn" id="h-water">ÁGUA: LAGO</div>
+        <div class="chip btn" id="h-occ">OCUPANTES: 1</div>
+      </div>
+      <div id="h-debug" class="panel"></div>
     </div>
-    <div id="h-debug" class="panel"></div>
     <div id="h-help" class="panel">
       <div class="t">CONTROLES</div>
       <div>Manete: toque <kbd>S</kbd>/<kbd>↓</kbd> → <b>N</b>, de novo → <b>R</b> (ré lenta)</div>
       <div>toque <kbd>W</kbd>/<kbd>↑</kbd> → <b>N</b>, de novo → <b>F</b> (frente lenta) · <b>segure</b> para acelerar</div>
       <div><kbd>A</kbd><kbd>D</kbd>/<kbd>←</kbd><kbd>→</kbd> direção</div>
       <div><kbd>E</kbd> trim + (proa sobe) · <kbd>Q</kbd> trim − (proa desce)</div>
-      <div><kbd>C</kbd> câmera · <kbd>L</kbd> luzes · <kbd>R</kbd> reposicionar</div>
+      <div><kbd>C</kbd> câmera · <kbd>L</kbd> luzes · <kbd>R</kbd> reposicionar (30 L)</div>
+      <div><kbd>O</kbd> ocupantes (1 · carona · 2 na popa · 4) — mudam o peso e o equilíbrio</div>
       <div><kbd>0</kbd>/<kbd>G</kbd> água vidro · <kbd>1</kbd> calma · <kbd>2</kbd> lago · <kbd>3</kbd> forte · <kbd>V</kbd> alterna</div>
       <div><kbd>P</kbd> liga/desliga o motor (partida só em <b>N</b>) · <kbd>Esc</kbd> pausa</div>
       <div><kbd>F3</kbd> telemetria · <kbd>H</kbd> ajuda</div>
@@ -123,23 +121,7 @@
       <div>Gamepad: RT/LT, analógico, LB/RB trim, Y câmera</div>
     </div>
     <div id="h-toast"></div>
-    <div id="instr" class="panel">
-      <div class="ins"><span>COMB.</span><div class="bar"><div id="h-fuel-bar"></div></div><b id="h-fuel">100%</b></div>
-      <div class="ins"><span>TEMP</span><b id="h-temp">--°C</b></div>
-      <div class="ins"><span>BAT</span><b id="h-volt">--V</b></div>
-      <div class="ins"><span>HORAS</span><b id="h-hours">0000.0</b></div>
-    </div>
-    <div id="dash" class="panel">
-      <div class="vbar"><div class="track"><div id="h-thr-bar"></div></div><b id="h-thr">0%</b>ACEL</div>
-      <div class="vbar"><div class="track trim"><div id="h-trim-mark"></div></div><b id="h-trim">0.0°</b>TRIM</div>
-      <div>
-        <div style="display:flex; gap:10px; align-items:end; justify-content:flex-end">
-          <div class="gear g-F" id="h-gear">F</div>
-          <div class="speed"><div id="h-speed">0</div><div class="unit">KM/H</div></div>
-        </div>
-        <div class="rpm"><div class="track"><div id="h-rpm-bar"></div></div><div class="lbl"><span>RPM</span><span id="h-rpm">0</span></div></div>
-      </div>
-    </div>
+    <div id="gauges" class="panel"><div id="g-big"></div><div id="g-side"><div id="g-small"></div><div id="g-aut"></div></div></div>
     <div id="h-build"></div>
 
     <div class="touch" id="t-stick"><div id="t-knob"></div></div>

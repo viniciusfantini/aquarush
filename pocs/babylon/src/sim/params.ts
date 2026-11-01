@@ -4,6 +4,10 @@
 
 import { type Vec3, v3, DEG } from "./math.ts";
 
+export type SeatId = "helm" | "passenger" | "rearLeft" | "rearRight";
+export interface Occupant { seat: SeatId; mass: number }
+export const PERSON_KG = 80;
+
 export interface BuoyancyPoint {
   /** Posição local relativa ao centro de massa (m). X direita, Y cima, Z proa. */
   p: Vec3;
@@ -19,7 +23,10 @@ export interface SpeedboatParams {
   name: string;
   length: number;          // m
   beam: number;            // m (boca)
-  mass: number;            // kg (casco + motor + piloto + combustível)
+  mass: number;            // kg — massa SECA (casco + motor + equipamentos); combustível e ocupantes somam à parte
+  fuelTankPos: Vec3;       // centro do tanque (local) — o peso da gasolina age aqui
+  fuelDensity: number;     // kg/L
+  seats: Record<SeatId, Vec3>; // centro de massa de uma pessoa sentada em cada banco (local)
   inertia: Vec3;           // kg·m² (pitch X, yaw Y, roll Z) — eixos locais
   waterplaneArea: number;  // m² (área de flutuação total)
   pointMaxDepth: number;   // m (imersão máxima considerada por ponto)
@@ -84,7 +91,15 @@ export const SPEEDBOAT: SpeedboatParams = {
   name: "Lancha provisória AR-6",
   length: 6.0,
   beam: 2.3,
-  mass: 1200,
+  mass: 1030,
+  fuelTankPos: v3(0, -0.22, -0.9),
+  fuelDensity: 0.74,
+  seats: {
+    helm: v3(0.5, 0.42, -0.08),        // piloto (boreste)
+    passenger: v3(-0.5, 0.42, -0.22),  // carona (bombordo)
+    rearLeft: v3(-0.45, 0.4, -2.15),   // banco de popa
+    rearRight: v3(0.45, 0.4, -2.15),
+  },
   inertia: v3(3700, 4100, 900),
   waterplaneArea: 10.0,
   pointMaxDepth: 0.85,
@@ -151,7 +166,7 @@ export const SPEEDBOAT: SpeedboatParams = {
   waveDragPeakRatio: 0.15,
   sternTrough: 0.32,
   bowWave: 0.12,
-  bankCoef: 2600,
-  rollDamping: 9000,
+  bankCoef: 1800,
+  rollDamping: 15000,
   airDragCdA: 1.6,
 };
