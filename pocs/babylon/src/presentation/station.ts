@@ -3,7 +3,7 @@
 // asfalto + uma "saia" de terreno nas laterais (a malha geral do terreno é grossa e fica rebaixada sob elas).
 
 import { type Scene, Mesh, MeshBuilder, StandardMaterial, PBRMaterial, Color3, Vector3, DynamicTexture, Texture, VertexBuffer } from "@babylonjs/core";
-import { groundHeight, ROAD, ROAD_SAMPLES, LOT, fbm, lotDistance } from "../sim/world.ts";
+import { groundHeight, ROAD, ROAD_SAMPLES, LOT, YARD, fbm, lotDistance, yardDistance } from "../sim/world.ts";
 import { STATION } from "../sim/station.ts";
 import { pbr, roundedBox } from "./boatMesh.ts";
 import { smoothstep } from "../sim/math.ts";
@@ -52,7 +52,7 @@ export const signMat = (scene: Scene, name: string, title: string, sub = "", bg 
 export const buildRoadAndLot = (scene: Scene, terrainSubdiv: number): Mesh[] => {
   const meshes: Mesh[] = [];
   // a estrada visual termina na borda do pátio (dentro dele vale o asfalto do pátio, sem faixas)
-  const S = ROAD_SAMPLES.filter((p) => lotDistance(p.x, p.z) > 0.3), hw = ROAD.halfWidth, skirt = ROAD.shoulder + skirtWidth(terrainSubdiv);
+  const S = ROAD_SAMPLES.filter((p) => lotDistance(p.x, p.z) > 0.3 && yardDistance(p.x, p.z) > 0.3), hw = ROAD.halfWidth, skirt = ROAD.shoulder + skirtWidth(terrainSubdiv);
   // ---- saia de terreno da estrada (segue o relevo da física; cores do terreno) ----
   const offs = [-hw - skirt, -hw - skirt * 0.6, -hw - skirt * 0.3, -hw - ROAD.shoulder, -hw - 0.6, 0, hw + 0.6, hw + ROAD.shoulder, hw + skirt * 0.3, hw + skirt * 0.6, hw + skirt];
   const rows = S.map((p) => offs.map((o) => { const x = p.x - p.dz * o, z = p.z + p.dx * o; return new Vector3(x, groundHeight(x, z) + 0.02, z); }));
@@ -73,34 +73,46 @@ export const buildRoadAndLot = (scene: Scene, terrainSubdiv: number): Mesh[] => 
   for (let i = 0; i < uv.length; i += 2) uv[i + 1] *= S.length / 8; // ~8 m por repetição
   road.setVerticesData("uv", uv);
   meshes.push(road);
-  // ---- pátio: saia + asfalto plano ----
-  const m = skirtWidth(terrainSubdiv) + 6, N = 24;
-  const lotRows: Vector3[][] = [];
-  for (let i = 0; i <= N; i++) {
-    const z = LOT.cz - LOT.hz - m + (2 * (LOT.hz + m)) * (i / N);
-    const row: Vector3[] = [];
-    for (let j = 0; j <= N; j++) { const x = LOT.cx - LOT.hx - m + (2 * (LOT.hx + m)) * (j / N); row.push(new Vector3(x, groundHeight(x, z) + 0.02, z)); }
-    lotRows.push(row);
-  }
-  const lsk = MeshBuilder.CreateRibbon("lotSkirt", { pathArray: lotRows, sideOrientation: Mesh.DOUBLESIDE }, scene);
-  const lp = lsk.getVerticesData(VertexBuffer.PositionKind)!;
-  const lc: number[] = [];
-  for (let i = 0; i < lp.length; i += 3) { const c = grassColor(lp[i], lp[i + 2], lp[i + 1]); lc.push(c.r, c.g, c.b, 1); }
-  lsk.setVerticesData(VertexBuffer.ColorKind, lc);
-  lsk.material = skMat; meshes.push(lsk);
-  const lot = MeshBuilder.CreateGround("lot", { width: LOT.hx * 2, height: LOT.hz * 2 }, scene);
-  lot.position.set(LOT.cx, LOT.y + 0.05, LOT.cz);
-  const lotMat = new PBRMaterial("lotAsphalt", scene);
-  const lt = asphaltTex(scene, "lotTex", "lot"); lt.uScale = LOT.hx / 4; lt.vScale = LOT.hz / 8;
-  lotMat.albedoTexture = lt; lotMat.metallic = 0; lotMat.roughness = 0.85; lotMat.environmentIntensity = 0.4;
-  lot.material = lotMat; meshes.push(lot);
-  // vagas pintadas (faixa sul do pátio) + faixa de pedestre na loja
+  // ---- pátios planos (posto e manobra no alto da rampa): saia de terreno + asfalto ----
+  const pad = (R: { cx: number; cz: number; hx: number; hz: number; y: number }, name: string) => {
+    const m = skirtWidth(terrainSubdiv) + 6, N = 28;
+    const rows: Vector3[][] = [];
+    for (let i = 0; i <= N; i++) {
+      const z = R.cz - R.hz - m + (2 * (R.hz + m)) * (i / N);
+      const row: Vector3[] = [];
+      for (let j = 0; j <= N; j++) { const x = R.cx - R.hx - m + (2 * (R.hx + m)) * (j / N); row.push(new Vector3(x, groundHeight(x, z) + 0.02, z)); }
+      rows.push(row);
+    }
+    const sk2 = MeshBuilder.CreateRibbon(name + "Skirt", { pathArray: rows, sideOrientation: Mesh.DOUBLESIDE }, scene);
+    const lp = sk2.getVerticesData(VertexBuffer.PositionKind)!;
+    const lc: number[] = [];
+    for (let i = 0; i < lp.length; i += 3) { const c = grassColor(lp[i], lp[i + 2], lp[i + 1]); lc.push(c.r, c.g, c.b, 1); }
+    sk2.setVerticesData(VertexBuffer.ColorKind, lc);
+    sk2.material = skMat; meshes.push(sk2);
+    const g = MeshBuilder.CreateGround(name, { width: R.hx * 2, height: R.hz * 2 }, scene);
+    g.position.set(R.cx, R.y + 0.05, R.cz);
+    const gm = new PBRMaterial(name + "Asphalt", scene);
+    const gt = asphaltTex(scene, name + "Tex", "lot"); gt.uScale = R.hx / 4; gt.vScale = R.hz / 8;
+    gm.albedoTexture = gt; gm.metallic = 0; gm.roughness = 0.85; gm.environmentIntensity = 0.4;
+    g.material = gm; meshes.push(g);
+  };
+  pad(LOT, "lot");
+  pad(YARD, "yard");
   const paint = new StandardMaterial("paint", scene); paint.diffuseColor = new Color3(0.92, 0.92, 0.88); paint.specularColor = Color3.Black();
-  for (let k = 0; k < 4; k++) {
-    const z = LOT.cz - LOT.hz + 1 + k * 4.2;
-    const st = MeshBuilder.CreateGround("stall", { width: 18, height: 0.15 }, scene);
-    st.position.set(LOT.cx + 14, LOT.y + 0.06, z); st.material = paint; meshes.push(st);
+  const stripe = (x: number, z: number, w: number, d: number, y: number, rot = 0) => {
+    const st = MeshBuilder.CreateGround("stripe", { width: w, height: d }, scene);
+    st.position.set(x, y + 0.06, z); st.rotation.y = rot; st.material = paint; meshes.push(st);
+  };
+  // vagas para carro + carretinha (longas, ao sul do pátio do posto)
+  for (let k = 0; k < 4; k++) stripe(STATION.parking.x - 8, LOT.cz - LOT.hz + 1.5 + k * 4.5, 22, 0.15, LOT.y);
+  // círculo de manobra pintado no meio do pátio do posto e no alto da rampa
+  for (const [cx, cz, r, y] of [[LOT.cx - 2, LOT.cz, 10, LOT.y], [YARD.cx, YARD.cz, 9, YARD.y]] as const) {
+    const ring = MeshBuilder.CreateTorus("maneuverRing", { diameter: r * 2, thickness: 0.2, tessellation: 64 }, scene);
+    ring.scaling.y = 0.05; ring.position.set(cx, y + 0.06, cz); ring.material = paint; meshes.push(ring);
   }
+  const yardSign = MeshBuilder.CreateGround("yardText", { width: 9, height: 1.6 }, scene);
+  yardSign.material = (() => { const m = signMat(scene, "yardTextT", "ÁREA DE MANOBRA", "", "rgba(0,0,0,0)", "#e8e8e2", 1024, 180); m.diffuseTexture!.hasAlpha = true; m.useAlphaFromDiffuseTexture = true; m.emissiveColor = new Color3(0.1, 0.1, 0.1); return m; })();
+  yardSign.position.set(YARD.cx, YARD.y + 0.07, YARD.cz - 4); yardSign.rotation.y = Math.PI; meshes.push(yardSign);
   for (const mm of meshes) { mm.isPickable = false; mm.receiveShadows = true; }
   return meshes;
 };

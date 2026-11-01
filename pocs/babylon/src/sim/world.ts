@@ -126,14 +126,19 @@ const terrainWithRamp = (x: number, z: number): number => {
 };
 
 // ---------- estrada (rampa → pátio) e pátio de estacionamento / posto ----------
-/** Pátio: retângulo plano (asfalto) com posto de combustível, loja, oficina e vagas. */
-export const LOT = { cx: -160, cz: -311, hx: 26, hz: 17, y: 0 };
+/** Pátio do posto: retângulo plano (asfalto) com posto de combustível, loja, oficina, vagas e áreas de manobra. */
+export const LOT = { cx: -165, cz: -312, hx: 38, hz: 25, y: 0 };
+/** Pátio de manobra no alto da rampa: plano, na cota do topo da rampa (o carro vira e desce de ré). */
+export const YARD = { cx: RAMP.x, cz: RAMP.z0 + RAMP.sMin - 12, hx: 16, hz: 12, y: rampY(RAMP.sMin) };
+const rectDistance = (r: { cx: number; cz: number; hx: number; hz: number }, x: number, z: number): number =>
+  Math.hypot(Math.max(0, Math.abs(x - r.cx) - r.hx), Math.max(0, Math.abs(z - r.cz) - r.hz));
+export const yardDistance = (x: number, z: number): number => rectDistance(YARD, x, z);
 /** distância (≥ 0) ao retângulo do pátio */
-export const lotDistance = (x: number, z: number): number => Math.hypot(Math.max(0, Math.abs(x - LOT.cx) - LOT.hx), Math.max(0, Math.abs(z - LOT.cz) - LOT.hz));
+export const lotDistance = (x: number, z: number): number => rectDistance(LOT, x, z);
 /** Pontos de controle da estrada (Catmull-Rom): sai do alto da rampa e vai pela faixa baixa da praia com curvas. */
 const ROAD_CTRL: [number, number][] = [
-  [RAMP.x, RAMP.z0 + RAMP.sMin], [RAMP.x, RAMP.z0 + RAMP.sMin - 9], [-34, -300], [-58, -303], [-80, -297],
-  [-102, -302], [-118, -312], [LOT.cx + LOT.hx - 2, -311], [LOT.cx + LOT.hx - 10, -311],
+  [YARD.cx - YARD.hx + 2, YARD.cz], [YARD.cx - YARD.hx - 8, YARD.cz], [-58, -287], [-76, -283], [-94, -290],
+  [-104, -302], [-112, -314], [LOT.cx + LOT.hx - 2, -317], [LOT.cx + LOT.hx - 10, -317],
 ];
 export const ROAD = { halfWidth: 3.5, shoulder: 4 };
 export interface RoadSample { x: number; z: number; y: number; dx: number; dz: number }
@@ -162,13 +167,13 @@ export const ROAD_SAMPLES: RoadSample[] = (() => {
   const smooth = raw.map((_, i) => { let s2 = 0, n = 0; for (let j = Math.max(0, i - W); j <= Math.min(raw.length - 1, i + W); j++) { s2 += raw[j]; n++; } return s2 / n; });
   let ly = 0, ln = 0;
   for (let x = LOT.cx - LOT.hx; x <= LOT.cx + LOT.hx; x += 4) for (let z = LOT.cz - LOT.hz; z <= LOT.cz + LOT.hz; z += 4) { ly += terrainWithRamp(x, z); ln++; }
-  LOT.y = ly / ln;
-  const y0 = rampY(RAMP.sMin), n = out.length;
+  LOT.y = Math.min(ly / ln, 7.0); // o pátio corta um pouco o morro (estrada com rampa ≤ 9 %)
+  const y0 = YARD.y, n = out.length;
   // greide: segue o terreno suavizado, mas com rampa máx. de 9 % e as pontas presas (topo da rampa e pátio)
   const G = 0.09, prof = smooth.slice();
   // dentro da faixa de transição do pátio a estrada já está na cota dele (senão a borda do pátio vira um degrau)
-  const inLot = out.map((p) => lotDistance(p.x, p.z) < 7);
-  const pin = () => { prof[0] = y0; for (let i = 0; i < n; i++) if (inLot[i]) prof[i] = LOT.y; };
+  const inLot = out.map((p) => lotDistance(p.x, p.z) < 7), inYard = out.map((p) => yardDistance(p.x, p.z) < 7);
+  const pin = () => { for (let i = 0; i < n; i++) { if (inLot[i]) prof[i] = LOT.y; if (inYard[i]) prof[i] = y0; } };
   pin();
   for (let it = 0; it < 6; it++) {
     for (let i = 1; i < n; i++) prof[i] = clamp(prof[i], prof[i - 1] - G, prof[i - 1] + G);
@@ -216,10 +221,12 @@ export const groundHeight = (x: number, z: number): number => {
   if (r) h += (r.s.y - h) * (1 - smoothstep(ROAD.halfWidth, ROAD.halfWidth + ROAD.shoulder, r.d));
   const dl = lotDistance(x, z);
   if (dl < 6) h += (LOT.y - h) * (1 - smoothstep(0, 6, dl));
+  const dy = yardDistance(x, z);
+  if (dy < 6 && z < RAMP.z0 + RAMP.sMin + 0.01) h += (YARD.y - h) * (1 - smoothstep(0, 6, dy)); // não invade a rampa
   return h;
 };
 /** perto da estrada/pátio (para a vegetação e as rochas ficarem fora) */
-export const onRoadOrLot = (x: number, z: number, margin = 0): boolean => lotDistance(x, z) < margin + 1 || nearestRoad(x, z, ROAD.halfWidth + margin) !== null;
+export const onRoadOrLot = (x: number, z: number, margin = 0): boolean => lotDistance(x, z) < margin + 1 || yardDistance(x, z) < margin + 1 || nearestRoad(x, z, ROAD.halfWidth + margin) !== null;
 
 export const RIVER_CURRENT: CurrentZone = {
   // aproximação retangular do trecho mais reto do rio próximo à foz; vazão para o sul

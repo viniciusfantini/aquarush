@@ -136,6 +136,8 @@ export class Speedboat {
   private obstacleInside = false;
   /** cinta do guincho presa ao olhal de proa (carretinha) — só traciona */
   winchStrap: { anchor: Vec3; local: Vec3; length: number } | null = null;
+  /** cabos de amarração (vaga do píer: proa e popa; poita: proa) */
+  mooringLines: { anchor: Vec3; local: Vec3; length: number }[] = [];
   private cavitation = 0;
   private propRpmState = 0;
   private immersion = 1;
@@ -228,7 +230,7 @@ export class Speedboat {
     this.trim = 0;
     this.tilt = 0;
     this.tiltWanted = false;
-    this.capsized = false; this.capsizeT = 0; this.swimmers = []; this.winchStrap = null;
+    this.capsized = false; this.capsizeT = 0; this.swimmers = []; this.winchStrap = null; this.mooringLines = [];
     this.trimPin = Math.max(0, Math.min(1, this.params.trimPins.length - 1));
     this.manualAngle = this.params.trimPins[this.trimPin] ?? 0;
     this.gear = this.wantGear = "N";
@@ -979,15 +981,17 @@ export class Speedboat {
         }
       }
     }
-    // cinta do guincho: mola só de tração entre o olhal de proa e o guincho
-    if (this.winchStrap) {
-      const ws = this.winchStrap;
+    // cinta do guincho e cabos de amarração (píer/poita): molas só de tração entre o ponto do barco e a âncora
+    const ropes: [{ anchor: Vec3; local: Vec3; length: number }, number, number][] = [];
+    if (this.winchStrap) ropes.push([this.winchStrap, 60000, 6000]);
+    for (const ml of this.mooringLines) ropes.push([ml, 25000, 5000]);
+    for (const [ws, k, c] of ropes) {
       const eye = this.toWorld(ws.local);
       const d = sub(ws.anchor, eye), dl = len(d);
       if (dl > ws.length) {
         const n = scale(d, 1 / dl);
         const vrel = dot(this.pointVelocity(eye), n);
-        const f = Math.max(0, 60000 * mk * (dl - ws.length) - 6000 * mk * vrel);
+        const f = Math.max(0, k * mk * (dl - ws.length) - c * mk * vrel);
         this.addForceAt(scale(n, f), eye, "contact");
       }
     }

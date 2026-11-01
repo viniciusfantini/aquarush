@@ -1,7 +1,7 @@
 // Dirigir da rampa até a bomba do posto pela estrada (perseguição pura). node tests/debug-road.ts [lancha|bote]
 declare const process: { argv: string[] };
 import { VESSELS, type VesselKind } from "../src/sim/params.ts";
-import { groundHeight, ROAD_SAMPLES } from "../src/sim/world.ts";
+import { groundHeight, ROAD_SAMPLES, YARD, LOT, lotDistance } from "../src/sim/world.ts";
 import { buildTrailer } from "../src/sim/trailer.ts";
 import { TowRig, TOW_SPECS } from "../src/sim/towVehicle.ts";
 import { STATION, stationObstacles, fuelBayState } from "../src/sim/station.ts";
@@ -11,7 +11,7 @@ const rig = new TowRig(tr, TOW_SPECS[kind === "lancha" ? "pickup" : "car"], grou
 rig.obstacles = stationObstacles();
 const DT = 1 / 120;
 const lane = STATION.pumps[1].lanes[1], pumpX = STATION.pumps[1].x; // faixa sul (mais alinhada com a entrada)
-const path = [...ROAD_SAMPLES.filter((p) => p.x > -128).map((p) => ({ x: p.x, z: p.z })), { x: -134, z: lane }, { x: pumpX + 4, z: lane }, { x: pumpX - 20, z: lane }];
+const path = [{ x: YARD.cx, z: YARD.cz }, ...ROAD_SAMPLES.filter((p) => lotDistance(p.x, p.z) > 0).map((p) => ({ x: p.x, z: p.z })), { x: LOT.cx + LOT.hx - 6, z: lane }, { x: pumpX + 4, z: lane }, { x: pumpX - 20, z: lane }];
 let idx = 0, t = 0, maxGrade = 0, blockedT = 0;
 for (; t < 120; t += DT) {
   const c = rig.carPose();

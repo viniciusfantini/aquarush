@@ -11,17 +11,22 @@ export interface Obb { x: number; z: number; hw: number; hl: number; yaw: number
 export interface Pump { x: number; z: number; lanes: number[] /* z do centro de cada faixa */ }
 
 const L = LOT;
+const CAN = { x: L.cx + 15, z: L.cz + 10 };
+/**
+ * Pátio grande (76 × 50 m): posto perto da entrada (leste), loja e oficina no fundo (oeste), vaga do outro
+ * conjunto ao sul e o miolo livre para manobrar o carro com a carretinha.
+ */
 export const STATION = {
-  canopy: { x: L.cx + 10, z: L.cz + 9, w: 16, d: 16, h: 5.2 },          // cobertura do posto
+  canopy: { x: CAN.x, z: CAN.z, w: 18, d: 18, h: 5.2 },          // cobertura do posto
   pumps: [
-    { x: L.cx + 10, z: L.cz + 12, lanes: [L.cz + 14.2, L.cz + 9] },
-    { x: L.cx + 10, z: L.cz + 6, lanes: [L.cz + 9, L.cz + 3.8] },
+    { x: CAN.x, z: CAN.z + 3, lanes: [CAN.z + 5.2, CAN.z + 0.8] },
+    { x: CAN.x, z: CAN.z - 3, lanes: [CAN.z - 0.8, CAN.z - 5.2] },
   ] as Pump[],
   islandLen: 4, islandW: 1.0,
-  shop: { x: L.cx - 16, z: L.cz + 11, w: 12, d: 9, h: 3.6 },             // loja (porta para +X)
-  workshop: { x: L.cx - 16, z: L.cz - 7, w: 12, d: 12, h: 5.0 },         // oficina (portões para +X)
+  shop: { x: L.cx - 25, z: L.cz + 12, w: 12, d: 9, h: 3.6 },          // loja (porta para +X)
+  workshop: { x: L.cx - 25, z: L.cz - 11, w: 12, d: 12, h: 5.0 },     // oficina (portões para +X)
   /** vaga do outro veículo + carretinha (de frente para a saída, +X) */
-  parking: { x: L.cx + 17, z: L.cz - 10, yaw: Math.PI / 2 },
+  parking: { x: L.cx + 22, z: L.cz - 19, yaw: Math.PI / 2 },
 };
 
 /** Obstáculos fixos para o veículo de reboque (prédios, ilhas das bombas, colunas da cobertura). */

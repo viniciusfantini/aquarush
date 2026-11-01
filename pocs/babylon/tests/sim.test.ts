@@ -8,8 +8,9 @@ import { Speedboat } from "../src/sim/boat.ts";
 import { SPEEDBOAT, DINGHY, PERSON_KG, type Occupant } from "../src/sim/params.ts";
 import { GerstnerWater, WAVE_PRESETS, type CurrentZone } from "../src/sim/water.ts";
 import type { PhysicsWorld } from "../src/sim/world.ts";
-import { buildWorld, RAMP, groundHeight, fromFrame, ROAD_SAMPLES, LOT } from "../src/sim/world.ts";
+import { buildWorld, RAMP, groundHeight, fromFrame, ROAD_SAMPLES, LOT, YARD, lotDistance } from "../src/sim/world.ts";
 import { STATION, stationObstacles, fuelBayState } from "../src/sim/station.ts";
+import { pierBerth, pierBerthState, tieToPier, buoyState, tieToBuoy, BUOYS } from "../src/sim/mooring.ts";
 import { buildTrailer, trailerLoadState, attachWinch } from "../src/sim/trailer.ts";
 import { TowRig, TOW_SPECS } from "../src/sim/towVehicle.ts";
 import { emptyInput, type VehicleInput } from "../src/gameplay/vehicleInput.ts";
@@ -686,14 +687,16 @@ for (const [label, thr] of [["baixa", 0.25], ["alta", 1]] as const) {
   check("estrada", "rampa máxima da estrada (%)", g * 100, 0, 9.5, "%", 1);
   let step = 0; for (let z = RAMP.z0; z > RAMP.z0 - 30; z -= 0.5) step = Math.max(step, Math.abs(groundHeight(RAMP.x, z - 0.5) - groundHeight(RAMP.x, z)) / 0.5);
   check("estrada", "emenda rampa → estrada sem degrau (% máx)", step * 100, 0, 14, "%", 1);
-  let lotStep = 0; for (let x = LOT.cx + LOT.hx + 12; x > LOT.cx + LOT.hx - 4; x -= 0.5) lotStep = Math.max(lotStep, Math.abs(groundHeight(x - 0.5, -311.4) - groundHeight(x, -311.4)) / 0.5);
+  const zIn = S[S.length - 1].z; // a estrada entra no pátio nesta linha
+  let lotStep = 0; for (let x = LOT.cx + LOT.hx + 12; x > LOT.cx + LOT.hx - 4; x -= 0.5) lotStep = Math.max(lotStep, Math.abs(groundHeight(x - 0.5, zIn) - groundHeight(x, zIn)) / 0.5);
   check("estrada", "entrada do pátio sem degrau (% máx)", lotStep * 100, 0, 10, "%", 1);
   for (const kind of ["lancha", "bote"] as const) {
     const tr = buildTrailer(kind === "lancha" ? SPEEDBOAT : DINGHY);
     const rig = new TowRig(tr, TOW_SPECS[kind === "lancha" ? "pickup" : "car"], groundHeight);
     rig.obstacles = stationObstacles();
     const lane = STATION.pumps[1].lanes[1], pumpX = STATION.pumps[1].x;
-    const path = [...S.filter((p) => p.x > -128).map((p) => ({ x: p.x, z: p.z })), { x: -134, z: lane }, { x: pumpX + 4, z: lane }, { x: pumpX - 20, z: lane }];
+    // pátio de manobra → estrada → entra no pátio do posto → faixa da bomba
+    const path = [{ x: YARD.cx, z: YARD.cz }, ...S.filter((p) => lotDistance(p.x, p.z) > 0).map((p) => ({ x: p.x, z: p.z })), { x: LOT.cx + LOT.hx - 6, z: lane }, { x: pumpX + 4, z: lane }, { x: pumpX - 20, z: lane }];
     let idx = 0, at = -1, blocked = 0;
     for (let i = 0; i < 120 / DT && at < 0; i++) {
       const c = rig.carPose();
@@ -718,6 +721,51 @@ for (const [label, thr] of [["baixa", 0.25], ["alta", 1]] as const) {
   const c = rig.carPose();
   check("posto", "carro contra a loja: para encostado (m da fachada)", c.x - (STATION.shop.x + STATION.shop.w / 2), 2.0, 3.5, "m", 2);
   check("posto", "bomba: longe dela não abastece", fuelBayState({ x: 0, z: 0, yaw: 0 }, 0).near ? 0 : 1, 1, 1, "", 0);
+}
+
+// ---------- Atracação no píer e poitas ----------
+{
+  const w = buildWorld();
+  const water = mkWater(0.35);
+  const B = pierBerth(w.pier);
+  for (const kind of ["lancha", "bote"] as const) {
+    const P = kind === "lancha" ? SPEEDBOAT : DINGHY;
+    const b = new Speedboat(P, v3(B.edgeX + P.beam / 2 + 0.9, 0.25, B.z + 14), Math.PI);
+    b.systems.fuelL = 20;
+    let tied = -1;
+    const inp: VehicleInput = { ...emptyInput(), gear: "F" };
+    run(b, water, 40, inp, w, (t) => {
+      const st = pierBerthState(b, w.pier);
+      const along = b.pos.z - B.z, gap = b.pos.x - B.edgeX - P.beam / 2;
+      inp.gear = along > 7 ? "F" : "N";
+      inp.steering = Math.max(-1, Math.min(1, (gap - 0.3) * 0.6 + Math.atan2(b.forward.x, -b.forward.z) * 2));
+      if (st.ok && tied < 0) { tied = t; tieToPier(b, w.pier, st.side); }
+    });
+    const gap = b.pos.x - B.edgeX - P.beam / 2;
+    check("amarração", `${kind}: entra na vaga do píer e é amarrado (s)`, tied, 3, 35, "s", 1);
+    check("amarração", `${kind}: amarrado fica encostado no píer (folga m)`, gap, -0.1, 0.6, "m", 2);
+    check("amarração", `${kind}: amarrado fica na vaga (m do centro)`, Math.abs(b.pos.z - B.z), 0, 3.5, "m", 2);
+    check("amarração", `${kind}: atracar sem avaria (%)`, (b.hullDamage + b.engineDamage) * 100, 0, 0, "%", 0);
+    // poita
+    b.mooringLines = [];
+    const buoy = BUOYS[1];
+    b.reset(v3(buoy.x, 0.25, buoy.z - 14), 0);
+    let tiedB = -1;
+    const ib: VehicleInput = { ...emptyInput(), gear: "F" };
+    run(b, water, 60, ib, w, (t) => {
+      const st = buoyState(b);
+      const want = Math.atan2(buoy.x - b.pos.x, buoy.z - b.pos.z), yaw = Math.atan2(b.forward.x, b.forward.z);
+      let err = want - yaw; while (err > Math.PI) err -= 2 * Math.PI; while (err < -Math.PI) err += 2 * Math.PI;
+      ib.gear = st.dist > 2.5 && tiedB < 0 ? "F" : "N"; ib.steering = Math.max(-1, Math.min(1, err * 2));
+      if (st.ok && tiedB < 0) { tiedB = t; tieToBuoy(b, buoy); }
+    });
+    const e = b.toWorld(P.contactPoints.reduce((a, c) => (c.z > a.z ? c : a)));
+    check("amarração", `${kind}: amarra na poita (s)`, tiedB, 2, 50, "s", 1);
+    check("amarração", `${kind}: fica preso à poita (proa a m)`, Math.hypot(e.x - buoy.x, e.z - buoy.z), 0, 3.5, "m", 2);
+    b.mooringLines = [];
+    run(b, water, 10, { ...emptyInput(), gear: "R", throttle: 0.4 }, w);
+    check("amarração", `${kind}: M solta e o barco se afasta (m)`, Math.hypot(b.pos.x - buoy.x, b.pos.z - buoy.z), 5, 200, "m", 1);
+  }
 }
 
 // ---------- Carga: gasolina e ocupantes (quantidade e posição) ----------

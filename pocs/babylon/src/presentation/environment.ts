@@ -170,9 +170,10 @@ export const buildPier = (scene: Scene, pier: PierLayout): Mesh[] => {
     }
   }
   // cabana da marina
-  const shoreH = groundHeight(pier.shoreX - 9, pier.shoreZ - 12);
+  // bar & restaurante centralizado com o píer (o píer chega na frente do deck)
+  const shoreH = groundHeight(pier.shoreX, pier.shoreZ - 16);
   const hut = MeshBuilder.CreateBox("hut", { width: 7, height: 3.2, depth: 5 }, scene);
-  hut.position.set(pier.shoreX - 9, shoreH + 1.6, pier.shoreZ - 12);
+  hut.position.set(pier.shoreX, shoreH + 1.6, pier.shoreZ - 16);
   const hutMat = new StandardMaterial("hutMat", scene);
   hutMat.diffuseColor = new Color3(0.86, 0.84, 0.78);
   hut.material = hutMat;
@@ -205,6 +206,26 @@ export const buildPier = (scene: Scene, pier: PierLayout): Mesh[] => {
     const pole = MeshBuilder.CreateCylinder("umbPole", { height: 2.0, diameter: 0.05 }, scene); pole.material = tableM; pole.position.set(tx, shoreH + 1.2, tz); meshes.push(pole);
     const umb = MeshBuilder.CreateCylinder("umbrellaTop", { height: 0.45, diameterTop: 0.05, diameterBottom: 2.3, tessellation: 12 }, scene); umb.material = clothM; umb.position.set(tx, shoreH + 2.2, tz); meshes.push(umb);
     for (const sx of [-1, 1]) { const ch = MeshBuilder.CreateBox("barChair", { width: 0.45, height: 0.45, depth: 0.45 }, scene); ch.material = tableM; ch.position.set(tx + sx * 0.75, shoreH + 0.43, tz); meshes.push(ch); }
+  }
+  // ---- piscina do bar (lado leste, longe da rampa): borda de pedra, água azul, espreguiçadeiras e escada ----
+  const px = hx + 13, pz = hz + 1, PW = 9, PD = 5, ph = groundHeight(px, pz);
+  const stone = new StandardMaterial("poolStone", scene); stone.diffuseColor = new Color3(0.86, 0.84, 0.78); stone.specularColor = new Color3(0.05, 0.05, 0.05);
+  const deckP = MeshBuilder.CreateBox("poolDeck", { width: PW + 4, height: 0.3, depth: PD + 4 }, scene); deckP.material = stone; deckP.position.set(px, ph + 0.15, pz); meshes.push(deckP);
+  for (const [w, d, dx, dz] of [[PW + 0.6, 0.3, 0, PD / 2 + 0.15], [PW + 0.6, 0.3, 0, -PD / 2 - 0.15], [0.3, PD, PW / 2 + 0.15, 0], [0.3, PD, -PW / 2 - 0.15, 0]] as const) {
+    const rim = MeshBuilder.CreateBox("poolRim", { width: w, height: 0.2, depth: d }, scene); rim.material = stone; rim.position.set(px + dx, ph + 0.4, pz + dz); meshes.push(rim);
+  }
+  const poolWater = MeshBuilder.CreateGround("poolWater", { width: PW, height: PD }, scene);
+  const pwM = new StandardMaterial("poolWaterMat", scene); pwM.diffuseColor = new Color3(0.25, 0.72, 0.85); pwM.emissiveColor = new Color3(0.05, 0.22, 0.28); pwM.specularColor = new Color3(0.9, 0.9, 0.9); pwM.specularPower = 64; pwM.alpha = 0.92;
+  poolWater.material = pwM; poolWater.position.set(px, ph + 0.36, pz); meshes.push(poolWater);
+  const lounger = new StandardMaterial("lounger", scene); lounger.diffuseColor = new Color3(0.95, 0.95, 0.92);
+  for (const dx of [-2.5, 0, 2.5]) {
+    const l = MeshBuilder.CreateBox("poolLounger", { width: 0.7, height: 0.12, depth: 1.8 }, scene); l.material = lounger; l.position.set(px + dx, ph + 0.5, pz - PD / 2 - 1.3); l.rotation.x = -0.12; meshes.push(l);
+  }
+  const ladM = new StandardMaterial("poolLadder", scene); ladM.diffuseColor = new Color3(0.8, 0.82, 0.85); ladM.specularColor = new Color3(0.8, 0.8, 0.8);
+  for (const dx of [-0.25, 0.25]) {
+    const path: Vector3[] = [];
+    for (let i = 0; i <= 8; i++) { const a = Math.PI * (i / 8); path.push(new Vector3(px + PW / 2 - 0.8 + dx, ph + 0.35 + Math.sin(a) * 0.45, pz + PD / 2 + 0.2 - Math.cos(a) * 0.3)); }
+    const t = MeshBuilder.CreateTube("poolLadderRail", { path, radius: 0.025, tessellation: 8 }, scene); t.material = ladM; meshes.push(t);
   }
   // boias de sinalização na ponta do píer
   const buoyMat = new StandardMaterial("buoyMat", scene);
