@@ -23,7 +23,9 @@ import { BoatCamera } from "./presentation/cameras.ts";
 import { Hud } from "./presentation/hud.ts";
 import { EngineAudio } from "./presentation/audio.ts";
 
-const BUILD = "poc-babylon 0.2.0";
+const BUILD = "poc-babylon 0.2.1";
+/** Escala visual da rotação da hélice (proporcional ao RPM, abaixo do limite estroboscópico). */
+const PROP_VISUAL_SCALE = 0.12;
 
 /** Presets de água: amplitude das ondas de Gerstner (física + visual) e ondulação fina (visual). */
 const WATER_PRESETS = [
@@ -224,8 +226,10 @@ const boot = async () => {
     boatVis.wheel.rotation.z = -T.steerDeg * Math.PI / 180 * 5;
     boatVis.speedNeedle.rotation.z = needleAngle(T.speedKmh, 100);
     boatVis.rpmNeedle.rotation.z = needleAngle(T.rpm / 1000, 7);
-    if (!paused) boatVis.propeller.rotation.z += (T.propRpm / 60) * 2 * Math.PI * dtReal;
-    boatVis.propBlur.alpha = Math.min(0.55, Math.max(0, (Math.abs(T.propRpm) - 250) / 1400)) * (1 - 0.4 * T.cavitation);
+    // hélice: velocidade visual PROPORCIONAL ao RPM real (escala fixa de 0,12). A rotação real (até ~48 voltas/s)
+    // daria efeito estroboscópico a 60 FPS (a hélice pareceria parada ou girando ao contrário).
+    if (!paused) boatVis.propeller.rotation.z += (T.propRpm / 60) * PROP_VISUAL_SCALE * 2 * Math.PI * dtReal;
+    boatVis.propBlur.alpha = Math.min(0.3, Math.max(0, (Math.abs(T.propRpm) - 1200) / 4000));
     for (const b of buoys) b.position.y = water.getHeight(b.position.x, b.position.z) - 0.05;
 
     cam.update(dtReal, rPos, rRot, Math.hypot(boat.vel.x, boat.vel.z));

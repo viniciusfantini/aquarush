@@ -99,7 +99,9 @@ export class WakeMap {
     const c = this.ctx, N = this.size, ppm = N / this.worldSize;
     const ox = this.originX, oz = this.originZ;
     const X = (x: number) => (x - ox) * ppm + N / 2;
-    const Y = (z: number) => N / 2 - (z - oz) * ppm; // canvas cresce para baixo; +Z para cima
+    // a DynamicTexture inverte o canvas no upload: a linha 0 do canvas vira v = 0 no shader,
+    // então +Z cresce para BAIXO no canvas (verificado no navegador: a esteira fica atrás da popa)
+    const Y = (z: number) => N / 2 + (z - oz) * ppm;
     c.globalCompositeOperation = "source-over";
     c.fillStyle = "#000";
     c.fillRect(0, 0, N, N);

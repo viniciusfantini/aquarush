@@ -63,7 +63,7 @@ A lancha é um **corpo rígido 6DOF** (massa de 1200 kg, tensor de inércia diag
   - ondas transversais em baixa velocidade (λ = 2πv²/g);
   - água revolvida da hélice (espuma que se abre e some) e "bigode" de espuma no costado e na proa;
   - **fervura de cavitação e ventilação** na popa.
-- **Hélice:** rotação real (motor ÷ 2); disco de borrão em alta rotação; bolhas, névoa e spray extra quando cavita ou ventila; aviso piscante no HUD e chiado no áudio.
+- **Hélice:** a velocidade visual é **proporcional ao RPM do motor** (escala fixa de 0,12: 750 rpm = 0,75 volta/s e 5300 rpm = 5,2 voltas/s, medido no navegador). A rotação real (até ~48 voltas/s) causaria efeito estroboscópico a 60 FPS. Disco de borrão suave acima de 1200 rpm da hélice; bolhas, névoa e spray extra quando cavita ou ventila; aviso piscante no HUD e chiado no áudio.
 - A água não aparece dentro do cockpit (tampa só de profundidade).
 
 ## Roteiro de testes (GDD A.12): resultados de 2026-10-31

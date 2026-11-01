@@ -19,6 +19,7 @@
 
 - `src/sim/**` **não pode importar Babylon** (precisa rodar no Node para os testes).
 - A esteira, o spray e o HUD só leem a telemetria (`BoatTelemetry`): velocidade na água, acelerador, `cavitation`, `ventilation`, `propRpm`.
+- No mapa de esteira, a DynamicTexture inverte o canvas no upload: **+Z do mundo = para baixo no canvas** (). Inverter isso faz a esteira sair à frente da proa.
 - Uma textura dinâmica nova precisa de `update()` antes do 1º quadro, senão o material fica "not ready" e a cena não inicia (aconteceu com o mapa de esteira). Se a cena não carregar, o `main.ts` loga após 4 s o que está pendente.
 - Convenção de eixos: X direita, Y cima, Z proa. Quaternions de Hamilton, iguais aos da Babylon (verificado no navegador).
 - A física roda a 120 Hz em passo fixo (`core/config.ts`). O render interpola.
