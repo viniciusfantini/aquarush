@@ -9,7 +9,7 @@ import {
 } from "./math.ts";
 import type { IWaterSurface } from "./water.ts";
 import { G } from "./water.ts";
-import { type PhysicsWorld, surfaceHeight } from "./world.ts";
+import { type PhysicsWorld, frameQuat } from "./world.ts";
 import type { SpeedboatParams, Occupant, SeatId } from "./params.ts";
 import { PERSON_KG } from "./params.ts";
 import { ENGINE_SYSTEMS } from "./engineSystems.ts";
@@ -52,6 +52,10 @@ export interface BoatTelemetry {
   distanceM: number;
   collisions: number;
   capsized: boolean;     // barco virou (kill switch desliga o motor; ocupantes caem na água)
+  hullDamage: number;    // avaria do casco 0..1 (impactos fortes)
+  engineDamage: number;  // avaria do motor 0..1 (pé/hélice batendo no fundo, pedra ou carro)
+  damageEvent: string;   // última avaria (texto para o aviso) — muda a cada nova avaria
+  damageCount: number;   // contador de avarias (o HUD avisa quando muda)
   swimmers: number;      // pessoas na água
   lastImpact: number;    // N (intensidade do último impacto)
   engine: EngineState;   // motor desligado / dando partida / funcionando
@@ -65,7 +69,7 @@ export interface BoatTelemetry {
   protectMode: boolean;  // superaquecido: rotação limitada
   lowFuel: boolean;
   chargeWarn: boolean;
-  stall: "" | "fuel" | "overheat" | "capsize"; // último motivo de o motor ter morrido sozinho
+  stall: "" | "fuel" | "overheat" | "capsize" | "broken"; // último motivo de o motor ter morrido sozinho
   buzzer: boolean;       // alarme do motor apitando (autoteste da chave)
   starterRpm: number;    // rotação do motor de arranque (0 = só o "clique" do solenoide)
   startFail: "" | "weak" | "dead" | "pull"; // última partida que não pegou (bateria fraca / sem força / corda)
@@ -120,6 +124,14 @@ export class Speedboat {
   private lastContact = false;
   /** apoiado no berço da carretinha neste passo */
   onSupport = false;
+  /** força normal máxima de contato neste passo (N) — usada para avarias */
+  impactN = 0;
+  /** avarias (0..1). Casco: impactos acima de ~4× o peso. Motor: pé batendo no fundo/pedra/carro em movimento. */
+  hullDamage = 0;
+  engineDamage = 0;
+  private hullEpisode = 0;      // avaria já aplicada no impacto atual (um impacto = um episódio de contato)
+  private engineHitting = false;
+  private obstacleInside = false;
   /** cinta do guincho presa ao olhal de proa (carretinha) — só traciona */
   winchStrap: { anchor: Vec3; local: Vec3; length: number } | null = null;
   private cavitation = 0;
@@ -199,7 +211,7 @@ export class Speedboat {
     this.telemetry = {
       speedKmh: 0, waterSpeed: 0, rpm: params.idleRpm, throttle: 0, throttleCmd: 0, trim: 0, trimDeg: 0, tiltDeg: 0, tiltBlocked: false, intakeSubmerged: true, steerDeg: 0,
       gear: "N", pitchDeg: 0, rollDeg: 0, wetFraction: 0, planing: false, thrustN: 0, ventilation: 1, cavitation: 0, propImmersion: 1, revLimiter: false, propSlip: 0, propRpm: 0, engine: "running", fuelL: 0, fuelFrac: 1, coolantC: 45, batteryV: 12.6, engineHours: 0, overheatWarn: false, protectMode: false, lowFuel: false, chargeWarn: false, stall: "", trimMotorA: 0, fuelLph: 0, buzzer: false, starterRpm: 0, startFail: "", batterySoc: 0.92, trimPin: 0, pullStart: !params.electricStart,
-      distanceM: 0, collisions: 0, capsized: false, swimmers: 0, lastImpact: 0, depth: 0, submergedPoints: params.buoyancyPoints.map(() => false),
+      distanceM: 0, collisions: 0, capsized: false, swimmers: 0, hullDamage: 0, engineDamage: 0, damageEvent: "", damageCount: 0, lastImpact: 0, depth: 0, submergedPoints: params.buoyancyPoints.map(() => false),
     };
   }
 
@@ -301,7 +313,7 @@ export class Speedboat {
       const fBuoy = v3(0, fy, 0);
 
       // arrasto longitudinal (atrito do casco molhado) e lateral (quilha/costado) — em eixos locais
-      const fLon = -(P.dragLinear * lr.z + P.dragFrictionQuad * Math.abs(lr.z) * lr.z) * wet * share;
+      const fLon = -(P.dragLinear * lr.z + P.dragFrictionQuad * (1 + 1.5 * this.hullDamage) * Math.abs(lr.z) * lr.z) * wet * share; // casco avariado arrasta mais
       // lateral: arrasto do costado + sustentação da quilha/strakes (∝ u·v_lat, como um perfil):
       // em velocidade o casco "agarra" e quase não derrapa nas curvas
       const fLat = -(P.lateralLinear * lr.x + P.lateralQuad * Math.abs(lr.x) * lr.x) * wet * share;
@@ -382,7 +394,7 @@ export class Speedboat {
     const load = Math.abs(thrust) / P.maxThrust;
     const cavTarget = immersion > 0.9 && this.engine === "running" ? clamp((load * slip - 0.55) / 0.25, 0, 1) : 0;
     this.cavitation += (cavTarget - this.cavitation) * (1 - Math.exp(-dt / 0.15));
-    thrust *= Math.pow(immersion, 1.5) * (1 - 0.5 * aeration) * (1 - 0.3 * this.cavitation);
+    thrust *= Math.pow(immersion, 1.5) * (1 - 0.5 * aeration) * (1 - 0.3 * this.cavitation) * (1 - 0.7 * this.engineDamage); // pé/hélice avariados
     if (thrust !== 0) this.addForceAt(scale(tDir, thrust), propW, "thrust");
     this.lastThrust = thrust;
 
@@ -412,6 +424,8 @@ export class Speedboat {
 
     // ---------------- colisões (fundo, rochas, píer) ----------------
     const impact = this.collide(world);
+    this.impactN = impact;
+    this.evaluateDamage(dt, world, impact);
 
     // ---------------- integração (Euler semi-implícito) ----------------
     this.vel = addScaled(this.vel, this.F, dt / this.totalMass);
@@ -482,6 +496,7 @@ export class Speedboat {
     t.depth = water.getDepth(this.pos.x, this.pos.z);
     this.updateCapsize(dt, water, world);
     t.capsized = this.capsized;
+    t.hullDamage = this.hullDamage; t.engineDamage = this.engineDamage;
     t.swimmers = this.swimmers.length;
     if (impact > 0) t.lastImpact = impact;
   }
@@ -552,6 +567,100 @@ export class Speedboat {
     if (this.systems.protect) target = Math.min(target, 0.3);   // modo de proteção
     if (this.systems.starving) target = Math.min(target, 0.05); // engasgando sem combustível
     this.throttleActual += (target - this.throttleActual) * (1 - Math.exp(-dt / P.engineResponse));
+  }
+
+  /** Ponta da rabeta (quilha do pé, abaixo da hélice) no mundo — gira com trim/tilt. */
+  lowerUnitTip(): Vec3 {
+    const P = this.params;
+    const trimAngle = P.trimMode === "manual" ? this.manualAngle : this.trim >= 0 ? this.trim * P.trimUp : -this.trim * P.trimDown;
+    const q = qFromAxisAngle(v3(1, 0, 0), trimAngle + this.tilt);
+    const tip = v3(P.propPos.x, P.propPos.y - P.propRadius - 0.06, P.propPos.z + 0.15);
+    return this.toWorld(add(P.drivePivot, rotate(q, sub(tip, P.drivePivot))));
+  }
+  /** Topo do capô do motor no mundo (para batidas no carro com o motor levantado). */
+  cowlTop(): Vec3 {
+    const P = this.params;
+    const trimAngle = P.trimMode === "manual" ? this.manualAngle : this.trim >= 0 ? this.trim * P.trimUp : -this.trim * P.trimDown;
+    const q = qFromAxisAngle(v3(1, 0, 0), trimAngle + this.tilt);
+    return this.toWorld(add(P.drivePivot, rotate(q, v3(0, P.kind === "lancha" ? 0.75 : 0.5, -0.45))));
+  }
+
+  private addDamage(part: "hull" | "engine", amount: number, why: string): void {
+    if (amount <= 0.005) return;
+    if (part === "hull") this.hullDamage = clamp(this.hullDamage + amount, 0, 1);
+    else {
+      this.engineDamage = clamp(this.engineDamage + amount, 0, 1);
+      if (this.engineDamage >= 0.95 && this.engine === "running") { this.engine = "off"; this.telemetry.stall = "broken"; }
+    }
+    this.telemetry.damageEvent = why;
+    this.telemetry.damageCount++;
+  }
+
+  /**
+   * Avarias por impacto:
+   *  • casco: pico de contato acima de 4× o peso → avaria ∝ excesso (pedra a 15 km/h ≈ 17 %, a 40 km/h ≈ 90 %);
+   *    cada impacto conta uma vez (episódio de contato);
+   *  • motor: a ponta do pé abaixo do fundo (ou dentro de uma pedra) com o barco andando > 1 m/s
+   *    → avaria ∝ velocidade enquanto raspa (encalhar/rebocar com o motor baixado destrói o pé).
+   */
+  private evaluateDamage(dt: number, world: PhysicsWorld, impact: number): void {
+    const W = this.totalMass * G;
+    if (impact <= 0) this.hullEpisode = 0;
+    else {
+      const sev = clamp((impact / W - 4) / 30, 0, 1);
+      if (sev > this.hullEpisode) { this.addDamage("hull", sev - this.hullEpisode, "Avaria no casco: batida forte"); this.hullEpisode = sev; }
+    }
+    this.lowerUnitScrape(dt, world, Math.hypot(this.vel.x, this.vel.z));
+  }
+
+  private lowerUnitScrape(dt: number, world: PhysicsWorld, speed: number): void {
+    const tip = this.lowerUnitTip();
+    let hit = tip.y < world.groundHeight(tip.x, tip.z);
+    for (const s of world.spheres) if (!hit && (tip.x - s.x) ** 2 + (tip.y - s.y) ** 2 + (tip.z - s.z) ** 2 < s.r * s.r) hit = true;
+    if (hit && speed > 1.0) { // raspar devagar (≤ 3,6 km/h, ex.: subindo na carretinha) não quebra
+      const first = !this.engineHitting;
+      this.addDamage("engine", (first ? 0.06 : 0) + 0.3 * (speed - 1.0) * dt, "Avaria no motor: o pé bateu no fundo — levante o motor (tilt) em água rasa e para rebocar");
+      this.engineHitting = true;
+    } else if (!hit) this.engineHitting = false;
+  }
+
+  /**
+   * Barco preso na carretinha sendo rebocado (pose imposta pelo veículo): só as avarias — pé arrastando
+   * no chão e batidas do casco/motor no veículo (`inside` diz se um ponto do mundo está dentro dele).
+   */
+  carriedDamage(dt: number, world: PhysicsWorld, inside: (p: Vec3) => boolean): void {
+    this.lowerUnitScrape(dt, world, Math.hypot(this.vel.x, this.vel.z));
+    this.obstacleDamage(inside);
+  }
+
+  /** Casco ou motor dentro de um obstáculo móvel (o veículo de reboque): avaria uma vez por batida. */
+  obstacleDamage(inside: (p: Vec3) => boolean): void {
+    const eng = inside(this.lowerUnitTip()) || inside(this.cowlTop());
+    const hull = this.params.contactPoints.some((p) => inside(this.toWorld(p)));
+    if ((eng || hull) && !this.obstacleInside) {
+      if (eng) this.addDamage("engine", 0.3, "Avaria no motor: bateu no carro");
+      if (hull) this.addDamage("hull", 0.2, "Avaria no casco: bateu no carro");
+    }
+    this.obstacleInside = eng || hull;
+  }
+
+  /** Oficina: zera as avarias (usado no reset do píer/rampa). */
+  repair(): void { this.hullDamage = 0; this.engineDamage = 0; this.hullEpisode = 0; this.engineHitting = false; }
+
+  /** Trim/tilt com o barco fora da física (preso na carretinha): a bomba/mão continuam funcionando. */
+  trimWhileCarried(dt: number, trimIn: number): void {
+    const inp = { ...NO_PILOT, trim: trimIn, gear: this.wantGear };
+    this.updateControls(dt, inp, 0);
+    this.systems.update(dt, { engine: this.engine, rpm: this.rpm, fuelLph: 0, load: 0, intakeSubmerged: false, lightsOn: false, trimMotorA: this.trimMotorA });
+    const P = this.params, t = this.telemetry;
+    const trimAngle = P.trimMode === "manual" ? this.manualAngle : this.trim >= 0 ? this.trim * P.trimUp : -this.trim * P.trimDown;
+    t.trim = this.trim; t.trimDeg = trimAngle * 57.2958; t.tiltDeg = this.tilt * 57.2958;
+    t.tiltBlocked = this.tiltBlocked || this.manualBlockT > 0;
+    t.trimPin = P.trimMode === "manual" ? (this.tiltWanted ? P.trimPins.length + 1 : this.trimPin + 1) : 0;
+    t.trimMotorA = this.trimMotorA; t.batteryV = this.systems.batteryV; t.batterySoc = this.systems.batterySoc;
+    t.hullDamage = this.hullDamage; t.engineDamage = this.engineDamage;
+    t.speedKmh = Math.hypot(this.vel.x, this.vel.z) * 3.6;
+    t.engine = this.engine; t.rpm = this.rpm = 0; t.propRpm = 0; t.throttle = 0; t.thrustN = 0;
   }
 
   /**
@@ -667,8 +776,9 @@ export class Speedboat {
    * Ignição (tecla P): desliga o motor ou dá partida. Por segurança (como nos motores reais),
    * a partida só funciona em NEUTRO. Retorna o que aconteceu.
    */
-  toggleIgnition(): "stopped" | "starting" | "pulling" | "needNeutral" | "busy" | "noFuel" | "lowBattery" | "hot" | "noPilot" {
+  toggleIgnition(): "stopped" | "starting" | "pulling" | "needNeutral" | "busy" | "noFuel" | "lowBattery" | "hot" | "noPilot" | "broken" {
     if (!this.occupants.some((o) => o.seat === "helm")) return "noPilot";
+    if (this.engine !== "running" && this.engineDamage >= 0.95) return "broken";
     if (this.engine === "running") { this.engine = "off"; return "stopped"; }
     if (this.engine === "cranking") return "busy";
     if (this.gear !== "N") return "needNeutral";
@@ -798,22 +908,35 @@ export class Speedboat {
         contact = true;
       }
     }
-    // berço da carretinha (bunks): apoio só por cima, com atrito baixo (carpete) — o casco desliza e centraliza no V
-    if (world.surfaces?.length) {
+    // carretinha (no referencial dela, que anda com o veículo): berço em V que só apoia por cima, com atrito
+    // de carpete — o casco desliza e centraliza; postes-guia e batente como caixas locais
+    for (const tc of world.trailers ?? []) {
+      const q = frameQuat(tc.pose);
       const kS = 140000 * mk, cS = 14000 * mk;
       for (const lp of [...P.contactPoints, ...P.bunkPoints]) {
         const wp = this.toWorld(lp);
-        for (const sf of world.surfaces) {
-          const hs = surfaceHeight(sf, wp.x, wp.z);
-          if (hs === null) continue;
-          const pen = hs - wp.y;
-          if (pen <= 0 || pen > 0.3) continue;
-          const gx = sf.vSlope * Math.sign(wp.x - sf.cx);
-          const nl = Math.hypot(gx, 1, sf.slope);
-          const n = v3(-gx / nl, 1 / nl, -sf.slope / nl);
-          maxImpact = Math.max(maxImpact, this.applyContact(wp, this.pointVelocity(wp), n, pen / nl, kS, cS, sf.mu));
+        const L = rotateInv(q, v3(wp.x - tc.pose.x, wp.y - tc.pose.y, wp.z - tc.pose.z));
+        if (L.z >= 0 && L.z <= tc.length && Math.abs(L.x) <= tc.halfW) {
+          const pen = tc.clear + tc.vSlope * Math.abs(L.x) - L.y;
+          if (pen > 0 && pen < 0.3) {
+            const gx = tc.vSlope * Math.sign(L.x), nl = Math.hypot(gx, 1);
+            const n = rotate(q, v3(-gx / nl, 1 / nl, 0));
+            maxImpact = Math.max(maxImpact, this.applyContact(wp, this.pointVelocity(wp), n, pen / nl, kS, cS, tc.mu));
+            contact = true;
+            this.onSupport = true;
+          }
+        }
+        for (const b of tc.boxes) {
+          if (L.x < b.minX || L.x > b.maxX || L.y < b.minY || L.y > b.maxY || L.z < b.minZ || L.z > b.maxZ) continue;
+          const opts = [
+            { pen: L.x - b.minX, n: v3(-1, 0, 0) }, { pen: b.maxX - L.x, n: v3(1, 0, 0) },
+            { pen: L.z - b.minZ, n: v3(0, 0, -1) }, { pen: b.maxZ - L.z, n: v3(0, 0, 1) },
+            { pen: b.maxY - L.y, n: v3(0, 1, 0) },
+          ];
+          let best = opts[0];
+          for (const o of opts) if (o.pen < best.pen) best = o;
+          maxImpact = Math.max(maxImpact, this.applyContact(wp, this.pointVelocity(wp), rotate(q, best.n), best.pen, kC, cC, muC));
           contact = true;
-          this.onSupport = true;
         }
       }
     }

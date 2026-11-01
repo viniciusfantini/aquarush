@@ -5,7 +5,7 @@
 import { type VehicleInput, type GearCommand, emptyInput } from "../gameplay/vehicleInput.ts";
 import { approach, clamp } from "../sim/math.ts";
 
-export type Action = "camera" | "lights" | "reset" | "ramp" | "debug" | "help" | "pause" | "ignition" | "occupants" | "water0" | "water1" | "water2" | "water3" | "waterNext";
+export type Action = "camera" | "lights" | "reset" | "ramp" | "unhitch" | "debug" | "help" | "pause" | "ignition" | "occupants" | "water0" | "water1" | "water2" | "water3" | "waterNext";
 
 /**
  * Manete única (como numa lancha real), com detentes  R ← N → F:
@@ -50,7 +50,7 @@ export class InputManager {
       this.keys.add(e.code);
       this.lastDevice = "teclado";
       const map: Record<string, Action> = {
-        KeyC: "camera", KeyL: "lights", KeyR: "reset", KeyT: "ramp", F3: "debug", KeyH: "help", KeyP: "ignition", Escape: "pause", KeyO: "occupants",
+        KeyC: "camera", KeyL: "lights", KeyR: "reset", KeyT: "ramp", KeyU: "unhitch", F3: "debug", KeyH: "help", KeyP: "ignition", Escape: "pause", KeyO: "occupants",
         Digit0: "water0", Digit1: "water1", Digit2: "water2", Digit3: "water3", KeyG: "water0", KeyV: "waterNext",
       };
       const a = map[e.code];
@@ -143,11 +143,12 @@ export class InputManager {
    * Teclado W/↑ frente, S/↓ freio e, parado, ré; A/D direção. Gamepad: RT/LT + analógico.
    * Touch: alavanca acima do N = frente, abaixo = freio/ré; joystick = direção.
    */
-  drive(dt: number): { up: number; down: number; steer: number } {
-    let gpUp = 0, gpDown = 0, gpSteer = 0;
+  drive(dt: number): { up: number; down: number; steer: number; trim: number } {
+    let gpUp = 0, gpDown = 0, gpSteer = 0, gpTrim = 0;
     const pads = typeof navigator !== "undefined" && navigator.getGamepads ? navigator.getGamepads() : [];
     for (const gp of pads) {
       if (!gp || gp.mapping !== "standard") continue;
+      gpTrim = (gp.buttons[5]?.pressed ? 1 : 0) - (gp.buttons[4]?.pressed ? 1 : 0);
       gpUp = Math.max(gp.buttons[7]?.value ?? 0, gp.buttons[12]?.pressed ? 1 : 0);
       gpDown = Math.max(gp.buttons[6]?.value ?? 0, gp.buttons[13]?.pressed ? 1 : 0);
       const ax = gp.axes[0] ?? 0;
@@ -163,6 +164,8 @@ export class InputManager {
       up: Math.max(this.k("KeyW", "ArrowUp") ? 1 : 0, gpUp, tUp),
       down: Math.max(this.k("KeyS", "ArrowDown") ? 1 : 0, gpDown, tDown),
       steer: clamp(this.kbSteer + gpSteer + this.touchSteer, -1, 1),
+      // trim/tilt do motor do barco continuam funcionando com ele na carretinha (E/Q, RB/LB, TRIM±)
+      trim: clamp((this.k("KeyE") ? 1 : 0) - (this.k("KeyQ") ? 1 : 0) + this.touchTrim + gpTrim, -1, 1),
     };
   }
 

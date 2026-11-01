@@ -84,7 +84,7 @@ class RoundGauge {
   }
 }
 
-export interface HudOpts { speedMax: number; temp: boolean; battery: boolean; trimPins: number }
+export interface HudOpts { speedMax: number; temp: boolean; battery: boolean; trimPins: number; gear?: "bar" | "dial" }
 
 export class Hud {
   private speedG!: RoundGauge;
@@ -93,6 +93,8 @@ export class Hud {
   private tempG: RoundGauge | null = null;
   private voltG: RoundGauge | null = null;
   private pins = 0;
+  private gearStyle: "bar" | "dial" = "bar";
+  private shownGear = "";
   private thrBar = $("h-thr-bar");
   private thrTxt = $("h-thr");
   private trimMark = $("h-trim-mark");
@@ -106,6 +108,8 @@ export class Hud {
   private vent = $("h-vent");
   private water = $("h-water");
   private occ = $("h-occ");
+  private dmgHull = $("h-dmg-hull");
+  private dmgEng = $("h-dmg-eng");
   private fuelAut = $("g-aut");
   private cam = $("h-cam");
   private lights = $("h-lights");
@@ -119,8 +123,21 @@ export class Hud {
   constructor(opts?: HudOpts) { this.configure(opts); }
 
   /** (Re)monta os relógios para o barco escolhido. */
-  configure(opts: HudOpts = { speedMax: 100, temp: true, battery: true, trimPins: 0 }): void {
+  configure(opts: HudOpts = { speedMax: 100, temp: true, battery: true, trimPins: 0, gear: "bar" }): void {
     const big = $("g-big"), small = $("g-small");
+    // marcha: lancha = barra da manete (F em cima, N, R embaixo); bote = alavanca de câmbio do motor (mostrador redondo)
+    const gearBox = $("g-gear");
+    if ((opts.gear ?? "bar") === "bar") {
+      gearBox.innerHTML = `<div class="vbar"><div class="track gear"><span class="gl" data-g="F" style="bottom:85%">F</span><span class="gl" data-g="N" style="bottom:50%">N</span><span class="gl" data-g="R" style="bottom:15%">R</span><div id="h-gear-mark"></div></div><b id="h-gear">N</b>MARCHA</div>`;
+    } else {
+      // vista lateral da alavanca no motor (proa para a direita): F = para a frente, N = em pé, R = para trás
+      gearBox.innerHTML = `<div class="vbar"><svg class="gear-dial" viewBox="0 0 64 64"><circle class="face" cx="32" cy="32" r="30"/>
+        <text data-g="R" x="11" y="20">R</text><text data-g="N" x="32" y="9">N</text><text data-g="F" x="53" y="20">F</text>
+        <g id="h-gear-lever"><line class="lever" x1="32" y1="44" x2="32" y2="18"/><circle class="knob" cx="32" cy="16" r="5"/></g>
+        <circle class="knob" cx="32" cy="44" r="4"/></svg><b id="h-gear">N</b>MARCHA</div>`;
+    }
+    this.gearStyle = opts.gear ?? "bar";
+    this.shownGear = "";
     big.innerHTML = ""; small.innerHTML = "";
     this.pins = opts.trimPins;
     const sm = opts.speedMax;
@@ -144,6 +161,22 @@ export class Hud {
     this.thrBar.style.height = `${t.throttle * 100}%`;
     this.thrBar.classList.toggle("rev", t.gear === "R");
     this.thrTxt.textContent = `${Math.round(t.throttle * 100)}%`;
+    // indicador de marcha (lê a marcha REAL da simulação: passa por N durante a troca)
+    if (t.gear !== this.shownGear) {
+      this.shownGear = t.gear;
+      const box = $("g-gear");
+      $("h-gear").textContent = t.gear;
+      for (const el of box.querySelectorAll<SVGElement | HTMLElement>("[data-g]")) el.classList.toggle("on", el.dataset.g === t.gear);
+      if (this.gearStyle === "bar") {
+        const m = $("h-gear-mark");
+        m.style.bottom = t.gear === "F" ? "85%" : t.gear === "R" ? "15%" : "50%";
+        m.className = t.gear === "R" ? "r" : t.gear === "N" ? "n" : "";
+      } else {
+        const lev = box.querySelector<SVGGElement>("#h-gear-lever")!;
+        lev.style.transformOrigin = "32px 44px"; // gira em torno do pivô da alavanca (animação por CSS)
+        lev.style.transform = `rotate(${t.gear === "F" ? 40 : t.gear === "R" ? -40 : 0}deg)`;
+      }
+    }
     this.trimMark.style.bottom = t.tiltDeg > 0.5 ? "100%" : `${((t.trim + 1) / 2) * 100}%`;
     this.trimMark.style.background = t.tiltDeg > 0.5 ? "#ff9d3d" : "";
     this.trimTxt.textContent = t.trimPin > this.pins ? `TILT ${t.tiltDeg.toFixed(0)}°` : t.tiltDeg > 0.5 ? `TILT ${t.tiltDeg.toFixed(0)}°`
@@ -158,6 +191,10 @@ export class Hud {
     this.lowFuelChip.classList.toggle("warn", t.lowFuel);
     if (t.lowFuel) this.lowFuelChip.textContent = `COMBUSTÍVEL BAIXO · ${t.fuelL.toFixed(1)} L`;
     this.chargeChip.classList.toggle("warn", t.chargeWarn && t.engine === "running");
+    this.dmgHull.classList.toggle("warn", t.hullDamage > 0.005);
+    this.dmgEng.classList.toggle("warn", t.engineDamage > 0.005);
+    if (t.hullDamage > 0.005) this.dmgHull.textContent = `AVARIA CASCO ${Math.round(t.hullDamage * 100)}%`;
+    if (t.engineDamage > 0.005) this.dmgEng.textContent = t.engineDamage >= 0.95 ? "MOTOR QUEBRADO" : `AVARIA MOTOR ${Math.round(t.engineDamage * 100)}%`;
 
     if (this.debugOn) {
       const rows: [string, string][] = [

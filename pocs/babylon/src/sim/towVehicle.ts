@@ -9,7 +9,7 @@
 
 import type { TrailerLayout } from "./trailer.ts";
 import { RAMP } from "./world.ts";
-import { clamp, approach } from "./math.ts";
+import { clamp, approach, v3, qMul, qFromAxisAngle, rotateInv, type Vec3 } from "./math.ts";
 
 /** ângulo máximo entre veículo e carretinha (cabeçalho encosta no para-choque) */
 export const MAX_ARTICULATION = 80 * Math.PI / 180;
@@ -17,6 +17,7 @@ export const MAX_ARTICULATION = 80 * Math.PI / 180;
 export interface DriveCommand { up: number; down: number; steer: number }
 
 export interface TowSpec {
+  length: number; width: number; height: number; // caixa do veículo (colisão com o barco → avaria)
   wheelbase: number;     // m
   rearToHitch: number;   // m do eixo traseiro até a bola do engate
   maxSteer: number;      // rad
@@ -27,8 +28,8 @@ export interface TowSpec {
 }
 
 export const TOW_SPECS: Record<"car" | "pickup", TowSpec> = {
-  car: { wheelbase: 2.56, rearToHitch: 1.12, maxSteer: 0.6, accel: 2.4, brake: 6, maxSpeed: 11, maxReverse: 2.5 },
-  pickup: { wheelbase: 3.17, rearToHitch: 1.4, maxSteer: 0.55, accel: 2.8, brake: 6.5, maxSpeed: 11, maxReverse: 2.5 },
+  car: { length: 4.3, width: 1.78, height: 1.5, wheelbase: 2.56, rearToHitch: 1.12, maxSteer: 0.6, accel: 2.4, brake: 6, maxSpeed: 11, maxReverse: 2.5 },
+  pickup: { length: 5.4, width: 1.9, height: 1.95, wheelbase: 3.17, rearToHitch: 1.4, maxSteer: 0.55, accel: 2.8, brake: 6.5, maxSpeed: 11, maxReverse: 2.5 },
 };
 
 export interface Pose { x: number; y: number; z: number; yaw: number; pitch: number }
@@ -114,6 +115,14 @@ export class TowRig {
     const fx = this.rx + Math.sin(this.yaw) * S.wheelbase, fz = this.rz + Math.cos(this.yaw) * S.wheelbase;
     const gR = this.ground(this.rx, this.rz), gF = this.ground(fx, fz);
     return { x: (this.rx + fx) / 2, y: (gR + gF) / 2, z: (this.rz + fz) / 2, yaw: this.yaw, pitch: -Math.atan2(gF - gR, S.wheelbase) };
+  }
+
+  /** O ponto (mundo) está dentro da carroceria do veículo? (para avarias do barco batendo no carro) */
+  insideCar(p: Vec3): boolean {
+    const c = this.carPose(), S = this.spec;
+    const q = qMul(qFromAxisAngle(v3(0, 1, 0), c.yaw), qFromAxisAngle(v3(1, 0, 0), c.pitch));
+    const l = rotateInv(q, v3(p.x - c.x, p.y - c.y, p.z - c.z));
+    return Math.abs(l.x) < S.width / 2 && l.y > 0.2 && l.y < S.height && Math.abs(l.z) < S.length / 2;
   }
 
   /** Pose da carretinha: origem no guincho (sFront), +Z local = para a traseira. */

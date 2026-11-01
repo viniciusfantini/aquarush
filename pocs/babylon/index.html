@@ -48,6 +48,20 @@
     .vbar b { color: var(--fg); font-variant-numeric: tabular-nums; font-weight: 600; min-width: 46px; text-align: center; }
     #h-thr-bar { position: absolute; bottom: 0; left: 0; right: 0; height: 0; background: var(--accent); }
     #h-thr-bar.rev { background: var(--warn); }
+    /* marcha: barra F/N/R (lancha, manete) ou mostrador redondo da alavanca do motor (bote) */
+    #g-gear { display: flex; }
+    .vbar .track.gear { width: 22px; overflow: visible; background: rgba(255,255,255,0.1); }
+    .vbar .track.gear .gl { position: absolute; left: 0; right: 0; text-align: center; font-size: 10px; font-weight: 700; color: var(--dim); transform: translateY(50%); z-index: 1; }
+    .vbar .track.gear .gl.on { color: #04222a; }
+    #h-gear-mark { position: absolute; left: -2px; right: -2px; height: 20px; margin-bottom: -10px; border-radius: 5px; background: var(--accent); transition: bottom 0.18s ease-out; }
+    #h-gear-mark.r { background: var(--warn); } #h-gear-mark.n { background: #ffd34d; }
+    .gear-dial { width: 64px; height: 64px; margin-top: 28px; margin-bottom: 28px; }
+    .gear-dial .face { fill: rgba(8, 20, 30, 0.6); stroke: rgba(255,255,255,0.35); stroke-width: 1.5; }
+    .gear-dial text { font-size: 10px; font-weight: 700; fill: var(--dim); text-anchor: middle; dominant-baseline: middle; }
+    .gear-dial text.on { fill: var(--fg); }
+    .gear-dial #h-gear-lever { transition: transform 0.2s ease-out; }
+    .gear-dial .lever { stroke: #e8eef2; stroke-width: 4; stroke-linecap: round; }
+    .gear-dial .knob { fill: #1b1f22; stroke: #e8eef2; stroke-width: 1.2; }
     #h-trim-mark { position: absolute; left: -3px; right: -3px; height: 4px; margin-bottom: -2px; background: #ffd34d; border-radius: 2px; }
     .vbar .track.trim::after { content: ""; position: absolute; left: 0; right: 0; top: 50%; height: 1px; background: rgba(255,255,255,0.4); }
     #g-small { display: grid; grid-template-columns: repeat(3, 84px); gap: 6px; }
@@ -86,7 +100,7 @@
     @keyframes blink { 50% { background: #ff5a4e; } }
     #status .chip.btn { pointer-events: auto; cursor: pointer; color: var(--fg); border: 1px solid rgba(255,255,255,0.3); }
     #status { pointer-events: auto; }
-    #h-trailer:not(.show), #h-hot:not(.warn), #h-lowfuel:not(.warn), #h-charge:not(.warn), #h-cav:not(.warn), #h-vent:not(.warn) { display: none; }
+    #h-trailer:not(.show), #h-dmg-hull:not(.warn), #h-dmg-eng:not(.warn), #h-hot:not(.warn), #h-lowfuel:not(.warn), #h-charge:not(.warn), #h-cav:not(.warn), #h-vent:not(.warn) { display: none; }
     #h-build { position: absolute; left: 18px; bottom: 10px; font-size: 11px; color: var(--dim); }
 
     #h-debug { display: none; padding: 10px 14px; font-size: 12px; width: 270px; }
@@ -147,6 +161,8 @@
         <div class="chip" id="h-hot">SUPERAQUECIMENTO</div>
         <div class="chip" id="h-lowfuel">COMBUSTÍVEL BAIXO</div>
         <div class="chip" id="h-trailer">CARRETINHA</div>
+        <div class="chip" id="h-dmg-hull">AVARIA CASCO</div>
+        <div class="chip" id="h-dmg-eng">AVARIA MOTOR</div>
         <div class="chip" id="h-charge">BATERIA</div>
         <div class="chip btn" id="h-water">ÁGUA: LAGO</div>
         <div class="chip btn" id="h-occ">OCUPANTES: 1</div>
@@ -164,7 +180,7 @@
       <div id="help-occ"><kbd>O</kbd> ocupantes (1 · carona · 2 na popa · 4) — mudam o peso e o equilíbrio</div>
       <div><kbd>0</kbd>/<kbd>G</kbd> água vidro · <kbd>1</kbd> calma · <kbd>2</kbd> lago · <kbd>3</kbd> forte · <kbd>V</kbd> alterna</div>
       <div id="help-ign"><kbd>P</kbd> liga/desliga o motor (partida só em <b>N</b>) · <kbd>Esc</kbd> pausa</div>
-      <div><kbd>T</kbd> ir para a rampa: alinhe e suba o barco na carretinha (devagar, de proa). Com a cinta presa você passa a dirigir o carro: <kbd>W</kbd> frente · <kbd>S</kbd> freio/ré · <kbd>A</kbd><kbd>D</kbd></div>
+      <div><kbd>T</kbd> ir para a rampa: alinhe e suba o barco na carretinha (devagar, de proa). Com a cinta presa você passa a dirigir o carro: <kbd>W</kbd> frente · <kbd>S</kbd> freio/ré · <kbd>A</kbd><kbd>D</kbd> · <kbd>U</kbd> desengata o barco (solta a cinta)</div>
       <div><kbd>F3</kbd> telemetria · <kbd>H</kbd> ajuda</div>
       <div>Mouse: arraste para orbitar a câmera</div>
       <div>Gamepad: RT/LT, analógico, LB/RB trim, Y câmera</div>
@@ -174,6 +190,7 @@
       <div id="g-bars">
         <div class="vbar"><div class="track"><div id="h-thr-bar"></div></div><b id="h-thr">0%</b>ACEL</div>
         <div class="vbar"><div class="track trim"><div id="h-trim-mark"></div></div><b id="h-trim">0.0°</b>TRIM</div>
+        <div id="g-gear"></div>
       </div>
       <div id="g-big"></div>
       <div id="g-side"><div id="g-small"></div><div id="g-aut"></div></div>

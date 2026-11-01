@@ -3,26 +3,35 @@
 // compartilhado entre física e geração visual.
 
 import type { CurrentZone } from "./water.ts";
-import { clamp, smoothstep } from "./math.ts";
+import { clamp, smoothstep, v3, qMul, qFromAxisAngle, rotate, rotateInv, type Vec3, type Quat } from "./math.ts";
 
 export interface SphereCollider { x: number; y: number; z: number; r: number }
 export interface BoxCollider { minX: number; maxX: number; minY: number; maxY: number; minZ: number; maxZ: number }
 
+/** Pose de um referencial móvel (carretinha): origem, rumo (yaw, +Z = (sen, cos)) e pitch (> 0 = +Z local desce). */
+export interface FramePose { x: number; y: number; z: number; yaw: number; pitch: number }
+
 /**
- * Superfície de apoio inclinada (bunks/berço da carretinha): só segura de CIMA para baixo.
- * Altura = y0 + slope·(z − z0) + vSlope·|x − cx|  (berço em V: centraliza o casco).
+ * Carretinha no referencial dela (origem = guincho no chão; +Z local = traseira; Y = normal ao chão):
+ * berço em V (y = clear + vSlope·|x|, 0 ≤ z ≤ length, só apoia por cima) + caixas locais (postes, batente).
  */
-export interface SupportSurface { cx: number; halfW: number; z0: number; z1: number; y0: number; slope: number; vSlope: number; mu: number }
+export interface TrailerCollider {
+  pose: FramePose;
+  length: number; clear: number; vSlope: number; halfW: number; mu: number;
+  boxes: BoxCollider[];
+}
 
 export interface PhysicsWorld {
   groundHeight(x: number, z: number): number;
   spheres: SphereCollider[];
   boxes: BoxCollider[];
-  surfaces?: SupportSurface[];
+  trailers?: TrailerCollider[];
 }
 
-export const surfaceHeight = (s: SupportSurface, x: number, z: number): number | null =>
-  Math.abs(x - s.cx) > s.halfW || z < Math.min(s.z0, s.z1) || z > Math.max(s.z0, s.z1) ? null : s.y0 + s.slope * (z - s.z0) + s.vSlope * Math.abs(x - s.cx);
+/** rotação da pose (Hamilton, igual à Babylon: yaw em Y e depois pitch no X local) */
+export const frameQuat = (p: FramePose): Quat => qMul(qFromAxisAngle(v3(0, 1, 0), p.yaw), qFromAxisAngle(v3(1, 0, 0), p.pitch));
+export const toFrameLocal = (p: FramePose, w: Vec3): Vec3 => rotateInv(frameQuat(p), v3(w.x - p.x, w.y - p.y, w.z - p.z));
+export const fromFrame = (p: FramePose, l: Vec3): Vec3 => { const r = rotate(frameQuat(p), l); return v3(p.x + r.x, p.y + r.y, p.z + r.z); };
 
 // ---------- ruído determinístico ----------
 const hash = (x: number, z: number): number => {
@@ -172,7 +181,7 @@ export const buildWorld = (): PhysicsWorld & { pier: PierLayout; rockList: Spher
   }
 
   const spawn = { x: pier.shoreX + 9, z: pier.shoreZ + pier.length - 6, heading: 0 };
-  return { groundHeight, spheres, boxes, surfaces: [], pier, rockList: spheres, spawn };
+  return { groundHeight, spheres, boxes, trailers: [], pier, rockList: spheres, spawn };
 };
 
 export const isWater = (x: number, z: number): boolean => groundHeight(x, z) < -0.3;

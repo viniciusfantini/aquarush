@@ -506,7 +506,7 @@ for (const [label, thr] of [["baixa", 0.25], ["alta", 1]] as const) {
     const P = kind === "lancha" ? SPEEDBOAT : DINGHY;
     const w = buildWorld();
     const tr = buildTrailer(P);
-    w.surfaces = tr.surfaces; w.boxes = [...w.boxes, ...tr.boxes];
+    w.trailers = [tr.collider];
     const water = mkWater(0);
     const b = new Speedboat(P, v3(RAMP.x + 0.4, 0.25, tr.zRear + 14), Math.PI);
     b.systems.fuelL = 20;
@@ -560,6 +560,69 @@ for (const [label, thr] of [["baixa", 0.25], ["alta", 1]] as const) {
     // de frente virando, a carretinha volta a seguir o carro
     for (let i = 0; i < 12 / DT; i++) rig.update(DT, { up: 0.5, down: 0, steer: 0 });
     check("reboque", `${kind}: andando para a frente ela realinha (°)`, Math.abs(rig.articulation) * 57.3, 0, 8, "°", 1);
+  }
+}
+
+// ---------- Avarias (casco e motor) e desengate da carretinha ----------
+{
+  const still = mkWater(0);
+  const rockW: PhysicsWorld = { groundHeight: () => -50, spheres: [{ x: 0, y: 0, z: 30, r: 3 }], boxes: [] };
+  const shallowW: PhysicsWorld = { groundHeight: () => -0.75, spheres: [], boxes: [] };
+  const hit = (P: typeof SPEEDBOAT, w: PhysicsWorld, z0: number, v: number, thr: number, secs: number) => {
+    const b = new Speedboat(P, v3(0, 0.25, z0), 0);
+    b.vel = v3(0, 0, v);
+    run(b, still, secs, { ...emptyInput(), gear: "F", throttle: thr }, w);
+    return b;
+  };
+  const r15 = hit(SPEEDBOAT, rockW, 20, 4.2, 0.2, 4);
+  check("avarias", "lancha: pedra a 15 km/h → casco (%)", r15.hullDamage * 100, 8, 35, "%", 0);
+  check("avarias", "lancha: pedra a 15 km/h → motor intacto (%)", r15.engineDamage * 100, 0, 1, "%", 0);
+  const r40 = hit(SPEEDBOAT, rockW, 10, 11, 0.8, 3);
+  check("avarias", "lancha: pedra a 40 km/h → casco (%)", r40.hullDamage * 100, 70, 100, "%", 0);
+  const sh = hit(SPEEDBOAT, shallowW, 0, 8.3, 0.6, 3);
+  check("avarias", "lancha: raso (0,75 m) a 30 km/h com o motor baixado → motor (%)", sh.engineDamage * 100, 50, 100, "%", 0);
+  check("avarias", "motor quebrado não liga", sh.engineDamage >= 0.95 ? (run(sh, still, 1, emptyInput(), shallowW), sh.engine === "off" && sh.toggleIgnition() === "broken" ? 1 : 0) : 1, 1, 1, "", 0);
+  const ok = hit(SPEEDBOAT, openWater, 0, 0, 1, 20);
+  check("avarias", "navegando normal a toda: sem avaria (%)", (ok.hullDamage + ok.engineDamage) * 100, 0, 0, "%", 0);
+  sh.repair();
+  check("avarias", "oficina (R) repara tudo", sh.hullDamage + sh.engineDamage, 0, 0, "", 0);
+
+  // carregar com o motor levantado: sem avaria; soltar a cinta e sair de ré na água
+  const w = buildWorld();
+  const tr = buildTrailer(SPEEDBOAT);
+  w.trailers = [tr.collider];
+  const b = new Speedboat(SPEEDBOAT, v3(RAMP.x + 0.4, 0.25, tr.zRear + 14), Math.PI);
+  b.systems.fuelL = 20; b.trim = 1; b.tilt = 8 * Math.PI / 180;
+  const inp: VehicleInput = { ...emptyInput(), gear: "F" };
+  let loaded = false;
+  run(b, still, 40, inp, w, () => {
+    const st = trailerLoadState(b, tr);
+    inp.steering = Math.max(-1, Math.min(1, st.lateral * 1.2 + st.angleDeg / 25));
+    inp.throttle = st.bowGap > 0.3 && b.telemetry.speedKmh < (st.bowGap > 8 ? 4 : 2.2) ? 0.3 : 0;
+    if (st.loaded && !loaded) { loaded = true; attachWinch(b, tr); }
+  });
+  check("avarias", "subir na carretinha com o motor levantado: sem avaria (%)", (b.hullDamage + b.engineDamage) * 100, 0, 0, "%", 0);
+  // desengatar: solta a cinta e dá ré devagar com o motor ainda levantado (procedimento real em água rasa)
+  b.winchStrap = null;
+  run(b, still, 12, { ...emptyInput(), gear: "R", throttle: 0.3 }, w);
+  const st = trailerLoadState(b, tr);
+  check("rampa", "desengatado: sai de ré da carretinha e flutua (m do guincho)", st.bowGap, 4, 60, "m", 1);
+  check("rampa", "desengatado: fora do berço", st.onBunks ? 0 : 1, 1, 1, "", 0);
+  check("avarias", "sair de ré devagar com o motor levantado: sem avaria (%)", (b.hullDamage + b.engineDamage) * 100, 0, 0, "%", 0);
+
+  // rebocar com o motor baixado arrasta o pé no chão (avaria); levantado não
+  for (const tilted of [false, true]) {
+    const tb = new Speedboat(SPEEDBOAT, v3(0, 0, 0), Math.PI);
+    if (tilted) tb.tilt = SPEEDBOAT.tiltMax;
+    const rig = new TowRig(tr, TOW_SPECS.pickup, groundHeight);
+    for (let i = 0; i < 8 / DT; i++) {
+      rig.update(DT, { up: 1, down: 0, steer: 0 });
+      const p = rig.trailerPose();
+      // barco na posição de transporte: casco ~0,6 m acima do chão da carretinha
+      tb.pos = v3(p.x, p.y + 0.6, p.z + 3.4); tb.vel = v3(0, 0, -rig.v);
+      tb.carriedDamage(DT, w, (q) => rig.insideCar(q));
+    }
+    check("avarias", `rebocar com o motor ${tilted ? "levantado: sem avaria" : "baixado: o pé arrasta (avaria)"} (%)`, tb.engineDamage * 100, tilted ? 0 : 20, tilted ? 0 : 100, "%", 0);
   }
 }
 
