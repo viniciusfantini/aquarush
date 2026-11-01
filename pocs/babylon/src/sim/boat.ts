@@ -72,7 +72,7 @@ export interface BoatTelemetry {
   stall: "" | "fuel" | "overheat" | "capsize" | "broken"; // último motivo de o motor ter morrido sozinho
   buzzer: boolean;       // alarme do motor apitando (autoteste da chave)
   starterRpm: number;    // rotação do motor de arranque (0 = só o "clique" do solenoide)
-  startFail: "" | "weak" | "dead" | "pull"; // última partida que não pegou (bateria fraca / sem força / corda)
+  startFail: "" | "weak" | "dead" | "pull" | "fuel"; // última partida que não pegou (bateria fraca / sem força / corda / sem combustível)
   batterySoc: number;    // estado de carga 0..1
   trimPin: number;       // trim manual: furo do pino 1..N, N+1 = tilt total; 0 = power trim
   pullStart: boolean;    // partida na corda (sem arranque elétrico)
@@ -821,7 +821,7 @@ export class Speedboat {
     if (this.engine === "cranking") return "busy";
     if (this.gear !== "N") return "needNeutral";
     const why = this.systems.canStart();
-    if (why === "fuel") return "noFuel";
+    // sem combustível a partida é permitida (o arranque gira / a corda é puxada), mas o motor não pega
     if (why === "battery") return "lowBattery";
     if (why === "overheat") return "hot";
     if (this.selfTestT > 0) return "busy";
@@ -830,7 +830,7 @@ export class Speedboat {
     if (!this.params.electricStart) {
       // partida na corda: uma puxada (~0,5 s). Motor quente pega quase sempre; frio pode precisar de 2–3
       this.engine = "cranking"; this.crankTimer = 0;
-      this.pullCatch = Math.random() < (this.systems.coolantC > 45 ? 0.85 : 0.5);
+      this.pullCatch = this.systems.fuelL > 0.005 && Math.random() < (this.systems.coolantC > 45 ? 0.85 : 0.5);
       return "pulling";
     }
     // chave em ON: autoteste com o apito característico; o arranque gira quando ele termina
@@ -873,7 +873,7 @@ export class Speedboat {
       this.crankTimer += dt;
       this.rpm += ((this.crankTimer < 0.45 ? 450 : 0) - this.rpm) * (1 - Math.exp(-dt / 0.08));
       if (this.crankTimer > 0.4 && this.pullCatch) { this.engine = "running"; this.rpm = 1400; }
-      else if (this.crankTimer > 0.9) { this.engine = "off"; this.telemetry.startFail = "pull"; }
+      else if (this.crankTimer > 0.9) { this.engine = "off"; this.telemetry.startFail = this.systems.fuelL > 0.005 ? "pull" : "fuel"; }
       return this.rpm;
     }
     if (this.engine === "cranking") {
@@ -885,10 +885,10 @@ export class Speedboat {
       this.rpm += (starterTarget - this.rpm) * (1 - Math.exp(-dt / 0.12));
       this.crankTimer += dt;
       this.crankRevs += (this.rpm / 60) * dt * clamp((this.rpm - 60) / 100, 0, 1);
-      if (this.crankRevs >= this.crankNeed) { this.engine = "running"; this.rpm = 1150; }
+      if (this.crankRevs >= this.crankNeed && this.systems.fuelL > 0.005) { this.engine = "running"; this.rpm = 1150; }
       else if (this.crankTimer > 4) { // o piloto solta a chave: não pegou
         this.engine = "off";
-        this.telemetry.startFail = this.rpm < 40 ? "dead" : "weak";
+        this.telemetry.startFail = this.systems.fuelL <= 0.005 && this.rpm >= 40 ? "fuel" : this.rpm < 40 ? "dead" : "weak";
       }
       return this.rpm;
     }

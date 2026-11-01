@@ -338,7 +338,12 @@ for (const [label, thr] of [["baixa", 0.25], ["alta", 1]] as const) {
   run(b3, water, 120, { ...emptyInput(), gear: "F", throttle: 0.6 });
   check("sistemas", "sem combustível: motor parou", b3.telemetry.engine === "off" && b3.telemetry.stall === "fuel" ? 1 : 0, 1, 1, "", 0);
   run(b3, water, 1, { ...emptyInput(), gear: "N" });
-  check("sistemas", "sem combustível: partida recusada", b3.toggleIgnition() === "noFuel" ? 1 : 0, 1, 1, "", 0);
+  // sem combustível a partida é permitida (autoteste + arranque giram), mas o motor não pega
+  const r3 = b3.toggleIgnition();
+  let cranked = false;
+  run(b3, water, 7, { ...emptyInput(), gear: "N" }, openWater, () => { if (b3.telemetry.engine === "cranking") cranked = true; });
+  check("sistemas", "sem combustível: arranque gira (partida permitida)", r3 === "starting" && cranked ? 1 : 0, 1, 1, "", 0);
+  check("sistemas", "sem combustível: o motor não pega", b3.telemetry.engine === "off" && b3.telemetry.startFail === "fuel" ? 1 : 0, 1, 1, "", 0);
   check("sistemas", "desligado: bateria em repouso (V)", b3.telemetry.batteryV, 12.2, 12.8, "V", 2);
 }
 
@@ -831,6 +836,20 @@ for (const [label, thr] of [["baixa", 0.25], ["alta", 1]] as const) {
   }
 }
 
+// ---------- Ponto de partida (bacia dragada da marina) ----------
+{
+  const w = buildWorld();
+  const water = mkWater(0.35);
+  check("partida", "profundidade no ponto de partida (m)", -groundHeight(w.spawn.x, w.spawn.z), 2.0, 3.0, "m", 2);
+  for (const P of [SPEEDBOAT, DINGHY]) {
+    const b = new Speedboat(P, v3(w.spawn.x, 0.25, w.spawn.z), w.spawn.heading);
+    let minClear = 9;
+    run(b, water, 25, { ...emptyInput(), gear: "F", throttle: 1 }, w, () => { const tip = b.lowerUnitTip(); minClear = Math.min(minClear, tip.y - groundHeight(tip.x, tip.z)); });
+    check("partida", `${P.kind}: saindo a toda do ponto de partida, folga do pé ao fundo (m)`, minClear, 0.2, 5, "m", 2);
+    check("partida", `${P.kind}: saindo a toda, sem avaria`, (b.engineDamage + b.hullDamage) * 100, 0, 0, "%", 0);
+  }
+}
+
 // ---------- Combustível inicial × fim do cânion ----------
 {
   const w = buildWorld();
@@ -841,7 +860,7 @@ for (const [label, thr] of [["baixa", 0.25], ["alta", 1]] as const) {
   const go = (P: typeof SPEEDBOAT, fuel: number, thr: number) => {
     const b = new Speedboat(P, v3(w.spawn.x, 0.25, w.spawn.z), 0);
     b.systems.fuelL = fuel;
-    let idx = 0, reached = -1;
+    let idx = 0, reached = -1, maxZ = -1e9;
     const inp: VehicleInput = { ...emptyInput(), gear: "F", throttle: thr };
     run(b, water, 400, inp, w, (t) => {
       while (idx < route.length - 1 && Math.hypot(route[idx][0] - b.pos.x, route[idx][1] - b.pos.z) < 15) idx++;
@@ -850,13 +869,16 @@ for (const [label, thr] of [["baixa", 0.25], ["alta", 1]] as const) {
       while (err > Math.PI) err -= 2 * Math.PI; while (err < -Math.PI) err += 2 * Math.PI;
       inp.steering = Math.max(-1, Math.min(1, err * 1.5));
       if (reached < 0 && Math.hypot(b.pos.x - CANYON_END.x, b.pos.z - CANYON_END.z) < 18) reached = t;
+      maxZ = Math.max(maxZ, b.pos.z); // (sem motor, a correnteza leva o barco de volta rio abaixo)
     });
-    return { b, reached };
+    return { b, reached, maxZ };
   };
-  for (const [kind, P, start, thr] of [["lancha", SPEEDBOAT, 0.2, 0.3], ["bote", DINGHY, 0.04, 0.3]] as const) {
+  for (const [kind, P, start, thr] of [["lancha", SPEEDBOAT, 0.25, 0.3], ["bote", DINGHY, 0.05, 0.3]] as const) {
     const low = go(P, start, thr);
-    check("combustível", `${kind}: com ${start} L (início) NÃO chega ao fim do cânion`, low.reached < 0 ? 1 : 0, 1, 1, "", 0);
-    check("combustível", `${kind}: com ${start} L o motor morre no caminho (m do fim do cânion)`, Math.hypot(low.b.pos.x - CANYON_END.x, low.b.pos.z - CANYON_END.z), 100, 2000, "m", 0);
+    check("combustível", `${kind}: com ${start} L (início), no ritmo mais econômico, NÃO chega ao fim do cânion`, low.reached < 0 ? 1 : 0, 1, 1, "", 0);
+    check("combustível", `${kind}: com ${start} L o ponto mais longe fica antes do fim (m antes do fim)`, CANYON_END.z - low.maxZ, 60, 2000, "m", 0);
+    const fast = go(P, start, 1);
+    check("combustível", `${kind}: com ${start} L, mesmo a toda, entra no cânion (z máx.)`, fast.maxZ, RIVER.z0 + 20, CANYON_END.z - 60, "", 0);
     const full = go(P, P.tankLiters, thr);
     check("combustível", `${kind}: com o tanque cheio chega ao fim do cânion (s)`, full.reached, 30, 390, "s", 0);
   }

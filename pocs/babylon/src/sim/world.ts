@@ -115,8 +115,20 @@ export const onRamp = (x: number, z: number, margin = 0): boolean => {
   return Math.abs(x - RAMP.x) < RAMP.width / 2 + margin && s > RAMP.sMin - margin && s < RAMP.sMax + margin;
 };
 
+/**
+ * Bacia dragada da marina (na frente do píer: ponto de partida, vaga de atracação e saída para o lago).
+ * O lago perto da margem tem ~1 m — raso demais para o pé do motor da lancha (bate ao acelerar).
+ */
+export const MARINA_BASIN = { cx: 27, cz: -226, hx: 35, hz: 22, depth: -2.3, blend: 8 };
+const basin = (x: number, z: number, h: number): number => {
+  const B = MARINA_BASIN;
+  const d = Math.hypot(Math.max(0, Math.abs(x - B.cx) - B.hx), Math.max(0, Math.abs(z - B.cz) - B.hz));
+  if (d >= B.blend) return h;
+  return Math.min(h, h + (B.depth - h) * (1 - smoothstep(0, B.blend, d)));
+};
+
 const terrainWithRamp = (x: number, z: number): number => {
-  const b = baseGround(x, z);
+  const b = basin(x, z, baseGround(x, z));
   const s = z - RAMP.z0, lat = Math.abs(x - RAMP.x);
   if (lat > RAMP.width / 2 + RAMP.shoulder || s < RAMP.sMin - 6 || s > RAMP.sMax + 6) return b;
   const r = rampY(clamp(s, RAMP.sMin, RAMP.sMax));

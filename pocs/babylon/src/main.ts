@@ -36,7 +36,7 @@ import { BoatCamera } from "./presentation/cameras.ts";
 import { Hud } from "./presentation/hud.ts";
 import { EngineAudio } from "./presentation/audio.ts";
 
-const BUILD = "poc-babylon 0.25.0";
+const BUILD = "poc-babylon 0.26.0";
 /** Escala visual da rotação da hélice (proporcional ao RPM, abaixo do limite estroboscópico). */
 const PROP_VISUAL_SCALE = 0.12;
 
@@ -49,11 +49,11 @@ const WATER_PRESETS = [
 ] as const;
 
 /**
- * Combustível ao começar / reposicionar: de propósito NÃO dá para chegar ao fim do cânion (≈1 km, metade rio
- * acima) — o melhor consumo medido é 0,28 L/km (lancha a 38 km/h) e 0,06 L/km (bote a 22 km/h). É preciso
+ * Combustível ao começar / reposicionar: dá para chegar pelo menos à ENTRADA do cânion, mas de propósito NÃO ao
+ * fim dele (≈1 km, metade rio acima) — o melhor consumo medido é 0,28 L/km (lancha a 38 km/h) e 0,06 L/km (bote a 22 km/h). É preciso
  * abastecer no posto (estrada da rampa). Pedido do usuário.
  */
-const START_FUEL: Record<VesselKind, number> = { lancha: 0.2, bote: 0.04 };
+const START_FUEL: Record<VesselKind, number> = { lancha: 0.25, bote: 0.05 }; // chega à entrada do cânion mesmo a toda (z≈250), nunca ao fim
 
 /** Tudo o que pertence a uma embarcação: física, visual, comandos, pessoas. */
 interface Vessel {
@@ -745,7 +745,7 @@ const boot = async () => {
       }
     }
     if (T.damageCount !== lastDamage) { if (mode === "game") hud.showToast(T.damageEvent + (T.engineDamage >= 0.95 ? " — MOTOR QUEBRADO" : "")); lastDamage = T.damageCount; }
-    if (T.startFail && T.startFail !== lastStartFail) hud.showToast(T.startFail === "pull" ? "Não pegou — puxe de novo (P)" : T.startFail === "dead" ? "Só estalou: bateria sem força para girar o arranque" : "Não pegou: o arranque girou fraco (bateria baixa)");
+    if (T.startFail && T.startFail !== lastStartFail) hud.showToast(T.startFail === "fuel" ? "O motor gira mas não pega: sem combustível — abasteça no posto" : T.startFail === "pull" ? "Não pegou — puxe de novo (P)" : T.startFail === "dead" ? "Só estalou: bateria sem força para girar o arranque" : "Não pegou: o arranque girou fraco (bateria baixa)");
     lastStartFail = T.startFail;
     if (T.lowFuel && !lowFuelWarned && T.engine === "running" && mode === "game") { hud.showToast(`Combustível na reserva: ${T.fuelL.toFixed(1)} L`); lowFuelWarned = true; }
     if (!T.lowFuel) lowFuelWarned = false;
