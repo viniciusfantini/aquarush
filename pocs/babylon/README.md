@@ -79,6 +79,10 @@ A lancha é um **corpo rígido 6DOF** (massa seca de 1030 kg + gasolina, ocupant
 
 **Água compartilhada:** `GerstnerWater.shaderParams()` envia ao shader exatamente as ondas que a física consulta. `getHeight` inverte o deslocamento horizontal de Gerstner por iteração de ponto fixo. No teste, o desvio médio entre o casco e a superfície é de 3 cm.
 
+## Embaixo d'água (v0.44)
+
+`main.ts` testa se a câmera está abaixo da superfície (mesma `getHeight` da física, com a esteira). Embaixo d'água: `scene.fog` verde-azulada (densidade 0,07 + 0,01/m de profundidade), sem céu, sobreposição `#underwater` (tom e vinheta), `waterVis.under` (o shader desenha a superfície vista por baixo: janela de Snell com cosseno > ~0,66, reflexão interna total fora dela) e `audio.setUnderwater` (passa-baixa no master). A câmera externa desce até −0,75 de inclinação de órbita e não entra no fundo (`cam.ground`).
+
 ## Água e interação (v0.2)
 
 - **Presets de água:** vidro (glass: sem ondas nem ondulação fina), calma, lago e forte. A física usa a mesma amplitude que o visual.

@@ -21,6 +21,8 @@ export class BoatCamera {
   headLocal = new Vector3(0.5, 1.24, -0.06);
   /** escala da distância da câmera externa (barcos menores = mais perto) */
   distScale = 1;
+  /** relevo (para a câmera não atravessar o fundo do lago nem a margem) */
+  ground: ((x: number, z: number) => number) | null = null;
 
   constructor(scene: Scene, canvas: HTMLCanvasElement) {
     this.cam = new UniversalCamera("cam", new Vector3(0, 5, -15), scene);
@@ -36,7 +38,7 @@ export class BoatCamera {
     window.addEventListener("pointermove", (e) => {
       if (!this.dragging) return;
       this.orbitYaw += (e.clientX - this.lastX) * 0.006;
-      this.orbitPitch = clamp(this.orbitPitch + (e.clientY - this.lastY) * 0.004, -0.25, 0.9);
+      this.orbitPitch = clamp(this.orbitPitch + (e.clientY - this.lastY) * 0.004, -0.75, 0.9); // < −0,25: abaixo da água
       this.lastX = e.clientX; this.lastY = e.clientY;
       this.idle = 0;
     });
@@ -82,8 +84,11 @@ export class BoatCamera {
       const desired = new Vector3(boatPos.x - Math.sin(yaw) * dist, boatPos.y + height, boatPos.z - Math.cos(yaw) * dist);
       const k = this.first ? 1 : 1 - Math.exp(-dt * 6);
       this.pos = Vector3.Lerp(this.pos, desired, k);
-      if (this.pos.y < 0.6) this.pos.y = 0.6;
-      const lookT = boatPos.add(new Vector3(flat.x * 2.5 * this.distScale, 1.0 * (0.5 + 0.5 * this.distScale), flat.z * 2.5 * this.distScale));
+      // pode ir para baixo d'água (arrastando para baixo), mas não para dentro do fundo/margem
+      if (this.ground) this.pos.y = Math.max(this.pos.y, this.ground(this.pos.x, this.pos.z) + 0.35);
+      // abaixo da água: olha para o casco por baixo
+      const under = this.orbitPitch < -0.25;
+      const lookT = boatPos.add(new Vector3(flat.x * 2.5 * this.distScale, (under ? -0.3 : 1.0) * (0.5 + 0.5 * this.distScale), flat.z * 2.5 * this.distScale));
       this.look = this.first ? lookT : Vector3.Lerp(this.look, lookT, 1 - Math.exp(-dt * 12));
       this.first = false;
       this.cam.position.copyFrom(this.pos);

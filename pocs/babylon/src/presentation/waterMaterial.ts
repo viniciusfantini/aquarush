@@ -77,6 +77,7 @@ uniform vec3 uSkyHorizon;
 uniform vec3 uSkyZenith;
 uniform vec3 uFogColor;
 uniform float uFogDensity;
+uniform float uUnder;
 uniform float uTime;
 uniform float uRipple;
 uniform float uWhitecaps;
@@ -205,6 +206,18 @@ void main() {
   alpha = max(alpha, foam * 0.92);
   alpha = max(alpha, clamp(wakeFoam * 0.8, 0.0, 0.7));
 
+  if (uUnder > 0.5) {
+    // vista de BAIXO: dentro da janela de Snell (~48,6° da vertical) passa a claridade do céu, ondulando; fora dela
+    // há reflexão interna total (a superfície espelha o fundo escuro). A espuma aparece como manchas claras.
+    vec3 Nd = -N;
+    float c = clamp(dot(Nd, V), 0.0, 1.0);                 // cosseno do ângulo com a vertical (para cima)
+    float win = smoothstep(0.62, 0.72, c);
+    vec3 skyU = mix(uSkyHorizon, uSkyZenith, 0.5) * (1.15 + 0.35 * c) + uSunColor * pow(c, 24.0) * 0.6;
+    vec3 tir = uDeep * 0.9 + vec3(0.0, 0.05, 0.05);
+    col = mix(tir, skyU, win);
+    col = mix(col, vec3(0.75, 0.85, 0.86), foam * 0.6);
+    alpha = 0.97;
+  }
   float fog = 1.0 - exp(-pow(uFogDensity * dist, 2.0));
   col = mix(col, uFogColor, fog);
   gl_FragColor = vec4(col, mix(alpha, 1.0, fog));
@@ -271,6 +284,8 @@ export class WaterVisual {
   ripple = 1;
   /** Carneirinhos do vento (0 = nenhum, 1 = tempestade) e direção para onde o vento sopra (XZ, unitária). */
   whitecaps = 0;
+  /** câmera abaixo da superfície (o shader desenha a superfície vista por baixo) */
+  under = false;
   windDir = new Vector2(0, 1);
 
   constructor(scene: Scene, opts: WaterVisualOptions) {
@@ -285,7 +300,7 @@ export class WaterVisual {
       uniforms: [
         "viewProjection", "uCamPos", "uGridOffset", "uTime", "wA", "wB", "uFade", "uSunDir", "uSunColor", "uDeep",
         "uShallow", "uSkyHorizon", "uSkyZenith", "uFogColor", "uFogDensity", "uUseDepth", "uScreen", "uNearFar", "uCamFwd",
-        "uRipple", "uWhitecaps", "uWindDir", "uWakeInfo", "uWakeHeight", "uWakeTexel", "uUseRefl", "uReflVP",
+        "uRipple", "uUnder", "uWhitecaps", "uWindDir", "uWakeInfo", "uWakeHeight", "uWakeTexel", "uUseRefl", "uReflVP",
       ],
       samplers: ["uDepthMap", "uWake", "uRefl"],
       needAlphaBlending: true,
@@ -353,6 +368,7 @@ export class WaterVisual {
     m.setFloat("uFogDensity", this.fogDensity);
     m.setFloat("uRipple", this.ripple);
     m.setFloat("uWhitecaps", this.whitecaps);
+    m.setFloat("uUnder", this.under ? 1 : 0);
     m.setVector2("uWindDir", this.windDir);
     m.setFloat("uUseDepth", this.depth ? 1 : 0);
     m.setVector2("uScreen", new Vector2(screenW, screenH));

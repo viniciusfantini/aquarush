@@ -40,7 +40,7 @@ import { BoatCamera } from "./presentation/cameras.ts";
 import { Hud } from "./presentation/hud.ts";
 import { EngineAudio } from "./presentation/audio.ts";
 
-const BUILD = "poc-babylon 0.43.0";
+const BUILD = "poc-babylon 0.44.0";
 /** Escala visual da rotação da hélice (proporcional ao RPM, abaixo do limite estroboscópico). */
 const PROP_VISUAL_SCALE = 0.12;
 
@@ -144,6 +144,13 @@ const boot = async () => {
   skyMat.mieDirectionalG = 0.85;
   skyMat.fogEnabled = false;
   const skybox = MeshBuilder.CreateBox("skyBox", { size: 3000 }, scene);
+  // câmera embaixo d'água (neblina/cor do ar × da água)
+  const AIR_FOG = new Color3(0.72, 0.8, 0.86), AIR_FOG_DENSITY = 0.0009;
+  const UNDER_FOG = new Color3(0.04, 0.2, 0.21);
+  let underwater = false;
+  const underOverlay = document.createElement("div");
+  underOverlay.id = "underwater";
+  document.body.appendChild(underOverlay);
   skybox.material = skyMat;
   skybox.infiniteDistance = true;
   skybox.isPickable = false;
@@ -228,6 +235,7 @@ const boot = async () => {
   scene.environmentTexture = probe.cubeTexture;
 
   const cam = new BoatCamera(scene, canvas);
+  cam.ground = (x, z) => world.groundHeight(x, z);
   scene.activeCamera = cam.cam;
 
   let depth = null;
@@ -866,6 +874,27 @@ const boot = async () => {
     }
     ropes.update(boat);
     V.gear.update(boat, simTime, mode === "game", physWater);
+    // câmera embaixo d'água: neblina verde-azulada densa, céu escondido, superfície vista por baixo, som abafado
+    {
+      const cp = cam.cam.position;
+      const under = cp.y < physWater.getHeight(cp.x, cp.z) - 0.03;
+      if (under !== underwater) {
+        underwater = under;
+        waterVis.under = under;
+        skybox.setEnabled(!under);
+        scene.fogColor = under ? UNDER_FOG : AIR_FOG;
+        scene.clearColor = under ? new Color4(UNDER_FOG.r, UNDER_FOG.g, UNDER_FOG.b, 1) : new Color4(AIR_FOG.r, AIR_FOG.g, AIR_FOG.b, 1);
+        waterVis.fogColor = under ? UNDER_FOG : AIR_FOG;
+        underOverlay.classList.toggle("on", under);
+        audio.setUnderwater(under);
+      }
+      // a densidade cresce com a profundidade (menos luz)
+      if (under) {
+        const depthCam = physWater.getHeight(cp.x, cp.z) - cp.y;
+        scene.fogDensity = 0.07 + 0.01 * depthCam;
+        waterVis.fogDensity = scene.fogDensity;
+      } else if (scene.fogDensity !== AIR_FOG_DENSITY) { scene.fogDensity = AIR_FOG_DENSITY; waterVis.fogDensity = AIR_FOG_DENSITY; }
+    }
 
     if (mode === "menu") cam.spin(dtReal, 0.22, 0.12); // prévia: câmera girando devagar em volta do barco
     cam.distScale = (V.kind === "bote" ? 0.62 : 1) * (driving ? 1.35 : 1);

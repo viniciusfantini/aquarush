@@ -119,6 +119,9 @@ export class EngineAudio {
   private bilgeGain!: GainNode;
   private winchOsc!: OscillatorNode;
   private winchGain!: GainNode;
+  private underLP!: BiquadFilterNode;
+  private underGain!: GainNode;
+  private underOn = false;
   private windGain!: GainNode;
   private windLP!: BiquadFilterNode;
   muted = false;
@@ -153,6 +156,15 @@ export class EngineAudio {
     this.horn.gain.gain.setTargetAtTime(on ? vol : 0, t, on ? 0.004 : 0.012); // ataque e corte rápidos
   }
 
+  /** Câmera embaixo d'água: som abafado (passa-baixa ~350 Hz, volume menor); na superfície, aberto. */
+  setUnderwater(on: boolean): void {
+    if (!this.ctx || on === this.underOn) return;
+    this.underOn = on;
+    const t = this.ctx.currentTime;
+    this.underLP.frequency.setTargetAtTime(on ? 350 : 20000, t, on ? 0.05 : 0.12);
+    this.underGain.gain.setTargetAtTime(on ? 0.6 : 1, t, 0.08);
+  }
+
   /** Puxada na corda de partida: "zzzip" da corda + catraca do arranque manual. */
   ropePull(): void {
     const ctx = this.ctx;
@@ -182,7 +194,10 @@ export class EngineAudio {
     comp.threshold.value = -16; comp.ratio.value = 3;
     this.master = ctx.createGain();
     this.master.gain.value = 0.7;
-    this.master.connect(comp).connect(ctx.destination);
+    // embaixo d'água: passa-baixa forte (o som chega abafado, grave) e um pouco mais baixo
+    this.underLP = ctx.createBiquadFilter(); this.underLP.type = "lowpass"; this.underLP.frequency.value = 20000; this.underLP.Q.value = 0.9;
+    this.underGain = ctx.createGain(); this.underGain.gain.value = 1;
+    this.master.connect(this.underLP).connect(this.underGain).connect(comp).connect(ctx.destination);
     const noiseSrc = () => { const s = ctx.createBufferSource(); s.buffer = this.noise; s.loop = true; s.loopStart = Math.random(); s.start(0, Math.random() * 1.5); return s; };
 
     // ---- bloco do motor ----

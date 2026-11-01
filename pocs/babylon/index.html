@@ -129,6 +129,10 @@
     #status .chip.btn { pointer-events: auto; cursor: pointer; color: var(--fg); border: 1px solid rgba(255,255,255,0.3); }
     #status { pointer-events: auto; }
     #h-trailer:not(.show), #h-dmg-hull:not(.warn), #h-dmg-eng:not(.warn), #h-hot:not(.warn), #h-lowfuel:not(.warn), #h-charge:not(.warn), #h-bilge:not(.warn), #h-anchor:not(.show), #h-cav:not(.warn), #h-vent:not(.warn) { display: none; }
+    /* embaixo d'água: leve tom verde-azulado e vinheta escura nas bordas (luz que vem de cima) */
+    #underwater { position: fixed; inset: 0; pointer-events: none; opacity: 0; transition: opacity 0.15s; z-index: 1;
+      background: radial-gradient(ellipse at 50% 20%, rgba(40, 140, 140, 0.10), rgba(0, 35, 40, 0.55) 85%); }
+    #underwater.on { opacity: 1; }
     #h-build { position: absolute; left: 18px; bottom: 10px; font-size: 11px; color: var(--dim); }
 
     #h-debug { display: none; padding: 10px 14px; font-size: 12px; width: 270px; }
