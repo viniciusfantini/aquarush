@@ -79,6 +79,8 @@ uniform vec3 uFogColor;
 uniform float uFogDensity;
 uniform float uTime;
 uniform float uRipple;
+uniform float uWhitecaps;
+uniform vec2 uWindDir;
 uniform float uUseDepth;
 uniform sampler2D uDepthMap;
 uniform vec2 uScreen;
@@ -180,7 +182,23 @@ void main() {
   float foamNoise = noise(vWorld.xz * 1.7 + uTime * 0.2) * noise(vWorld.xz * 0.6 - uTime * 0.1);
   float shoreFoam = (1.0 - smoothstep(0.0, 0.9, thickness)) * smoothstep(0.15, 0.6, foamNoise + 0.35 * sin(thickness * 9.0 - uTime * 2.0));
   float wf = smoothstep(0.22, 0.95, wakeFoam * (0.35 + 1.1 * n1) + (n2 - 0.5) * 0.45 * wakeFoam) * (0.75 + 0.25 * n2);
-  float foam = clamp(vFoam * smoothstep(0.25, 0.7, foamNoise * 1.6) + shoreFoam + wf, 0.0, 1.0);
+  // carneirinhos (vento): manchas de espuma que nascem, andam a favor do vento e se desfazem — sem mudar as ondas
+  float wc = 0.0;
+  if (uWhitecaps > 0.001) {
+    // alongados no sentido do vento (escala menor ao longo dele)
+    vec2 wa = vec2(dot(vWorld.xz, uWindDir) * 0.22, dot(vWorld.xz, vec2(-uWindDir.y, uWindDir.x)) * 0.45);
+    vec2 wp = wa - vec2(uTime * 0.12, 0.0);
+    vec2 cellId = floor(wp * 0.5);
+    float life = 0.5 + 0.5 * sin(uTime * (0.9 + hash(cellId) * 0.8) + hash(cellId + 7.3) * 6.2832);
+    float patchN = noise(wp) * noise(wp * 2.3 + 5.1);
+    float th = mix(0.62, 0.34, uWhitecaps);
+    wc = smoothstep(th, th + 0.07, patchN * (0.55 + 0.75 * life));
+    // borda rendada e estrias na direção do vento
+    float streak = noise(vec2(dot(vWorld.xz, uWindDir) * 0.6, dot(vWorld.xz, vec2(-uWindDir.y, uWindDir.x)) * 3.5) - uTime * 0.4);
+    wc *= (0.55 + 0.45 * noise(vWorld.xz * 4.5 + uTime * 0.8)) * (0.7 + 0.3 * streak);
+    wc *= smoothstep(0.4, 1.6, thickness); // não na beira
+  }
+  float foam = clamp(vFoam * smoothstep(0.25, 0.7, foamNoise * 1.6) + shoreFoam + wf + wc * 0.95, 0.0, 1.0);
   col = mix(col, vec3(0.96, 0.98, 1.0) * (0.78 + 0.22 * diffuse), foam * 0.9);
 
   float alpha = mix(clamp(1.0 - exp(-thickness * 1.3), 0.0, 1.0), 1.0, fres);
@@ -251,6 +269,9 @@ export class WaterVisual {
   fogDensity = 0.0009;
   /** Intensidade das ondulações finas (0 = vidro). */
   ripple = 1;
+  /** Carneirinhos do vento (0 = nenhum, 1 = tempestade) e direção para onde o vento sopra (XZ, unitária). */
+  whitecaps = 0;
+  windDir = new Vector2(0, 1);
 
   constructor(scene: Scene, opts: WaterVisualOptions) {
     const inner = opts.innerExtent;
@@ -264,7 +285,7 @@ export class WaterVisual {
       uniforms: [
         "viewProjection", "uCamPos", "uGridOffset", "uTime", "wA", "wB", "uFade", "uSunDir", "uSunColor", "uDeep",
         "uShallow", "uSkyHorizon", "uSkyZenith", "uFogColor", "uFogDensity", "uUseDepth", "uScreen", "uNearFar", "uCamFwd",
-        "uRipple", "uWakeInfo", "uWakeHeight", "uWakeTexel", "uUseRefl", "uReflVP",
+        "uRipple", "uWhitecaps", "uWindDir", "uWakeInfo", "uWakeHeight", "uWakeTexel", "uUseRefl", "uReflVP",
       ],
       samplers: ["uDepthMap", "uWake", "uRefl"],
       needAlphaBlending: true,
@@ -331,6 +352,8 @@ export class WaterVisual {
     m.setColor3("uFogColor", this.fogColor);
     m.setFloat("uFogDensity", this.fogDensity);
     m.setFloat("uRipple", this.ripple);
+    m.setFloat("uWhitecaps", this.whitecaps);
+    m.setVector2("uWindDir", this.windDir);
     m.setFloat("uUseDepth", this.depth ? 1 : 0);
     m.setVector2("uScreen", new Vector2(screenW, screenH));
     m.setVector2("uNearFar", new Vector2(camera.minZ, camera.maxZ));

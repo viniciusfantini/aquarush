@@ -1,7 +1,8 @@
 // Vento: 5 níveis (sem vento → tempestade), com rajadas e direção que oscila um pouco.
 // A física do barco usa o vento aparente (vento − velocidade do barco) sobre a área exposta (`params.windage`):
-// empurra o barco (deriva), inclina (banda) e gira (a proa cai a sotavento). O vento também levanta as
-// ondas (o nível de mar efetivo é o maior entre o preset de água e o do vento). Sem Babylon (testável no Node).
+// empurra o barco (deriva), inclina (banda) e gira (a proa cai a sotavento). Num lago a pista de vento é curta:
+// o vento NÃO levanta as ondas (elas ficam no preset de água); só aparecem os carneirinhos (espuma) no visual.
+// Sem Babylon (testável no Node).
 
 import { type Vec3, v3 } from "./math.ts";
 
@@ -12,18 +13,17 @@ export interface WindLevel {
   speed: number;
   /** amplitude das rajadas (fração da média) */
   gust: number;
-  /** mar levantado pelo vento (mesma escala de `water.intensity`) e ondulação fina do visual */
-  waves: number;
-  ripple: number;
+  /** carneirinhos (espuma das cristas) no visual: 0..1 */
+  whitecaps: number;
 }
 
 /** Beaufort aproximado: 0 / 2 / 4 / 6 / 8. */
 export const WIND_LEVELS: WindLevel[] = [
-  { key: "nenhum", label: "sem vento", speed: 0, gust: 0, waves: 0, ripple: 0 },
-  { key: "fraco", label: "vento fraco (~6 nós)", speed: 3, gust: 0.25, waves: 0.15, ripple: 0.5 },
-  { key: "moderado", label: "vento moderado (~14 nós)", speed: 7, gust: 0.3, waves: 0.5, ripple: 0.9 },
-  { key: "forte", label: "vento forte (~23 nós)", speed: 12, gust: 0.35, waves: 1.3, ripple: 1.3 },
-  { key: "tempestade", label: "tempestade (~39 nós)", speed: 20, gust: 0.4, waves: 2.6, ripple: 1.8 },
+  { key: "nenhum", label: "sem vento", speed: 0, gust: 0, whitecaps: 0 },
+  { key: "fraco", label: "vento fraco (~6 nós)", speed: 3, gust: 0.25, whitecaps: 0 },          // abaixo do limiar dos carneirinhos
+  { key: "moderado", label: "vento moderado (~14 nós)", speed: 7, gust: 0.3, whitecaps: 0.35 },  // carneirinhos esparsos
+  { key: "forte", label: "vento forte (~23 nós)", speed: 12, gust: 0.35, whitecaps: 0.7 },
+  { key: "tempestade", label: "tempestade (~39 nós)", speed: 20, gust: 0.4, whitecaps: 1 },
 ];
 
 export const MS_TO_KNOTS = 1.94384;

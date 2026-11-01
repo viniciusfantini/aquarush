@@ -40,7 +40,7 @@ import { BoatCamera } from "./presentation/cameras.ts";
 import { Hud } from "./presentation/hud.ts";
 import { EngineAudio } from "./presentation/audio.ts";
 
-const BUILD = "poc-babylon 0.36.0";
+const BUILD = "poc-babylon 0.37.0";
 /** Escala visual da rotação da hélice (proporcional ao RPM, abaixo do limite estroboscópico). */
 const PROP_VISUAL_SCALE = 0.12;
 
@@ -287,26 +287,27 @@ const boot = async () => {
   };
   document.getElementById("h-occ")!.addEventListener("click", () => input.pushAction("occupants"));
 
-  // vento (T): 5 níveis; ele também levanta o mar — o estado efetivo é o maior entre o preset de água e o do vento
+  // vento (T): 5 níveis — no lago só deriva e carneirinhos; as ondas ficam no preset de água (0/G/1/2/3/V)
   const wind = new Wind();
   let waterPreset = 2;
   const applyEnv = () => {
-    const p = WATER_PRESETS[waterPreset], w = wind.def;
-    water.intensity = Math.max(p.waves, w.waves);
-    waterVis.ripple = Math.max(p.ripple, w.ripple);
+    const p = WATER_PRESETS[waterPreset];
+    water.intensity = p.waves;
+    waterVis.ripple = p.ripple;
+    waterVis.whitecaps = wind.def.whitecaps;
   };
   const applyWater = (i: number, toast = true) => {
     waterPreset = (i + WATER_PRESETS.length) % WATER_PRESETS.length;
     const p = WATER_PRESETS[waterPreset];
     applyEnv();
     hud.setWater(p.key);
-    if (toast) hud.showToast(p.label + (wind.def.waves > p.waves ? ` (o ${wind.def.key === "tempestade" ? "vento de tempestade" : "vento " + wind.def.key} mantém o mar mais agitado)` : ""));
+    if (toast) hud.showToast(p.label);
   };
   const applyWind = (i: number, toast = true) => {
     wind.setLevel(i);
     applyEnv();
     hud.setWind(wind.def.key);
-    if (toast) hud.showToast(`Vento: ${wind.def.label}${wind.def.speed > 0 ? " — empurra o barco (deriva), adorna e levanta o mar" : ""} · T muda`);
+    if (toast) hud.showToast(`Vento: ${wind.def.label}${wind.def.speed > 0 ? ` — o barco deriva e adorna${wind.def.whitecaps > 0 ? "; carneirinhos na água" : ""}` : ""} · T muda`);
   };
   applyWater(1, false); // sempre começa em "1 — calma"
   applyWind(0, false);  // e sem vento
@@ -692,6 +693,7 @@ const boot = async () => {
         water.time += PHYSICS_DT;
         simTime += PHYSICS_DT;
         wind.update(PHYSICS_DT); world.wind = wind.v;
+        if (wind.speed > 0.1) waterVis.windDir.set(wind.v.x / wind.speed, wind.v.z / wind.speed);
         boat.step(PHYSICS_DT, vin, physWater, world);
         buoyField.step(PHYSICS_DT, boat);
         if (carCmd) V.rig.update(PHYSICS_DT, carCmd);
