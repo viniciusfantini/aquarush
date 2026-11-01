@@ -27,6 +27,9 @@ export interface BoatTelemetry {
   throttleCmd: number;   // comando recebido
   trim: number;          // -1..1
   trimDeg: number;
+  tiltDeg: number;       // recolhimento além do trim (0 = motor na água)
+  tiltBlocked: boolean;  // tentou recolher em velocidade/rotação alta
+  intakeSubmerged: boolean; // entrada d'água de refrigeração dentro d'água
   steerDeg: number;
   gear: Gear;
   pitchDeg: number;      // + proa para cima
@@ -71,6 +74,11 @@ export class Speedboat {
   private lastContact = false;
   private cavitation = 0;
   private propRpmState = 0;
+  /** posição atual da hélice no mundo (gira com trim/tilt) */
+  propWorld: Vec3 = v3();
+  /** recolhimento (rad) além do fim do trim */
+  tilt = 0;
+  private tiltBlocked = false;
 
   telemetry: BoatTelemetry;
   debugForces: ForceDebug[] = [];
@@ -86,7 +94,7 @@ export class Speedboat {
     this.rot = qFromAxisAngle(v3(0, 1, 0), headingRad);
     this.rpm = params.idleRpm;
     this.telemetry = {
-      speedKmh: 0, waterSpeed: 0, rpm: params.idleRpm, throttle: 0, throttleCmd: 0, trim: 0, trimDeg: 0, steerDeg: 0,
+      speedKmh: 0, waterSpeed: 0, rpm: params.idleRpm, throttle: 0, throttleCmd: 0, trim: 0, trimDeg: 0, tiltDeg: 0, tiltBlocked: false, intakeSubmerged: true, steerDeg: 0,
       gear: "N", pitchDeg: 0, rollDeg: 0, wetFraction: 0, planing: false, thrustN: 0, ventilation: 1, cavitation: 0, propSlip: 0, propRpm: 0, engine: "running", fuelLph: 0,
       distanceM: 0, collisions: 0, lastImpact: 0, depth: 0, submergedPoints: params.buoyancyPoints.map(() => false),
     };
@@ -101,6 +109,7 @@ export class Speedboat {
     this.throttleActual = 0;
     this.steer = 0;
     this.trim = 0;
+    this.tilt = 0;
     this.gear = this.wantGear = "N";
     this.shiftTimer = 0;
   }
@@ -216,13 +225,19 @@ export class Speedboat {
 
     // ---------------- propulsão (motor de popa / rabeta) ----------------
     const trimAngle = this.trim >= 0 ? this.trim * P.trimUp : -this.trim * P.trimDown;
-    const propW = this.toWorld(P.propPos);
+    // ângulo total da rabeta = trim + tilt; a hélice gira em torno do pivô no espelho de popa
+    const driveAngle = trimAngle + this.tilt;
+    const driveRot = qFromAxisAngle(v3(1, 0, 0), driveAngle);
+    const propW = this.toWorld(add(P.drivePivot, rotate(driveRot, sub(P.propPos, P.drivePivot))));
+    const intakeW = this.toWorld(add(P.drivePivot, rotate(driveRot, sub(P.intakePos, P.drivePivot))));
+    const intakeSubmerged = water.getHeight(intakeW.x, intakeW.z) - intakeW.y > 0.02;
+    this.propWorld = propW;
     const propDepth = water.getHeight(propW.x, propW.z) - propW.y;
     // ventilação: hélice perto da superfície perde empuxo (trim excessivo / saltos)
     const ventilation = clamp((propDepth + 0.05) / 0.3, 0, 1);
     // Direção do empuxo: esterçar à direita gira a rabeta e empurra a popa para a esquerda.
     // Trim positivo inclina o empuxo para baixo (eleva a proa); negativo, para cima.
-    const tDirLocal = v3(-Math.sin(this.steer) * Math.cos(trimAngle), -Math.sin(trimAngle), Math.cos(this.steer) * Math.cos(trimAngle));
+    const tDirLocal = v3(-Math.sin(this.steer) * Math.cos(driveAngle), -Math.sin(driveAngle), Math.cos(this.steer) * Math.cos(driveAngle));
     const tDir = rotate(this.rot, tDirLocal);
     const vProp = rotateInv(this.rot, sub(this.pointVelocity(propW), water.getCurrent(propW.x, propW.z)));
     const axial = dot(vProp, tDirLocal);
@@ -297,6 +312,9 @@ export class Speedboat {
     t.throttleCmd = input.throttle;
     t.trim = this.trim;
     t.trimDeg = trimAngle * 57.2958;
+    t.tiltDeg = this.tilt * 57.2958;
+    t.tiltBlocked = this.tiltBlocked;
+    t.intakeSubmerged = intakeSubmerged;
     t.steerDeg = this.steer * 57.2958;
     t.gear = this.gear;
     t.pitchDeg = pitch * 57.2958;
@@ -329,7 +347,20 @@ export class Speedboat {
     this.steer = approach(this.steer, clamp(input.steering, -1, 1) * maxSteer, P.steerRate * dt);
 
     // trim (comando é taxa)
-    this.trim = clamp(this.trim + clamp(input.trim, -1, 1) * P.trimRate * dt, -1, 1);
+    // Trim/tilt (um só comando, como o botão do power trim real):
+    //  • faixa de TRIM (−6°..+10°): usada navegando, a hélice continua na água;
+    //  • segurando "trim +" no fim do curso → TILT até +60° (recolher para guardar/água rasa):
+    //    a hélice sai da água. Bloqueado em velocidade ou rotação alta (como nos motores reais).
+    const trimIn = clamp(input.trim, -1, 1);
+    this.tiltBlocked = false;
+    if (trimIn > 0 && this.trim >= 1) {
+      if (Math.abs(u) < P.tiltMaxSpeed && this.rpm < P.tiltMaxRpm) this.tilt = Math.min(P.tiltMax, this.tilt + trimIn * P.tiltRate * dt);
+      else this.tiltBlocked = true;
+    } else if (trimIn < 0 && this.tilt > 0) {
+      this.tilt = Math.max(0, this.tilt + trimIn * P.tiltRate * dt);
+    } else {
+      this.trim = clamp(this.trim + trimIn * P.trimRate * dt, -1, 1);
+    }
 
     // Manete com detentes F / N / R (GDD: frente, neutro e ré). A troca SEMPRE passa por N:
     // corta o acelerador, espera `shiftTime` em neutro (embreagem da rabeta) e só então engrena.

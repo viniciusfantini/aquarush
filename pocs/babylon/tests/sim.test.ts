@@ -222,6 +222,26 @@ for (const [label, thr] of [["baixa", 0.25], ["alta", 1]] as const) {
   check("6 correnteza", "deriva com correnteza 1.6 m/s (m/s)", len(v3(bc.vel.x, 0, bc.vel.z)), 1.2, 1.7, "m/s");
 }
 
+// ---------- Trim × tilt (recolher o motor) ----------
+{
+  const water = mkWater(0);
+  const boat = new Speedboat(SPEEDBOAT, v3(0, 0.25, 0));
+  settle(boat, water);
+  // trim todo para cima navegando: a hélice continua na água
+  run(boat, water, 20, { ...emptyInput(), gear: "F", throttle: 0.6, trim: 1 });
+  check("tilt", "trim máx em movimento: tilt bloqueado (°)", boat.telemetry.tiltDeg, 0, 0.01, "°");
+  check("tilt", "trim máx em movimento: hélice na água (ventilação)", boat.telemetry.ventilation, 0.5, 1, "", 2);
+  // parado, em N, segurando trim +: recolhe e a hélice sai da água
+  run(boat, water, 30, { ...emptyInput(), gear: "N" });
+  run(boat, water, 8, { ...emptyInput(), gear: "N", trim: 1 });
+  check("tilt", "parado: recolhe até o tilt máx (°)", boat.telemetry.tiltDeg, 59, 60.01, "°", 1);
+  check("tilt", "recolhido: entrada d'água fora (sem esguicho)", boat.telemetry.intakeSubmerged ? 0 : 1, 1, 1, "", 0);
+  run(boat, water, 3, { ...emptyInput(), gear: "F", throttle: 1 });
+  check("tilt", "recolhido: empuxo acelerando (hélice no ar)", Math.abs(boat.telemetry.thrustN), 0, 50, "N", 0);
+  run(boat, water, 8, { ...emptyInput(), gear: "N", trim: -1 });
+  check("tilt", "baixar de volta: tilt 0 (°)", boat.telemetry.tiltDeg, 0, 0.01, "°");
+}
+
 // ---------- Ignição (P): desligar / partida só em N ----------
 {
   const water = mkWater(0);

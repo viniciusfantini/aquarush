@@ -24,7 +24,7 @@ import { BoatCamera } from "./presentation/cameras.ts";
 import { Hud } from "./presentation/hud.ts";
 import { EngineAudio } from "./presentation/audio.ts";
 
-const BUILD = "poc-babylon 0.6.0";
+const BUILD = "poc-babylon 0.7.0";
 /** Escala visual da rotação da hélice (proporcional ao RPM, abaixo do limite estroboscópico). */
 const PROP_VISUAL_SCALE = 0.12;
 
@@ -180,6 +180,7 @@ const boot = async () => {
   snap(curPos, curRot); snap(prevPos, prevRot);
   let fpsSmooth = 60;
   let lastGear = boat.telemetry.gear;
+  let tiltWarned = false, intakeWarned = false;
   let physMs = 0;
 
   document.getElementById("h-build")!.textContent = `${BUILD} · ${engine.isWebGPU ? "WebGPU" : "WebGL" + (engine as Engine).webGLVersion} · q=${cfg.quality.name}`;
@@ -235,7 +236,7 @@ const boot = async () => {
     boatVis.root.rotationQuaternion = rRot;
     const T = boat.telemetry;
     boatVis.engine.rotation.y = -T.steerDeg * Math.PI / 180;
-    boatVis.engine.rotation.x = T.trimDeg * Math.PI / 180;
+    boatVis.engine.rotation.x = (T.trimDeg + T.tiltDeg) * Math.PI / 180;
     boatVis.wheel.rotation.z = -T.steerDeg * Math.PI / 180 * 5;
     boatVis.speedNeedle.rotation.z = needleAngle(T.speedKmh, 100);
     boatVis.rpmNeedle.rotation.z = needleAngle(T.rpm / 1000, 7);
@@ -252,7 +253,12 @@ const boot = async () => {
 
     // esguicho de refrigeração: bico no capô, jato para fora (+X local do motor, levemente para trás e para baixo)
     const ew = boatVis.engine.getWorldMatrix();
-    fx.updateTelltale(boatVis.telltale.getAbsolutePosition().clone(), Vector3.TransformNormal(new Vector3(1, -0.15, -0.35), ew), T.rpm, new Vector3(boat.vel.x, boat.vel.y, boat.vel.z));
+    fx.updateTelltale(boatVis.telltale.getAbsolutePosition().clone(), Vector3.TransformNormal(new Vector3(1, -0.15, -0.35), ew), T.rpm, new Vector3(boat.vel.x, boat.vel.y, boat.vel.z),
+      T.engine === "running" && T.intakeSubmerged); // sem água na entrada do pé = sem esguicho
+    if (T.tiltBlocked && !tiltWarned) { hud.showToast("Tilt só com a lancha parada/devagar e em lenta"); tiltWarned = true; }
+    if (!T.tiltBlocked) tiltWarned = false;
+    if (T.engine === "running" && !T.intakeSubmerged && T.tiltDeg > 5 && !intakeWarned) { hud.showToast("Motor recolhido: sem água de refrigeração!"); intakeWarned = true; }
+    if (T.intakeSubmerged) intakeWarned = false;
 
     if (T.gear !== lastGear) { audio.clunk(T.gear !== "N"); lastGear = T.gear; }
     audio.update({

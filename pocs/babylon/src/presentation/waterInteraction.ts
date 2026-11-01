@@ -113,7 +113,7 @@ export class WaterInteraction {
   }
 
   /** Esguicho: posição do bico e direção do jato (mundo), vazão ∝ rotação da bomba d'água. */
-  updateTelltale(nozzle: Vector3, dir: Vector3, rpm: number, boatVel: Vector3): void {
+  updateTelltale(nozzle: Vector3, dir: Vector3, rpm: number, boatVel: Vector3, pumping = true): void {
     const ps = this.telltale;
     ps.emitter = nozzle;
     // bomba d'água acionada pelo virabrequim: em lenta é um fio fraco que cai perto do capô;
@@ -124,7 +124,7 @@ export class WaterInteraction {
     ps.direction1 = d.scale(v).add(new Vector3(0, 0.05, 0)).add(boatVel);
     ps.direction2 = d.scale(v * 1.06).add(new Vector3(0, 0.12, 0)).add(boatVel);
     ps.minEmitPower = ps.maxEmitPower = 1;
-    ps.emitRate = rpm > 300 ? 110 + 230 * r : 0;
+    ps.emitRate = rpm > 300 && pumping ? 110 + 230 * r : 0;
     ps.minSize = 0.014 + 0.01 * r; ps.maxSize = 0.026 + 0.016 * r;
   }
 
@@ -155,7 +155,7 @@ export class WaterInteraction {
     setBow(this.bowR, 1);
 
     // ---------------- hélice: rooster tail, cavitação, ventilação ----------------
-    const prop = boat.toWorld(boat.params.propPos);
+    const prop = boat.propWorld;
     const surf = water.getHeight(prop.x, prop.z);
     // só há água para ferver/espirrar se houver profundidade sob a hélice (encalhado na areia: nada)
     const hasWater = smoothstep(0.15, 0.5, water.getDepth(prop.x, prop.z));

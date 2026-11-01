@@ -7,6 +7,7 @@ import {
   VertexData, DynamicTexture,
 } from "@babylonjs/core";
 import { smoothstep } from "../sim/math.ts";
+import { SPEEDBOAT } from "../sim/params.ts";
 
 export interface BoatVisual {
   root: TransformNode;
@@ -402,15 +403,15 @@ export const buildBoat = (scene: Scene): BoatVisual => {
   const lowerCowl = add(roundedBox("lowerCowl", scene, 0.4, 0.2, 0.62, 0.06), blackGloss, engine);
   lowerCowl.position.set(0, 0.17, -0.46);
 
-  // adesivo traseiro "60" (potência) — genérico, sem marca
-  const decalTex = new DynamicTexture("decal60", { width: 512, height: 320 }, scene, true);
+  // adesivo traseiro "150" (potência real da física: SPEEDBOAT.enginePowerHp) — genérico, sem marca
+  const decalTex = new DynamicTexture("decalHp", { width: 512, height: 320 }, scene, true);
   {
     const c = decalTex.getContext() as CanvasRenderingContext2D;
     c.clearRect(0, 0, 512, 320);
     c.fillStyle = "#0d1b33";
-    c.font = "bold 230px 'Arial Black', Arial, sans-serif";
+    c.font = "bold 200px 'Arial Black', Arial, sans-serif";
     c.textAlign = "center"; c.textBaseline = "middle";
-    c.fillText("60", 256, 150);
+    c.fillText(String(SPEEDBOAT.enginePowerHp), 256, 150); // sempre igual à potência da física
     c.fillStyle = "#c0141c";
     c.fillRect(70, 268, 372, 14);
     c.fillStyle = "#0d1b33";

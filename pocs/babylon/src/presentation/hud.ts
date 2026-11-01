@@ -36,7 +36,8 @@ export class Hud {
     this.thrBar.classList.toggle("rev", t.gear === "R");
     this.thrTxt.textContent = `${Math.round(t.throttle * 100)}%`;
     this.trimMark.style.bottom = `${((t.trim + 1) / 2) * 100}%`;
-    this.trimTxt.textContent = `${t.trimDeg >= 0 ? "+" : ""}${t.trimDeg.toFixed(1)}°`;
+    this.trimTxt.textContent = t.tiltDeg > 0.5 ? `TILT ${t.tiltDeg.toFixed(0)}°` : `${t.trimDeg >= 0 ? "+" : ""}${t.trimDeg.toFixed(1)}°`;
+    this.trimMark.style.background = t.tiltDeg > 0.5 ? "#ff9d3d" : "";
     this.gear.textContent = t.gear;
     this.gear.className = "gear g-" + t.gear;
     this.planing.classList.toggle("on", t.planing);

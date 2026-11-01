@@ -45,6 +45,7 @@ A lancha é um **corpo rígido 6DOF** (massa de 1200 kg, tensor de inércia diag
 | Planeio | sustentação ∝ ½ρu²·A·CL·ângulo de ataque local (incidência do fundo + atitude), na normal do fundo (gera arrasto induzido). **O planeio surge sozinho**: o casco sobe, a área molhada cai e o arrasto também |
 | "Hump" | sistema de ondas do próprio casco (onda na proa, cavado na popa, em Froude ~0,5): a proa empina antes de planar. Mais resistência de ondas |
 | Propulsão | empuxo na posição da hélice; cai com a velocidade (passo da hélice); direção = esterço + trim; ventila perto da superfície |
+| Tilt (recolher) | segurando trim+ no fim do curso, com a lancha a menos de 2,5 m/s e abaixo de 2200 rpm, a rabeta gira até +60° em torno do pivô no espelho. A posição da hélice e da entrada d'água giram junto: a hélice sai da água (sem empuxo) e o esguicho para. Em velocidade/rotação alta o tilt é bloqueado, como no power trim real |
 | Trim | inclina o vetor de empuxo e age como flap da rabeta (força ∝ u² na popa). **Muda a atitude e a velocidade de fato** |
 | Manete F / N / R | a marcha pedida vem de `VehicleInput.gear`. Toda troca passa por N com 0,45 s (embreagem da rabeta) e só engrena com o acelerador em lenta. Em N o empuxo é zero. Engrenado em lenta, o motor dá 4 % do empuxo (≈ 5 km/h para frente e ≈ 3 km/h em ré) |
 | Cavitação | índice = f(carga × escorregamento da hélice). Com carga alta e pouca velocidade (arrancada), perde até 30 % do empuxo e o RPM sobe. Some em cruzeiro |
@@ -78,7 +79,7 @@ A lancha é um **corpo rígido 6DOF** (massa de 1200 kg, tensor de inércia diag
 - **Teste:** um retorno de 180° cruzando a própria esteira. Sem esteira, a aceleração vertical máxima é 0,11 m/s²; com esteira, **11,2 m/s²** (um tranco de ~1 g). Custo: **0,047 ms/passo**.
 - **No navegador:** cruzando a 41 km/h, a marola sob o casco tinha 0,20 m, com velocidade vertical de 0,87 m/s.
 
-## Áudio (v0.4 → v0.5): motor de popa 4 tempos, 4 cilindros (~60 hp)
+## Áudio (v0.4 → v0.6): motor de popa 4 tempos, 4 cilindros em linha (150 hp, como os 150 hp 4T reais)
 
 **v0.5: síntese física em AudioWorklet** (`presentation/engineWorklet.js`):
 
@@ -118,12 +119,13 @@ Limitação: é uma síntese aproximada, não uma gravação. Validar o timbre d
 | 4. Curva | baixa (22 km/h): raio 5 m. Alta (77 km/h, volante todo): raio 17 m, inclina 2,5° para dentro, perde velocidade |
 | 5. Desaceleração e ré | solta o acelerador: do topo a 10 km/h em 12 s; com ré a toda (reverso), em 4,4 s; ré a toda: 23 km/h |
 | 4b. Soltar o volante | depois de 3 s de curva a 55 km/h: guinada inversa 0°/s e rumo volta 0° (antes: −10°/s e 16°) |
+| Tilt | trim máx navegando: tilt bloqueado e hélice na água; parado: recolhe a 60°, entrada d'água fora, empuxo 0 acelerando; trim− baixa de volta a 0° |
 | Ignição | desliga em movimento; desligado, empuxo 0 mesmo acelerando; RPM vai a 0; partida engatado é recusada; em N dá partida e pega na lenta (750–1200 rpm) |
 | 5. Manete | de cruzeiro para N: empuxo 0 e < 1 km/h em 27 s; a hélice gira **solta** (~990 rpm 1,5 s depois do N) e para junto com a lancha. F em lenta: 5,0 km/h a 750 rpm. R em lenta: 2,8 km/h para trás. No navegador: 1 toque W = F a 4 km/h; segurar = 45 km/h; 1 toque S = N; 2º toque = R lenta; segurar S = ré acelerando |
 | 6. Ondas e correnteza | ondas fortes (×2,5): roll ≤ 30°, não emborca; deriva com correnteza de 1,6 m/s: 1,54 m/s |
 | Lago | flutua no spawn; a toda contra a margem, encalha e para sem atravessar o terreno |
 
-Resultado: **62/63 OK**, com 1 limitação conhecida (abaixo). Na v0.2 a hélice foi para 0,5 m atrás do espelho, como no modelo visual, e o esterço máximo em alta velocidade caiu de 13° para 11°.
+Resultado: **68/69 OK**, com 1 limitação conhecida (abaixo). Na v0.2 a hélice foi para 0,5 m atrás do espelho, como no modelo visual, e o esterço máximo em alta velocidade caiu de 13° para 11°.
 
 ### Navegador (Chrome, Windows 11, WebGL2, `q=med`, ~1370×896)
 
@@ -143,7 +145,7 @@ Resultado: **62/63 OK**, com 1 limitação conhecida (abaixo). Na v0.2 a hélice
 5. Colisão por pontos: um objeto fino entre dois pontos de contato pode atravessar o costado.
 6. Combustível, danos e porão ainda não existem (o HUD só mostra o consumo estimado).
 7. ~~A física não sente a esteira~~: resolvido na v0.5 (`WaterWithWake`). A espuma continua só visual.
-9. O capô diz **"60"**, mas a física simula **150 hp** (`params.ts`). Mudar para 60 hp reduz a velocidade final e o planeio; está pendente de decisão.
+9. ~~Adesivo "60" × física de 150 hp~~: resolvido na v0.7 (o adesivo lê `enginePowerHp`).
 8. As bolhas são partículas desenhadas antes da água. Com a água vidro e muito transparente, a profundidade delas é aproximada.
 
 ## Próximos passos (POC 1)
