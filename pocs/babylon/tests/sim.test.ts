@@ -10,6 +10,7 @@ import { GerstnerWater, WAVE_PRESETS, type CurrentZone } from "../src/sim/water.
 import type { PhysicsWorld } from "../src/sim/world.ts";
 import { buildWorld, RAMP, groundHeight } from "../src/sim/world.ts";
 import { buildTrailer, trailerLoadState, attachWinch } from "../src/sim/trailer.ts";
+import { TowRig, TOW_SPECS } from "../src/sim/towVehicle.ts";
 import { emptyInput, type VehicleInput } from "../src/gameplay/vehicleInput.ts";
 import { v3, len, qFromAxisAngle } from "../src/sim/math.ts";
 import { WakeField, WaterWithWake } from "../src/sim/wake.ts";
@@ -532,6 +533,33 @@ for (const [label, thr] of [["baixa", 0.25], ["alta", 1]] as const) {
     check("rampa", `${kind}: inclinado como a rampa (°)`, b.telemetry.pitchDeg, 5.5, 8, "°", 1);
     check("rampa", `${kind}: sem tombar no berço (roll °)`, Math.abs(b.telemetry.rollDeg), 0, 3, "°", 1);
     check("rampa", `${kind}: física estável`, finite ? 1 : 0, 1, 1, "", 0);
+  }
+}
+
+// ---------- Veículo de reboque puxando a carretinha ----------
+{
+  for (const [kind, spec] of [["bote", "car"], ["lancha", "pickup"]] as const) {
+    const tr = buildTrailer(kind === "lancha" ? SPEEDBOAT : DINGHY);
+    const rig = new TowRig(tr, TOW_SPECS[spec], groundHeight);
+    const t0 = rig.trailerPose();
+    check("reboque", `${kind}: carretinha começa onde está estacionada (m)`, Math.hypot(t0.x - tr.cx, t0.z - tr.zFront), 0, 0.01, "m", 3);
+    // parado na rampa, sem comando: o "auto hold" segura
+    for (let i = 0; i < 5 / DT; i++) rig.update(DT, { up: 0, down: 0, steer: 0 });
+    check("reboque", `${kind}: parado na rampa não desce (m)`, Math.abs(rig.trailerPose().z - t0.z), 0, 0.02, "m", 3);
+    // acelerando 8 s: sobe a rampa puxando a carretinha para fora d'água
+    for (let i = 0; i < 8 / DT; i++) rig.update(DT, { up: 1, down: 0, steer: 0 });
+    const tp = rig.trailerPose();
+    check("reboque", `${kind}: carretinha saiu da água (traseira acima d'água, m)`, groundHeight(tp.x, tp.z + (tr.sRear - tr.sFront)), 0, 5, "m", 2);
+    check("reboque", `${kind}: velocidade limitada (km/h)`, rig.v * 3.6, 10, 41, "km/h", 1);
+    check("reboque", `${kind}: em linha reta, carretinha alinhada (°)`, Math.abs(rig.articulation) * 57.3, 0, 1, "°", 2);
+    // freia (S) até parar e depois dá ré virando: a carretinha dobra
+    for (let i = 0; i < 4 / DT; i++) rig.update(DT, { up: 0, down: 1, steer: 0 });
+    check("reboque", `${kind}: S freia e engata a ré (m/s)`, rig.v, -TOW_SPECS[spec].maxReverse, -0.5, "m/s", 2);
+    for (let i = 0; i < 4 / DT; i++) rig.update(DT, { up: 0, down: 1, steer: 1 });
+    check("reboque", `${kind}: de ré virando, a carretinha dobra até o batente (°)`, Math.abs(rig.articulation) * 57.3, 10, 80.5, "°", 1);
+    // de frente virando, a carretinha volta a seguir o carro
+    for (let i = 0; i < 12 / DT; i++) rig.update(DT, { up: 0.5, down: 0, steer: 0 });
+    check("reboque", `${kind}: andando para a frente ela realinha (°)`, Math.abs(rig.articulation) * 57.3, 0, 8, "°", 1);
   }
 }
 

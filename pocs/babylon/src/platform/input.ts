@@ -138,6 +138,34 @@ export class InputManager {
     if (this.pressShifted) this.setGear(next);
   }
 
+  /**
+   * Comando simples do veículo de reboque (frente, freio/ré, direita, esquerda) — sem manete com marchas.
+   * Teclado W/↑ frente, S/↓ freio e, parado, ré; A/D direção. Gamepad: RT/LT + analógico.
+   * Touch: alavanca acima do N = frente, abaixo = freio/ré; joystick = direção.
+   */
+  drive(dt: number): { up: number; down: number; steer: number } {
+    let gpUp = 0, gpDown = 0, gpSteer = 0;
+    const pads = typeof navigator !== "undefined" && navigator.getGamepads ? navigator.getGamepads() : [];
+    for (const gp of pads) {
+      if (!gp || gp.mapping !== "standard") continue;
+      gpUp = Math.max(gp.buttons[7]?.value ?? 0, gp.buttons[12]?.pressed ? 1 : 0);
+      gpDown = Math.max(gp.buttons[6]?.value ?? 0, gp.buttons[13]?.pressed ? 1 : 0);
+      const ax = gp.axes[0] ?? 0;
+      gpSteer = Math.abs(ax) > 0.12 ? (ax - Math.sign(ax) * 0.12) / 0.88 : 0;
+      break;
+    }
+    const steerT = (this.k("KeyD", "ArrowRight") ? 1 : 0) - (this.k("KeyA", "ArrowLeft") ? 1 : 0);
+    this.kbSteer = approach(this.kbSteer, steerT, (steerT === 0 ? 4 : 2.8) * dt);
+    const tl = this.touchLever;
+    const tUp = tl && tl.gear === "F" ? Math.max(0.35, tl.throttle) : 0;
+    const tDown = tl && tl.gear === "R" ? Math.max(0.35, tl.throttle) : 0;
+    return {
+      up: Math.max(this.k("KeyW", "ArrowUp") ? 1 : 0, gpUp, tUp),
+      down: Math.max(this.k("KeyS", "ArrowDown") ? 1 : 0, gpDown, tDown),
+      steer: clamp(this.kbSteer + gpSteer + this.touchSteer, -1, 1),
+    };
+  }
+
   toggleLights(): boolean { this.lights = !this.lights; return this.lights; }
   setLights(on: boolean): void { this.lights = on; }
 }
