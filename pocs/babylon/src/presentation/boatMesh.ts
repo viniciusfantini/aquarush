@@ -23,14 +23,11 @@ export interface BoatVisual {
 }
 
 // ---------------- forma do casco ----------------
-export const Z_STERN = -2.95;
-export const Z_BOW = 3.2;
+// forma do casco: fonte única em sim/hullShape.ts (também usada na hidrostática do porão)
+import { Z_STERN, Z_BOW, halfBeam, keelY, chineY, sheerY } from "../sim/hullShape.ts";
+export { Z_STERN, Z_BOW };
 const ZC0 = -2.45, ZC1 = 1.15;       // limites do cockpit
 const FLOOR = 0.02;                  // piso do cockpit (acima da linha d'água ≈ -0.23)
-const halfBeam = (z: number) => z <= 0 ? 1.13 - 0.06 * (z / Z_STERN) : 1.13 * Math.pow(Math.max(0, 1 - (z / Z_BOW) ** 2.3), 0.55);
-const keelY = (z: number) => -0.47 + 0.62 * Math.pow(smoothstep(0.6, Z_BOW, z), 1.7);
-const chineY = (z: number) => -0.25 + 0.55 * Math.pow(smoothstep(1.0, Z_BOW, z), 1.5);
-const sheerY = (z: number) => 0.44 + 0.2 * Math.pow(smoothstep(-0.5, Z_BOW, z), 2.2);
 const inBeam = (z: number) => Math.max(0.25, halfBeam(z) - 0.16);
 
 const hullHalfSection = (z: number): [number, number][] => {

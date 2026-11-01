@@ -40,7 +40,7 @@ import { BoatCamera } from "./presentation/cameras.ts";
 import { Hud } from "./presentation/hud.ts";
 import { EngineAudio } from "./presentation/audio.ts";
 
-const BUILD = "poc-babylon 0.40.0";
+const BUILD = "poc-babylon 0.41.0";
 /** Escala visual da rotação da hélice (proporcional ao RPM, abaixo do limite estroboscópico). */
 const PROP_VISUAL_SCALE = 0.12;
 
@@ -323,7 +323,7 @@ const boot = async () => {
   const prevRot = new Quaternion(), curRot = new Quaternion();
   const snap = (dst: Vector3, q: Quaternion) => { const b = V.boat; dst.set(b.pos.x, b.pos.y, b.pos.z); q.set(b.rot.x, b.rot.y, b.rot.z, b.rot.w); };
   let fpsSmooth = 60, resT = 0;
-  let lastStartFail = "", lowFuelWarned = false, trimRelayWarned = false, neutralRevWarned = false, lastJumperOff = 0, lastJumperTrips = 0, lastAnchorState = "recolhida", lastBilgeAlarm = false, windHudT = 0;
+  let lastStartFail = "", lowFuelWarned = false, trimRelayWarned = false, neutralRevWarned = false, lastJumperOff = 0, lastJumperTrips = 0, lastAnchorState = "recolhida", lastBilgeAlarm = false, lastSwamped = false, lastSunk = false, windHudT = 0;
   const qTilt = new Quaternion(), qSteer = new Quaternion();
   let lastGear = V.boat.telemetry.gear;
   let tiltWarned = false, intakeWarned = false, capsizeWarned = false;
@@ -837,6 +837,10 @@ const boot = async () => {
     }
     if (T.bilgeAlarm && !lastBilgeAlarm && mode === "game") hud.showToast(T.bilgePump ? `Bomba de porão ligada: entrando ${T.bilgeInflowLps.toFixed(1)} L/s — ${T.bilgeInflowLps > T.bilgeFlowLps ? "a bomba não vence, volte ao píer!" : "a bomba dá conta"}` : `Água no porão: ${T.bilgeL.toFixed(0)} L`);
     lastBilgeAlarm = T.bilgeAlarm;
+    if (T.swamped && !lastSwamped && mode === "game" && !T.sunk) hud.showToast(`Barco ALAGADO: ${T.bilgeL.toFixed(0)} L dentro e a borda na linha d'água — inavegável; se entrar mais água ele afunda`);
+    lastSwamped = T.swamped;
+    if (T.sunk && !lastSunk && mode === "game") hud.showToast(`O barco AFUNDOU com ${T.bilgeL.toFixed(0)} L de água dentro — todos na água de colete. R para recomeçar`);
+    lastSunk = T.sunk;
     if (boat.systems.jumperTrips !== lastJumperTrips) { if (mode === "game") hud.showToast(`Proteção do jump start desarmou: mais de ${JUMP_MAX_A} A (ex.: partida + molinete juntos) — J para religar`); lastJumperTrips = boat.systems.jumperTrips; }
     if (boat.systems.jumperAutoOff !== lastJumperOff) { if (mode === "game") hud.showToast(`O motor pegou — jump start desconectado (carga ${Math.round(T.jumpCharge * 100)} %, recarrega em cruzeiro)`); lastJumperOff = boat.systems.jumperAutoOff; }
     if (T.trimRelay && !trimRelayWarned && mode === "game") { hud.showToast("Trim sem força: bateria zerada — só o relé estala (J conecta o jump start)"); trimRelayWarned = true; }
@@ -861,7 +865,7 @@ const boot = async () => {
       if (dEnd > 60) reachedEnd = false;
     }
     ropes.update(boat);
-    V.gear.update(boat, simTime, mode === "game");
+    V.gear.update(boat, simTime, mode === "game", physWater);
 
     if (mode === "menu") cam.spin(dtReal, 0.22, 0.12); // prévia: câmera girando devagar em volta do barco
     cam.distScale = (V.kind === "bote" ? 0.62 : 1) * (driving ? 1.35 : 1);

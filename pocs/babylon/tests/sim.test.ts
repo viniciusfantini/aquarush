@@ -553,7 +553,8 @@ for (const [label, thr] of [["baixa", 0.25], ["alta", 1]] as const) {
   check("porão", "casco 17 %: entrada pelo furo, orifício Cd·A·√(2gh) (L/s)", inflow0, 0.35, 0.6, "L/s", 2);
   check("porão", "a boia liga a bomba sozinha", pumped ? 1 : 0, 1, 1, "", 0);
   check("porão", "casco 17 %: a bomba dá conta, máximo no porão (L)", maxL, 4, 12, "L", 1);
-  check("porão", "vazão da bomba (L/s, ~750 GPH)", maxFlow, 0.7, 0.85, "L/s", 2);
+  check("porão", "vazão da bomba: 750 GPH na curva com ~0,8 m de coluna (L/s)", maxFlow, 0.45, 0.65, "L/s", 2);
+  check("porão", "jato: velocidade de saída na mangueira de 1 1/8\" (m/s)", Math.hypot(b.telemetry.bilgeJetVel.x, b.telemetry.bilgeJetVel.y, b.telemetry.bilgeJetVel.z), 0, 1.2, "m/s", 2);
   check("porão", "alarme sonoro/luminoso com a bomba jogando água fora", alarm ? 1 : 0, 1, 1, "", 0);
   check("porão", "bomba ligada: corrente na bateria (A)", pumpBatA, -5, -3, "A", 1);
   // furo maior que a bomba: a água acumula, pesa e afunda o barco (e o furo fica mais fundo)
@@ -588,7 +589,44 @@ for (const [label, thr] of [["baixa", 0.25], ["alta", 1]] as const) {
   const d = new Speedboat(DINGHY, v3(0, 0.25, 0));
   d.hullDamage = 0.3;
   run(d, water, 60, emptyInput());
-  check("porão", "bote (sem bomba): 1 min com furo de casco 30 % (L)", d.telemetry.bilgeL, 18, 40, "L", 1);
+  check("porão", "bote (sem bomba): 1 min com furo de casco 30 % (L)", d.telemetry.bilgeL, 10, 30, "L", 1);
+}
+
+
+// ---------- Alagar e afundar: quantos litros dentro (água calma, só o piloto, bomba desligada) ----------
+{
+  const flat: PhysicsWorld = { groundHeight: () => -60, spheres: [], boxes: [] };
+  const settle = (P: typeof SPEEDBOAT, L: number, secs = 40) => {
+    const Pn = { ...P, bilge: { ...P.bilge, pumpLph: 0 } };
+    const water = mkWater(0);
+    const b = new Speedboat(Pn, v3(0, 0.25, 0), 0);
+    b.engine = "off"; b.systems.fuelL = 5; b.bilgeL = L;
+    let fb = 9;
+    run(b, water, secs, emptyInput(), flat, (t) => { if (t > 15) fb = Math.min(fb, b.telemetry.freeboard); });
+    return { b, fb };
+  };
+  const findL = (P: typeof SPEEDBOAT, pred: (r: ReturnType<typeof settle>) => boolean) => {
+    let lo = 0, hi = P.bilge.maxL;
+    for (let k = 0; k < 10; k++) { const m = (lo + hi) / 2; if (pred(settle(P, m))) hi = m; else lo = m; }
+    return hi;
+  };
+  const dry = settle(SPEEDBOAT, 0);
+  check("afundar", "lancha seca: borda livre (cm)", dry.fb * 100, 55, 75, "cm", 0);
+  const swampL = findL(SPEEDBOAT, (r) => r.fb < 0.03);
+  check("afundar", "lancha: alagada/inavegável (borda na linha d'água) com (L)", swampL, 3200, 3800, "L", 0);
+  const sinkL = findL(SPEEDBOAT, (r) => r.b.telemetry.sunk);
+  check("afundar", "lancha: afunda com (L) — a água passa a entrar pelo espelho sem parar", sinkL, swampL, 4300, "L", 0);
+  const s = settle(SPEEDBOAT, sinkL + 300, 60);
+  check("afundar", "afundou: motor desligado e pessoas na água", s.b.telemetry.sunk && s.b.engine === "off" && s.b.swimmers.length === 1 ? 1 : 0, 1, 1, "", 0);
+  check("afundar", "afundou: o barco desce (m abaixo da superfície)", -s.b.pos.y, 1, 60, "m", 1);
+  const full = settle(DINGHY, DINGHY.bilge.maxL, 40);
+  check("afundar", "bote inflável cheio até o topo dos tubos: não afunda (flutuadores)", full.b.telemetry.sunk ? 0 : 1, 1, 1, "", 0);
+  // furo de 60 % sem bomba: a água entra até igualar o nível de fora (o barco fica pesado, mas não afunda)
+  const hole = new Speedboat({ ...SPEEDBOAT, bilge: { ...SPEEDBOAT.bilge, pumpLph: 0 } }, v3(0, 0.25, 0), 0);
+  hole.engine = "off"; hole.hullDamage = 0.6;
+  run(hole, mkWater(0), 600, emptyInput(), flat);
+  check("afundar", "furo de 60 % por 10 min, sem bomba: equilíbrio (água iguala o nível de fora) (L)", hole.bilgeL, 400, 1300, "L", 0);
+  check("afundar", "furo de 60 %: pesado, mas não afunda nem alaga", !hole.telemetry.sunk && !hole.telemetry.swamped ? 1 : 0, 1, 1, "", 0);
 }
 
 // ---------- Vento: 5 níveis, deriva, banda, âncora ----------

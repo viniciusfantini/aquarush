@@ -4,8 +4,11 @@
 import { type Scene, Mesh, MeshBuilder, StandardMaterial, PBRMaterial, Color3, Color4, TransformNode, Vector3, LinesMesh, Quaternion } from "@babylonjs/core";
 import type { Speedboat } from "../sim/boat.ts";
 import type { SpeedboatParams } from "../sim/params.ts";
+import type { IWaterSurface } from "../sim/water.ts";
 
 const ROPE_N = 16;
+const JET_N = 14;
+const G = 9.81;
 
 export class BoatGearVis {
   private readonly root: TransformNode;      // nó do barco (visual)
@@ -17,6 +20,7 @@ export class BoatGearVis {
   private readonly drops: Mesh[] = [];
   private readonly foam: Mesh | null = null;
   private readonly streamPath: Vector3[] = [];
+  private readonly streamR: number[] = [];
   private stowed = true;
   readonly meshes: Mesh[] = [];
 
@@ -50,21 +54,18 @@ export class BoatGearVis {
       this.meshes.push(thru);
       const wm = new StandardMaterial(prefix + "BilgeWater", scene);
       wm.diffuseColor = new Color3(0.8, 0.9, 1); wm.emissiveColor = new Color3(0.25, 0.3, 0.35); wm.alpha = 0.7; wm.specularColor = new Color3(1, 1, 1);
-      // parábola no referencial do barco: sai a ~1,4 m/s para fora e cai na água
-      for (let i = 0; i <= 12; i++) {
-        const t = (i / 12) * 0.3;
-        this.streamPath.push(new Vector3(o.x + sx * 1.35 * t, o.y + 0.25 * t - 4.9 * t * t, o.z - 0.15 * t));
-      }
-      const tube = MeshBuilder.CreateTube(prefix + "BilgeJet", { path: this.streamPath, radius: 0.022, tessellation: 10, cap: Mesh.CAP_ALL }, scene);
-      tube.parent = root; tube.material = wm; tube.isPickable = false; tube.setEnabled(false);
+      // jato no MUNDO (trajetória balística recalculada a cada quadro a partir da simulação)
+      for (let i = 0; i < JET_N; i++) { this.streamPath.push(new Vector3(0, -i * 0.01, 0)); this.streamR.push(0.01); }
+      const tube = MeshBuilder.CreateTube(prefix + "BilgeJet", { path: this.streamPath, radiusFunction: (i) => this.streamR[i] ?? 0.01, tessellation: 10, cap: Mesh.CAP_ALL, updatable: true }, scene);
+      tube.material = wm; tube.isPickable = false; tube.setEnabled(false);
       this.stream = tube;
-      for (let i = 0; i < 9; i++) {
-        const d = MeshBuilder.CreateSphere(prefix + "BilgeDrop", { diameter: 0.05, segments: 6 }, scene);
-        d.parent = root; d.material = wm; d.isPickable = false; d.setEnabled(false);
+      for (let i = 0; i < 14; i++) {
+        const d = MeshBuilder.CreateSphere(prefix + "BilgeDrop", { diameter: 1, segments: 6 }, scene);
+        d.material = wm; d.isPickable = false; d.setEnabled(false);
         this.drops.push(d);
       }
-      const foam = MeshBuilder.CreateDisc(prefix + "BilgeFoam", { radius: 0.12, tessellation: 18 }, scene);
-      foam.rotation.x = Math.PI / 2; foam.parent = root; foam.material = wm; foam.isPickable = false; foam.setEnabled(false);
+      const foam = MeshBuilder.CreateDisc(prefix + "BilgeFoam", { radius: 1, tessellation: 20 }, scene);
+      foam.rotation.x = Math.PI / 2; foam.material = wm; foam.isPickable = false; foam.setEnabled(false);
       this.foam = foam;
       this.meshes.push(tube, foam, ...this.drops);
     }
@@ -79,7 +80,7 @@ export class BoatGearVis {
     this.stowed = true;
   }
 
-  update(boat: Speedboat, time: number, active: boolean): void {
+  update(boat: Speedboat, time: number, active: boolean, water?: IWaterSurface): void {
     const A = boat.anchor, T = boat.telemetry;
     // ---- âncora e cabo ----
     if (A.state === "recolhida" || !active) {
@@ -118,26 +119,51 @@ export class BoatGearVis {
       MeshBuilder.CreateLines("", { points: pts, instance: this.rope });
       this.rope.setEnabled(true);
     }
-    // ---- jato da bomba de porão ----
+    // ---- jato da bomba de porão: balístico no mundo, da saída até a superfície da água ----
     if (this.stream) {
-      const on = active && T.bilgeFlowLps > 0.05;
+      const Q = T.bilgeFlowLps / 1000; // m³/s
+      const on = active && Q > 0.00005;
       this.stream.setEnabled(on);
       this.foam?.setEnabled(on);
-      const k = Math.min(1, T.bilgeFlowLps / 1.1);
-      this.stream.scaling.setAll(1);
+      for (const d of this.drops) d.setEnabled(on);
+      if (!on || !water) return;
+      const p0 = T.bilgeJetPos, v0 = T.bilgeJetVel;
+      // tempo até cruzar a superfície (marcha em passos de 5 ms; no máx. 1 s)
+      let tHit = 1;
+      for (let t = 0.005; t <= 1; t += 0.005) {
+        const x = p0.x + v0.x * t, y = p0.y + v0.y * t - 0.5 * G * t * t, z = p0.z + v0.z * t;
+        if (y <= water.getHeight(x, z)) { tHit = t; break; }
+      }
+      const at = (t: number) => new Vector3(p0.x + v0.x * t, p0.y + v0.y * t - 0.5 * G * t * t, p0.z + v0.z * t);
+      // velocidade relativa ao barco (o ar e a água "veem" o jato saindo do costado): a seção afina ao cair (continuidade)
+      const vRel0 = Math.max(0.3, Q / this.P.bilge.outletAreaM2);
+      for (let i = 0; i < JET_N; i++) {
+        const t = (tHit * i) / (JET_N - 1);
+        this.streamPath[i] = at(t);
+        const vRel = Math.hypot(vRel0, G * t);
+        this.streamR[i] = Math.min(0.03, Math.max(0.004, Math.sqrt(Q / (Math.PI * vRel)))) * (1 - 0.35 * (i / (JET_N - 1)));
+      }
+      MeshBuilder.CreateTube("", { path: this.streamPath, radiusFunction: (i) => this.streamR[i] ?? 0.004, instance: this.stream });
+      // gotas: o jato se quebra no fim da queda; mais gotas e mais espalhadas perto da água
+      const hit = this.streamPath[JET_N - 1];
       this.drops.forEach((d, i) => {
-        d.setEnabled(on);
-        if (!on) return;
-        const u = (time * 2.2 + i / this.drops.length) % 1;
-        const f = u * (this.streamPath.length - 1), j = Math.floor(f), w = f - j;
-        const a = this.streamPath[j], b = this.streamPath[Math.min(j + 1, this.streamPath.length - 1)];
-        d.position.copyFrom(Vector3.Lerp(a, b, w)).addInPlace(new Vector3(0, Math.sin(i * 7.3 + time * 13) * 0.02, Math.cos(i * 3.1 + time * 11) * 0.02));
-        d.scaling.setAll(0.6 + 0.6 * k * ((i * 37) % 10) / 10);
+        const u = (time * 1.7 + i / this.drops.length) % 1;
+        if (i < 9) {
+          const t = tHit * (0.35 + 0.65 * u);
+          const spread = 0.05 * u * u;
+          d.position.copyFrom(at(t)).addInPlace(new Vector3(Math.sin(i * 7.3 + time * 13) * spread, Math.cos(i * 5.1 + time * 9) * spread, Math.cos(i * 3.1 + time * 11) * spread));
+          d.scaling.setAll((0.012 + 0.012 * ((i * 37) % 10) / 10) * (0.6 + 0.6 * Math.min(1, Q / 0.0007)));
+        } else {
+          // respingos na água: sobem um pouco e voltam (ciclo de ~0,3 s)
+          const ph = (time * 3.3 + i * 0.37) % 1, a = (i * 2.4) % (Math.PI * 2);
+          const r = 0.05 + 0.12 * ph;
+          d.position.set(hit.x + Math.cos(a) * r, hit.y + 0.18 * ph * (1 - ph) * 4 * Math.min(1, Q / 0.0005), hit.z + Math.sin(a) * r);
+          d.scaling.setAll(0.015 * (1 - ph));
+        }
       });
-      if (this.foam && on) {
-        const e = this.streamPath[this.streamPath.length - 1];
-        this.foam.position.set(e.x, e.y + 0.01, e.z);
-        this.foam.scaling.setAll(0.7 + 0.35 * Math.sin(time * 9) * k + 0.3 * k);
+      if (this.foam) {
+        this.foam.position.set(hit.x, water.getHeight(hit.x, hit.z) + 0.01, hit.z);
+        this.foam.scaling.setAll(0.04 + 0.09 * Math.min(1, Q / 0.0008) * (0.85 + 0.15 * Math.sin(time * 9)));
       }
     }
   }

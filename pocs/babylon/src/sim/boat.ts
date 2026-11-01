@@ -72,7 +72,7 @@ export interface BoatTelemetry {
   protectMode: boolean;  // superaquecido: rotação limitada
   lowFuel: boolean;
   chargeWarn: boolean;
-  stall: "" | "fuel" | "overheat" | "capsize" | "broken"; // último motivo de o motor ter morrido sozinho
+  stall: "" | "fuel" | "overheat" | "capsize" | "broken" | "sunk"; // último motivo de o motor ter morrido sozinho
   buzzer: boolean;       // alarme do motor apitando (autoteste da chave)
   starterRpm: number;    // rotação do motor de arranque (0 = só o "clique" do solenoide)
   startFail: "" | "weak" | "dead" | "pull" | "fuel"; // última partida que não pegou (bateria fraca / sem força / corda / sem combustível)
@@ -89,6 +89,11 @@ export interface BoatTelemetry {
   bilgePump: boolean;    // bomba de porão ligada
   bilgeFlowLps: number;  // vazão da bomba (L/s) — o jato pelo costado
   bilgeAlarm: boolean;   // alarme de porão (bomba acionada com água, ou água alta sem bomba)
+  bilgeJetPos: Vec3;     // saída da bomba no costado (mundo)
+  bilgeJetVel: Vec3;     // velocidade do jato ao sair (mundo, m/s)
+  freeboard: number;     // borda livre: menor altura da borda/espelho acima da água (m)
+  swamped: boolean;      // alagado: borda na linha d'água (inavegável)
+  sunk: boolean;         // afundou (peso acima do empuxo máximo do casco)
   anchorOut: number;     // cabo da âncora lançado (m)
   anchorState: AnchorState;
   anchorDepth: number;   // profundidade da roldana ao fundo (m)
@@ -170,6 +175,8 @@ export class Speedboat {
   private bilgePumpA = 0;
   /** entrada pelo furo (L/s, negativo = escoando) e por cima da borda (L/s) no último passo */
   bilgeHole = 0; bilgeOver = 0;
+  /** afundou: o peso (com a água de dentro) passou do empuxo máximo do casco */
+  sunk = false;
   private cavitation = 0;
   private propRpmState = 0;
   private immersion = 1;
@@ -204,7 +211,7 @@ export class Speedboat {
   private updateMassProperties(): void {
     const P = this.params;
     this.loads = [{ mass: this.systems.fuelL * P.fuelDensity, pos: P.fuelTankPos }];
-    if (this.bilgeL > 0) this.loads.push({ mass: this.bilgeL, pos: P.bilge.pos }); // água doce: 1 kg/L
+    if (this.bilgeL > 0) this.loads.push({ mass: this.bilgeL, pos: this.bilgeLoadPos() }); // água doce: 1 kg/L
     for (const o of this.occupants) this.loads.push({ mass: o.mass, pos: P.seats[o.seat] });
     let m = P.mass, ix = P.inertia.x, iy = P.inertia.y, iz = P.inertia.z;
     for (const L of this.loads) {
@@ -248,7 +255,7 @@ export class Speedboat {
     this.rpm = params.idleRpm;
     this.telemetry = {
       speedKmh: 0, waterSpeed: 0, rpm: params.idleRpm, throttle: 0, throttleCmd: 0, trim: 0, trimDeg: 0, tiltDeg: 0, tiltBlocked: false, intakeSubmerged: true, steerDeg: 0,
-      gear: "N", pitchDeg: 0, rollDeg: 0, wetFraction: 0, planing: false, thrustN: 0, ventilation: 1, cavitation: 0, propImmersion: 1, revLimiter: false, propSlip: 0, propRpm: 0, engine: "running", fuelL: 0, fuelFrac: 1, coolantC: 45, batteryV: 12.6, engineHours: 0, overheatWarn: false, protectMode: false, lowFuel: false, chargeWarn: false, stall: "", trimMotorA: 0, trimRelay: false, jumper: false, jumpCharge: 1, batteryA: 0, bilgeL: 0, bilgeInflowLps: 0, bilgePump: false, bilgeFlowLps: 0, bilgeAlarm: false,
+      gear: "N", pitchDeg: 0, rollDeg: 0, wetFraction: 0, planing: false, thrustN: 0, ventilation: 1, cavitation: 0, propImmersion: 1, revLimiter: false, propSlip: 0, propRpm: 0, engine: "running", fuelL: 0, fuelFrac: 1, coolantC: 45, batteryV: 12.6, engineHours: 0, overheatWarn: false, protectMode: false, lowFuel: false, chargeWarn: false, stall: "", trimMotorA: 0, trimRelay: false, jumper: false, jumpCharge: 1, batteryA: 0, bilgeL: 0, bilgeInflowLps: 0, bilgePump: false, bilgeFlowLps: 0, bilgeAlarm: false, bilgeJetPos: v3(), bilgeJetVel: v3(), freeboard: 1, swamped: false, sunk: false,
       anchorOut: 0, anchorState: "recolhida", anchorDepth: 0, anchorScope: 0, anchorTension: 0, anchorRelay: false, windlassA: 0, apparentWind: 0, neutralRev: false, fuelLph: 0, buzzer: false, starterRpm: 0, startFail: "", batterySoc: 0.92, trimPin: 0, pullStart: !params.electricStart,
       distanceM: 0, collisions: 0, draftHull: 0, draftMotor: 0, capsized: false, swimmers: 0, hullDamage: 0, engineDamage: 0, damageEvent: "", damageCount: 0, lastImpact: 0, depth: 0, submergedPoints: params.buoyancyPoints.map(() => false),
     };
@@ -266,7 +273,7 @@ export class Speedboat {
     this.tilt = 0;
     this.tiltWanted = false;
     this.capsized = false; this.capsizeT = 0; this.swimmers = []; this.winchStrap = null; this.mooringLines = [];
-    this.anchor.reset(); this.bilgeL = 0; this.bilgeAuto = false; this.bilgePumpA = 0;
+    this.anchor.reset(); this.bilgeL = 0; this.bilgeAuto = false; this.bilgePumpA = 0; this.sunk = false;
     this.trimPin = Math.max(0, Math.min(1, this.params.trimPins.length - 1));
     this.manualAngle = this.params.trimPins[this.trimPin] ?? 0;
     this.gear = this.wantGear = "N";
@@ -579,30 +586,65 @@ export class Speedboat {
    * sozinha (> 6 L, desliga < 0,5 L) ou o interruptor manual (`input.bilgePump`). A vazão cai com a
    * tensão da bateria; a água pesa no barco (carga em params.bilge.pos).
    */
+  /** Nível da água de dentro (y local): primeiro enche o poço do porão (até o piso), depois cobre o piso. */
+  bilgeLevelY(L = this.bilgeL): number {
+    const B = this.params.bilge, keel = this.keelLocalY;
+    if (L > B.sumpL) return B.floorY + (L - B.sumpL) / 1000 / B.areaM2;
+    const T = B.underFloor;
+    if (!T) return keel + (B.floorY - keel) * (L / B.sumpL);
+    // tabela da forma do casco: interpola litros → nível
+    for (let i = 1; i < T.liters.length; i++) if (T.liters[i] >= L) {
+      const u = (L - T.liters[i - 1]) / Math.max(1e-6, T.liters[i] - T.liters[i - 1]);
+      return T.levels[i - 1] + (T.levels[i] - T.levels[i - 1]) * u;
+    }
+    return B.floorY;
+  }
+  private get keelLocalY(): number { return this.params.contactPoints.reduce((m, c) => Math.min(m, c.y), 0); }
+  /** Centro de massa da água de dentro (local): no poço (popa) com pouca água; espalhada pelo piso com muita. */
+  private bilgeLoadPos(): Vec3 {
+    const B = this.params.bilge, L = this.bilgeL;
+    if (L <= B.sumpL) {
+      // sob o piso: pouca água fica no poço (à ré); enchendo, o centro vai para o meio e sobe com o nível
+      const f = clamp(L / B.sumpL, 0, 1);
+      const lvl = this.bilgeLevelY(L);
+      return v3(0, B.pos.y + (lvl - B.pos.y) * 0.5 * f, B.pos.z + (B.floodCenter.z - B.pos.z) * f * 0.8);
+    }
+    const sump = B.sumpL, deck = L - sump, h = this.bilgeLevelY(L) - B.floorY;
+    const ySump = (B.pos.y + B.floorY) / 2, zSump = B.pos.z + (B.floodCenter.z - B.pos.z) * 0.8;
+    const y = (sump * ySump + deck * (B.floorY + h / 2)) / L;
+    const z = (sump * zSump + deck * B.floodCenter.z) / L;
+    return v3(0, y, z);
+  }
+
+  /**
+   * Porão:
+   *  - ENTRADA: furo no fundo (orifício Q = Cd*A*raiz(2g*dh), dh = água de fora - nível de dentro, nos dois
+   *    sentidos) e água por cima da borda/espelho (vertedouro ~ h^1,5; respingos; menos com o barco andando);
+   *  - NÍVEL: a água enche o poço (sumpL) e depois se espalha pelo piso (areaM2): o peso vai para o meio e
+   *    sobe com o nível; capacidade = volume alagável (maxL);
+   *  - BOMBA: boia (> 6 L liga, < 0,5 L desliga) ou interruptor manual; curva vazão x altura manométrica
+   *    Q = Qmax*(1 - H/H0)*f(tensão), H = da água de dentro até a saída (+ coluna d'água se a saída afundar);
+   *    o jato sai pela mangueira com v = Q/A, perpendicular ao costado, somado à velocidade do barco;
+   *  - BORDA LIVRE: menor altura da borda/espelho acima da água; < 3 cm com água dentro = INAVEGÁVEL (alagado);
+   *    peso total acima do empuxo máximo do casco (água até a borda) = AFUNDA.
+   */
   private updateBilge(dt: number, water: IWaterSurface, input: VehicleInput): void {
     const P = this.params, B = P.bilge, t = this.telemetry;
     let inflow = 0;
     this.bilgeHole = 0; this.bilgeOver = 0;
-    if (this.capsized) this.bilgeL = 0; // virado: o peso da água deixa de ser "carga no porão"
+    let freeboard = 9;
+    if (this.capsized && !this.sunk) this.bilgeL = 0; // virado: o peso da água deixa de ser "carga no porão"
     else {
-      // furo no casco = orifício: Q = Cd·A·√(2g·Δh), Δh = água de fora acima do furo − nível da água de dentro.
-      // Afundando (água pesando, ondas) a vazão cresce; se a água de dentro ficar mais alta, ela escoa pelo furo.
       const holeA = B.holeMaxM2 * Math.pow(this.hullDamage, 1.3);
+      const keel = this.keelLocalY;
       if (holeA > 0) {
-        // furo no fundo do casco (quilha), sob o porão
-        const keelY = P.contactPoints.reduce((m, c) => Math.min(m, c.y), 0);
-        const hp = this.toWorld(v3(B.pos.x, keelY + 0.03, B.pos.z));
-        const inside = this.bilgeL / 1000 / B.areaM2;
-        const dh = water.getHeight(hp.x, hp.z) - hp.y - inside;
+        const hp = this.toWorld(v3(B.pos.x, keel + 0.03, B.pos.z));
+        const insideAboveHole = this.bilgeLevelY() - (keel + 0.03);
+        const dh = water.getHeight(hp.x, hp.z) - hp.y - insideAboveHole;
         this.bilgeHole = Math.sign(dh) * 0.62 * holeA * Math.sqrt(2 * G * Math.abs(dh)) * 1000;
         if (this.bilgeHole < 0) this.bilgeHole = Math.max(this.bilgeHole, -this.bilgeL / dt);
       }
-      // água por cima da borda = vertedouro em cada trecho: Q = 1,8·L·h^1,5 (m³/s). Crista raspando a borda
-      // (até 6 cm abaixo) ainda joga respingos para dentro. Borda sobe para a proa; a popa tem o poço do motor.
-      // (lâmina limitada a 30 cm: acima disso a borda já está debaixo d'água e a fórmula deixa de valer)
       const weir = (h: number, L: number) => (h > 0 ? 1.8 * L * Math.min(h, 0.3) ** 1.5 + 0.25 * L * 0.06 ** 1.5 : h > -0.06 ? 0.25 * L * (h + 0.06) ** 1.5 : 0) * 1000;
-      // andando, a onda de proa e o bordo falso jogam a água para fora e a imersão da borda é só um instante:
-      // a entrada cai com a velocidade na água (parado = fórmula cheia; a 3 m/s = metade; planando ≈ 5 %)
       const uw = Math.hypot(this.vel.x, this.vel.z);
       const moving = 1 / (1 + (uw / 3) ** 2);
       const NS = 6, z0 = -P.length * 0.46, seg = (P.length * 0.86) / NS;
@@ -611,29 +653,62 @@ export class Speedboat {
         const gy = P.gunwaleY + B.bowRise * smoothstep(-0.1 * P.length, 0.5 * P.length, z) ** 2;
         for (const sx of [-1, 1]) {
           const w = this.toWorld(v3(sx * (P.beam / 2 - 0.04), gy, z));
-          this.bilgeOver += moving * weir(water.getHeight(w.x, w.z) - w.y, seg);
+          const h = water.getHeight(w.x, w.z) - w.y;
+          freeboard = Math.min(freeboard, -h);
+          this.bilgeOver += moving * weir(h, seg);
         }
       }
       const tw = this.toWorld(v3(0, B.transomY, -P.length / 2 + 0.05));
-      // pelo espelho a onda cai primeiro no poço do motor, que escoa pelos embornais: só ~1/3 chega ao porão
-      this.bilgeOver += 0.35 * weir(water.getHeight(tw.x, tw.z) - tw.y, B.transomW);
+      const ht = water.getHeight(tw.x, tw.z) - tw.y;
+      freeboard = Math.min(freeboard, -ht);
+      this.bilgeOver += 0.35 * weir(ht, B.transomW);
       inflow = this.bilgeHole + this.bilgeOver;
     }
+    // ---- bomba: boia/interruptor, curva vazão x altura, tensão ----
     if (B.pumpLph > 0) {
       if (this.bilgeL > 6) this.bilgeAuto = true;
       else if (this.bilgeL < 0.5) this.bilgeAuto = false;
     }
-    const wantPump = B.pumpLph > 0 && (this.bilgeAuto || input.bilgePump) && !this.capsized;
+    const wantPump = B.pumpLph > 0 && (this.bilgeAuto || input.bilgePump) && !this.capsized && !this.sunk;
     const powered = wantPump && this.systems.supplyV(B.pumpA) >= 9;
-    const flowLps = powered ? (B.pumpLph / 3600) * clamp((this.systems.batteryV - 9) / 3.4, 0.2, 1.05) : 0;
+    let flowLps = 0;
+    const ow = this.toWorld(B.outlet);
+    if (powered) {
+      const outsideOver = Math.max(0, water.getHeight(ow.x, ow.z) - ow.y);        // saída afogada: coluna d'água contra
+      const head = Math.max(0, B.outlet.y - this.bilgeLevelY()) + outsideOver + 0.25; // + perdas na mangueira/válvula
+      const curve = clamp(1 - head / B.shutoffHeadM, 0, 1);
+      flowLps = (B.pumpLph / 3600) * curve * clamp((this.systems.batteryV - 9) / 3.4, 0.2, 1.05);
+      if (this.bilgeL < 0.3) flowLps *= this.bilgeL / 0.3; // poço quase seco: suga ar
+    }
     const out = Math.min(flowLps * dt, Math.max(0, this.bilgeL + inflow * dt));
     this.bilgeL = clamp(this.bilgeL + inflow * dt - out, 0, B.maxL);
-    this.bilgePumpA = powered ? B.pumpA : 0;
+    this.bilgePumpA = powered ? B.pumpA * (0.7 + 0.3 * clamp(this.bilgeL, 0, 1)) : 0; // seca: a corrente cai
     t.bilgeL = this.bilgeL; t.bilgeInflowLps = inflow; t.bilgePump = powered;
     t.bilgeFlowLps = out > 0 ? out / dt : 0;
+    // jato: sai da mangueira (v = Q/A) para fora do costado e um pouco para baixo, somado à velocidade do barco
+    {
+      const vOut = t.bilgeFlowLps / 1000 / B.outletAreaM2;
+      const sx = Math.sign(B.outlet.x) || 1;
+      const dirW = rotate(this.rot, v3(sx * 0.98, -0.17, 0));
+      const pv = this.pointVelocity(ow);
+      t.bilgeJetPos = ow;
+      t.bilgeJetVel = v3(pv.x + dirW.x * vOut, pv.y + dirW.y * vOut, pv.z + dirW.z * vOut);
+    }
+    // borda livre, alagado e afundando
+    t.freeboard = freeboard;
+    t.swamped = !this.capsized && freeboard < 0.03 && this.bilgeL > 50;
+    if (!this.sunk && !this.capsized && this.totalMass > this.maxBuoyancyKg && freeboard < -0.3) {
+      this.sunk = true;
+      if (this.engine !== "off") { this.engine = "off"; t.stall = "sunk"; }
+      this.ejectOccupants(1);
+    }
+    t.sunk = this.sunk;
     // alarme: bomba acionada e jogando água fora, ou água alta (sem bomba / bomba sem força)
     t.bilgeAlarm = (powered && t.bilgeFlowLps > 0.05) || this.bilgeL > 40;
   }
+
+  /** Empuxo máximo do casco (kg): casco imerso até a borda (modelo de pontos saturado). */
+  get maxBuoyancyKg(): number { return 1000 * this.params.waterplaneArea * this.params.pointMaxDepth; }
 
   private updateControls(dt: number, input: VehicleInput, u: number): void {
     const P = this.params;
@@ -869,20 +944,28 @@ export class Speedboat {
     if (!this.capsized && this.capsizeT > 0.4) {
       this.capsized = true;
       if (this.engine !== "off") { this.engine = "off"; this.telemetry.stall = "capsize"; }
-      const fwd = this.forward, right = this.right;
       // caem para o lado em que o barco deitou (bordo que afundou), afastando-se do casco
-      const rollSide = right.y < 0 ? 1 : -1;
-      for (const o of this.occupants) {
-        const seat = this.params.seats[o.seat];
-        const p = this.toWorld(seat);
-        const side = Math.abs(seat.x) > 0.1 ? Math.sign(seat.x) : rollSide;
-        const out = v3(right.x * side, 0, right.z * side);
-        const ol = Math.hypot(out.x, out.z) || 1;
-        this.swimmers.push({ seat: o.seat, mass: o.mass, pos: p, vel: addScaled(this.pointVelocity(p), v3(out.x / ol, 0.5, out.z / ol), 1.6), yaw: Math.atan2(fwd.x, fwd.z),
-          slot: Math.atan2(side * 1, seat.z / (this.params.length / 2)), swim: 0, t: 0 });
-      }
-      this.occupants = [];
+      this.ejectOccupants(this.right.y < 0 ? 1 : -1);
     }
+    this.updateSwimmers(dt, water, world);
+  }
+
+  /** Ocupantes vão para a água (de colete), cada um pelo bordo do seu banco. */
+  private ejectOccupants(rollSide: number): void {
+    const fwd = this.forward, right = this.right;
+    for (const o of this.occupants) {
+      const seat = this.params.seats[o.seat];
+      const p = this.toWorld(seat);
+      const side = Math.abs(seat.x) > 0.1 ? Math.sign(seat.x) : rollSide;
+      const out = v3(right.x * side, 0, right.z * side);
+      const ol = Math.hypot(out.x, out.z) || 1;
+      this.swimmers.push({ seat: o.seat, mass: o.mass, pos: p, vel: addScaled(this.pointVelocity(p), v3(out.x / ol, 0.5, out.z / ol), 1.6), yaw: Math.atan2(fwd.x, fwd.z),
+        slot: Math.atan2(side * 1, seat.z / (this.params.length / 2)), swim: 0, t: 0 });
+    }
+    this.occupants = [];
+  }
+
+  private updateSwimmers(dt: number, water: IWaterSurface, world: PhysicsWorld): void {
     for (const s of this.swimmers) {
       const h = water.getHeight(s.pos.x, s.pos.z);
       const cur = water.getCurrent(s.pos.x, s.pos.z);

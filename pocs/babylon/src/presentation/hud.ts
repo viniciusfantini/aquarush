@@ -179,8 +179,14 @@ export class Hud {
     const amps = t.batteryA;
     this.ampG?.set(Math.max(-60, Math.min(30, amps)), `${amps > 0.5 ? "+" : ""}${amps.toFixed(0)} A`, amps > 0.5 ? "carga" : amps < -0.5 ? "consumo" : "", amps < -40);
     // porão: bomba jogando água fora / água alta (alerta luminoso piscando)
-    this.bilgeChip.classList.toggle("warn", t.bilgeAlarm);
-    if (t.bilgeAlarm) this.bilgeChip.textContent = t.bilgePump ? `BOMBA DE PORÃO · ${t.bilgeL.toFixed(0)} L · ${t.bilgeFlowLps.toFixed(1)} L/s` : `ÁGUA NO PORÃO · ${t.bilgeL.toFixed(0)} L`;
+    const bilgeShow = t.bilgeAlarm || t.swamped || t.sunk;
+    this.bilgeChip.classList.toggle("warn", bilgeShow);
+    if (bilgeShow) {
+      const fb = t.freeboard < 5 ? ` · borda ${Math.max(0, t.freeboard * 100).toFixed(0)} cm` : "";
+      this.bilgeChip.textContent = t.sunk ? `AFUNDOU · ${t.bilgeL.toFixed(0)} L dentro`
+        : t.swamped ? `ALAGADO — INAVEGÁVEL · ${t.bilgeL.toFixed(0)} L${fb}`
+        : t.bilgePump ? `BOMBA DE PORÃO · ${t.bilgeL.toFixed(0)} L · ${t.bilgeFlowLps.toFixed(2)} L/s${fb}` : `ÁGUA NO PORÃO · ${t.bilgeL.toFixed(0)} L${fb}`;
+    }
     // âncora: cabo lançado, profundidade, filame e estado
     const anc = t.anchorOut > 0.05 || t.anchorRelay;
     this.anchorChip.classList.toggle("show", anc);
@@ -267,6 +273,7 @@ export class Hud {
         ["bateria (V)", t.batteryV.toFixed(2)],
         ["carga da bateria", `${(t.batterySoc * 100).toFixed(1)} %`],
         ["porão (L · entra L/s)", `${t.bilgeL.toFixed(1)} · ${t.bilgeInflowLps.toFixed(2)}`],
+        ["borda livre (cm)", (t.freeboard * 100).toFixed(0)],
         ["âncora (m · N)", `${t.anchorOut.toFixed(1)} · ${t.anchorTension.toFixed(0)}`],
         ["jump start", `${t.jumper ? "conectado · " : ""}${(t.jumpCharge * 100).toFixed(0)} %`],
         ["arranque (rpm)", t.starterRpm.toFixed(0)],
