@@ -22,6 +22,12 @@ export interface EngineSystemsParams {
   altIdleFrac: number;
   /** false = motor de partida manual sem bateria (bote): sem tensão, sem alternador */
   hasBattery: boolean;
+  /**
+   * Tensão nominal do sistema (12 ou 24 V). O modelo elétrico trabalha SEMPRE em "equivalente 12 V" (tensões,
+   * limites, correntes e Ah referidos a um bloco de 12 V); num sistema de 24 V (duas baterias de 12 V em série,
+   * starter-gerador de 28 V da turbina) a telemetria mostra tensão × 2 e corrente ÷ 2 — mesma energia.
+   */
+  nominalV?: number;
 }
 
 export const ENGINE_SYSTEMS: EngineSystemsParams = {

@@ -102,6 +102,8 @@ export class Hud {
   private ampG: RoundGauge | null = null;
   /** 2º motor (AR-9): temperatura e banco de bateria próprios */
   private tempG2: RoundGauge | null = null;
+  /** escala do voltímetro (1 = 12 V, 2 = 24 V) */
+  private vk = 1;
   private voltG2: RoundGauge | null = null;
   private bilgeChip = $("h-bilge");
   private anchorChip = $("h-anchor");
@@ -201,7 +203,10 @@ export class Hud {
     // dois motores: um relógio de temperatura e um de bateria para cada (BB = bombordo, BE = boreste: bancos separados)
     const tw = !!opts.twin;
     const tempOpts = (t: string) => ({ title: t, min: 40, max: 120, labels: [40, 80, 120], minor: 10, redFrom: 90 });
-    const voltOpts = (t: string) => ({ title: t, min: 8, max: 16, labels: [8, 12, 16], minor: 1, redFrom: 8, redTo: 11.5 });
+    // voltímetro na escala do sistema (24 V na turbina: 16–32 V, vermelho abaixo de 23 V)
+    const vk = opts.turbine ? 2 : 1;
+    this.vk = vk;
+    const voltOpts = (t: string) => ({ title: t, min: 8 * vk, max: 16 * vk, labels: [8 * vk, 12 * vk, 16 * vk], minor: vk, redFrom: 8 * vk, redTo: 11.5 * vk });
     this.tempG = opts.temp && !opts.turbine ? new RoundGauge(small, tempOpts(tw ? "TEMP BB" : "TEMP")) : null; // turbina: temp. do óleo vai no relógio de óleo
     this.tempG2 = opts.temp && tw ? new RoundGauge(small, tempOpts("TEMP BE")) : null;
     this.voltG = opts.battery ? new RoundGauge(small, voltOpts(tw ? "BAT. BB" : "BATERIA")) : null;
@@ -244,7 +249,7 @@ export class Hud {
       [this.voltG, this.voltG2].forEach((g, i) => { const v = t.batteryVs[i] ?? t.batteryV; g?.set(v, `${v.toFixed(1)} V`, voltTag(i), v < 12.2); });
     } else {
       this.tempG?.set(t.coolantC, `${t.coolantC.toFixed(0)}°C`, t.protectMode ? "PROTEÇÃO" : t.overheatWarn ? "QUENTE" : "", t.overheatWarn);
-      this.voltG?.set(t.batteryV, `${t.batteryV.toFixed(1)} V`, t.jumper ? "jump" : t.engine === "running" && t.batteryV > 13.2 ? "carga" : `${Math.round(t.batterySoc * 100)}%`, t.chargeWarn);
+      this.voltG?.set(t.batteryV, `${t.batteryV.toFixed(1)} V`, t.jumper ? "jump" : t.engine === "running" && t.batteryV > 13.2 * this.vk ? "carga" : `${Math.round(t.batterySoc * 100)}%`, t.chargeWarn);
     }
     const amps = t.batteryA;
     this.ampG?.set(Math.max(-60, Math.min(30, amps)), `${amps > 0.5 ? "+" : ""}${amps.toFixed(0)} A`, amps > 0.5 ? "carga" : amps < -0.5 ? "consumo" : "", amps < -40);

@@ -101,8 +101,14 @@ export class TurbineExhaustFx {
     if (T.phase === "running") fire = Math.max(fire, 25 * accel * (T.n1 > 85 ? 1 : 0)); // lambida no transitório a toda
 
     const g = 0.85 - 0.7 * Math.min(1, dark); // cinza claro → preto
+    // um bocal só (duto único, mais largo) concentra o gás dos dois: mais partículas e um "boca" maior
+    const k = 2 / nodes.length;
     for (let i = 0; i < this.nozzles.length; i++) {
-      const nz = this.nozzles[i], node = nodes[i % nodes.length];
+      const nz = this.nozzles[i], node = nodes[i];
+      if (!node) { nz.smoke.emitRate = 0; nz.fire.emitRate = 0; continue; }
+      const box = 0.08 * k;
+      nz.smoke.minEmitBox.set(-box, -box * 0.6, 0); nz.smoke.maxEmitBox.set(box, box * 0.6, 0);
+      nz.fire.minEmitBox.set(-box * 1.3, -box, 0); nz.fire.maxEmitBox.set(box * 1.3, box, 0);
       const p = node.getAbsolutePosition();
       const dir = Vector3.TransformNormal(new Vector3(0, 0, -1), node.getWorldMatrix()).normalize();
       const v = new Vector3(vel.x, vel.y, vel.z);
@@ -114,13 +120,13 @@ export class TurbineExhaustFx {
       nz.smoke.color1 = new Color4(g, g, g * 1.02, alpha);
       nz.smoke.color2 = new Color4(g * 0.9, g * 0.9, g * 0.92, alpha * 0.8);
       nz.smoke.colorDead = new Color4(g, g, g, 0);
-      nz.smoke.emitRate = rate;
+      nz.smoke.emitRate = rate * k;
       // fogo: jato curto e rápido saindo do bocal
       nz.fire.emitter = p.add(dir.scale(0.05));
       nz.fire.direction1 = dir.scale(6).add(v).add(new Vector3(-0.5, -0.2, -0.5));
       nz.fire.direction2 = dir.scale(11).add(v).add(new Vector3(0.5, 0.5, 0.5));
       nz.fire.minEmitPower = 1; nz.fire.maxEmitPower = 1;
-      nz.fire.emitRate = fire;
+      nz.fire.emitRate = fire * k;
     }
   }
 }

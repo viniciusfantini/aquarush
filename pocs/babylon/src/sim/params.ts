@@ -564,9 +564,10 @@ export const TURBINA: SpeedboatParams = {
   surfacePiercing: true,
   propWalk: 0.05,
   enclosedCockpit: true,
-  // starter-gerador: bateria de 150 Ah, arranque de ~350 A, gera ~60 A já em marcha lenta; óleo resfriado
-  // pela água do lago (trocador de calor) — o "TEMP" desta lancha é a temperatura do óleo
-  systems: { batteryAh: 150, starterA: 350, altMaxA: 60, altIdleFrac: 0.8, thermostatC: 75, warnC: 105, protectC: 115, shutdownC: 125 },
+  // sistema de 24 V (como nas turbinas: duas baterias de 12 V/75 Ah em série + starter-gerador de 28 V). Valores em
+  // "equivalente 12 V" (ver EngineSystemsParams.nominalV): 150 Ah ≙ 75 Ah a 24 V; arranque 350 A ≙ ~175 A a 24 V;
+  // gerador 120 A ≙ 60 A a 28 V. Óleo resfriado pela água do lago (trocador de calor): o "TEMP" é a do óleo
+  systems: { nominalV: 24, batteryAh: 150, starterA: 350, altMaxA: 120, altIdleFrac: 0.8, thermostatC: 75, warnC: 105, protectC: 115, shutdownC: 125 },
   maxThrust: 40000,
   reverseThrustFactor: 0.35,
   propPitchSpeed: 60,

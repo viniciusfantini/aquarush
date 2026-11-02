@@ -257,7 +257,7 @@ export const buildHelm = (scene: Scene, root: TransformNode): Helm => {
       rpmNeedle.rotation.z = bigAngle(t.rpm / 7000);
       fuelNeedle.rotation.z = smallAngle(t.fuelFrac);
       tempNeedle.rotation.z = smallAngle((t.coolantC - 40) / 80);
-      voltNeedle.rotation.z = smallAngle((t.batteryV - 8) / 8);
+      voltNeedle.rotation.z = smallAngle((t.batteryV * 12 / (t.nominalV || 12) - 8) / 8);
       trimNeedle.rotation.z = smallAngle(t.tiltDeg > 0.5 ? 1 : (t.trim + 1) / 2);
       const hours = Math.floor(t.engineHours * 10);
       if (hours !== lastHours) { lastHours = hours; tacho.redraw((hours / 10).toFixed(1).padStart(6, "0")); }

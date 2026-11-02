@@ -43,7 +43,7 @@ import { BoatCamera } from "./presentation/cameras.ts";
 import { Hud } from "./presentation/hud.ts";
 import { EngineAudio } from "./presentation/audio.ts";
 
-const BUILD = "poc-babylon 0.48.1";
+const BUILD = "poc-babylon 0.48.2";
 /** Escala visual da rotação da hélice (proporcional ao RPM, abaixo do limite estroboscópico). */
 const PROP_VISUAL_SCALE = 0.12;
 
@@ -662,7 +662,7 @@ const boot = async () => {
     }
     else if (a === "lights") {
       lights = input.toggleLights();
-      setNavLights(V.vis, lights, boat.telemetry.batteryV); V.dinghy?.setLantern(lights);
+      setNavLights(V.vis, lights, boat.telemetry.batteryV * 12 / boat.telemetry.nominalV); V.dinghy?.setLantern(lights);
       hud.setLights(lights, V.dinghy ? "LANTERNA" : "LUZES");
     }
     else if (a === "reset") resetBoat();
@@ -1006,8 +1006,8 @@ const boot = async () => {
     // buzina: do veículo quando você está nele; senão do barco (segurar B, ou toque no botão = 0,22 s)
     hornPulse = Math.max(0, hornPulse - dtReal);
     // buzina elétrica da lancha: tom e volume caem com a tensão da bateria (o bote tem buzina de ar; o carro, bateria própria)
-    audio.setHorn(mode === "game" && (input.hornHeld || hornPulse > 0), driving || carOnly ? "car" : V.kind === "bote" ? "bote" : "lancha", !driving && !carOnly && V.boat.systems.p.hasBattery ? T.batteryV : 12.6);
-    if (lights && V.vis.lights) setNavLights(V.vis, true, T.batteryV); // luzes de navegação: brilho pela tensão
+    audio.setHorn(mode === "game" && (input.hornHeld || hornPulse > 0), driving || carOnly ? "car" : V.kind === "bote" ? "bote" : "lancha", !driving && !carOnly && V.boat.systems.p.hasBattery ? T.batteryV * 12 / T.nominalV : 12.6);
+    if (lights && V.vis.lights) setNavLights(V.vis, true, T.batteryV * 12 / T.nominalV); // luzes de navegação: brilho pela tensão
     if ((windHudT -= dtReal) <= 0) { windHudT = 0.25; hud.updateWind(wind.speed * MS_TO_KNOTS, wind.dirFrom - Math.atan2(boat.forward.x, boat.forward.z)); }
     hud.update(T, fpsSmooth, {
       "física (ms/frame)": physMs.toFixed(2),

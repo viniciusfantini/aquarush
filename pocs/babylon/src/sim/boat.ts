@@ -123,6 +123,8 @@ export interface BoatTelemetry {
   batteryVs: number[];
   batterySocs: number[];
   batteryAs: number[];
+  /** tensão nominal do sistema elétrico (12 V; turbina: 24 V). batteryV/batteryA já vêm em volts/ampères reais */
+  nominalV: number;
 }
 
 /**
@@ -338,7 +340,7 @@ export class Speedboat {
       gear: "N", pitchDeg: 0, rollDeg: 0, wetFraction: 0, planing: false, thrustN: 0, ventilation: 1, cavitation: 0, propImmersion: 1, revLimiter: false, propSlip: 0, propRpm: 0, engine: "running", fuelL: 0, fuelFrac: 1, coolantC: 45, batteryV: 12.6, engineHours: 0, overheatWarn: false, protectMode: false, lowFuel: false, chargeWarn: false, stall: "", trimMotorA: 0, trimRelay: false, jumper: false, jumpCharge: 1, batteryA: 0, bilgeL: 0, bilgeInflowLps: 0, bilgePump: false, bilgeFlowLps: 0, bilgeAlarm: false, bilgeJetPos: v3(), bilgeJetVel: v3(), freeboard: 1, swamped: false, sunk: false, airPocketL: 0,
       anchorOut: 0, anchorState: "recolhida", anchorDepth: 0, anchorScope: 0, anchorTension: 0, anchorRelay: false, windlassA: 0, apparentWind: 0, neutralRev: false, fuelLph: 0, buzzer: false, starterRpm: 0, startFail: "", batterySoc: 0.92, trimPin: 0, pullStart: !params.electricStart,
       distanceM: 0, collisions: 0, draftHull: 0, draftMotor: 0, capsized: false, swimmers: 0, hullDamage: 0, engineDamage: 0, damageEvent: "", damageCount: 0, lastImpact: 0, depth: 0, submergedPoints: params.buoyancyPoints.map(() => false),
-      rpms: [params.idleRpm], gears: ["N"], throttles: [0], thrusts: [0], engines: ["running"], propRpms: [0], coolants: [45], batteryVs: [12.6], batterySocs: [0.92], batteryAs: [0], turbine: null,
+      rpms: [params.idleRpm], gears: ["N"], throttles: [0], thrusts: [0], engines: ["running"], propRpms: [0], coolants: [45], batteryVs: [12.6], batterySocs: [0.92], batteryAs: [0], turbine: null, nominalV: 12,
     };
   }
 
@@ -687,7 +689,6 @@ export class Speedboat {
     this.runSystems(dt, { lightsOn: input.navigationLights, trimMotorA: this.trimMotorA, auxA: this.anchor.motorA + this.bilgePumpA, intakeSubmerged });
     this.updateBilge(dt, water, input);
     this.updateSlosh(dt);
-    t.batteryA = sys.batteryA;
     t.anchorOut = this.anchor.out; t.anchorState = this.anchor.state; t.anchorDepth = this.anchor.depth; t.anchorScope = this.anchor.scope;
     t.anchorTension = this.anchor.tension; t.anchorRelay = this.anchor.relay; t.windlassA = this.anchor.motorA;
     t.trimMotorA = this.trimMotorA; t.jumper = sys.jumper; t.jumpCharge = sys.jumpCharge; t.neutralRev = this.neutralRev;
@@ -1350,8 +1351,11 @@ export class Speedboat {
   private banksTelemetry(): void {
     const t = this.telemetry, sys = this.systems, B = this.banks;
     t.fuelL = sys.fuelL; t.fuelFrac = sys.fuelFrac; t.lowFuel = sys.lowFuel;
-    t.coolants = B.map((b) => b.coolantC); t.batteryVs = B.map((b) => b.batteryV); t.batterySocs = B.map((b) => b.batterySoc); t.batteryAs = B.map((b) => b.batteryA);
-    t.coolantC = Math.max(...t.coolants); t.batteryV = sys.batteryV; t.batterySoc = sys.batterySoc; t.batteryA = sys.batteryA;
+    // (o modelo elétrico é "equivalente 12 V"; num sistema de 24 V a tensão real é ×2 e a corrente ÷2)
+    const k = (sys.p.nominalV ?? 12) / 12;
+    t.nominalV = 12 * k;
+    t.coolants = B.map((b) => b.coolantC); t.batteryVs = B.map((b) => b.batteryV * k); t.batterySocs = B.map((b) => b.batterySoc); t.batteryAs = B.map((b) => b.batteryA / k);
+    t.coolantC = Math.max(...t.coolants); t.batteryV = sys.batteryV * k; t.batterySoc = sys.batterySoc; t.batteryA = sys.batteryA / k;
     t.engineHours = sys.engineHours;
     t.overheatWarn = B.some((b) => b.overheatWarn); t.protectMode = B.some((b) => b.protect); t.chargeWarn = B.some((b) => b.chargeWarn);
     const tb = this.units[0].turb;

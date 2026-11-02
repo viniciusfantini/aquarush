@@ -1,7 +1,7 @@
 // Lancha de turbina AR-10 (10 m, piloto único no centro, habitáculo fechado) — visual procedural.
 // Casco em V profundo com pintura de corrida, CANOPY (bolha de vidro com arcos de estrutura) sobre o poço do
-// piloto, tampa da turbina com duas tomadas de ar laterais e DOIS DUTOS DE ESCAPE baixos e achatados saindo pelo
-// espelho (como nos barcos de corrida a turbina; o gás quente vai para trás, rente ao convés), e a
+// piloto, tampa da turbina com duas tomadas de ar laterais e UM duto de escape de inox polido que sai da tampa e
+// curva para cima (boca a 45°, para cima e para trás), e a
 // transmissão de superfície no espelho: eixo inclinado, quilha-leme e a hélice de superfície (meio fora d'água
 // em planeio). Nó do pivô = trim/direção da transmissão (mesmos ângulos da física). Só lê a simulação.
 
@@ -77,32 +77,30 @@ export const buildTurbina = (scene: Scene): BoatVisual & { floor: number } => {
   }
   // grade do topo (radiador de óleo)
   K.rbox(0.7, 0.03, 0.8, 0.02, 0, deckTop(-3.2) + 0.47, -3.2, M.black, root);
-  // escape: a turbina sopra para trás por DOIS dutos achatados (seção oval) que saem da traseira da tampa, descem
-  // rente ao convés e terminam em bocais de titânio um pouco além do espelho, abertos para fora e para baixo
-  const titanium = M.gunmetal, soot = M.matte;
+  // escape: UM duto de aço inox polido (prata) sai da traseira da tampa pelo centro, corre para trás e faz uma curva
+  // suave para cima: a boca aponta 45° para cima e para trás (o gás quente e a fumaça vão para longe do convés)
   const exhausts: TransformNode[] = [];
-  for (const s of [-1, 1]) {
-    const pts = [
-      new Vector3(s * 0.26, deckTop(-4.3) + 0.2, -4.3),
-      new Vector3(s * 0.31, deckTop(-4.65) + 0.15, -4.65),
-      new Vector3(s * 0.37, deckTop(-4.95) + 0.12, -4.98),
-      new Vector3(s * 0.4, deckTop(-5.0) + 0.1, -5.16),
-    ];
-    // seção oval que se achata para o fim (rx cresce, ry diminui: bocal "rabo de peixe")
-    const ring = (c: Vector3, rx: number, ry: number) => Array.from({ length: 17 }, (_, i) => { const a = (2 * Math.PI * i) / 16; return new Vector3(c.x + Math.cos(a) * rx, c.y + Math.sin(a) * ry, c.z); });
-    const rings = pts.map((c, i) => ring(c, 0.13 + 0.035 * i, 0.12 - 0.022 * i));
-    K.ribbon(rings, titanium, root);
-    // bocal: lábio mais escuro (fuligem) e a boca preta
-    K.ribbon([ring(pts[3], 0.24, 0.055), ring(new Vector3(pts[3].x, pts[3].y, pts[3].z - 0.03), 0.245, 0.06)], soot, root);
-    const mouth = MeshBuilder.CreateDisc("exhMouth", { radius: 1, tessellation: 20 }, scene);
-    mouth.parent = root; mouth.material = M.black; mouth.scaling.set(0.235, 0.052, 1); mouth.position.set(pts[3].x, pts[3].y, pts[3].z - 0.005);
-    K.out.push(mouth);
-    // abraçadeira e a chapa de proteção térmica no convés sob o duto
-    K.tube(ring(pts[1], 0.215, 0.115).map((v) => v), 0.012, M.steel, root, 6);
-    K.rbox(0.42, 0.012, 0.9, 0.01, s * 0.34, deckTop(-4.7) + 0.01, -4.7, soot, root);
-    // nó do bocal: −Z local aponta para onde o gás sai (para trás, um pouco para fora e para baixo)
-    const n = K.node("exhaust" + (s < 0 ? "BB" : "BE"), root, pts[3].x, pts[3].y, pts[3].z - 0.04);
-    n.rotation.set(-0.12, -s * 0.18, 0);
+  {
+    const R = 0.2, bend = 0.45, yC = deckTop(-4.0) + 0.24, zB = -4.5;
+    const path: Vector3[] = [new Vector3(0, yC, -3.95), new Vector3(0, yC, zB)];
+    for (let i = 1; i <= 10; i++) { const a = (Math.PI / 4) * (i / 10); path.push(new Vector3(0, yC + bend * (1 - Math.cos(a)), zB - bend * Math.sin(a))); }
+    const d45 = new Vector3(0, Math.SQRT1_2, -Math.SQRT1_2);
+    const tip = path[path.length - 1].add(d45.scale(0.24));
+    path.push(tip);
+    K.tube(path, R, M.steel, root, 24);
+    // lábio da boca (anel), a boca escura e a fuligem logo dentro
+    const lip = MeshBuilder.CreateTorus("exhLip", { diameter: 2 * R + 0.02, thickness: 0.035, tessellation: 28 }, scene);
+    lip.parent = root; lip.material = M.steel; lip.position.copyFrom(tip); lip.rotation.x = -Math.PI / 4;
+    const mouth = MeshBuilder.CreateDisc("exhMouth", { radius: R * 0.97, tessellation: 24 }, scene);
+    mouth.parent = root; mouth.material = M.black; mouth.position.copyFrom(tip.subtract(d45.scale(0.03))); mouth.rotation.x = Math.PI / 4;
+    K.out.push(lip, mouth);
+    // abraçadeiras e o suporte no convés (o duto passa por cima da chapa de proteção térmica)
+    for (const z of [-4.25, zB]) K.tube(Array.from({ length: 21 }, (_, i) => { const a = (2 * Math.PI * i) / 20; return new Vector3(Math.cos(a) * (R + 0.012), yC + Math.sin(a) * (R + 0.012), z); }), 0.014, M.gunmetal, root, 6);
+    K.rbox(0.08, yC - deckTop(zB) - R + 0.02, 0.12, 0.02, 0, (yC - R + deckTop(zB)) / 2, zB, M.gunmetal, root);
+    K.rbox(0.62, 0.012, 1.0, 0.01, 0, deckTop(-4.6) + 0.01, -4.6, M.matte, root);
+    // nó da boca: −Z local = saída do gás (45° para cima, para trás)
+    const n = K.node("exhaust", root, tip.x, tip.y, tip.z);
+    n.rotation.x = Math.PI / 4;
     exhausts.push(n);
   }
 

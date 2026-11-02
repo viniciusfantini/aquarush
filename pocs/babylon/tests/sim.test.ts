@@ -814,7 +814,7 @@ for (const [label, thr] of [["baixa", 0.25], ["alta", 1]] as const) {
   const at: Record<string, number> = {}; let egtPeak = 0, lightN1 = 0, minV = 99;
   run(b, water, 40, N, openWater, (t) => {
     const tb = b.units[0].turb!;
-    egtPeak = Math.max(egtPeak, tb.egt); minV = Math.min(minV, b.systems.batteryV);
+    egtPeak = Math.max(egtPeak, tb.egt); minV = Math.min(minV, b.telemetry.batteryV);
     for (const e of tb.drainEvents()) { if (at[e] === undefined) at[e] = t; if (e === "ignition") lightN1 = tb.n1; }
   });
   const order = ["starter", "ignition", "lightoff", "starterOff", "idle"].every((e, i, a) => at[e] !== undefined && (i === 0 || at[e] >= at[a[i - 1]])) ? 1 : 0;
@@ -823,12 +823,14 @@ for (const [label, thr] of [["baixa", 0.25], ["alta", 1]] as const) {
   check("turbina", "acende (light-off) depois da ignição (s)", at.lightoff - at.ignition, 0.8, 2, "s", 1);
   check("turbina", "pico de EGT na partida, bateria a 60 % (°C)", egtPeak, 550, 760, "°C", 0);
   check("turbina", "tempo até a marcha lenta (s)", at.idle, 12, 35, "s", 1);
-  check("turbina", "tensão mínima no arranque (V)", minV, 9, 12.5, "V", 1);
+  check("turbina", "sistema elétrico nominal (V)", b.telemetry.nominalV, 24, 24, "V", 0);
+  check("turbina", "24 V: tensão mínima no arranque (V)", minV, 18, 25, "V", 1);
   const T = b.telemetry.turbine!;
   check("turbina", "marcha lenta: N1 (%)", T.n1, 61, 63, "%", 1);
   check("turbina", "marcha lenta: EGT (°C)", T.egt, 440, 520, "°C", 0);
   check("turbina", "marcha lenta: pressão do óleo (psi)", T.oilPsi, 50, 80, "psi", 0);
-  check("turbina", "marcha lenta: o starter-gerador carrega a bateria (A)", b.systems.batteryA, 5, 80, "A", 0);
+  check("turbina", "marcha lenta: o starter-gerador carrega a bateria (A, 24 V)", b.telemetry.batteryA, 5, 60, "A", 0);
+  check("turbina", "marcha lenta: tensão do barramento com o gerador (V)", b.telemetry.batteryV, 26, 29.5, "V", 1);
   // corte: desacelera; nova partida só com o N1 abaixo de 8 %
   b.toggleIgnition();
   run(b, water, 3, N);
