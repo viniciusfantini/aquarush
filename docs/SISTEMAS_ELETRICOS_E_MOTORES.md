@@ -262,7 +262,7 @@ O piloto pode mexer na BAT mesmo no FADEC (`setSwitch("master")`).
   jato no espelho.
 
 ### 8.6 Painel, START/CORTE e checklist (v0.62)
-O painel de partida mostra sempre as 7 chaves. **START** (redondo verde, = P) = partida automática: se estava no
+O painel de partida mostra sempre as 7 chaves. **START** (redondo verde, legenda AUTO-START, em cima do STOP; = P) = partida automática: se estava no
 manual, `setFadec(true)` (sem ligar a MAIN) e o FADEC faz a sequência. **STOP** (redondo vermelho; "CORTE" nas versões anteriores): no FADEC
 corta/aborta; no manual fecha o combustível e desliga starter e ignição. **Acionar qualquer chave (menos a MAIN) com
 o FADEC no comando passa para o MANUAL** (`setFadec(false)`; sem proteção). O **CHECKLIST** (janela `ChecklistPanel`)

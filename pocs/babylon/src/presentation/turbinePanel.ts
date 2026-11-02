@@ -77,7 +77,7 @@ export class TurbinePanel {
           ${cell(tri("bilge", "BOMBA PORÃO", "boia ou manual", { v: "on", l: "ON" }, { v: "off", l: "OFF" }, { v: "auto", l: "AUTO" }), "bilge")}
         </div>
         <div class="sw-plate tp-start">${SCR}
-          <div class="rb-w"><button class="rb rb-start" data-f="start" title="partida automática: o FADEC faz a sequência e protege"><span>START</span></button><b>FADEC</b></div>
+          <div class="rb-w"><button class="rb rb-start" data-f="start" title="partida automática: o FADEC faz a sequência e protege"><span>START</span></button><b>AUTO-START</b></div>
           <div class="rb-w"><button class="rb rb-stop" data-f="cut" title="STOP: corta o combustível (no FADEC também aborta a partida)"><span>STOP</span></button></div>
         </div>
         <div class="sw-plate tp-lev">${SCR}</div>
