@@ -96,6 +96,10 @@ A lancha é um **corpo rígido 6DOF** (massa seca de 1030 kg + gasolina, ocupant
 
 > Referência completa da lógica elétrica e dos motores: [`docs/SISTEMAS_ELETRICOS_E_MOTORES.md`](../../docs/SISTEMAS_ELETRICOS_E_MOTORES.md).
 
+## Painéis estreitos (v0.62.1)
+
+Os painéis do Y ocupam a menor largura possível: AR-10 com 492 px (antes 830) — mostradores em 2 linhas de 4, anunciadores em 2 linhas, faixa de chaves em 2 linhas ao lado de START/STOP, sistemas e manetes empilhados; sistemas dos barcos a pistão com ~470 px (antes até 760) — PARTIDA, COMANDO e SISTEMAS empilhados, cada um na largura do painel. O botão redondo vermelho da AR-10 diz **STOP** (sem legenda embaixo); o verde, START, com "FADEC" embaixo.
+
 ## Painel da AR-10 sempre completo, checklist, buzina/apito (v0.62)
 
 - **Painel de partida sempre completo** (`turbinePanel.ts`): as 7 chaves (MAIN … GERADOR) ficam sempre à vista, ao lado de dois **botões redondos** (no estilo do STOP do bote): **START** = partida automática (FADEC; = P) e **CORTE** (no FADEC corta/aborta; no manual fecha o combustível e solta starter e ignição). O seletor FADEC/MANUAL saiu: um **indicador** no título mostra quem comanda — **mexer em qualquer chave (menos a MAIN) passa para o MANUAL** (o FADEC deixa de proteger), e START (ou P) devolve ao FADEC. Voltar ao FADEC não liga mais a MAIN (`Turbine.setFadec`).

@@ -1,7 +1,7 @@
 # AQUA RUSH — Sistemas elétricos e de motores (referência para qualquer IA ou dev)
 
 Este documento descreve **toda a lógica** dos sistemas elétricos, de combustível, de arrefecimento, de partida e
-dos motores das 4 embarcações da POC 1 (Babylon.js, `pocs/babylon`), como estão no código na **v0.62.0**. Serve
+dos motores das 4 embarcações da POC 1 (Babylon.js, `pocs/babylon`), como estão no código na **v0.62.1**. Serve
 para continuar o trabalho em outra IA/ferramenta ou portar para Unity/Unreal sem precisar redescobrir as regras.
 
 > Fonte da verdade = o código. Se divergir, vale o código e este arquivo deve ser corrigido.
@@ -263,7 +263,7 @@ O piloto pode mexer na BAT mesmo no FADEC (`setSwitch("master")`).
 
 ### 8.6 Painel, START/CORTE e checklist (v0.62)
 O painel de partida mostra sempre as 7 chaves. **START** (redondo verde, = P) = partida automática: se estava no
-manual, `setFadec(true)` (sem ligar a MAIN) e o FADEC faz a sequência. **CORTE** (redondo vermelho): no FADEC
+manual, `setFadec(true)` (sem ligar a MAIN) e o FADEC faz a sequência. **STOP** (redondo vermelho; "CORTE" nas versões anteriores): no FADEC
 corta/aborta; no manual fecha o combustível e desliga starter e ignição. **Acionar qualquer chave (menos a MAIN) com
 o FADEC no comando passa para o MANUAL** (`setFadec(false)`; sem proteção). O **CHECKLIST** (janela `ChecklistPanel`)
 lista os passos FADEC e manual, marcados pela telemetria.

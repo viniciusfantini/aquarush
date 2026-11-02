@@ -72,7 +72,7 @@ export class TurbinePanel {
           : toggle({ attr: "s", val: s.id, label: s.label, sub: s.sub, on: s.on, off: s.off, variant: s.variant, num: i + 1 })).join("")}</div>
         <div class="sw-plate tp-auto">${SCR}
           <div class="rb-w"><button class="rb rb-start" data-f="start" title="partida automática: o FADEC faz a sequência e protege"><span>START</span></button><b>FADEC</b></div>
-          <div class="rb-w"><button class="rb rb-stop" data-f="cut" title="corte: fecha o combustível (no FADEC também aborta a partida)"><span>CORTE</span></button><b>CORTE</b></div>
+          <div class="rb-w"><button class="rb rb-stop" data-f="cut" title="STOP: corta o combustível (no FADEC também aborta a partida)"><span>STOP</span></button></div>
         </div>
       </div>
       <div class="tp-row">

@@ -61,7 +61,9 @@
     #tpanel.open, #spanel.open { display: block; }
     body.menu-mode #tpanel, body.menu-mode #spanel { display: none; }
     #tpanel button, #spanel button { font: inherit; color: inherit; cursor: pointer; }
-    #spanel { width: fit-content; min-width: 360px; max-width: min(760px, calc(100vw - 24px)); }
+    #spanel { width: fit-content; min-width: 360px; max-width: min(500px, calc(100vw - 24px)); }
+    #spanel .sp-top { flex-direction: column; } #spanel .sp-top .sw-plate { flex: none; }
+    #spanel .rot { width: 116px; } #spanel .rot .dial { width: 110px; height: 84px; } #spanel .tg { width: 72px; } #spanel .tg.tri { width: 88px; }
     .sp-top { display: flex; flex-wrap: wrap; gap: 0 10px; } .sp-top > div { display: flex; flex-direction: column; } .sp-top .sw-plate { flex: 1; align-items: center; } .sp-grow { flex: 1; }
     .sp-note { margin: 8px 0 0; font-size: 12px; color: #ffc23a; min-height: 0; }
     .sp-note:empty { display: none; }
@@ -344,7 +346,15 @@
     .lev { gap: 8px 16px; }
     .tr-bar { height: 70px; }
     .tr-rocker button { height: 32px; }
-    #tpanel { width: min(830px, calc(100vw - 24px)); padding: 10px 12px 12px; }
+    /* largura mínima: mostradores em 2 linhas de 4, as faixas quebram em linhas */
+    #tpanel { width: min(492px, calc(100vw - 24px)); padding: 10px 12px 12px; }
+    #tpanel .tp-gauges { grid-template-columns: repeat(4, 1fr); row-gap: 4px; }
+    #tpanel .tp-ann span { flex: 1 1 22%; }
+    #tpanel .tp-row > .tp-sysp, #tpanel .tp-row > .tp-lev { flex: 1 1 100%; justify-content: center; }
+    #tpanel .tp-sw { justify-content: center; row-gap: 4px; }
+    #tpanel .tp-gauges .gauge.small { width: 72px; height: 72px; }
+    #tpanel .rot .dial { height: 80px; }
+    #tpanel .tp-auto { padding: 10px 8px 6px; }
     #tpanel .pl-track { width: 100px; height: 120px; } #tpanel .lev { gap: 8px 12px; } #tpanel .tg.tri { width: 88px; }
     #tpanel .tg { width: 64px; }
     #tpanel .rot { width: 118px; }
