@@ -11,9 +11,10 @@ import { type Vec3, v3 } from "./math.ts";
  * @param gL     gravidade em eixos do barco
  * @param airL   velocidade do ar visto do barco (ar parado ⇒ −velocidade do barco), em eixos do barco
  */
-export const jetStreakLocal = (outlet: Vec3, sx: number, vOut: number, gL: Vec3, airL: Vec3, stop: (p: Vec3) => boolean, dt = 0.01, tMax = 1, k = 1.2): Vec3[] => {
+export const jetStreakLocal = (outlet: Vec3, sx: number, vOut: number, gL: Vec3, airL: Vec3, stop: (p: Vec3) => boolean, dt = 0.01, tMax = 1, k = 1.2, dirL?: Vec3): Vec3[] => {
   const pts: Vec3[] = [];
-  let p = { ...outlet }, v = v3(sx * 0.98 * vOut, -0.17 * vOut, 0);
+  // sem `dirL`: sai pelo costado (para fora e um pouco para baixo); com `dirL` (unitário, local): nessa direção
+  let p = { ...outlet }, v = dirL ? v3(dirL.x * vOut, dirL.y * vOut, dirL.z * vOut) : v3(sx * 0.98 * vOut, -0.17 * vOut, 0);
   for (let t = 0; t <= tMax; t += dt) {
     pts.push(p);
     if (t > 0 && stop(p)) break;

@@ -996,6 +996,23 @@ for (const [label, thr] of [["baixa", 0.25], ["alta", 1]] as const) {
     x.repair();
     check("turbina", "desgaste ≥ 95 %: turbina trava (avaria) e o reparo zera", seized && tb.wear === 0 && !tb.seizedOn && x.engineDamage === 0 ? 1 : 0, 1, 1, "", 0);
   }
+  {
+    // água de resfriamento do óleo (bomba MECÂNICA, ∝ N1): parada = nada; só o starter = pouca; marcha lenta e a toda
+    const { x, tb } = manual();
+    run(x, water, 1, N);
+    const cold = x.telemetry.coolingLps;
+    for (const sw of ["master", "starter"] as const) tb.setSwitch(sw, true);
+    run(x, water, 8, N);
+    const starterOnly = x.telemetry.coolingLps;
+    check("turbina", "resfriamento: turbina parada não bombeia água (L/s)", cold, 0, 0, "L/s", 2);
+    check("turbina", "resfriamento: só o starter girando já bombeia pouco (L/s)", starterOnly, 0.3, 0.9, "L/s", 2);
+  }
+  {
+    const f2 = mk(); run(f2, water, 5, N);
+    check("turbina", "resfriamento em marcha lenta (L/s)", f2.telemetry.coolingLps, 1.5, 2.2, "L/s", 2);
+    run(f2, water, 30, { ...emptyInput(), gear: "F", throttle: 1 });
+    check("turbina", "resfriamento a toda (L/s)", f2.telemetry.coolingLps, 2.6, 3.2, "L/s", 2);
+  }
   check("turbina", "sem combustível: não acende (aborta)", dEv.includes("noLightOff") && !dEv.includes("lightoff") ? 1 : 0, 1, 1, "", 0);
   // a toda: velocidade, rotação e a hélice de superfície trabalhando com ~metade do disco fora d'água
   const f = mk(); let t100 = -1, immSum = 0, immN = 0;

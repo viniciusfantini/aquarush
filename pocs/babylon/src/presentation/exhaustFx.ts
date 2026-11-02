@@ -87,8 +87,10 @@ export class TurbineExhaustFx {
 
     // ---- fumaça ----
     let rate = 0, dark = 0, alpha = 0.35, speed = 3 + 0.25 * T.n1;
-    if (T.phase === "starter") { rate = 6 * Math.min(1, T.n1 / 10); alpha = 0.12; }
-    else if (fuelMist) { rate = 70; alpha = 0.3; dark = 0.05; }
+    // starter girando a seco: sem combustão não há fumaça; só se houver combustível acumulado na câmara (partida
+    // molhada) o ar do compressor o empurra para fora como névoa branca de vapor
+    if (T.phase === "starter") { rate = T.pooledL > 0.01 ? 70 * Math.min(1, T.pooledL / 0.08) * Math.min(1, T.n1 / 8) : 0; alpha = 0.32; dark = 0; }
+    else if (fuelMist) { rate = 70 * Math.min(1, T.n1 / 8); alpha = 0.3; dark = 0.05; }
     else if (T.phase === "accel") { rate = 40 + 220 * this.soot + 120 * egtHot; dark = 0.35 + 0.5 * Math.max(this.soot, egtHot); alpha = 0.5; }
     else if (T.phase === "running") { rate = 8 + 30 * power + 90 * accel + 60 * this.soot; dark = 0.15 + 0.5 * accel + 0.4 * this.soot; alpha = 0.1 + 0.18 * accel + 0.3 * this.soot; }
     else if (T.phase === "spooldown") { rate = 25 * Math.min(1, T.n1 / 40) + 160 * this.soot; alpha = 0.22 + 0.3 * this.soot; dark = 0.25 * this.soot + 0.5 * egtHot; }

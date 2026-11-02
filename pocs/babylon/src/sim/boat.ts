@@ -93,6 +93,7 @@ export interface BoatTelemetry {
   extPwr: boolean;       // GPU no barramento (cabo + diesel estável + relé EXT PWR fechado)
   extPwrClosed: boolean; // relé EXT PWR fechado (mesmo com a GPU ainda partindo)
   gpuA: number;          // corrente que a GPU entrega ao barramento (A reais) — o amperímetro do HUD é só o da bateria
+  coolingLps: number;    // água de resfriamento do óleo saindo pelo espelho (turbina; bomba mecânica ∝ N1) — L/s
   batteryA: number;      // amperímetro: + carregando, − descarregando (A)
   bilgeL: number;        // água no porão (L)
   bilgeInflowLps: number; // entrada de água (L/s): furo no casco + água por cima da borda
@@ -358,7 +359,7 @@ export class Speedboat {
       gear: "N", pitchDeg: 0, rollDeg: 0, wetFraction: 0, planing: false, thrustN: 0, ventilation: 1, cavitation: 0, propImmersion: 1, revLimiter: false, propSlip: 0, propRpm: 0, engine: "running", fuelL: 0, fuelFrac: 1, coolantC: 45, batteryV: 12.6, engineHours: 0, overheatWarn: false, protectMode: false, lowFuel: false, chargeWarn: false, stall: "", trimMotorA: 0, trimRelay: false, jumper: false, jumpCharge: 1, batteryA: 0, bilgeL: 0, bilgeInflowLps: 0, bilgePump: false, bilgeFlowLps: 0, bilgeAlarm: false, bilgeJetPos: v3(), bilgeJetVel: v3(), freeboard: 1, swamped: false, sunk: false, airPocketL: 0,
       anchorOut: 0, anchorState: "recolhida", anchorDepth: 0, anchorScope: 0, anchorTension: 0, anchorRelay: false, windlassA: 0, apparentWind: 0, neutralRev: false, fuelLph: 0, buzzer: false, starterRpm: 0, startFail: "", batterySoc: 0.92, trimPin: 0, pullStart: !params.electricStart,
       distanceM: 0, collisions: 0, draftHull: 0, draftMotor: 0, capsized: false, swimmers: 0, hullDamage: 0, engineDamage: 0, damageEvent: "", damageCount: 0, lastImpact: 0, depth: 0, submergedPoints: params.buoyancyPoints.map(() => false),
-      rpms: [params.idleRpm], gears: ["N"], throttles: [0], thrusts: [0], engines: ["running"], propRpms: [0], coolants: [45], batteryVs: [12.6], batterySocs: [0.92], batteryAs: [0], turbine: null, nominalV: 12, gpu: false, gpuState: "off", gpuT: 0, gpuKw: 0, busBattery: true, busGen: false, extPwr: false, extPwrClosed: false, gpuA: 0,
+      rpms: [params.idleRpm], gears: ["N"], throttles: [0], thrusts: [0], engines: ["running"], propRpms: [0], coolants: [45], batteryVs: [12.6], batterySocs: [0.92], batteryAs: [0], turbine: null, nominalV: 12, gpu: false, gpuState: "off", gpuT: 0, gpuKw: 0, busBattery: true, busGen: false, extPwr: false, extPwrClosed: false, gpuA: 0, coolingLps: 0,
     };
   }
 
@@ -1381,6 +1382,9 @@ export class Speedboat {
     t.gpuA = sys.gpuA / ((sys.p.nominalV ?? 12) / 12);
     t.overheatWarn = B.some((b) => b.overheatWarn); t.protectMode = B.some((b) => b.protect); t.chargeWarn = B.some((b) => b.chargeWarn);
     const tb = this.units[0].turb;
+    // bomba de água MECÂNICA: gira com o gerador de gás (até só com o starter) e só bombeia com a tomada submersa
+    const C = this.params.cooling;
+    t.coolingLps = tb && C && t.intakeSubmerged ? C.lpsAt100 * clamp(tb.n1 / 100, 0, 1.05) : 0;
     t.turbine = tb ? { n1: tb.n1, n2: tb.n2, egt: tb.egt, torque: tb.torque, oilPsi: tb.oilPsi, fuelLph: tb.fuelLph, phase: tb.phase,
       starter: tb.starter && tb.powered, ignition: tb.ignition && tb.powered, lit: tb.lit, egtWarn: tb.egtWarn, hotStarts: tb.hotStarts, powered: tb.powered, starterSw: tb.starter, ignitionSw: tb.ignition,
       fadec: tb.fadec, master: tb.master, boostPump: tb.boostPump, fuelValve: tb.fuelValve, pooledL: tb.pooledL, wear: tb.wear,

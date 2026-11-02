@@ -8,6 +8,7 @@ import { jetStreakLocal } from "../sim/bilgeJet.ts";
 import { halfBeam } from "../sim/hullShape.ts";
 import type { SpeedboatParams } from "../sim/params.ts";
 import type { IWaterSurface } from "../sim/water.ts";
+import { WaterJet } from "./waterJet.ts";
 
 const ROPE_N = 16;
 const JET_N = 14;
@@ -25,6 +26,8 @@ export class BoatGearVis {
   private readonly foam: Mesh | null = null;
   private readonly streamPath: Vector3[] = [];
   private readonly streamR: number[] = [];
+  /** água de resfriamento do óleo da turbina saindo pelo espelho (bomba mecânica) */
+  private readonly cooling: WaterJet | null = null;
   private stowed = true;
   /** água solta sobre o piso (visual): superfície sempre horizontal no mundo, volume = o da simulação */
   private readonly inner: Mesh;
@@ -53,6 +56,12 @@ export class BoatGearVis {
     this.rope.isPickable = false;
     this.rope.setEnabled(false);
     this.stowAnchor();
+
+    // ---- água de resfriamento da turbina (trocador de calor do óleo): saída no espelho ----
+    if (P.cooling) {
+      this.cooling = new WaterJet(scene, root, prefix + "Cool", P.cooling.outlet, P.cooling.dir, P.cooling.outletAreaM2);
+      this.meshes.push(...this.cooling.meshes);
+    }
 
     // ---- jato da bomba de porão (só barco com bomba elétrica) ----
     if (P.bilge.pumpLph > 0) {
@@ -185,6 +194,7 @@ export class BoatGearVis {
         this.inner.updateVerticesData(VertexBuffer.PositionKind, this.iwPos);
       }
     }
+    this.cooling?.update(boat, T.coolingLps, time, active, water);
     // ---- jato da bomba de porão: balístico no mundo, da saída até a superfície da água ----
     if (this.stream) {
       const Q = T.bilgeFlowLps / 1000; // m³/s
