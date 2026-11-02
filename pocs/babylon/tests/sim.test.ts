@@ -1035,6 +1035,18 @@ for (const [label, thr] of [["baixa", 0.25], ["alta", 1]] as const) {
     check("turbina", "sem barramento: ignição ligada mas sem faísca (luz apagada, instrumentos sem energia)", !x.telemetry.turbine!.ignition && !x.telemetry.turbine!.powered ? 1 : 0, 1, 1, "", 0);
   }
   {
+    // EXT PWR no manual: a chave muda de posição sempre. Sem MAIN: GPU estável, chave em ON e nenhum efeito.
+    // Barco energizado (MAIN + baterias) e EXT PWR em ON SEM a GPU conectada: falha (alarme + EXT PWR vermelho)
+    const { x, tb } = manual();
+    x.systems.gpu = true; run(x, water, 6, N);
+    tb.setSwitch("master", false); x.systems.extPwr = true; run(x, water, 1, N);
+    check("turbina", "EXT PWR em ON sem MAIN (GPU estável): a chave fica em ON, sem efeito (barramento, V)", x.telemetry.extPwrClosed && !x.telemetry.extPwr ? x.telemetry.batteryV : -1, 0, 1, "V", 1);
+    x.systems.gpu = false; tb.setSwitch("master", true); run(x, water, 1, N);
+    check("turbina", "EXT PWR em ON sem a GPU conectada, barco energizado: falha (alarme)", x.telemetry.extPwrFault && x.telemetry.extPwrClosed ? 1 : 0, 1, 1, "", 0);
+    x.systems.extPwr = false; run(x, water, 0.5, N);
+    check("turbina", "EXT PWR desligado: a falha some", x.telemetry.extPwrFault ? 0 : 1, 1, 1, "", 0);
+  }
+  {
     // combustível + ignição CEDO (N1 a 6 %): acende com pouco ar → partida quente
     const { x, tb } = manual();
     for (const sw of ["master", "boostPump", "starter"] as const) tb.setSwitch(sw, true);

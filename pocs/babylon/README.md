@@ -96,6 +96,13 @@ A lancha é um **corpo rígido 6DOF** (massa seca de 1030 kg + gasolina, ocupant
 
 > Referência completa da lógica elétrica e dos motores: [`docs/SISTEMAS_ELETRICOS_E_MOTORES.md`](../../docs/SISTEMAS_ELETRICOS_E_MOTORES.md).
 
+## AR-10: EXT PWR sem MAIN e falha do EXT PWR (v0.60.3)
+
+- No manual a chave **EXT PWR** é só do piloto: muda de posição sempre (`EngineSystems.extPwr` não é mais zerada quando o cabo sai, exceto no FADEC). O efeito depende do cabo, da GPU estável e da MAIN (`extOnline`).
+- Anunciador **EXT PWR**: verde = GPU no barramento; **âmbar piscando** = GPU disponível/partindo mas fora do barramento (relé aberto **ou sem MAIN** — a luz é alimentada pela própria GPU); **vermelho piscando** = falha.
+- **Falha do EXT PWR** (`telemetry.extPwrFault`): manual, chave em ON, **sem a GPU conectada** e o barco energizado (MAIN + fonte) → EXT PWR vermelho, alarme de cautela (o mesmo "master caution" do óleo) e aviso na tela. Some ao desligar a chave ou conectar a GPU.
+- Testes: sem MAIN com a GPU estável a chave fica em ON e o barramento em 0 V; sem GPU e energizado → falha; chave desligada → a falha some. No navegador: âmbar piscando sem MAIN, vermelho piscando com o alarme sem GPU.
+
 ## AR-10: chave MAIN (v0.60.2)
 
 A antiga chave BAT da AR-10 chama-se **MAIN**: ela liga o barramento dos **sistemas eletrônicos** (`Turbine.master` → `EngineSystems.busOn`), não a bateria — quem coloca as baterias no barramento é o seletor **OFF / BUS / BOTH**. A **espia** da MAIN acende quando ela está em ON **e** o barramento tem tensão de qualquer fonte: baterias (BOTH), GPU (BUS ou BOTH, EXT PWR fechado) ou o gerador da turbina. Em BUS sem GPU nem gerador ela fica em ON com a espia apagada. O anunciador **BAT** continua mostrando as baterias no barramento. No navegador: BOTH → espia acesa (24,4 V); BUS sem GPU → ON e apagada; BUS + GPU → acesa (27,9 V); MAIN desligada → 0 V.
@@ -315,7 +322,7 @@ Limitação: é uma síntese aproximada, não uma gravação. Validar o timbre d
 | 6. Ondas e correnteza | ondas fortes (×2,5): roll ≤ 30°, não emborca; deriva com correnteza de 1,6 m/s: 1,54 m/s |
 | Lago | flutua no spawn; a toda contra a margem, encalha e para sem atravessar o terreno |
 
-Resultado: **566/568 OK + 2 KNOWN** (v0.60.0). Na v0.10, o peso do piloto na posição real (boreste, acima do CG) aumentou o roll em curva com ondas fortes; o `bankCoef` foi para 1800 e o `rollDamping` para 15000, com 1 limitação conhecida (abaixo). Na v0.2 a hélice foi para 0,5 m atrás do espelho, como no modelo visual, e o esterço máximo em alta velocidade caiu de 13° para 11°.
+Resultado: **569/571 OK + 2 KNOWN** (v0.60.3). Na v0.10, o peso do piloto na posição real (boreste, acima do CG) aumentou o roll em curva com ondas fortes; o `bankCoef` foi para 1800 e o `rollDamping` para 15000, com 1 limitação conhecida (abaixo). Na v0.2 a hélice foi para 0,5 m atrás do espelho, como no modelo visual, e o esterço máximo em alta velocidade caiu de 13° para 11°.
 
 ### Navegador (Chrome, Windows 11, WebGL2, `q=med`, ~1370×896)
 

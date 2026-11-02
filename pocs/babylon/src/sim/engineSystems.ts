@@ -217,7 +217,8 @@ export class EngineSystems {
     // GPU: o diesel parte, estabiliza e chaveia a energia externa
     if (!this.gpu) {
       // cabo retirado: a energia sai na hora; o diesel ainda roda sem carga uns segundos e só então desliga
-      this.extPwr = false;
+      // (no FADEC o relé abre junto; no MANUAL a chave EXT PWR fica onde o piloto deixou — sem cabo, sem efeito)
+      if (this.autoExt) this.extPwr = false;
       if (this.gpuState === "online" || this.gpuState === "starting") { this.gpuState = "stopping"; this.gpuStopT = 0; }
       if (this.gpuState === "stopping") {
         this.gpuStopT += dt; this.gpuT += dt;

@@ -8,7 +8,7 @@ para continuar o trabalho em outra IA/ferramenta ou portar para Unity/Unreal sem
 > Arquivos: `src/sim/engineSystems.ts` (combustível, temperatura, bateria, alternador, booster, GPU, barramento),
 > `src/sim/turbine.ts` (turbina a gás + FADEC), `src/sim/boat.ts` (motores `EngineUnit`, partida, chaves,
 > roteamento de baterias, porão), `src/sim/anchor.ts` (molinete), `src/sim/params.ts` (parâmetros = contrato entre
-> as POCs). Testes: `tests/sim.test.ts` (`npm run test:sim`, hoje **566/568 + 2 KNOWN**).
+> as POCs). Testes: `tests/sim.test.ts` (`npm run test:sim`, hoje **569/571 + 2 KNOWN**).
 
 ---
 
@@ -91,7 +91,10 @@ cruzeiro (rpm ≥ 2000 e folga de alternador ≥ 10 A) a ~10 A.
   fecha sozinho com a GPU estável e a turbina parada/partindo, e abre na marcha lenta (`gpuAutoOff`); no manual é a
   chave EXT PWR.
 - Fonte: 28 V reais (14 V eq.), 2,5 mΩ, não descarrega; fornece as cargas e ainda carrega a bateria (até ~40 A eq.).
-- Retirar o cabo corta a energia na hora; o diesel roda mais 4 s e desliga.
+- Retirar o cabo corta a energia na hora; o diesel roda mais 4 s e desliga. No FADEC o relé abre junto; no **manual** a
+  chave EXT PWR fica onde o piloto deixou (sem cabo ou sem MAIN: sem efeito).
+- Anunciador EXT PWR: verde = no barramento; âmbar piscando = GPU disponível fora do barramento (relé aberto ou sem
+  MAIN); **vermelho piscando + alarme** = `extPwrFault` (manual, chave em ON sem a GPU conectada e o barco energizado).
 - Telemetria: `gpuState`, `gpuA`, `gpuKw`, `extPwr` (online), `extPwrClosed` (relé).
 
 ---

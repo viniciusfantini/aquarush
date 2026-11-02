@@ -46,7 +46,7 @@ import { BoatCamera } from "./presentation/cameras.ts";
 import { Hud } from "./presentation/hud.ts";
 import { EngineAudio } from "./presentation/audio.ts";
 
-const BUILD = "poc-babylon 0.60.2";
+const BUILD = "poc-babylon 0.60.3";
 /** Escala visual da rotação da hélice (proporcional ao RPM, abaixo do limite estroboscópico). */
 const PROP_VISUAL_SCALE = 0.12;
 
@@ -371,7 +371,7 @@ const boot = async () => {
   const prevRot = new Quaternion(), curRot = new Quaternion();
   const snap = (dst: Vector3, q: Quaternion) => { const b = V.boat; dst.set(b.pos.x, b.pos.y, b.pos.z); q.set(b.rot.x, b.rot.y, b.rot.z, b.rot.w); };
   let fpsSmooth = 60, resT = 0;
-  let lastStartFail = "", lowFuelWarned = false, trimRelayWarned = false, neutralRevWarned = false, lastJumperOff = 0, lastJumperTrips = 0, lastGpuOff = 0, lastGpuState = "off", lastAnchorState = "recolhida", lastBilgeAlarm = false, lastSwamped = false, lastSunk = false, windHudT = 0;
+  let lastStartFail = "", lowFuelWarned = false, trimRelayWarned = false, neutralRevWarned = false, lastJumperOff = 0, lastJumperTrips = 0, lastGpuOff = 0, lastGpuState = "off", lastAnchorState = "recolhida", lastBilgeAlarm = false, lastExtFault = false, lastSwamped = false, lastSunk = false, windHudT = 0;
   const qTilt = new Quaternion(), qSteer = new Quaternion();
   let lastGear = V.boat.telemetry.gear;
   let tiltWarned = false, intakeWarned = false, capsizeWarned = false;
@@ -618,8 +618,12 @@ const boot = async () => {
       const tb = V.boat.units[0].turb; if (!tb) return;
       if (sw === "extPwr") {
         if (tb.fadec) { hud.showToast("No FADEC o EXT PWR é automático: fecha com a GPU estável e abre na marcha lenta"); return; }
-        if (on && !V.boat.systems.gpuOnline) hud.showToast(V.boat.systems.gpu ? "EXT PWR fechado: a GPU entra no barramento quando estabilizar" : "EXT PWR: o cabo da GPU não está conectado (J, na doca)");
-        V.boat.systems.extPwr = on && V.boat.systems.gpu;
+        // a chave muda de posição sempre; o efeito depende do cabo, da GPU estável e da MAIN
+        const sy = V.boat.systems, powered = !!V.boat.telemetry.turbine?.powered;
+        sy.extPwr = on;
+        if (on) hud.showToast(!sy.gpu ? (powered ? "EXT PWR em ON sem a GPU conectada — FALHA (alarme): desligue ou conecte a GPU (J, na doca)" : "EXT PWR em ON — sem GPU e sem barramento: nenhum efeito")
+          : !tb.master || V.boat.batterySel === "off" ? "EXT PWR em ON, mas sem MAIN: nenhum efeito (a GPU continua fora do barramento)"
+          : !sy.gpuOnline ? "EXT PWR em ON: a GPU entra no barramento quando estabilizar" : "EXT PWR em ON: GPU no barramento");
         return;
       }
       tb.setSwitch(sw, on);
@@ -1058,6 +1062,9 @@ const boot = async () => {
     }
     if (T.bilgeAlarm && !lastBilgeAlarm && mode === "game") hud.showToast(T.bilgePump ? `Bomba de porão ligada: entrando ${T.bilgeInflowLps.toFixed(1)} L/s — ${T.bilgeInflowLps > T.bilgeFlowLps ? "a bomba não vence, volte ao píer!" : "a bomba dá conta"}` : `Água no porão: ${T.bilgeL.toFixed(0)} L`);
     lastBilgeAlarm = T.bilgeAlarm;
+    // AR-10 manual: EXT PWR em ON sem a GPU conectada com o barco energizado — falha (alarme + EXT PWR vermelho)
+    if (T.extPwrFault && !lastExtFault && mode === "game") hud.showToast("FALHA EXT PWR: chave em ON sem a GPU conectada — desligue o EXT PWR ou conecte a GPU (J, na doca)", true);
+    lastExtFault = T.extPwrFault;
     if (T.swamped && !lastSwamped && mode === "game" && !T.sunk) hud.showToast(`Barco ALAGADO: ${T.bilgeL.toFixed(0)} L dentro e a borda na linha d'água — inavegável; se entrar mais água ele afunda`);
     lastSwamped = T.swamped;
     if (T.sunk && !lastSunk && mode === "game") hud.showToast(`O barco AFUNDOU com ${T.bilgeL.toFixed(0)} L de água dentro — todos na água de colete. R para recomeçar`, true);
@@ -1173,7 +1180,7 @@ const boot = async () => {
     audio.update({
       rpm: T.rpm, throttle: T.throttle, speed: Math.hypot(boat.vel.x, boat.vel.z), boil: Math.max(T.cavitation, 1 - T.ventilation),
       inGear: T.gear !== "N", propInWater: T.propImmersion > 0.5, revLimiter: T.revLimiter, cockpit: cam.mode === "cockpit", engine: T.engine, trimMotorA: T.trimMotorA, trimRelay: T.trimRelay, bilgeAlarm: mode === "game" && T.bilgeAlarm && !T.capsized && !T.sunk, bilgeFlowLps: T.bilgeFlowLps, bilgePumpOn: T.bilgePump && !T.sunk, bilgeWaterL: T.bilgeL, windlassA: T.windlassA, apparentWind: T.apparentWind, anchorRelay: T.anchorRelay, buzzer: T.buzzer, starterRpm: T.starterRpm, pullStart: T.pullStart,
-      oilAlarm: mode === "game" && !!T.turbine?.oilHot && !T.sunk,
+      oilAlarm: mode === "game" && (!!T.turbine?.oilHot || T.extPwrFault) && !T.sunk, // "master caution": óleo quente ou falha do EXT PWR
       // AR-9: o 2º V8 tem voz própria (rotação/carga/estado dele)
       ...(boat.units.length > 1 ? { rpm: T.rpms[0], throttle: T.throttles[0], rpm2: T.rpms[1], throttle2: T.throttles[1], engine2: T.engines[1], engine: T.engines[0] } : {}),
       // turbina: N1/N2, EGT (chama), arranque e velas de ignição — síntese própria (apito do compressor, rugido da combustão)

@@ -91,7 +91,8 @@ export interface BoatTelemetry {
   busBattery: boolean;   // relé da bateria fechado (chave BAT)
   busGen: boolean;       // o gerador está alimentando o barramento
   extPwr: boolean;       // GPU no barramento (cabo + diesel estável + relé EXT PWR fechado)
-  extPwrClosed: boolean; // relé EXT PWR fechado (mesmo com a GPU ainda partindo)
+  extPwrClosed: boolean; // chave/relé EXT PWR em ON (mesmo com a GPU ainda partindo, sem cabo ou sem MAIN)
+  extPwrFault: boolean;  // AR-10 manual: EXT PWR em ON sem a GPU conectada e o barco energizado — alarme + EXT PWR vermelho
   gpuA: number;          // corrente que a GPU entrega ao barramento (A reais) — o amperímetro do HUD é só o da bateria
   coolingLps: number;    // água de resfriamento do óleo saindo pelo espelho (turbina; bomba mecânica ∝ N1) — L/s
   /** painel de sistemas: registro do combustível, linha (0..1), bomba de porão, chave de baterias, afogador */
@@ -398,7 +399,7 @@ export class Speedboat {
       gear: "N", pitchDeg: 0, rollDeg: 0, wetFraction: 0, planing: false, thrustN: 0, ventilation: 1, cavitation: 0, propImmersion: 1, revLimiter: false, propSlip: 0, propRpm: 0, engine: "running", fuelL: 0, fuelFrac: 1, coolantC: 45, batteryV: 12.6, engineHours: 0, overheatWarn: false, protectMode: false, lowFuel: false, chargeWarn: false, stall: "", trimMotorA: 0, trimRelay: false, jumper: false, jumpCharge: 1, batteryA: 0, bilgeL: 0, bilgeInflowLps: 0, bilgePump: false, bilgeFlowLps: 0, bilgeAlarm: false, bilgeJetPos: v3(), bilgeJetVel: v3(), freeboard: 1, swamped: false, sunk: false, airPocketL: 0,
       anchorOut: 0, anchorState: "recolhida", anchorDepth: 0, anchorScope: 0, anchorTension: 0, anchorRelay: false, windlassA: 0, apparentWind: 0, neutralRev: false, fuelLph: 0, buzzer: false, starterRpm: 0, startFail: "", batterySoc: 0.92, trimPin: 0, pullStart: !params.electricStart,
       distanceM: 0, collisions: 0, draftHull: 0, draftMotor: 0, capsized: false, swimmers: 0, hullDamage: 0, engineDamage: 0, damageEvent: "", damageCount: 0, lastImpact: 0, depth: 0, submergedPoints: params.buoyancyPoints.map(() => false),
-      rpms: [params.idleRpm], gears: ["N"], throttles: [0], thrusts: [0], engines: ["running"], keys: ["on"], houseV: 12.6, propRpms: [0], coolants: [45], batteryVs: [12.6], batterySocs: [0.92], batteryAs: [0], turbine: null, nominalV: 12, gpu: false, gpuState: "off", gpuT: 0, gpuKw: 0, busBattery: true, busGen: false, extPwr: false, extPwrClosed: false, gpuA: 0, coolingLps: 0, fuelValveOpen: true, fuelLineFrac: 1, bilgeMode: "auto", batterySel: "ind", choke: false,
+      rpms: [params.idleRpm], gears: ["N"], throttles: [0], thrusts: [0], engines: ["running"], keys: ["on"], houseV: 12.6, propRpms: [0], coolants: [45], batteryVs: [12.6], batterySocs: [0.92], batteryAs: [0], turbine: null, nominalV: 12, gpu: false, gpuState: "off", gpuT: 0, gpuKw: 0, busBattery: true, busGen: false, extPwr: false, extPwrClosed: false, extPwrFault: false, gpuA: 0, coolingLps: 0, fuelValveOpen: true, fuelLineFrac: 1, bilgeMode: "auto", batterySel: "ind", choke: false,
     };
   }
 
@@ -1500,6 +1501,7 @@ export class Speedboat {
     t.engineHours = sys.engineHours; t.gpu = sys.gpu; t.gpuState = sys.gpuState; t.gpuT = sys.gpuT; t.gpuKw = sys.gpuKw;
     t.busBattery = sys.batteryOn; t.busGen = sys.genOn && sys.alternatorA > 0; t.extPwr = sys.extOnline; t.extPwrClosed = sys.extPwr;
     t.gpuA = sys.gpuA / ((sys.p.nominalV ?? 12) / 12);
+    { const tb0 = this.units[0].turb; t.extPwrFault = !!tb0 && !tb0.fadec && sys.extPwr && !sys.gpu && tb0.powered; }
     t.overheatWarn = B.some((b) => b.overheatWarn); t.protectMode = B.some((b) => b.protect); t.chargeWarn = B.some((b) => b.chargeWarn);
     const tb = this.units[0].turb;
     // bomba de água MECÂNICA: gira com o gerador de gás (até só com o starter) e só bombeia com a tomada submersa
