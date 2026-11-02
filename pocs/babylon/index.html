@@ -528,7 +528,9 @@
     #h-engine.off { color: #fff; background: #b3261e; }
     #h-engine.crank { color: #2a0400; background: #ffd34d; }
     .chip.warn { color: #2a0400; background: #ffb13d; animation: blink 0.35s steps(2) infinite; }
-    .chip.warn.steady { animation: none; } /* reserva de combustível: laranja fixo (pisca só quando acaba) */
+    .chip.warn.steady { animation: none; } /* reserva de combustível / avaria até 80 %: laranja fixo */
+    .chip.warn.crit { color: #fff; background: #d62a20; animation: blinkCrit 0.18s steps(2) infinite; } /* avaria acima de 80 %: pisca rápido */
+    @keyframes blinkCrit { 50% { background: #ffb13d; color: #2a0400; } }
     @keyframes blink { 50% { background: #ff5a4e; } }
     #status .chip.btn { pointer-events: auto; cursor: pointer; color: var(--fg); border: 1px solid rgba(255,255,255,0.3); }
     #status { pointer-events: auto; }

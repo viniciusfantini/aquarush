@@ -345,8 +345,13 @@ export class Hud {
     this.depthTxt.textContent = depth > 9.95 ? `${depth.toFixed(0)} m` : `${depth.toFixed(1)} m`;
     this.draftTxt.textContent = `calado ${t.draftHull.toFixed(2)} · pé ${t.draftMotor.toFixed(2)}`;
     this.depthBox.classList.toggle("warn", depth < t.draftMotor + 0.25 && depth > 0.01);
+    // avarias: aviso laranja fixo; acima de 80 % pisca rápido (crítico)
     this.dmgHull.classList.toggle("warn", t.hullDamage > 0.005);
     this.dmgEng.classList.toggle("warn", t.engineDamage > 0.005);
+    this.dmgHull.classList.toggle("steady", t.hullDamage <= 0.8);
+    this.dmgEng.classList.toggle("steady", t.engineDamage <= 0.8);
+    this.dmgHull.classList.toggle("crit", t.hullDamage > 0.8);
+    this.dmgEng.classList.toggle("crit", t.engineDamage > 0.8);
     if (t.hullDamage > 0.005) this.dmgHull.textContent = `AVARIA CASCO ${Math.round(t.hullDamage * 100)}%`;
     if (t.engineDamage > 0.005) this.dmgEng.textContent = t.engineDamage >= 0.95 ? "MOTOR QUEBRADO" : `AVARIA MOTOR ${Math.round(t.engineDamage * 100)}%`;
 
