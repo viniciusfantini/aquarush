@@ -98,6 +98,8 @@ A lancha é um **corpo rígido 6DOF** (massa seca de 1030 kg + gasolina, ocupant
 
 ## AR-10: chave GOV e sobrevelocidade do N2 (v0.64)
 
+**v0.64.4:** relógios do Y com 82 px; luz **GOV** única (âmbar = chave desligada, apagada = ligada, verde piscando = governador atuando); luz **CHAMA** = fogo saindo do escape (`TurbineExhaustFx.fireRate`, o mesmo cálculo das partículas; acende na labareda do acendimento).
+
 **v0.64.3:** luz **GEN** = gerador fora do barramento ("cockpit escuro"): acesa antes da partida e se ele cair; apaga quando ele entra (conferido: acesa parada e na partida, apagada em marcha lenta, acesa ao desligar a chave GEN, apagada ao religar).
 
 **v0.64.2:** luz **BAT** = bateria alimentando o barramento (descarregando): parada −9,7 A acesa, partida −164 A acesa, gerador no barramento +15,3 A apagada.

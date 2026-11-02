@@ -66,6 +66,8 @@ export class TurbineExhaustFx {
   }
 
   /** `nodes`: bocais do barco ativo (−Z local = saída). Sem turbina ou sem bocais: tudo para de emitir. */
+  /** intensidade do fogo saindo do escape agora (partículas/s; 0 = sem chama visível) — a luz CHAMA do painel lê isto */
+  fireRate = 0;
   update(dt: number, nodes: TransformNode[] | undefined, T: BoatTelemetry["turbine"], vel: { x: number; y: number; z: number }, paused: boolean): void {
     if (!T || !nodes || nodes.length === 0 || paused) {
       for (const n of this.nozzles) { n.smoke.emitRate = 0; n.fire.emitRate = 0; }
@@ -101,6 +103,7 @@ export class TurbineExhaustFx {
     if (starting && T.lit) fire = Math.max(fire, 260 * egtHot);            // "torching" na partida quente
     if (T.phase === "spooldown" && egtHot > 0.2) fire = Math.max(fire, 200 * egtHot);
     if (T.phase === "running") fire = Math.max(fire, 25 * accel * (T.n1 > 85 ? 1 : 0)); // lambida no transitório a toda
+    this.fireRate = paused ? this.fireRate : fire;
 
     const g = 0.85 - 0.7 * Math.min(1, dark); // cinza claro → preto
     // um bocal só (duto único, mais largo) concentra o gás dos dois: mais partículas e um "boca" maior

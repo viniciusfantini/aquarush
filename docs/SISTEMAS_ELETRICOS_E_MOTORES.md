@@ -1,7 +1,7 @@
 # AQUA RUSH — Sistemas elétricos e de motores (referência para qualquer IA ou dev)
 
 Este documento descreve **toda a lógica** dos sistemas elétricos, de combustível, de arrefecimento, de partida e
-dos motores das 4 embarcações da POC 1 (Babylon.js, `pocs/babylon`), como estão no código na **v0.64.3**. Serve
+dos motores das 4 embarcações da POC 1 (Babylon.js, `pocs/babylon`), como estão no código na **v0.64.4**. Serve
 para continuar o trabalho em outra IA/ferramenta ou portar para Unity/Unreal sem precisar redescobrir as regras.
 
 > Fonte da verdade = o código. Se divergir, vale o código e este arquivo deve ser corrigido.
@@ -247,8 +247,9 @@ mais o EXT PWR da GPU no `EngineSystems`.
   Resultado: em N a pleno, N2 ~103 % e N1 ~71 %; a toda com ondas, N2 ≤ ~105,5 %.
 - **Chave GOV** (`governor`, só manual; o FADEC sempre governa): desligada, sem governador — em N o N2 dispara.
   Aviso de sobrevelocidade > 106 % (anunciador **N2 SOBREV.**). **Sem corte automático** (v0.64.1): acima de 106 %
-  o desgaste sobe `(N2 − 106)/100` por segundo até a turbina travar (≥ 95 %, avaria). Anunciador **GOV OFF** (âmbar);
-  luz **GOV** (verde, no lugar da antiga CHAMA, também no HUD) = o governador está limitando (`govActing`).
+  o desgaste sobe `(N2 − 106)/100` por segundo até a turbina travar (≥ 95 %, avaria). Luz **GOV** única (v0.64.4, também no
+  HUD): âmbar acesa = chave GOV desligada; apagada = ligada; verde piscando = o governador está limitando (`govActing`).
+  Luz **CHAMA** = fogo saindo do escape (`TurbineExhaustFx.fireRate` > 5, o mesmo cálculo que desenha o fogo).
 
 ### 8.3 FADEC (padrão) — camada que aciona as mesmas chaves (`fadecStep`)
 1. `start()`: bomba ON, starter ON (não liga a BAT: ela é do piloto; sem BAT e sem GPU → `"noPower"`).

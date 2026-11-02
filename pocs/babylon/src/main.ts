@@ -47,7 +47,7 @@ import { BoatCamera } from "./presentation/cameras.ts";
 import { Hud } from "./presentation/hud.ts";
 import { EngineAudio } from "./presentation/audio.ts";
 
-const BUILD = "poc-babylon 0.64.3";
+const BUILD = "poc-babylon 0.64.4";
 /** Escala visual da rotação da hélice (proporcional ao RPM, abaixo do limite estroboscópico). */
 const PROP_VISUAL_SCALE = 0.12;
 
@@ -1153,7 +1153,7 @@ const boot = async () => {
       const cpos = scene.activeCamera?.globalPosition ?? Vector3.Zero();
       audio.updateGpu(isTurb ? T.gpuState : "off", T.gpuT, Vector3.Distance(cpos, gpuCart.root.position), cam.mode === "cockpit", T.gpuKw);
       gpuCart.updateDiesel(isTurb ? T.gpuState : "off", T.gpuT, T.gpuKw, paused ? 0 : dtReal);
-      tpanel.update(T);
+      tpanel.update(T, exhaustFx.fireRate > 5);
       { const ec = vin.engineCmd, cm = ec && ec.length ? ec : [{ gear: vin.gear, throttle: vin.throttle, neutral: !!vin.neutralThrottle }];
         const trimSt = { deg: T.trimDeg, tilt: T.tiltDeg, pin: T.trimPin, blocked: T.tiltBlocked, relay: T.trimRelay };
         tpanel.updateLevers(cm, trimSt); spanel.updateLevers(cm.length >= boat.units.length ? cm : [cm[0], cm[0]], trimSt); }

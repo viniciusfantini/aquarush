@@ -7,7 +7,8 @@
 //    Ninguém protege: errar a ordem dá partida molhada, pendurada ou quente (e desgasta a turbina).
 // Instrumentos ANALÓGICOS com as faixas dos instrumentos de turbina (verde = normal, amarelo = cautela, vermelho =
 // limite) e a leitura digital dentro: N1, EGT, N2, torque, óleo, barramento e a corrente da GPU. Sem tensão no
-// barramento eles ficam apagados (ponteiro no zero). Luzes BAT / EXT PWR / GEN / STARTER / IGNIÇÃO / GOV (governador limitando) / EGT ALTA / ÓLEO / GOV OFF / N2.
+// barramento eles ficam apagados (ponteiro no zero). Luzes BAT / EXT PWR / GEN / STARTER / IGNIÇÃO / GOV (âmbar = chave desligada; verde piscando = governador limitando) /
+// EGT ALTA / ÓLEO QUENTE / CHAMA (fogo saindo do escape) / N2 SOBREV.
 
 import type { BoatTelemetry } from "../sim/boat.ts";
 import type { TurbineSwitch } from "../sim/turbine.ts";
@@ -66,7 +67,7 @@ export class TurbinePanel {
         <button class="tp-ck" data-ck>CHECKLIST</button><button class="tp-x" aria-label="fechar">×</button></div>
       <div class="tp-grid">
       <div class="tp-gauges"></div>
-      <div class="tp-ann">${["BAT", "EXT PWR", "GEN", "STARTER", "IGNIÇÃO", "GOV", "EGT ALTA", "ÓLEO QUENTE", "GOV OFF", "N2 SOBREV."].map((k) => `<span data-a="${k}">${k}</span>`).join("")}</div>
+      <div class="tp-ann">${["BAT", "EXT PWR", "GEN", "STARTER", "IGNIÇÃO", "GOV", "EGT ALTA", "ÓLEO QUENTE", "CHAMA", "N2 SOBREV."].map((k) => `<span data-a="${k}">${k}</span>`).join("")}</div>
         <div class="sw-plate tp-sw">${SCR}${SWITCHES.map((s, i) => s.id === "fuelValve"
           // a manete de condição do combustível é um seletor rotativo (como os registros), não uma chave elétrica
           ? rotary("fv", "COMBUSTÍVEL", "condição", [{ v: "cut", l: "CORTE" }, { v: "idle", l: "LENTA" }], { num: i + 1, cls: "fuel" })
@@ -133,7 +134,8 @@ export class TurbinePanel {
   get isOpen(): boolean { return this.open; }
   setOpen(on: boolean): void { this.open = on; this.el.classList.toggle("open", on); if (!on) this.ck.setOpen(false); }
 
-  update(t: BoatTelemetry): void {
+  /** `fire` = há chama saindo do escape (o mesmo cálculo que desenha o fogo) */
+  update(t: BoatTelemetry, fire = false): void {
     if (!this.open || !t.turbine) return;
     const tb = t.turbine, blink = Math.floor(performance.now() / 350) % 2 === 0;
     this.ck.update(t);
@@ -163,9 +165,10 @@ export class TurbinePanel {
       // verde = GPU no barramento; âmbar piscando = GPU disponível/partindo mas fora do barramento (relé aberto ou sem
       // MAIN — a luz é alimentada pela própria GPU); vermelho piscando = EXT PWR em ON sem GPU conectada (falha)
       "EXT PWR": t.extPwr ? "g" : t.extPwrFault ? (blink ? "r" : "") : t.gpu && (t.gpuState === "starting" || t.gpuState === "online") && blink ? "a" : "",
-      STARTER: tb.starter ? "a" : "", "IGNIÇÃO": tb.ignition ? "a" : "", GOV: on && tb.govActing ? "g" : "", "EGT ALTA": on && tb.egt > 720 ? "r" : "",
+      STARTER: tb.starter ? "a" : "", "IGNIÇÃO": tb.ignition ? "a" : "", // GOV: chave desligada = âmbar aceso; ligada = apagada; governador atuando (limitando o combustível) = verde piscando
+      GOV: !on ? "" : !tb.governor && !tb.fadec ? "a" : tb.govActing ? (blink ? "g" : "") : "", "EGT ALTA": on && tb.egt > 720 ? "r" : "",
       "ÓLEO QUENTE": on && tb.oilRed ? (blink ? "r" : "") : on && tb.oilHot ? "r" : "",
-      "GOV OFF": on && !tb.governor && !tb.fadec ? "a" : "", "N2 SOBREV.": on && tb.n2 > 106 ? (blink ? "r" : "") : "",
+      CHAMA: fire ? "r" : "", "N2 SOBREV.": on && tb.n2 > 106 ? (blink ? "r" : "") : "",
     };
     for (const s of this.el.querySelectorAll<HTMLElement>("[data-a]")) s.className = ann[s.dataset.a ?? ""] ?? "";
     const sw: Record<PanelSwitch, boolean> = { master: tb.master, extPwr: t.extPwrClosed, boostPump: tb.boostPump, starter: tb.starterSw, ignition: tb.ignitionSw, fuelValve: tb.fuelValve, generator: tb.generator, governor: tb.governor || tb.fadec };

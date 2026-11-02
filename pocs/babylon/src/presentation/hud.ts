@@ -248,7 +248,7 @@ export class Hud {
       if (this.annun) {
         // GPU: pisca (âmbar) enquanto o diesel dela parte e estabiliza; verde e acesa com a energia externa chaveada
         const blink = Math.floor(performance.now() / 350) % 2 === 0;
-        const on: Record<string, [boolean, string]> = { GPU: [t.extPwr || (t.gpu && (t.gpuState === "starting" || !t.extPwrClosed) && blink), t.extPwr ? "#3ddc84" : "#ffb020"], ARRANQUE: [tb.starter, "#ffb020"], "IGNIÇÃO": [tb.ignition, "#ffb020"], GOV: [tb.govActing, "#3ddc84"], EGT: [tb.egtWarn || (tb.phase === "accel" && tb.egt > 720), "#ff4040"] };
+        const on: Record<string, [boolean, string]> = { GPU: [t.extPwr || (t.gpu && (t.gpuState === "starting" || !t.extPwrClosed) && blink), t.extPwr ? "#3ddc84" : "#ffb020"], ARRANQUE: [tb.starter, "#ffb020"], "IGNIÇÃO": [tb.ignition, "#ffb020"], GOV: [!tb.governor && !tb.fadec ? true : tb.govActing && blink, !tb.governor && !tb.fadec ? "#ffb020" : "#3ddc84"], EGT: [tb.egtWarn || (tb.phase === "accel" && tb.egt > 720), "#ff4040"] };
         for (const el of Array.from(this.annun.children) as HTMLElement[]) {
           const [lit, c] = on[el.dataset.k ?? ""] ?? [false, ""];
           el.style.color = lit ? "#111" : "rgba(255,255,255,.35)"; el.style.background = lit ? c : "rgba(0,0,0,.25)"; el.style.borderColor = lit ? c : "rgba(255,255,255,.18)";
