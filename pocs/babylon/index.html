@@ -53,6 +53,7 @@
     .sp-foot { display: flex; flex-direction: column; align-items: center; gap: 8px; padding-top: 4px; }
     #splash-play { font: inherit; font-size: 20px; letter-spacing: 0.22em; padding: 14px 46px; border-radius: 999px; border: none; background: var(--accent); color: #04222a; font-weight: 800; cursor: pointer; box-shadow: 0 6px 24px rgba(41,211,194,0.35); }
     #splash-play:hover, #splash-play:focus-visible { filter: brightness(1.1); outline: none; }
+    #splash-play span { font-size: 0.72em; letter-spacing: 0.16em; font-weight: 700; opacity: 0.85; }
     .sp-ver { font-size: 11px; color: rgba(244,248,251,0.4); letter-spacing: 0.08em; }
     /* ---------------- painel de partida da turbina (Y) ---------------- */
     #tpanel, #spanel { position: fixed; right: 14px; top: 64px; z-index: 3; width: min(700px, calc(100vw - 24px)); max-height: calc(100vh - 80px); overflow-y: auto;
@@ -359,7 +360,7 @@
     #tpanel { width: min(744px, calc(100vw - 24px)); overflow-x: hidden; } /* 8 relógios de 88 px numa linha */
     /* botão TESTE das luzes e alarmes: bem pequeno, encostado no canto direito da botoeira (não alarga o painel) */
     /* no lugar da "próxima chave" depois do GOV, na altura dos LEDs (só a largura do botão: a botoeira tem folga) */
-    .tp-test { align-self: flex-start; margin-top: -3px; width: 26px; display: flex; flex-direction: column; align-items: center; gap: 3px; }
+    .tp-test { position: absolute; left: 0; top: 0; width: 26px; display: flex; flex-direction: column; align-items: center; gap: 3px; }
     .tp-test b { font-size: 6.5px; letter-spacing: 0.06em; color: #e9eef2; font-weight: 800; }
     .tb-test { width: 18px; height: 18px; border-radius: 50%; border: none; padding: 0; font-size: 5px !important; font-weight: 900; color: #1b1203 !important;
       background: radial-gradient(circle at 40% 35%, #fff3c4, #ffc23a 55%, #a87400); box-shadow: 0 0 0 2px #1b1f24, 0 0 0 3px rgba(255,255,255,0.15), 0 1px 3px rgba(0,0,0,0.6); }
@@ -599,7 +600,7 @@
           <button class="soon" data-lang="en" aria-disabled="true" title="English — soon"><svg viewBox="0 0 28 20"><rect width="28" height="20" fill="#fff"/><rect y="0.000" width="28" height="1.538" fill="#b22234"/><rect y="3.077" width="28" height="1.538" fill="#b22234"/><rect y="6.154" width="28" height="1.538" fill="#b22234"/><rect y="9.231" width="28" height="1.538" fill="#b22234"/><rect y="12.308" width="28" height="1.538" fill="#b22234"/><rect y="15.385" width="28" height="1.538" fill="#b22234"/><rect y="18.462" width="28" height="1.538" fill="#b22234"/><rect width="12.5" height="10.8" fill="#3c3b6e"/><circle cx="1.40" cy="1.20" r="0.45" fill="#fff"/><circle cx="3.80" cy="1.20" r="0.45" fill="#fff"/><circle cx="6.20" cy="1.20" r="0.45" fill="#fff"/><circle cx="8.60" cy="1.20" r="0.45" fill="#fff"/><circle cx="11.00" cy="1.20" r="0.45" fill="#fff"/><circle cx="2.60" cy="2.95" r="0.45" fill="#fff"/><circle cx="5.00" cy="2.95" r="0.45" fill="#fff"/><circle cx="7.40" cy="2.95" r="0.45" fill="#fff"/><circle cx="9.80" cy="2.95" r="0.45" fill="#fff"/><circle cx="1.40" cy="4.70" r="0.45" fill="#fff"/><circle cx="3.80" cy="4.70" r="0.45" fill="#fff"/><circle cx="6.20" cy="4.70" r="0.45" fill="#fff"/><circle cx="8.60" cy="4.70" r="0.45" fill="#fff"/><circle cx="11.00" cy="4.70" r="0.45" fill="#fff"/><circle cx="2.60" cy="6.45" r="0.45" fill="#fff"/><circle cx="5.00" cy="6.45" r="0.45" fill="#fff"/><circle cx="7.40" cy="6.45" r="0.45" fill="#fff"/><circle cx="9.80" cy="6.45" r="0.45" fill="#fff"/><circle cx="1.40" cy="8.20" r="0.45" fill="#fff"/><circle cx="3.80" cy="8.20" r="0.45" fill="#fff"/><circle cx="6.20" cy="8.20" r="0.45" fill="#fff"/><circle cx="8.60" cy="8.20" r="0.45" fill="#fff"/><circle cx="11.00" cy="8.20" r="0.45" fill="#fff"/><circle cx="2.60" cy="9.95" r="0.45" fill="#fff"/><circle cx="5.00" cy="9.95" r="0.45" fill="#fff"/><circle cx="7.40" cy="9.95" r="0.45" fill="#fff"/><circle cx="9.80" cy="9.95" r="0.45" fill="#fff"/></svg>English<span class="soon-tag">SOON</span></button>
         </div>
       </div>
-      <div class="sp-foot"><button id="splash-play">JOGAR ▶</button><div class="sp-ver" id="splash-ver"></div></div>
+      <div class="sp-foot"><button id="splash-play">JOGAR <span>MODO PLAYGROUND</span> ▶</button><div class="sp-ver" id="splash-ver"></div></div>
     </div>
   </div>
   <div id="menu" class="hidden">

@@ -129,6 +129,25 @@ export class TurbinePanel {
 
   /** botão TESTE segurado / teste ativo (com energia no barramento): luzes acesas e alarme (o main lê `lampTestOn`) */
   private lampTest = false;
+  private alignT = -1e9;
+  /**
+   * Posiciona o botão TESTE: na horizontal, alinhado com a letra "E" de "N2 SOBREV." (a última luz); na vertical, na
+   * altura dos LEDs das chaves. Recalcula de tempos em tempos (o painel pode ser arrastado/redimensionado).
+   */
+  private alignTest(): void {
+    const plate = this.q<HTMLElement>(".tp-sw"), box = this.q<HTMLElement>(".tp-test"), btn = this.q<HTMLElement>(".tb-test");
+    const lamp = this.q<HTMLElement>('.tp-ann [data-a="N2 SOBREV."]'), led = this.q<HTMLElement>('.tg[data-s="governor"] .led');
+    const tn = lamp.firstChild;
+    if (!tn || plate.offsetWidth === 0) return;
+    const i = (lamp.textContent ?? "").lastIndexOf("E");
+    if (i < 0) return;
+    const r = document.createRange(); r.setStart(tn, i); r.setEnd(tn, i + 1);
+    const e = r.getBoundingClientRect(), pr = plate.getBoundingClientRect(), lr = led.getBoundingClientRect();
+    const left = `${Math.round(e.left + e.width / 2 - pr.left - box.offsetWidth / 2)}px`;
+    const top = `${Math.round(lr.top + lr.height / 2 - pr.top - btn.offsetHeight / 2)}px`;
+    if (box.style.left !== left) box.style.left = left;
+    if (box.style.top !== top) box.style.top = top;
+  }
   lampTestOn = false;
 
   /** Posição das manetes (o comando atual, do InputManager). */
@@ -149,6 +168,7 @@ export class TurbinePanel {
     if (!this.open || !t.turbine) return;
     const tb = t.turbine, blink = Math.floor(performance.now() / 350) % 2 === 0;
     this.ck.update(t);
+    if (performance.now() - this.alignT > 400) { this.alignT = performance.now(); this.alignTest(); }
     // quem comanda a partida (indicador, não seletor): START devolve ao FADEC; mexer numa chave passa para o manual
     const fl = this.q<HTMLElement>("[data-fl]"), flTxt = tb.fadec ? "FADEC" : "MANUAL";
     if (fl.textContent !== flTxt) fl.textContent = flTxt;
