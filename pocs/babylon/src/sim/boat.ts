@@ -1294,8 +1294,10 @@ export class Speedboat {
         tz = this.pos.z - lx * Math.sin(yawB) + lz * Math.cos(yawB);
       }
       const dxT = tx - s.pos.x, dzT = tz - s.pos.z, dT = Math.hypot(dxT, dzT);
-      // perto do lugar: acompanha o barco (segura no cabo); afundado, só a correnteza
-      let swx = this.sunk ? 0 : this.vel.x, swz = this.sunk ? 0 : this.vel.z;
+      // só quem já está junto do casco acompanha o barco (segurando o cabo de mão); longe dele a pessoa está parada na
+      // água (com a correnteza) e só avança o que nada — antes ela "seguia" o barco mesmo longe e nadava rápido demais
+      const holding = !this.sunk && dT < 0.6;
+      let swx = holding ? this.vel.x : cur.x, swz = holding ? this.vel.z : cur.z;
       let effort = 0;
       if (s.t > 1 && inWater && dT > 0.25) {
         const sp = Math.min(0.35, dT * 0.5);
@@ -1331,7 +1333,7 @@ export class Speedboat {
       const g = world.groundHeight(s.pos.x, s.pos.z) + 0.25; // raso: fica sentado no fundo
       if (s.pos.y < g) { s.pos = v3(s.pos.x, g, s.pos.z); s.vel = v3(s.vel.x * 0.9, Math.max(0, s.vel.y), s.vel.z * 0.9); }
       // de volta a bordo: chegou ao seu lugar junto do casco, com o barco de pé, inteiro e quase parado
-      if (!this.capsized && !this.sunk && s.t > 2.5 && inWater && dT < 0.45 && Math.hypot(this.vel.x, this.vel.z) < 1.5
+      if (!this.capsized && !this.sunk && s.t > 2.5 && inWater && dT < 0.45 && Math.hypot(this.vel.x, this.vel.z) < 3 / 3.6
         && !this.occupants.some((o) => o.seat === s.seat)) boarding.push(s);
     }
     for (const s of boarding) {

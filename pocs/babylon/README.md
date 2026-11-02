@@ -98,9 +98,11 @@ A lancha é um **corpo rígido 6DOF** (massa seca de 1030 kg + gasolina, ocupant
 
 ## Abandonar o barco — barra de espaço (v0.63)
 
+**v0.63.2:** longe do casco a pessoa não acompanha mais o barco (só quem segura o cabo de mão, a < 0,6 m do lugar); volta a bordo com o barco a até 3 km/h. Pulando a 65 km/h, 6 s depois ela nada a 0,35 m/s; o barco desliza ~80 m e para, e a volta leva 274 s.
+
 **v0.63.1:** dois toques — o 1º espaço tira só os passageiros (o piloto fica no comando e o motor segue ligado); o 2º (ou sem passageiros) tira o piloto, e o corta-circuito desliga o motor. Nado de colete até ~0,35 m/s (antes 0,7): no teste, voltam a bordo em 6,7 s.
 
-`Speedboat.abandonShip()`: os ocupantes pulam na água de colete, cada um pelo bordo do seu banco, com impulso para fora e para cima (`Swimmer.jumped`). O cordão do **corta-circuito** está no piloto: com ele fora o motor desliga (`stall = "lanyard"`). Na água eles nadam até o seu lugar em volta do casco (o mesmo nado do emborcamento) e **voltam a bordo** sozinhos (`updateSwimmers` → `occupants`, contador `reboarded`) quando chegam a ~0,45 m do lugar, depois de 2,5 s na água, com o barco **de pé, não afundado e a menos de 1,5 m/s**. Na **AR-10 virada** o piloto fica preso no cinto do habitáculo fechado; o espaço o tira da cabine e ele fica na água, a salvo — com o barco virado ninguém volta a bordo (R recomeça). Testes ("abandonar"): 2 pessoas pulam, motor desligado pelo corta-circuito, afastamento de 3,3 m, todos a bordo de novo em 4,2 s; AR-10 virada: o piloto sai e fica na água. No navegador: o piloto da AR-6 pula, nada e volta ("Todos de volta a bordo").
+`Speedboat.abandonShip()`: os ocupantes pulam na água de colete, cada um pelo bordo do seu banco, com impulso para fora e para cima (`Swimmer.jumped`). O cordão do **corta-circuito** está no piloto: com ele fora o motor desliga (`stall = "lanyard"`). Na água eles nadam até o seu lugar em volta do casco (o mesmo nado do emborcamento) e **voltam a bordo** sozinhos (`updateSwimmers` → `occupants`, contador `reboarded`) quando chegam a ~0,45 m do lugar, depois de 2,5 s na água, com o barco **de pé, não afundado e a até 3 km/h** (v0.63.2). Na **AR-10 virada** o piloto fica preso no cinto do habitáculo fechado; o espaço o tira da cabine e ele fica na água, a salvo — com o barco virado ninguém volta a bordo (R recomeça). Testes ("abandonar"): 2 pessoas pulam, motor desligado pelo corta-circuito, afastamento de 3,3 m, todos a bordo de novo em 4,2 s; AR-10 virada: o piloto sai e fica na água. No navegador: o piloto da AR-6 pula, nada e volta ("Todos de volta a bordo").
 
 ## Painel da AR-10 (v0.62.3 → v0.62.7)
 
@@ -367,7 +369,7 @@ Limitação: é uma síntese aproximada, não uma gravação. Validar o timbre d
 | 6. Ondas e correnteza | ondas fortes (×2,5): roll ≤ 30°, não emborca; deriva com correnteza de 1,6 m/s: 1,54 m/s |
 | Lago | flutua no spawn; a toda contra a margem, encalha e para sem atravessar o terreno |
 
-Resultado: **576/578 OK + 2 KNOWN** (v0.63.1). Na v0.10, o peso do piloto na posição real (boreste, acima do CG) aumentou o roll em curva com ondas fortes; o `bankCoef` foi para 1800 e o `rollDamping` para 15000, com 1 limitação conhecida (abaixo). Na v0.2 a hélice foi para 0,5 m atrás do espelho, como no modelo visual, e o esterço máximo em alta velocidade caiu de 13° para 11°.
+Resultado: **578/580 OK + 2 KNOWN** (v0.63.2). Na v0.10, o peso do piloto na posição real (boreste, acima do CG) aumentou o roll em curva com ondas fortes; o `bankCoef` foi para 1800 e o `rollDamping` para 15000, com 1 limitação conhecida (abaixo). Na v0.2 a hélice foi para 0,5 m atrás do espelho, como no modelo visual, e o esterço máximo em alta velocidade caiu de 13° para 11°.
 
 ### Navegador (Chrome, Windows 11, WebGL2, `q=med`, ~1370×896)
 
