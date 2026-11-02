@@ -47,7 +47,7 @@ import { BoatCamera } from "./presentation/cameras.ts";
 import { Hud } from "./presentation/hud.ts";
 import { EngineAudio } from "./presentation/audio.ts";
 
-const BUILD = "poc-babylon 0.62.5";
+const BUILD = "poc-babylon 0.62.6";
 /** Escala visual da rotação da hélice (proporcional ao RPM, abaixo do limite estroboscópico). */
 const PROP_VISUAL_SCALE = 0.12;
 
@@ -321,7 +321,8 @@ const boot = async () => {
   window.addEventListener("pointerdown", startAudio);
 
   const GEAR_MSG = { F: "F — frente engatada (lenta)", N: "N — neutro (sem empuxo)", R: "R — ré engatada (lenta)" } as const;
-  input.onGearChange = (g) => sysToast(GEAR_MSG[g]);
+  // câmbio hidráulico (AR-10) com a turbina parada: a manete mexe, mas não engata
+  input.onGearChange = (g) => sysToast(g !== "N" && V.P.hydraulicShift && V.boat.engine !== "running" ? `Manete em ${g}: SEM PRESSÃO na caixa hidráulica — com a turbina parada a marcha não engata` : GEAR_MSG[g]);
 
   let occIdx = 0;
   const applyOccupants = (i: number, toast = true) => {

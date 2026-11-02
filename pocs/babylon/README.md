@@ -98,6 +98,8 @@ A lancha é um **corpo rígido 6DOF** (massa seca de 1030 kg + gasolina, ocupant
 
 ## Painel da AR-10 (v0.62.3 → v0.62.5)
 
+**v0.62.6:** alinhado — botoeira das 7 chaves numa faixa; START/STOP numa seção própria ao lado de baterias / tanque / bomba; manetes alinhadas pela base; o aviso de "sem pressão" do câmbio hidráulico vai para o display de avisos.
+
 **v0.62.5:** 700 px de largura, em faixas: mostradores / anunciadores (4 colunas) / botoeira de partida (7 chaves + START/STOP, com mais folga entre o START, o texto FADEC e o STOP) / sistemas / manetes / avisos.
 
 

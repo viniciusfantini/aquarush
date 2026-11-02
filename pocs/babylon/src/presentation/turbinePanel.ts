@@ -70,15 +70,15 @@ export class TurbinePanel {
           // a manete de condição do combustível é um seletor rotativo (como os registros), não uma chave elétrica
           ? rotary("fv", "COMBUSTÍVEL", "condição", [{ v: "cut", l: "CORTE" }, { v: "idle", l: "LENTA" }], { num: i + 1, cls: "fuel" })
           : toggle({ attr: "s", val: s.id, label: s.label, sub: s.sub, on: s.on, off: s.off, variant: s.variant, num: i + 1 })).join("")}
-          <div class="tp-auto">
-          <div class="rb-w"><button class="rb rb-start" data-f="start" title="partida automática: o FADEC faz a sequência e protege"><span>START</span></button><b>FADEC</b></div>
-          <div class="rb-w"><button class="rb rb-stop" data-f="cut" title="STOP: corta o combustível (no FADEC também aborta a partida)"><span>STOP</span></button></div>
-          </div>
         </div>
         <div class="sw-plate tp-sysp">${SCR}
           ${cell(rotary("bsel", "BATERIAS", "2 × 12 V em série", [{ v: "off", l: "OFF" }, { v: "bus", l: "BUS" }, { v: "both", l: "BOTH" }]), "bat")}
           ${cell(rotary("tank", "TANQUE", "registro", [{ v: "closed", l: "FECHADO" }, { v: "open", l: "ABERTO" }], { cls: "fuel" }), "tank")}
           ${cell(tri("bilge", "BOMBA PORÃO", "boia ou manual", { v: "on", l: "ON" }, { v: "off", l: "OFF" }, { v: "auto", l: "AUTO" }), "bilge")}
+        </div>
+        <div class="sw-plate tp-start">${SCR}
+          <div class="rb-w"><button class="rb rb-start" data-f="start" title="partida automática: o FADEC faz a sequência e protege"><span>START</span></button><b>FADEC</b></div>
+          <div class="rb-w"><button class="rb rb-stop" data-f="cut" title="STOP: corta o combustível (no FADEC também aborta a partida)"><span>STOP</span></button></div>
         </div>
         <div class="sw-plate tp-lev">${SCR}</div>
         <div class="tp-foot"><div class="msg-rd" data-msg><span></span></div></div>
@@ -120,7 +120,9 @@ export class TurbinePanel {
   }
 
   /** Posição das manetes (o comando atual, do InputManager). */
-  updateLevers(cmds: LeverCmd[], trim: TrimState | null = null): void { if (this.open) { this.levers.update(cmds); this.levers.updateTrim(trim); } }
+  updateLevers(cmds: LeverCmd[], trim: TrimState | null = null): void { this.cmdGear = cmds[0]?.gear ?? "N"; if (this.open) { this.levers.update(cmds); this.levers.updateTrim(trim); } }
+  /** marcha pedida na manete (para o aviso "sem pressão" do câmbio hidráulico) */
+  private cmdGear: "F" | "N" | "R" = "N";
   configureTrim(opts: TrimOpts | null): void { this.levers.setTrim(opts, (d) => this.act.setTrim(d)); }
   private flashMsg = "";
   private flashT = -1e9;
@@ -170,9 +172,7 @@ export class TurbinePanel {
     setTri(this.el, "bilge", t.bilgeMode, on && t.bilgeMode !== "off", t.bilgePump);
     const rd = (k: string, txt: string) => { const e = this.el.querySelector<HTMLElement>(`[data-rd="${k}"]`); if (e && e.textContent !== txt) e.textContent = txt; };
     // câmbio hidráulico: sem a turbina rodando a alavanca mexe, mas a marcha não engata
-    const sm = this.el.querySelector<HTMLElement>(".lev .tl-shift small");
-    const smTxt = t.engine === "running" ? (t.gear === "N" ? "hidráulica: pronta para engatar" : `engatada: ${t.gear}`) : "SEM PRESSÃO: turbina parada, não engata";
-    if (sm && sm.textContent !== smTxt) { sm.textContent = smTxt; sm.classList.toggle("warn", t.engine !== "running"); }
+
     rd("bat", `${Math.round(t.batterySoc * 100)} % · ${t.busBattery ? "24 V no barram." : "fora"}`);
     rd("tank", t.fuelValveOpen ? `${t.fuelL.toFixed(0)} L no tanque` : `linha ${Math.round(t.fuelLineFrac * 100)} %`);
     rd("bilge", `${t.bilgePump ? "bombeando" : "parada"} · ${t.bilgeL.toFixed(0)} L`);
@@ -182,7 +182,8 @@ export class TurbinePanel {
       : tb.starterLock > 0 ? `starter superaquecido: aguarde ${tb.starterLock.toFixed(0)} s`
       : tb.wear > 0.005 ? `desgaste da turbina ${(tb.wear * 100).toFixed(0)} %` : "";
     const pooled = tb.pooledL > 0.01 ? `combustível na câmara: ${tb.pooledL.toFixed(2)} L` : "";
-    const msg = [wear, pooled].filter(Boolean).join(" · ");
+    const noPress = this.cmdGear !== "N" && t.engine !== "running" ? "SEM PRESSÃO: turbina parada, a marcha não engata" : "";
+    const msg = [wear, pooled, noPress].filter(Boolean).join(" · ");
     const flashing = performance.now() - this.flashT < 6000;
     setRd(this.q<HTMLElement>("[data-msg]"), flashing ? this.flashMsg : msg, !flashing && msg !== "");
   }

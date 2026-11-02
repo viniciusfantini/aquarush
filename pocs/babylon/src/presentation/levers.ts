@@ -75,7 +75,7 @@ export class LeverControls {
       el.innerHTML = `<div class="pl" title="manete de potência em T (N1) · em N acelera em neutro"><div class="pl-track" data-pl="0"><span class="pl-slot"></span>
             <i class="pl-l max">MÁX</i><i class="pl-l idle">LENTA</i><span class="pl-handle"><span class="pl-t"></span></span></div>
           <em class="mt-rd">N · 0 %</em><b>POTÊNCIA</b></div>
-        <div class="tl-shift">${gearSel(0)}<b>MARCHA</b><small>hidráulica: só engata com a turbina rodando</small></div>`;
+        <div class="tl-shift" title="caixa hidráulica: só engata com a turbina rodando">${gearSel(0)}<b>MARCHA</b></div>`;
     }
     this.el = el;
     for (let i = 0; i < this.n; i++) { this.drag.push(null); this.shown.push({ gear: "N", throttle: 0 }); this.nBtn.push(false); }
