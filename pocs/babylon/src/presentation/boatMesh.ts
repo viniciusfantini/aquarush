@@ -22,6 +22,8 @@ export interface BoatVisual {
   meshes: Mesh[];
   /** barco com mais de um motor: o pivô e a hélice de cada rabeta (o 1º é o mesmo de engine/propeller) */
   drives?: { engine: TransformNode; propeller: TransformNode; propBlur: PBRMaterial }[];
+  /** bocais do escape da turbina (−Z local = para onde o gás sai): fumaça e fogo em presentation/exhaustFx.ts */
+  exhausts?: TransformNode[];
 }
 
 // ---------------- forma do casco ----------------

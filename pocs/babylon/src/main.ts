@@ -38,11 +38,12 @@ import { buildDinghy, DINGHY_FLOOR, type DinghyControls } from "./presentation/d
 import { buildRapida } from "./presentation/rapidaMesh.ts";
 import { buildTurbina } from "./presentation/turbineMesh.ts";
 import { WaterInteraction } from "./presentation/waterInteraction.ts";
+import { TurbineExhaustFx } from "./presentation/exhaustFx.ts";
 import { BoatCamera } from "./presentation/cameras.ts";
 import { Hud } from "./presentation/hud.ts";
 import { EngineAudio } from "./presentation/audio.ts";
 
-const BUILD = "poc-babylon 0.48.0";
+const BUILD = "poc-babylon 0.48.1";
 /** Escala visual da rotação da hélice (proporcional ao RPM, abaixo do limite estroboscópico). */
 const PROP_VISUAL_SCALE = 0.12;
 
@@ -271,6 +272,7 @@ const boot = async () => {
   }
 
   const fx = new WaterInteraction(scene, wakeField, { particles: cfg.quality.particles, wakeTexture: cfg.quality.wakeTexture });
+  const exhaustFx = new TurbineExhaustFx(scene); // fumaça e fogo do escape da turbina (AR-10)
   const waterVis = new WaterVisual(scene, {
     resolution: cfg.quality.waterResolution, innerExtent: 80, outerExtent: 2600, depth, wake: fx.wake, reflectionSize: cfg.quality.reflection,
   });
@@ -977,6 +979,7 @@ const boot = async () => {
     } else cam.update(dtReal, rPos, rRot, Math.hypot(boat.vel.x, boat.vel.z));
     fx.water = physWater; // as partículas param na mesma superfície da física (com a esteira)
     if (!paused) fx.update(dtReal, boat, water);
+    exhaustFx.update(dtReal, vis.exhausts, T.turbine, boat.vel, paused);
     waterVis.update(water, cam.cam, engine.getRenderWidth(), engine.getRenderHeight());
     if (cfg.quality.shadows > 0) sun.position = rPos.add(sunDir.scale(150));
 

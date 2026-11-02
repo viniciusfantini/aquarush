@@ -1,6 +1,7 @@
 // Lancha de turbina AR-10 (10 m, piloto único no centro, habitáculo fechado) — visual procedural.
 // Casco em V profundo com pintura de corrida, CANOPY (bolha de vidro com arcos de estrutura) sobre o poço do
-// piloto, tampa da turbina com duas tomadas de ar laterais e a CHAMINÉ do escape saindo para trás, e a
+// piloto, tampa da turbina com duas tomadas de ar laterais e DOIS DUTOS DE ESCAPE baixos e achatados saindo pelo
+// espelho (como nos barcos de corrida a turbina; o gás quente vai para trás, rente ao convés), e a
 // transmissão de superfície no espelho: eixo inclinado, quilha-leme e a hélice de superfície (meio fora d'água
 // em planeio). Nó do pivô = trim/direção da transmissão (mesmos ângulos da física). Só lê a simulação.
 
@@ -64,7 +65,7 @@ export const buildTurbina = (scene: Scene): BoatVisual & { floor: number } => {
   for (const s of [-1, 1]) K.box(0.05, 0.6, 0.012, s * 0.12, floor + 0.62, seat.z - 0.26, M.red, root).rotation.x = -0.22; // cintos
   K.rbox(0.58, 0.2, 0.58, 0.05, seat.x, floor + 0.09, seat.z - 0.05, M.gunmetal, root);
 
-  // ---- tampa da turbina, tomadas de ar e chaminé do escape ----
+  // ---- tampa da turbina, tomadas de ar e dutos do escape ----
   const z0 = -1.6, z1 = -4.7;
   loftRR(K, loftFn(18, (t) => ({ z: z0 + (z1 - z0) * t, w: 1.55 - 0.15 * t, h: 0.18 + 0.32 * smoothstep(0, 0.25, t) - 0.1 * smoothstep(0.75, 1, t), y: deckTop(-3) - 0.02, r: 0.14 })), M.gunmetal, root);
   for (const s of [-1, 1]) {
@@ -74,13 +75,36 @@ export const buildTurbina = (scene: Scene): BoatVisual & { floor: number } => {
     K.rbox(0.26, 0.28, 0.05, 0.05, x, y + 0.01, zc + 0.26, M.black, root);
     K.rbox(0.36, 0.05, 1.02, 0.02, x, y + 0.19, zc - 0.25, M.yellow, root); // filete
   }
-  // grade do topo (radiador de óleo) e a chaminé do escape (curva para trás), com a boca enegrecida
+  // grade do topo (radiador de óleo)
   K.rbox(0.7, 0.03, 0.8, 0.02, 0, deckTop(-3.2) + 0.47, -3.2, M.black, root);
-  const ey = deckTop(-4.2) + 0.32;
-  const stack = [new Vector3(0, ey - 0.15, -3.95), new Vector3(0, ey + 0.2, -4.15), new Vector3(0, ey + 0.38, -4.45), new Vector3(0, ey + 0.42, -4.85), new Vector3(0, ey + 0.4, -5.12)];
-  K.tube(stack, 0.21, M.steel, root, 18);
-  K.cyl(0.04, 0.38, "z", 0, ey + 0.4, -5.14, M.black, root);
-  K.tube(stack.slice(2).map((v) => new Vector3(v.x, v.y + 0.005, v.z - 0.02)), 0.215, M.matte, root, 18); // fuligem na ponta
+  // escape: a turbina sopra para trás por DOIS dutos achatados (seção oval) que saem da traseira da tampa, descem
+  // rente ao convés e terminam em bocais de titânio um pouco além do espelho, abertos para fora e para baixo
+  const titanium = M.gunmetal, soot = M.matte;
+  const exhausts: TransformNode[] = [];
+  for (const s of [-1, 1]) {
+    const pts = [
+      new Vector3(s * 0.26, deckTop(-4.3) + 0.2, -4.3),
+      new Vector3(s * 0.31, deckTop(-4.65) + 0.15, -4.65),
+      new Vector3(s * 0.37, deckTop(-4.95) + 0.12, -4.98),
+      new Vector3(s * 0.4, deckTop(-5.0) + 0.1, -5.16),
+    ];
+    // seção oval que se achata para o fim (rx cresce, ry diminui: bocal "rabo de peixe")
+    const ring = (c: Vector3, rx: number, ry: number) => Array.from({ length: 17 }, (_, i) => { const a = (2 * Math.PI * i) / 16; return new Vector3(c.x + Math.cos(a) * rx, c.y + Math.sin(a) * ry, c.z); });
+    const rings = pts.map((c, i) => ring(c, 0.13 + 0.035 * i, 0.12 - 0.022 * i));
+    K.ribbon(rings, titanium, root);
+    // bocal: lábio mais escuro (fuligem) e a boca preta
+    K.ribbon([ring(pts[3], 0.24, 0.055), ring(new Vector3(pts[3].x, pts[3].y, pts[3].z - 0.03), 0.245, 0.06)], soot, root);
+    const mouth = MeshBuilder.CreateDisc("exhMouth", { radius: 1, tessellation: 20 }, scene);
+    mouth.parent = root; mouth.material = M.black; mouth.scaling.set(0.235, 0.052, 1); mouth.position.set(pts[3].x, pts[3].y, pts[3].z - 0.005);
+    K.out.push(mouth);
+    // abraçadeira e a chapa de proteção térmica no convés sob o duto
+    K.tube(ring(pts[1], 0.215, 0.115).map((v) => v), 0.012, M.steel, root, 6);
+    K.rbox(0.42, 0.012, 0.9, 0.01, s * 0.34, deckTop(-4.7) + 0.01, -4.7, soot, root);
+    // nó do bocal: −Z local aponta para onde o gás sai (para trás, um pouco para fora e para baixo)
+    const n = K.node("exhaust" + (s < 0 ? "BB" : "BE"), root, pts[3].x, pts[3].y, pts[3].z - 0.04);
+    n.rotation.set(-0.12, -s * 0.18, 0);
+    exhausts.push(n);
+  }
 
   // ---- abas de trim no espelho e cunhos ----
   for (const s of [-1, 1]) {
@@ -124,5 +148,5 @@ export const buildTurbina = (scene: Scene): BoatVisual & { floor: number } => {
   const telltale = new TransformNode("telltale", scene); telltale.parent = piv;
   const meshes = [...K.out, cockpitLid];
   for (const m of meshes) { m.isPickable = false; m.receiveShadows = true; }
-  return { root, engine: piv, propeller, telltale, propBlur, lights: { port, star, stern }, cockpitLid, meshes, floor };
+  return { root, engine: piv, propeller, telltale, propBlur, lights: { port, star, stern }, cockpitLid, meshes, floor, exhausts };
 };
