@@ -93,6 +93,8 @@ A lancha é um **corpo rígido 6DOF** (massa seca de 1030 kg + gasolina, ocupant
 
 **Água compartilhada:** `GerstnerWater.shaderParams()` envia ao shader exatamente as ondas que a física consulta. `getHeight` inverte o deslocamento horizontal de Gerstner por iteração de ponto fixo. No teste, o desvio médio entre o casco e a superfície é de 3 cm.
 
+> Referência completa da lógica elétrica e dos motores: [`docs/SISTEMAS_ELETRICOS_E_MOTORES.md`](../../docs/SISTEMAS_ELETRICOS_E_MOTORES.md).
+
 ## Chaves de ignição, LEDs e chave geral (v0.58)
 
 - **Chave de ignição por motor** (`Speedboat.setKey(i, "off" | "on" | "start")`, `EngineUnit.key`, telemetria `keys`): OFF desliga a ignição (o motor para); ON liga a ignição e faz o autoteste (apita ~1 s se houver tensão; sem tensão, nada); START gira o arranque **enquanto segurada** (`manualCrank`, sem o limite de 4 s do P) e volta para ON ao soltar (mola, `bindKeySpring`). Só em N. A AR-9 tem uma chave por motor (BB e BE). O P continua funcionando (liga as chaves em ON e faz a partida automática). No bote: **manete da corda** (= P) e **STOP**.

@@ -3,6 +3,7 @@
 ## Contexto
 
 - O jogo é de navegação aquática 3D para **mobile e navegador**. As premissas estão em `docs/AQUA_RUSH_GDD_COMPLETO_v2.docx`. Para ler e buscar, use `docs/GDD_texto_extraido.txt`.
+- **Lógica elétrica e de sistemas dos motores** (fonte de consulta antes de mexer em `engineSystems.ts`, `turbine.ts`, partida, chaves e baterias): `docs/SISTEMAS_ELETRICOS_E_MOTORES.md`. Ao mudar essa lógica, **atualize esse arquivo** junto com o README.
 - **Fase atual: POC comparativa** (GDD §10). A mesma fatia jogável será feita em três tecnologias, da mais simples para a mais complexa: Babylon.js (feita), Unity 6 + URP e Unreal. **Não transformar POC em jogo completo.** A economia, o multiplayer e o mapa completo estão fora do escopo (GDD A.14).
 - O usuário escreve em português. Docs, comentários e UI são em **pt-BR**.
 - A POC 1 tem **4 embarcações** na mesma física (`VESSELS` em `params.ts`, `?barco=`): **lancha AR-6** (`lancha`, motor de popa 150 hp), **bote AR-3** (`bote`, 15 hp de cana), **lancha rápida AR-9** (`rapida`, dois V8 de centro com rabeta) e **lancha de turbina AR-10** (`turbina`, turbina a gás, hélice de superfície, habitáculo fechado, 24 V).

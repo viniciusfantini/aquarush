@@ -12,11 +12,13 @@ O GDD (seção 10) pede a **mesma fatia jogável** em três tecnologias antes de
 
 | # | Tecnologia | Pasta | Status |
 |---|---|---|---|
-| 1 | **Babylon.js + TypeScript** (browser-first, sem instalar engine) | [`pocs/babylon`](pocs/babylon) | ✅ **v0.58.0** (online: v0.48.2): lancha 150 hp, **bote de apoio inflável 15 hp**, **lancha rápida AR-9 com dois V8 de 300 hp** (empuxo diferencial) ou **lancha de turbina AR-10** (turbina a gás de 1100 shp, hélice de superfície, partida de turbina com N1/N2/EGT) (escolhidos no menu com prévia no lago); física própria testada no Node (**552/554 critérios + 2 limitações registradas**); a mesma física serve para **um ou dois motores a pistão ou uma turbina**; largada atracada na vaga do píer com os passageiros esperando; sistemas do motor (combustível, temperatura, bateria com curva real, alternador, amperímetro, jump start 10 Ah/200 A; **dois bancos** na AR-9 e **24 V** na AR-10); **bomba de porão** com jato e alarme; **alagar e afundar**; **âncora de proa** com molinete; **vento** em 5 níveis com deriva e carneirinhos; avarias de casco e motor; rampa de concreto, carretinha e carro/caminhonete; estrada até o posto, poitas, restaurante e frota de exposição; barco que vira e pessoas de colete nadando até ele; água vidro, esteira que a física sente, cavitação |
+| 1 | **Babylon.js + TypeScript** (browser-first, sem instalar engine) | [`pocs/babylon`](pocs/babylon) | ✅ **v0.58.0** (online: v0.58.0): lancha 150 hp, **bote de apoio inflável 15 hp**, **lancha rápida AR-9 com dois V8 de 300 hp** (empuxo diferencial) ou **lancha de turbina AR-10** (turbina a gás de 1100 shp, hélice de superfície, partida de turbina com N1/N2/EGT) (escolhidos no menu com prévia no lago); física própria testada no Node (**552/554 critérios + 2 limitações registradas**); a mesma física serve para **um ou dois motores a pistão ou uma turbina**; largada atracada na vaga do píer com os passageiros esperando; sistemas do motor (combustível, temperatura, bateria com curva real, alternador, amperímetro, jump start 10 Ah/200 A; **dois bancos** na AR-9 e **24 V** na AR-10); **bomba de porão** com jato e alarme; **alagar e afundar**; **âncora de proa** com molinete; **vento** em 5 níveis com deriva e carneirinhos; avarias de casco e motor; rampa de concreto, carretinha e carro/caminhonete; estrada até o posto, poitas, restaurante e frota de exposição; barco que vira e pessoas de colete nadando até ele; água vidro, esteira que a física sente, cavitação |
 | 2 | Unity 6 LTS + URP | [`pocs/unity`](pocs/unity) | ⏳ planejada (Unity não instalado nesta máquina) |
 | 3 | Unreal Engine 5 | [`pocs/unreal`](pocs/unreal) | ⏳ planejada |
 
 A comparação entre as POCs, com os pesos da matriz do GDD §11, é registrada em [`docs/POC_COMPARATIVO.md`](docs/POC_COMPARATIVO.md).
+
+Toda a lógica elétrica e de sistemas dos motores (baterias, chave geral, alternador, GPU, combustível, arrefecimento, chaves de ignição, partida elétrica e na corda, afogador, turbina com FADEC e partida manual, óleo, porão, molinete, telemetria e critérios de teste) está documentada em [`docs/SISTEMAS_ELETRICOS_E_MOTORES.md`](docs/SISTEMAS_ELETRICOS_E_MOTORES.md), para continuar o trabalho em outra IA ou portar para Unity/Unreal.
 
 ## Rodar a POC 1 (Babylon.js)
 
@@ -93,7 +95,7 @@ Na escolha do barco, o **menu já fica no lago**: a embarcação escolhida boia 
 ```
 README.md            este arquivo
 CLAUDE.md            guia para agentes de IA (convenções, decisões, como validar)
-docs/                GDD original + comparativo das POCs
+docs/                GDD original + comparativo das POCs + lógica elétrica/motores (SISTEMAS_ELETRICOS_E_MOTORES.md)
 pocs/babylon/        POC 1 — Babylon.js (TypeScript + Vite)
 pocs/unity/          POC 2 — planejada
 pocs/unreal/         POC 3 — planejada
