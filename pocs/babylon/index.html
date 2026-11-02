@@ -102,9 +102,9 @@
     .tg b, .pp b, .rot b { font-size: 10.5px; letter-spacing: 0.07em; color: #e9eef2; font-weight: 800; text-shadow: 0 1px 0 rgba(0,0,0,0.8); margin-top: 2px; }
     .tg small, .pp small, .rot small { font-size: 9px; color: var(--dim); line-height: 1.15; text-align: center; }
     .tg .num { position: absolute; top: 0; left: 6px; font-style: normal; font-size: 10px; font-weight: 800; color: rgba(255,255,255,0.4); }
-    .tg .led, .pp .led { width: 8px; height: 8px; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #4d3030, #1e1212); box-shadow: inset 0 0 0 1px rgba(0,0,0,0.7), 0 1px 0 rgba(255,255,255,0.08); transition: background 0.15s, box-shadow 0.15s; }
-    .tg.on .led { background: radial-gradient(circle at 35% 30%, #d8ffe5, #35e27f 45%, #12893f); box-shadow: 0 0 8px 2px rgba(53,226,127,0.55); }
-    .pp.on .led, .tg.tri.on .led { background: radial-gradient(circle at 35% 30%, #fff1c9, #ffb020 45%, #a86400); box-shadow: 0 0 8px 2px rgba(255,176,32,0.5); }
+    .tg .led, .ik .led { width: 8px; height: 8px; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #4d3030, #1e1212); box-shadow: inset 0 0 0 1px rgba(0,0,0,0.7), 0 1px 0 rgba(255,255,255,0.08); transition: background 0.15s, box-shadow 0.15s; }
+    .tg.lit .led, .ik.lit .led { background: radial-gradient(circle at 35% 30%, #d8ffe5, #35e27f 45%, #12893f); box-shadow: 0 0 8px 2px rgba(53,226,127,0.55); }
+    .tg.tri.armed .led { background: radial-gradient(circle at 35% 30%, #fff1c9, #ffb020 45%, #a86400); box-shadow: 0 0 8px 2px rgba(255,176,32,0.5); }
     .tg.tri.run .led { background: radial-gradient(circle at 35% 30%, #d8ffe5, #35e27f 45%, #12893f); box-shadow: 0 0 8px 2px rgba(53,226,127,0.55); }
     .tg .plate { position: relative; width: 42px; height: 74px; border-radius: 6px; background: linear-gradient(180deg, #0b0d10, #1d2228);
       box-shadow: inset 0 0 0 1px rgba(255,255,255,0.1), inset 0 2px 5px rgba(0,0,0,0.85), 0 1px 0 rgba(255,255,255,0.07); transition: box-shadow 0.15s; }
@@ -167,6 +167,42 @@
     .tp-sys-rd { display: flex; flex-direction: column; gap: 6px; min-width: 190px; font-size: 11px; color: var(--dim); font-variant-numeric: tabular-nums; }
     .tp-sys-rd span { padding: 2px 8px; border-radius: 4px; background: rgba(0,0,0,0.4); }
     #tpanel.manual .only-fadec { display: none; }
+    /* número da etapa nos rotativos; registro de combustível com punho amarelo */
+    .rot { position: relative; }
+    .rot .num { position: absolute; top: 0; left: 8px; font-style: normal; font-size: 10px; font-weight: 800; color: rgba(255,255,255,0.4); }
+    .rot.fuel .knob i { background: linear-gradient(90deg, #8a6a00, #ffd23a 45%, #b08600); }
+    .rot.fuel .knob i::after { background: #1b1b1b; box-shadow: none; }
+    /* chave de ignição: miolo cromado, chave de cabeça preta; START volta sozinha (mola) */
+    .ik .dial { height: 92px; }
+    .ik .ring { width: 58px; height: 58px; margin: -29px 0 0 -29px; background: radial-gradient(circle at 38% 32%, #ffffff, #b9c0c6 35%, #69717a 70%, #3a4047);
+      box-shadow: inset 0 0 0 3px rgba(0,0,0,0.35), 0 3px 6px rgba(0,0,0,0.6); }
+    .ik .ring::after { content: ""; position: absolute; left: 50%; top: 50%; width: 30px; height: 30px; margin: -15px 0 0 -15px; border-radius: 50%; background: radial-gradient(circle at 40% 35%, #2d3237, #0b0d0f); }
+    .ik .knob i { left: -11px; top: -24px; width: 22px; height: 48px; border-radius: 10px 10px 7px 7px; background: linear-gradient(90deg, #0f1113, #3b4148 45%, #15181b);
+      box-shadow: 0 4px 6px rgba(0,0,0,0.7), inset 0 1px 1px rgba(255,255,255,0.25); }
+    .ik .knob i::after { left: 50%; top: 5px; width: 8px; height: 8px; margin-left: -4px; border-radius: 50%; background: #0b0d0f; box-shadow: inset 0 1px 1px rgba(255,255,255,0.2); }
+    .ik .knob::after { display: none; }
+    .ik.start .knob { transition-duration: 0.08s; }
+    .ik .dial button[data-kpos=start] span { color: rgba(255,176,32,0.75); }
+    .ik .dial button[data-kpos=start].on span { background: #ffb020; color: #1b1203; }
+    .ik { gap: 3px; }
+    .ik .led { margin-top: -2px; }
+    /* corda de partida (bote): manete em T no capô + botão STOP vermelho */
+    .rp { display: grid; grid-template-columns: auto auto; align-items: center; justify-items: center; gap: 4px 10px; width: 150px; }
+    .rp > b, .rp > small, .rp > em { grid-column: span 2; }
+    .rp-pull { position: relative; width: 70px; height: 70px; padding: 0; border: none; background: none; }
+    .rp-cowl { position: absolute; inset: 6px; border-radius: 14px; background: linear-gradient(180deg, #e9ecef, #aeb5bb 60%, #8a9197); box-shadow: inset 0 -3px 5px rgba(0,0,0,0.35), 0 3px 6px rgba(0,0,0,0.5); }
+    .rp-line { position: absolute; left: 50%; top: 22px; width: 3px; height: 0; margin-left: -1.5px; background: repeating-linear-gradient(180deg, #d8d2b8 0 3px, #9b947b 3px 6px); transition: height 0.12s; }
+    .rp-grip { position: absolute; left: 50%; top: 12px; width: 46px; height: 14px; margin-left: -23px; border-radius: 7px; background: linear-gradient(180deg, #2a2f35, #0d0f11); color: #cfd6dc;
+      font-size: 7.5px; font-weight: 800; letter-spacing: 0.1em; line-height: 14px; text-align: center; box-shadow: 0 2px 3px rgba(0,0,0,0.6); transition: transform 0.12s; }
+    .rp-pull:hover .rp-grip { box-shadow: 0 2px 3px rgba(0,0,0,0.6), 0 0 0 2px rgba(41,211,194,0.55); }
+    .rp.pulling .rp-grip { transform: translateY(30px); }
+    .rp.pulling .rp-line { height: 30px; }
+    .rp-stop { width: 42px; height: 42px; border-radius: 50%; border: none; font-size: 9px !important; font-weight: 900; letter-spacing: 0.05em; color: #fff !important;
+      background: radial-gradient(circle at 40% 35%, #ff7a6e, #d62a20 55%, #7d120c); box-shadow: 0 0 0 4px #1b1f24, 0 0 0 5px rgba(255,255,255,0.15), 0 3px 6px rgba(0,0,0,0.6); }
+    .rp-stop:active { transform: translateY(1px) scale(0.97); }
+    .rp.running .rp-st { color: #3ddc84; } .rp.pulling .rp-st { color: #ffc23a; }
+    .sp-sec { margin: 4px 0 6px; color: var(--accent); font-weight: 700; letter-spacing: 0.12em; font-size: 11px; }
+    .sp-sec + .sw-plate { margin-bottom: 10px; }
     .tp-foot [data-note] { color: #ffc23a; font-size: 12px; }
     #loading-msg { font-size: 12px; letter-spacing: 0.15em; color: var(--dim); min-height: 1em; }
 

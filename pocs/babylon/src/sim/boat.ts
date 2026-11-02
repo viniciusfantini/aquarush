@@ -127,6 +127,8 @@ export interface BoatTelemetry {
   throttles: number[];
   thrusts: number[];
   engines: EngineState[];
+  keys: IgnitionKey[];    // posição da chave de ignição de cada motor
+  houseV: number;         // tensão (real) do barramento da casa: luzes, buzina, LEDs do painel
   propRpms: number[];
   /** turbina (lancha de turbina): N1/N2 %, EGT °C, torque %, óleo psi, fase da partida */
   turbine: { n1: number; n2: number; egt: number; torque: number; oilPsi: number; fuelLph: number; phase: TurbinePhase; starter: boolean; ignition: boolean; lit: boolean; egtWarn: boolean; hotStarts: number;
@@ -163,6 +165,8 @@ export interface Swimmer {
   t: number;
 }
 
+export type IgnitionKey = "off" | "on" | "start";
+
 export interface ForceDebug { p: Vec3; f: Vec3; kind: "buoy" | "lift" | "thrust" | "contact" }
 
 /**
@@ -175,6 +179,12 @@ export class EngineUnit {
   readonly offsetX: number;
   throttleActual = 0; neutralRev = false; gear: Gear = "N"; shiftTimer = 0; wantGear: Gear = "N"; rpm = 750;
   engine: EngineState = "running"; crankTimer = 0; crankRevs = 0; crankNeed = 4; crankWait = 0;
+  /** chave de ignição deste motor (painel): OFF · ON (autoteste) · START (mola: volta para ON ao soltar) */
+  key: IgnitionKey = "on";
+  /** arranque segurado pelo piloto na chave (sem o limite de 4 s da partida automática do P) */
+  manualCrank = false;
+  /** autoteste da chave deste motor (s restantes; o alarme apita) */
+  testT = 0;
   cavitation = 0; propRpmState = 0; immersion = 1; revLimiting = false; limiterPhase = 0; lastThrust = 0; pullCatch = false;
   // última passada da física (telemetria / efeitos)
   axial = 0; ventilation = 1; slip = 0; propW: Vec3 = v3(); intakeSubmerged = true; fuelLph = 0;
@@ -213,7 +223,7 @@ export class Speedboat {
   /** Corrente dos periféricos da turbina (bomba, velas, solenoide, FADEC) no barramento — entra no amperímetro. */
   private turbinePeripheralA(): number { return this.units.reduce((a, x) => a + (x.turb?.peripheralA ?? 0), 0); }
   /** Turbinas paradas e frias (reposicionar no píer); os motores a pistão só desligam. */
-  coldEngines(): void { for (const x of this.units) { x.engine = "off"; x.rpm = 0; x.turb?.cold(); } }
+  coldEngines(): void { for (const x of this.units) { x.engine = "off"; x.rpm = 0; x.key = "off"; x.manualCrank = false; x.testT = 0; x.turb?.cold(); } }
   get gear(): Gear { return this.u.gear; }
   set gear(v: Gear) { if (this.inUnit) this.u.gear = v; else for (const x of this.units) x.gear = v; }
   private get wantGear(): Gear { return this.u.wantGear; }
@@ -380,7 +390,7 @@ export class Speedboat {
       gear: "N", pitchDeg: 0, rollDeg: 0, wetFraction: 0, planing: false, thrustN: 0, ventilation: 1, cavitation: 0, propImmersion: 1, revLimiter: false, propSlip: 0, propRpm: 0, engine: "running", fuelL: 0, fuelFrac: 1, coolantC: 45, batteryV: 12.6, engineHours: 0, overheatWarn: false, protectMode: false, lowFuel: false, chargeWarn: false, stall: "", trimMotorA: 0, trimRelay: false, jumper: false, jumpCharge: 1, batteryA: 0, bilgeL: 0, bilgeInflowLps: 0, bilgePump: false, bilgeFlowLps: 0, bilgeAlarm: false, bilgeJetPos: v3(), bilgeJetVel: v3(), freeboard: 1, swamped: false, sunk: false, airPocketL: 0,
       anchorOut: 0, anchorState: "recolhida", anchorDepth: 0, anchorScope: 0, anchorTension: 0, anchorRelay: false, windlassA: 0, apparentWind: 0, neutralRev: false, fuelLph: 0, buzzer: false, starterRpm: 0, startFail: "", batterySoc: 0.92, trimPin: 0, pullStart: !params.electricStart,
       distanceM: 0, collisions: 0, draftHull: 0, draftMotor: 0, capsized: false, swimmers: 0, hullDamage: 0, engineDamage: 0, damageEvent: "", damageCount: 0, lastImpact: 0, depth: 0, submergedPoints: params.buoyancyPoints.map(() => false),
-      rpms: [params.idleRpm], gears: ["N"], throttles: [0], thrusts: [0], engines: ["running"], propRpms: [0], coolants: [45], batteryVs: [12.6], batterySocs: [0.92], batteryAs: [0], turbine: null, nominalV: 12, gpu: false, gpuState: "off", gpuT: 0, gpuKw: 0, busBattery: true, busGen: false, extPwr: false, extPwrClosed: false, gpuA: 0, coolingLps: 0, fuelValveOpen: true, fuelLineFrac: 1, bilgeMode: "auto", batterySel: "ind", choke: false,
+      rpms: [params.idleRpm], gears: ["N"], throttles: [0], thrusts: [0], engines: ["running"], keys: ["on"], houseV: 12.6, propRpms: [0], coolants: [45], batteryVs: [12.6], batterySocs: [0.92], batteryAs: [0], turbine: null, nominalV: 12, gpu: false, gpuState: "off", gpuT: 0, gpuKw: 0, busBattery: true, busGen: false, extPwr: false, extPwrClosed: false, gpuA: 0, coolingLps: 0, fuelValveOpen: true, fuelLineFrac: 1, bilgeMode: "auto", batterySel: "ind", choke: false,
     };
   }
 
@@ -723,7 +733,7 @@ export class Speedboat {
     t.fuelLph = this.units.reduce((a, x) => a + x.fuelLph, 0);
     t.engine = this.engine;
     t.rpms = this.units.map((x) => x.rpm); t.gears = this.units.map((x) => x.gear); t.throttles = this.units.map((x) => x.throttleActual);
-    t.thrusts = this.units.map((x) => x.lastThrust); t.engines = this.units.map((x) => x.engine); t.propRpms = this.units.map((x) => x.propRpmState);
+    t.thrusts = this.units.map((x) => x.lastThrust); t.engines = this.units.map((x) => x.engine); t.keys = this.units.map((x) => x.key); t.propRpms = this.units.map((x) => x.propRpmState);
     // sistemas do motor: combustível, temperatura, bateria, horímetro
     const sys = this.systems;
     this.runSystems(dt, { lightsOn: input.navigationLights, trimMotorA: this.trimMotorA, auxA: this.anchor.motorA + this.bilgePumpA + this.turbinePeripheralA(), intakeSubmerged });
@@ -733,7 +743,7 @@ export class Speedboat {
     t.anchorTension = this.anchor.tension; t.anchorRelay = this.anchor.relay; t.windlassA = this.anchor.motorA;
     t.trimMotorA = this.trimMotorA; t.jumper = sys.jumper; t.jumpCharge = sys.jumpCharge; t.neutralRev = this.neutralRev;
     this.banksTelemetry();
-    t.buzzer = this.selfTestT > 0;
+    t.buzzer = this.selfTestT > 0 || this.units.some((x) => x.testT > 0);
     t.starterRpm = this.engine === "cranking" ? this.rpm : 0;
     t.batterySoc = sys.batterySoc;
     t.distanceM += Math.hypot(this.pos.x - oldPos.x, this.pos.z - oldPos.z);
@@ -1165,7 +1175,7 @@ export class Speedboat {
       un.propRpmState += ((engaged ? (un.gear === "R" ? -1 : 1) * un.rpm / 2 : 0) - un.propRpmState) * (1 - Math.exp(-dt / (engaged ? 0.08 : 3.5)));
     });
     t.rpm = this.units[0].rpm;
-    t.rpms = this.units.map((x) => x.rpm); t.engines = this.units.map((x) => x.engine); t.propRpms = this.units.map((x) => x.propRpmState);
+    t.rpms = this.units.map((x) => x.rpm); t.engines = this.units.map((x) => x.engine); t.keys = this.units.map((x) => x.key); t.propRpms = this.units.map((x) => x.propRpmState);
     t.fuelLph = this.units.filter((x) => x.engine === "running").length * P.fuelIdleLph;
     for (const x of this.units) x.fuelLph = x.turb ? x.turb.fuelLph : x.engine === "running" ? P.fuelIdleLph : 0;
     this.runSystems(dt, { lightsOn: false, trimMotorA: this.trimMotorA, auxA: this.turbinePeripheralA(), intakeSubmerged, load: 0 });
@@ -1175,7 +1185,7 @@ export class Speedboat {
     t.trimPin = P.trimMode === "manual" ? (this.tiltWanted ? P.trimPins.length + 1 : this.trimPin + 1) : 0;
     t.trimMotorA = this.trimMotorA; t.jumper = sys.jumper; t.jumpCharge = sys.jumpCharge;
     this.banksTelemetry();
-    t.buzzer = this.selfTestT > 0; t.starterRpm = this.engine === "cranking" ? this.rpm : 0;
+    t.buzzer = this.selfTestT > 0 || this.units.some((x) => x.testT > 0); t.starterRpm = this.engine === "cranking" ? this.rpm : 0;
     t.intakeSubmerged = intakeSubmerged; t.propImmersion = this.immersion; t.propRpm = this.propRpmState;
     t.hullDamage = this.hullDamage; t.engineDamage = this.engineDamage;
     t.speedKmh = Math.hypot(this.vel.x, this.vel.z) * 3.6;
@@ -1322,7 +1332,7 @@ export class Speedboat {
   toggleIgnition(): "stopped" | "starting" | "pulling" | "needNeutral" | "busy" | "noFuel" | "lowBattery" | "hot" | "noPilot" | "broken" | "manual" | "noPower" {
     if (!this.occupants.some((o) => o.seat === "helm")) return "noPilot";
     if (this.engine !== "running" && this.engineDamage >= 0.95) return "broken";
-    if (this.engine === "running") { this.engine = "off"; return "stopped"; }
+    if (this.engine === "running") { this.engine = "off"; for (const x of this.units) { x.key = "off"; x.manualCrank = false; } return "stopped"; }
     const tb = this.units[0].turb;
     if (tb) {
       // turbina: botão de partida do FADEC (arranque → ignição + combustível → acende → marcha lenta); de novo aborta.
@@ -1340,10 +1350,11 @@ export class Speedboat {
     }
     if (this.engine === "cranking") return "busy";
     if (this.gear !== "N") return "needNeutral";
-    const why = this.systems.canStart();
+    // cada motor parte pelo banco que o alimenta (na AR-9 em BE é o de boreste: o BB está isolado);
     // sem combustível a partida é permitida (o arranque gira / a corda é puxada), mas o motor não pega
-    if (why === "battery") return "lowBattery";
-    if (why === "overheat") return "hot";
+    const whys = this.units.map((x) => this.bankFor(x.index).canStart());
+    if (whys.every((w) => w === "battery")) return "lowBattery";
+    if (whys.some((w) => w === "overheat")) return "hot";
     if (this.selfTestT > 0) return "busy";
     this.telemetry.stall = "";
     this.telemetry.startFail = "";
@@ -1357,13 +1368,53 @@ export class Speedboat {
       return "pulling";
     }
     // chave em ON: autoteste com o apito característico; o arranque gira quando ele termina
+    for (const x of this.units) x.key = "on";
     this.selfTestT = 1.1;
     return "starting";
+  }
+
+  /**
+   * Chave de ignição de UM motor (painel do Y): OFF desliga a ignição (o motor para); ON liga a ignição e faz o
+   * autoteste (apito ~1 s, se houver tensão); START gira o arranque ENQUANTO segurada (mola: o painel manda "on" ao
+   * soltar). O arranque gira pela tensão do banco desse motor — sem tensão, só o silêncio. Só em neutro.
+   */
+  setKey(i: number, pos: IgnitionKey): "" | "needNeutral" | "noPilot" | "broken" {
+    const x = this.units[i];
+    if (!x || x.turb || !this.params.electricStart) return "";
+    if (pos === "off") {
+      x.key = "off"; x.testT = 0; x.manualCrank = false;
+      if (x.engine !== "off") x.engine = "off";
+      return "";
+    }
+    if (pos === "on") {
+      if (x.key === "off") { x.key = "on"; if (this.bankFor(i).supplyV(2) > 9) x.testT = 1.1; return ""; }
+      if (x.key === "start") {
+        x.key = "on";
+        // soltou a chave antes de pegar: o arranque para
+        if (x.manualCrank && x.engine === "cranking") {
+          x.engine = "off";
+          const fed = this.bankFor(i).fuelFeed;
+          this.telemetry.startFail = !fed && x.rpm >= 40 ? "fuel" : x.rpm < 40 ? "dead" : "weak";
+        }
+        x.manualCrank = false;
+      }
+      return "";
+    }
+    // START
+    if (!this.occupants.some((o) => o.seat === "helm")) return "noPilot";
+    if (x.engine === "running" || x.engine === "cranking") { if (x.key !== "off") x.key = "start"; return ""; }
+    if (this.engineDamage >= 0.95) return "broken";
+    if (x.gear !== "N") return "needNeutral";
+    x.key = "start"; x.testT = 0;
+    x.engine = "cranking"; x.manualCrank = true; x.crankTimer = 0; x.crankRevs = 0; x.crankNeed = 3 + Math.random() * 2; x.crankWait = 0;
+    this.telemetry.stall = ""; this.telemetry.startFail = "";
+    return "";
   }
 
   /** Este motor ainda espera a vez do arranque (pausa curta + nenhum motor anterior girando o arranque)? */
   private waitsToCrank(x: EngineUnit): boolean {
     if (x.engine !== "cranking") return false;
+    if (x.manualCrank) return false; // na chave o piloto decide (dois arranques juntos derrubam a tensão)
     if (x.crankWait > 0) return true;
     return this.units.some((o) => o.index < x.index && o.engine === "cranking");
   }
@@ -1375,6 +1426,7 @@ export class Speedboat {
    */
   private runSystems(dt: number, h: { lightsOn: boolean; trimMotorA: number; auxA: number; intakeSubmerged: boolean; load?: number }): void {
     const t = this.telemetry;
+    for (const x of this.units) x.testT = Math.max(0, x.testT - dt);
     if (!this.systems2) {
       const sys = this.systems;
       if (!this.units[0].turb) sys.batteryOn = this.batterySel !== "off";
@@ -1423,6 +1475,7 @@ export class Speedboat {
     const k = (sys.p.nominalV ?? 12) / 12;
     t.nominalV = 12 * k;
     t.coolants = B.map((b) => b.coolantC); t.batteryVs = B.map((b) => (b.batteryOn || !this.systems2 ? b.batteryV : b.restV) * k); /* dois bancos: o isolado mostra a tensão da PRÓPRIA bateria (nos bornes) */ t.batterySocs = B.map((b) => b.batterySoc); t.batteryAs = B.map((b) => b.batteryA / k);
+    t.houseV = (this.systems2 && this.batterySel === "be" ? this.systems2 : sys).batteryV * k; // em BE a casa vai para o banco de boreste
     t.coolantC = Math.max(...t.coolants); t.batteryV = sys.batteryV * k; t.batterySoc = sys.batterySoc; t.batteryA = sys.batteryA / k;
     t.fuelValveOpen = sys.fuelValveOpen; t.fuelLineFrac = Math.min(...B.map((b) => b.lineFrac)); t.bilgeMode = this.bilgeMode; t.batterySel = this.batterySel; t.choke = this.choke;
     t.engineHours = sys.engineHours; t.gpu = sys.gpu; t.gpuState = sys.gpuState; t.gpuT = sys.gpuT; t.gpuKw = sys.gpuKw;
@@ -1531,8 +1584,8 @@ export class Speedboat {
       this.rpm += (starterTarget - this.rpm) * (1 - Math.exp(-dt / 0.12));
       this.crankTimer += dt;
       this.crankRevs += (this.rpm / 60) * dt * clamp((this.rpm - 60) / 100, 0, 1);
-      if (this.crankRevs >= this.crankNeed && this.usys.fuelFeed) { this.engine = "running"; this.rpm = 1150; }
-      else if (this.crankTimer > 4) { // o piloto solta a chave: não pegou
+      if (this.crankRevs >= this.crankNeed && this.usys.fuelFeed) { this.engine = "running"; this.rpm = 1150; this.u.manualCrank = false; }
+      else if (this.crankTimer > 4 && !this.u.manualCrank) { // o piloto solta a chave: não pegou
         this.engine = "off";
         this.telemetry.startFail = !this.usys.fuelFeed && this.rpm >= 40 ? "fuel" : this.rpm < 40 ? "dead" : "weak";
       }

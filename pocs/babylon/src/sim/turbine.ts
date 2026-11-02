@@ -103,7 +103,9 @@ export class Turbine {
   private lightT = 0;       // tempo com combustível + ignição esperando acender
   private sinceLight = 99;  // s desde o acendimento
   private sfLight = 1;      // força do arranque no acendimento (bateria boa = 1; sem starter = 0)
-  private quietCut = false; // o próximo apagar foi um corte intencional (sem aviso de flameout)
+  private quietCut = false;
+  /** tempo sem tensão no barramento (s): passa de 0,3 s, o solenoide de combustível fecha */
+  private unpoweredT = 0; // o próximo apagar foi um corte intencional (sem aviso de flameout)
   private seq: "none" | "start" = "none"; // sequência do FADEC em andamento
   private seqT = 0;
   private overtempOn = false;
@@ -230,12 +232,14 @@ export class Turbine {
     // GPU (EXT PWR) ou o gerador da própria turbina; a chave BAT sozinha não decide (ver EngineSystems)
     const powered = inp.volts > 6;
     this.powered = powered;
+    this.unpoweredT = powered ? 0 : this.unpoweredT + dt;
     this.starterLockT = Math.max(0, this.starterLockT - dt);
     const sf = this.starter && powered ? this.starterForce(inp.volts) : 0;
     const ignOn = this.ignition && powered;
     const pumpOn = this.boostPump && powered;
     // combustível chega à câmara com a válvula aberta e pressão (bomba elétrica; acima de ~45 % N1 a bomba do motor basta)
-    const fuelFlow = this.fuelValve && inp.fuel && (pumpOn || this.n1 > 45);
+    // (a válvula é um solenoide normalmente fechado: sem barramento ela fecha — BAT e GEN desligados e sem GPU = apaga)
+    const fuelFlow = this.fuelValve && this.unpoweredT < 0.3 && inp.fuel && (pumpOn || this.n1 > 45);
     // starter: a embreagem solta acima de ~60 % (proteção de sobrevelocidade)
     if (this.starter && this.n1 > 60) { this.starter = false; this.events.push(this.fadec ? "starterOff" : "starterOverspeed"); }
     // limite de uso do starter (~40 s contínuos): superaquece, o térmico desarma e ele fica travado ~60 s

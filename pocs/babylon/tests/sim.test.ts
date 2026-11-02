@@ -898,6 +898,18 @@ for (const [label, thr] of [["baixa", 0.25], ["alta", 1]] as const) {
     const nb = mk(); nb.coldEngines(); nb.units[0].turb!.master = false;
     check("turbina", "FADEC com a chave BAT desligada (sem GPU): partida recusada", nb.toggleIgnition() === "noPower" ? 1 : 0, 1, 1, "", 0);
   }
+  // chave BAT desligada com a turbina em marcha lenta: o GERADOR mantém o barramento; sem ele (e sem GPU) o solenoide
+  // de combustível perde a tensão, fecha e a chama apaga
+  {
+    const r = mk(); r.coldEngines(); r.systems.batterySoc = 0.8;
+    r.toggleIgnition(); run(r, water, 40, N);
+    const tb = r.units[0].turb!;
+    tb.setSwitch("master", false); run(r, water, 8, N);
+    check("turbina", "BAT desligada em marcha lenta com o GERADOR ligado: segue acesa", tb.lit && tb.running ? 1 : 0, 1, 1, "", 0);
+    tb.generator = false; let outAt = -1;
+    run(r, water, 5, N, openWater, (t) => { if (outAt < 0 && !tb.lit) outAt = t; });
+    check("turbina", "BAT e GERADOR desligados (sem GPU): o solenoide fecha e a chama apaga (s)", outAt, 0.2, 1.5, "s", 2);
+  }
   // ---- partida MANUAL pelo painel (chave por chave) ----
   const manual = () => { const x = mk(); x.coldEngines(); x.systems.batterySoc = 0.6; const tb = x.units[0].turb!; tb.setFadec(false); tb.cold(); return { x, tb }; };
   {
@@ -1149,6 +1161,49 @@ for (const [label, thr] of [["baixa", 0.25], ["alta", 1]] as const) {
     check("sistemas", "chave em AMBAS: com a carga dividida os dois pegam", both.n, 2, 2, "", 0);
     const off = start("off");
     check("sistemas", "chave em OFF: nada pega", off.n, 0, 0, "", 0);
+  }
+  // AR-9 em BE com o banco BB zerado: os dois partem pelo banco de boreste (a partida não pode olhar o BB isolado)
+  {
+    const x = new Speedboat(RAPIDA, v3(0, 0.3, 0)); x.systems.fuelL = 100; x.occupants = [{ seat: "helm", mass: PERSON_KG }];
+    x.banks[0].batterySoc = 0; x.banks[1].batterySoc = 0.8; x.batterySel = "be";
+    for (const u of x.units) { u.engine = "off"; u.rpm = 0; }
+    run(x, water, 0.5, N);
+    const r = x.toggleIgnition(); run(x, water, 14, N);
+    check("sistemas", "AR-9, banco BB zerado, chave em BE: os dois pegam pelo banco de boreste", r === "starting" ? x.units.filter((u) => u.engine === "running").length : -1, 2, 2, "", 0);
+  }
+  // chave de ignição por motor: OFF · ON (autoteste) · START (mola)
+  {
+    const b = new Speedboat(SPEEDBOAT, v3(0, 0.25, 0)); b.systems.fuelL = 50; b.occupants = [{ seat: "helm", mass: PERSON_KG }];
+    b.coldEngines(); b.systems.coolantC = 60; b.systems.batterySoc = 0.8; run(b, water, 0.5, N);
+    b.setKey(0, "on"); run(b, water, 0.2, N);
+    const buzz = b.telemetry.buzzer; run(b, water, 1.5, N);
+    check("sistemas", "chave em ON: o autoteste apita (1 = sim)", buzz ? 1 : 0, 1, 1, "", 0);
+    check("sistemas", "chave em ON: o arranque não gira sozinho (rpm)", b.units[0].rpm, 0, 1, "rpm", 0);
+    b.setKey(0, "start"); let caught = -1;
+    run(b, water, 6, N, openWater, (t) => { if (caught < 0 && b.units[0].engine === "running") caught = t; });
+    b.setKey(0, "on"); run(b, water, 1, N);
+    check("sistemas", "chave em START segurada: pega (s)", caught, 0.3, 3, "s", 1);
+    check("sistemas", "soltou a chave (mola volta para ON): segue ligado", b.units[0].engine === "running" && b.units[0].key === "on" ? 1 : 0, 1, 1, "", 0);
+    b.setKey(0, "off"); run(b, water, 1, N);
+    check("sistemas", "chave em OFF: o motor para", b.units[0].engine === "off" ? 1 : 0, 1, 1, "", 0);
+    b.units[0].gear = "F";
+    check("sistemas", "START engatado: recusada (só em N)", b.setKey(0, "start") === "needNeutral" ? 1 : 0, 1, 1, "", 0);
+    b.units[0].gear = "N";
+    // bateria zerada: segurando START 8 s só estala / gira devagar e não pega; soltou: motor parado, chave em ON
+    const z = new Speedboat(SPEEDBOAT, v3(0, 0.25, 0)); z.systems.fuelL = 50; z.occupants = [{ seat: "helm", mass: PERSON_KG }];
+    z.coldEngines(); z.systems.batterySoc = 0; run(z, water, 0.5, N);
+    z.setKey(0, "on"); z.setKey(0, "start"); run(z, water, 8, N); z.setKey(0, "on");
+    check("sistemas", "bateria zerada: START segurada 8 s não pega", z.units[0].engine === "off" && z.telemetry.startFail !== "" ? 1 : 0, 1, 1, "", 0);
+    // AR-9: só a chave de bombordo → só o motor BB
+    const x = new Speedboat(RAPIDA, v3(0, 0.3, 0)); x.systems.fuelL = 100; x.occupants = [{ seat: "helm", mass: PERSON_KG }];
+    x.coldEngines(); for (const s2 of x.banks) { s2.batterySoc = 0.8; s2.coolantC = 60; } run(x, water, 0.5, N);
+    x.setKey(0, "on"); run(x, water, 1.3, N); x.setKey(0, "start"); run(x, water, 4, N); x.setKey(0, "on"); run(x, water, 1, N);
+    check("sistemas", "AR-9: chave só de bombordo → só BB ligado", x.units[0].engine === "running" && x.units[1].engine === "off" ? 1 : 0, 1, 1, "", 0);
+    x.setKey(1, "on"); run(x, water, 1.3, N); x.setKey(1, "start"); run(x, water, 4, N); x.setKey(1, "on"); run(x, water, 1, N);
+    check("sistemas", "AR-9: depois a de boreste → os dois ligados", x.units.every((u) => u.engine === "running") ? 1 : 0, 1, 1, "", 0);
+    // chave geral em OFF com os motores funcionando: o alternador segura a ignição (o motor NÃO morre)
+    x.batterySel = "off"; run(x, water, 10, N);
+    check("sistemas", "AR-9: chave de baterias em OFF com os motores ligados: seguem ligados (alternador)", x.units.every((u) => u.engine === "running") ? 1 : 0, 1, 1, "", 0);
   }
 }
 

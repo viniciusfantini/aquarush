@@ -41,7 +41,7 @@ src/
     turbinePanel.ts         painel de partida da turbina (Y): FADEC ou manual com as chaves + sistemas
     systemsPanel.ts         painel de sistemas (Y) dos barcos a pistão: baterias, registro, afogador, bomba de porão, luzes
     dragPanel.ts            janelas arrastáveis pela barra de título (posição salva)
-    switches.ts             chaves de painel em CSS: alavanca, 3 posições, seletor rotativo, puxador
+    switches.ts             chaves de painel em CSS: alavanca, 3 posições, rotativo, chave de ignição, puxador, corda
     environment.ts          terreno, árvores, píer, marina, restaurante, piscina
     boatMesh.ts / dinghyMesh.ts / rapidaMesh.ts / turbineMesh.ts   as 4 embarcações procedurais (PBR): motores, rabetas,
                             transmissão de superfície, hélices, canopy e escape da turbina
@@ -92,6 +92,15 @@ A lancha é um **corpo rígido 6DOF** (massa seca de 1030 kg + gasolina, ocupant
 | Avarias | casco: pico de contato > 4× o peso; motor: pé raspando o fundo andando, baixar o motor contra o chão, batidas na carretinha/carro. Casco avariado arrasta mais e abre o furo do porão |
 
 **Água compartilhada:** `GerstnerWater.shaderParams()` envia ao shader exatamente as ondas que a física consulta. `getHeight` inverte o deslocamento horizontal de Gerstner por iteração de ponto fixo. No teste, o desvio médio entre o casco e a superfície é de 3 cm.
+
+## Chaves de ignição, LEDs e chave geral (v0.58)
+
+- **Chave de ignição por motor** (`Speedboat.setKey(i, "off" | "on" | "start")`, `EngineUnit.key`, telemetria `keys`): OFF desliga a ignição (o motor para); ON liga a ignição e faz o autoteste (apita ~1 s se houver tensão; sem tensão, nada); START gira o arranque **enquanto segurada** (`manualCrank`, sem o limite de 4 s do P) e volta para ON ao soltar (mola, `bindKeySpring`). Só em N. A AR-9 tem uma chave por motor (BB e BE). O P continua funcionando (liga as chaves em ON e faz a partida automática). No bote: **manete da corda** (= P) e **STOP**.
+- **Chaves elétricas**: a posição é do piloto e não depende de energia; só o **LED** (a espia) acende quando a função está energizada (`setToggle(…, on, lit)`). Sem bateria, LUZES/BOMBA/BOMBA COMB./IGNIÇÃO ficam em ON com o LED apagado.
+- **Registros de combustível** (tanque nos quatro barcos e a condição CORTE/LENTA da turbina) são seletores rotativos de punho amarelo, como a chave de baterias.
+- **Correção (AR-9 em BE):** o P conferia `systems.canStart()` (o banco BB), que em BE fica isolado com 0 V no barramento → "bateria fraca". Agora cada motor confere o banco que o alimenta (`bankFor`).
+- **Chave geral em OFF com o motor ligado:** os motores a pistão (AR-6, AR-9) **seguem ligados** pelo alternador, que segura a ignição; a bateria não carrega e o painel avisa do risco ao regulador. O bote (magneto) não depende de bateria. Na **AR-10** o gerador da turbina segura o barramento; sem gerador e sem GPU o **solenoide de corte de combustível** (normalmente fechado) perde a tensão em 0,3 s e a chama apaga.
+- `telemetry.houseV`: tensão do barramento da casa (em BE é o banco de boreste); luzes, buzina e LEDs usam ela.
 
 ## Chaves de painel (v0.57)
 
@@ -244,6 +253,7 @@ Limitação: é uma síntese aproximada, não uma gravação. Validar o timbre d
 | Recarregar (v0.19) | ciclo completo para lancha e bote: carregar, rebocar 6 s, voltar de ré (o veículo para com as rodas na água), soltar, sair de ré e carregar de novo na carretinha deslocada: encaixa e prende a cinta (lancha 19,7 s, bote 13,7 s), a proa não atravessa o batente, sem avaria (`node tests/debug-reload.ts [lancha|bote]`) |
 | Avarias e desengate (v0.18) | lancha contra pedra a 15 km/h: casco 17 %, motor 0 %; a 40 km/h: casco 100 %; raso de 0,75 m a 30 km/h com o motor baixado: motor quebrado, não liga; navegando normal a toda: 0 %; R repara. Subir na carretinha com o motor levantado (trim + 8° de tilt): 0 %; soltar a cinta e dar ré devagar com o motor levantado: sai do berço e flutua a 15 m do guincho, sem avaria. Rebocar com o motor baixado: o pé arrasta (100 %); levantado: 0 % |
 | Veículo de reboque (v0.17) | carro e caminhonete: começam com a carretinha exatamente onde estava estacionada; parados na rampa não descem; 8 s acelerando tiram a carretinha da água (traseira 1,9 m acima d'água) a 14–17 km/h, em linha reta alinhada (0°); S freia e engata a ré (−2,5 m/s); de ré virando a carretinha dobra até o batente (80°); andando para a frente realinha (≤4,3°) |
+| Chaves de ignição e chave geral (v0.58) | AR-9 com o banco BB zerado em BE: os dois pegam (antes: "bateria fraca"). Chave: ON apita e não gira; START segurada pega em 1,2 s; soltou → ON e ligado; OFF para; engatado recusa; bateria zerada 8 s não pega. AR-9: só a chave BB → só BB; depois BE → os dois. Chave geral OFF com os motores ligados: seguem (alternador). AR-10: BAT off em lenta com GEN: segue acesa; sem GEN: apaga em 0,38 s. No navegador: AR-9 em BE parte pelas chaves (START segurado) e pelo P; com a chave geral em OFF e os motores parados, BOMBA/LUZES em ON com LED apagado ("sem energia"); bote: corda e STOP; AR-10 manual: chaves em ON com LED apagado sem BAT, acendem com BAT |
 | Chaves de painel (v0.57) | molinete da AR-10 pagando cabo: −16 A na bateria de 24 V (critério −45…−15 A; no navegador −9,7 → −25,4 A). FADEC com BAT desligada e sem GPU: partida recusada ("noPower"; no navegador o aviso aparece e a fase fica "off"). No navegador: chaves da AR-6 (rotativa ON/OFF), do bote (afogador puxado), da AR-9 (rotativa de 5 posições em BB, registro fechado, bomba em ON girando seca) e da AR-10 (FADEC: BAT/TANQUE/BOMBA; MANUAL: 7 alavancas numeradas, capa no STARTER) |
 | Painel de sistemas (v0.56) | registro fechado: a AR-6 em marcha lenta morre em 96 s (combustível da linha), motivo "combustível"; aberto de novo, pega em 2,3 s. Bomba de porão: OFF não tira (80 L), AUTO esvazia, ON liga seca. Afogador (bote frio, 40 tentativas): sem 7 %, com 85 % por puxada; quente com o afogador: afoga em 15 s. AR-9 com o banco BE zerado: IND. 1 motor, BB 2, BE 0, AMBAS iguala a carga e 2, OFF 0. No navegador: painéis da AR-9 (chave com 5 posições), do bote (afogador com a dica de motor frio) e da AR-10 (relógios maiores + sistemas) |
 | HUD em duas faixas (v0.55.1) | no navegador: barras + relógios grandes em cima e os pequenos alinhados numa linha embaixo, centralizados, nos 4 barcos (bote 2, AR-6 4, AR-9 6, AR-10 7); a popa e a hélice da AR-10 aparecem acima do HUD |
@@ -282,7 +292,7 @@ Limitação: é uma síntese aproximada, não uma gravação. Validar o timbre d
 | 6. Ondas e correnteza | ondas fortes (×2,5): roll ≤ 30°, não emborca; deriva com correnteza de 1,6 m/s: 1,54 m/s |
 | Lago | flutua no spawn; a toda contra a margem, encalha e para sem atravessar o terreno |
 
-Resultado: **539/541 OK + 2 KNOWN** (v0.57.0). Na v0.10, o peso do piloto na posição real (boreste, acima do CG) aumentou o roll em curva com ondas fortes; o `bankCoef` foi para 1800 e o `rollDamping` para 15000, com 1 limitação conhecida (abaixo). Na v0.2 a hélice foi para 0,5 m atrás do espelho, como no modelo visual, e o esterço máximo em alta velocidade caiu de 13° para 11°.
+Resultado: **552/554 OK + 2 KNOWN** (v0.58.0). Na v0.10, o peso do piloto na posição real (boreste, acima do CG) aumentou o roll em curva com ondas fortes; o `bankCoef` foi para 1800 e o `rollDamping` para 15000, com 1 limitação conhecida (abaixo). Na v0.2 a hélice foi para 0,5 m atrás do espelho, como no modelo visual, e o esterço máximo em alta velocidade caiu de 13° para 11°.
 
 ### Navegador (Chrome, Windows 11, WebGL2, `q=med`, ~1370×896)
 

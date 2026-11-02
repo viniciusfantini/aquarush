@@ -46,7 +46,7 @@ import { BoatCamera } from "./presentation/cameras.ts";
 import { Hud } from "./presentation/hud.ts";
 import { EngineAudio } from "./presentation/audio.ts";
 
-const BUILD = "poc-babylon 0.57.0";
+const BUILD = "poc-babylon 0.58.0";
 /** Escala visual da rotação da hélice (proporcional ao RPM, abaixo do limite estroboscópico). */
 const PROP_VISUAL_SCALE = 0.12;
 
@@ -568,7 +568,8 @@ const boot = async () => {
     setCockpitHead(false);
     audio.cylinders = V.P.cylinders;
     tpanel.setOpen(false); spanel.setOpen(false);
-    spanel.configure({ title: V.P.name, banks: !V.P.electricStart ? 0 : V.boat.systems2 ? 2 : 1, choke: !!V.P.carbureted, bilgePump: V.P.bilge.pumpLph > 0, lights: isBote ? "LANTERNA" : "LUZES" });
+    spanel.configure({ title: V.P.name, banks: !V.P.electricStart ? 0 : V.boat.systems2 ? 2 : 1,
+      keys: !V.P.electricStart || V.P.turbine ? [] : V.boat.units.length > 1 ? ["IGNIÇÃO BB", "IGNIÇÃO BE"] : ["IGNIÇÃO"], choke: !!V.P.carbureted, bilgePump: V.P.bilge.pumpLph > 0, lights: isBote ? "LANTERNA" : "LUZES" });
     lights = false; input.setLights(false);
     setNavLights(V.vis, false); V.dinghy?.setLantern(false);
     hud.setLights(false, isBote ? "LANTERNA" : "LUZES");
@@ -591,6 +592,7 @@ const boot = async () => {
     b.systems.gpu = false; lastGpuOff = b.systems.gpuAutoOff;
     for (const bk of b.banks) if (bk.p.hasBattery) bk.batterySoc = START_BATTERY; // bateria(s) a 60 %
     b.engine = "off"; // começa desligado: dê a partida (P)
+    for (const x of b.units) { x.key = "off"; x.manualCrank = false; x.testT = 0; }
     b.batterySel = "ind"; b.bilgeMode = "auto"; b.choke = false; b.systems.fuelValveOpen = true;
     if (b.params.carbureted) b.systems.coolantC = 24; // bote carburado: motor frio, pede o afogador
     b.coldEngines(); // (turbina parada e fria, N1 = 0)
@@ -649,6 +651,18 @@ const boot = async () => {
     setChoke: (on) => { V.boat.choke = on; hud.showToast(on ? "Afogador PUXADO (partida a frio)" : "Afogador EMPURRADO"); },
     setBilge: setBilgeMode,
     toggleLights: () => input.pushAction("lights"),
+    setKey: (i, pos) => {
+      const b = V.boat, before = b.units[i]?.key;
+      const r = b.setKey(i, pos);
+      const name = b.units.length > 1 ? (i === 0 ? " de bombordo" : " de boreste") : "";
+      if (r === "needNeutral") hud.showToast("Coloque em N para dar partida");
+      else if (r === "noPilot") hud.showToast("Ninguém no comando — o piloto está na água");
+      else if (r === "broken") hud.showToast("Motor avariado: não liga — R leva à oficina do píer");
+      else if (pos === "off" && before !== "off") hud.showToast(`Chave${name} em OFF: ignição desligada`);
+      else if (pos === "on" && before === "off") hud.showToast(b.units[i].testT > 0 ? `Chave${name} em ON — autoteste… segure START para dar partida` : `Chave${name} em ON — sem tensão: nem o autoteste apita`);
+    },
+    pullStart: () => { if (V.boat.engine !== "running") input.pushAction("ignition"); },
+    stopEngine: () => { if (V.boat.engine === "running") input.pushAction("ignition"); },
     close: () => spanel.setOpen(false),
   });
 
@@ -751,7 +765,7 @@ const boot = async () => {
     }
     else if (a === "lights") {
       lights = input.toggleLights();
-      setNavLights(V.vis, lights, boat.telemetry.batteryV * 12 / boat.telemetry.nominalV); V.dinghy?.setLantern(lights);
+      setNavLights(V.vis, lights, boat.telemetry.houseV * 12 / boat.telemetry.nominalV); V.dinghy?.setLantern(lights);
       hud.setLights(lights, V.dinghy ? "LANTERNA" : "LUZES");
     }
     else if (a === "reset") resetBoat();
@@ -1152,8 +1166,8 @@ const boot = async () => {
     // buzina: do veículo quando você está nele; senão do barco (segurar B, ou toque no botão = 0,22 s)
     hornPulse = Math.max(0, hornPulse - dtReal);
     // buzina elétrica da lancha: tom e volume caem com a tensão da bateria (o bote tem buzina de ar; o carro, bateria própria)
-    audio.setHorn(mode === "game" && (input.hornHeld || hornPulse > 0), driving || carOnly ? "car" : V.kind === "bote" ? "bote" : "lancha", !driving && !carOnly && V.boat.systems.p.hasBattery ? T.batteryV * 12 / T.nominalV : 12.6);
-    if (lights && V.vis.lights) setNavLights(V.vis, true, T.batteryV * 12 / T.nominalV); // luzes de navegação: brilho pela tensão
+    audio.setHorn(mode === "game" && (input.hornHeld || hornPulse > 0), driving || carOnly ? "car" : V.kind === "bote" ? "bote" : "lancha", !driving && !carOnly && V.boat.systems.p.hasBattery ? T.houseV * 12 / T.nominalV : 12.6);
+    if (lights && V.vis.lights) setNavLights(V.vis, true, T.houseV * 12 / T.nominalV); // luzes de navegação: brilho pela tensão
     if ((windHudT -= dtReal) <= 0) { windHudT = 0.25; hud.updateWind(wind.speed * MS_TO_KNOTS, wind.dirFrom - Math.atan2(boat.forward.x, boat.forward.z)); }
     hud.update(T, fpsSmooth, {
       "física (ms/frame)": physMs.toFixed(2),
