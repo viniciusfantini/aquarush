@@ -161,7 +161,7 @@ export class Turbine {
   start(): boolean {
     if (!this.fadec || this.starting || this.running || this.n1 > 8) return false;
     if (this.starterLockT > 0) { this.events.push("starterLocked"); return false; }
-    this.master = true; this.boostPump = true; this.ignition = false; this.fuelValve = false; this.starter = true; this.generator = false;
+    this.boostPump = true; this.ignition = false; this.fuelValve = false; this.starter = true; this.generator = false;
     this.seq = "start"; this.seqT = 0;
     this.events.push("starter");
     return true;
@@ -185,7 +185,7 @@ export class Turbine {
   // ---------------- manual ----------------
   /** Aciona uma chave do painel (só no modo manual). Devolve o novo estado. */
   setSwitch(s: TurbineSwitch, on: boolean): boolean {
-    if (this.fadec) return this[s];
+    if (this.fadec && s !== "master") return this[s]; // no FADEC só a chave geral (BAT) é do piloto
     if (s === "starter" && on && this.n1 > 50) { this.events.push("starterOverspeed"); return false; } // embreagem do starter não engata
     if (s === "starter" && on && this.starterLockT > 0) { this.events.push("starterLocked"); return false; } // ainda quente
     if (s === "fuelValve" && !on && this.lit) this.quietCut = true;

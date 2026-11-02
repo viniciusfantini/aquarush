@@ -46,7 +46,7 @@ import { BoatCamera } from "./presentation/cameras.ts";
 import { Hud } from "./presentation/hud.ts";
 import { EngineAudio } from "./presentation/audio.ts";
 
-const BUILD = "poc-babylon 0.56.0";
+const BUILD = "poc-babylon 0.57.0";
 /** Escala visual da rotação da hélice (proporcional ao RPM, abaixo do limite estroboscópico). */
 const PROP_VISUAL_SCALE = 0.12;
 
@@ -620,6 +620,7 @@ const boot = async () => {
         return;
       }
       tb.setSwitch(sw, on);
+      if (sw === "master") hud.showToast(on ? "Chave geral BAT ligada: bateria de 24 V no barramento" : "Chave geral BAT desligada: a bateria saiu do barramento");
     },
     fadecStart: () => { const tb = V.boat.units[0].turb; if (tb && !tb.running && !tb.starting) input.pushAction("ignition"); },
     fadecCut: () => { const tb = V.boat.units[0].turb; if (tb && (tb.running || tb.starting)) input.pushAction("ignition"); },
@@ -789,7 +790,8 @@ const boot = async () => {
       if (boat.params.turbine) {
         const tb = boat.telemetry.turbine;
         const tm: Record<string, string> = { stopped: tb && tb.phase === "running" ? "Combustível cortado" : "Partida abortada", starting: "Partida da turbina: arranque girando o gerador de gás…",
-          busy: `Turbina ainda girando (N1 ${tb ? tb.n1.toFixed(0) : 0} %) — espere passar de 8 % para nova partida`, needNeutral: "Coloque em N para dar partida", lowBattery: "Bateria descarregada: o arranque não gira — atraque na doca e conecte a GPU (J)" };
+          busy: `Turbina ainda girando (N1 ${tb ? tb.n1.toFixed(0) : 0} %) — espere passar de 8 % para nova partida`, needNeutral: "Coloque em N para dar partida", lowBattery: "Bateria descarregada: o arranque não gira — atraque na doca e conecte a GPU (J)",
+          noPower: "Sem energia no barramento: ligue a chave BAT no painel (Y) — ou a GPU na doca (J)" };
         if (tm[r]) { hud.showToast(tm[r]); return; }
       }
       const msg: Record<string, string> = { stopped: "Motor desligado", pulling: "Puxando a corda…", starting: "Chave ligada — autoteste…", busy: "Dando partida…", needNeutral: "Coloque em N para dar partida", noFuel: "Sem combustível — R para voltar ao píer e abastecer", lowBattery: "Bateria descarregada: nem o relé de partida arma — J conecta o jump start", hot: "Motor quente demais — espere esfriar" };
@@ -1140,7 +1142,7 @@ const boot = async () => {
     if (T.gear !== lastGear) { audio.clunk(T.gear !== "N"); lastGear = T.gear; }
     audio.update({
       rpm: T.rpm, throttle: T.throttle, speed: Math.hypot(boat.vel.x, boat.vel.z), boil: Math.max(T.cavitation, 1 - T.ventilation),
-      inGear: T.gear !== "N", propInWater: T.propImmersion > 0.5, revLimiter: T.revLimiter, cockpit: cam.mode === "cockpit", engine: T.engine, trimMotorA: T.trimMotorA, trimRelay: T.trimRelay, bilgeAlarm: mode === "game" && T.bilgeAlarm && !T.capsized && !T.sunk, bilgeFlowLps: T.bilgeFlowLps, windlassA: T.windlassA, apparentWind: T.apparentWind, anchorRelay: T.anchorRelay, buzzer: T.buzzer, starterRpm: T.starterRpm, pullStart: T.pullStart,
+      inGear: T.gear !== "N", propInWater: T.propImmersion > 0.5, revLimiter: T.revLimiter, cockpit: cam.mode === "cockpit", engine: T.engine, trimMotorA: T.trimMotorA, trimRelay: T.trimRelay, bilgeAlarm: mode === "game" && T.bilgeAlarm && !T.capsized && !T.sunk, bilgeFlowLps: T.bilgeFlowLps, bilgePumpOn: T.bilgePump && !T.sunk, bilgeWaterL: T.bilgeL, windlassA: T.windlassA, apparentWind: T.apparentWind, anchorRelay: T.anchorRelay, buzzer: T.buzzer, starterRpm: T.starterRpm, pullStart: T.pullStart,
       oilAlarm: mode === "game" && !!T.turbine?.oilHot && !T.sunk,
       // AR-9: o 2º V8 tem voz própria (rotação/carga/estado dele)
       ...(boat.units.length > 1 ? { rpm: T.rpms[0], throttle: T.throttles[0], rpm2: T.rpms[1], throttle2: T.throttles[1], engine2: T.engines[1], engine: T.engines[0] } : {}),

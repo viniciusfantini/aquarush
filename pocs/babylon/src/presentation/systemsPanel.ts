@@ -8,6 +8,7 @@
 
 import type { BoatTelemetry } from "../sim/boat.ts";
 import { makeDraggable } from "./dragPanel.ts";
+import { toggle, tri, rotary, pull, setToggle, setTri, setRotary, setPull, isOn } from "./switches.ts";
 
 export type BatterySel = "off" | "ind" | "bb" | "be" | "both";
 export type BilgeMode = "off" | "auto" | "on";
@@ -45,8 +46,8 @@ export class SystemsPanel {
       const d = b.dataset;
       if (b.classList.contains("tp-x")) this.act.close();
       else if (d.bat) this.act.setBattery(d.bat as BatterySel);
-      else if (d.fuel) this.act.setFuelValve(d.fuel === "open");
-      else if (d.choke) this.act.setChoke(d.choke === "on");
+      else if (d.fuel) this.act.setFuelValve(!isOn(b));
+      else if (d.choke) this.act.setChoke(!isOn(b));
       else if (d.bilge) this.act.setBilge(d.bilge as BilgeMode);
       else if (d.lights) this.act.toggleLights();
     });
@@ -55,21 +56,20 @@ export class SystemsPanel {
     this.setOpen(false);
   }
 
-  /** Monta os controles do barco ativo. */
+  /** Monta o painel de chaves do barco ativo. */
   configure(caps: SystemsPanelCaps): void {
     this.caps = caps;
-    const seg = (key: string, opts: [string, string][]) => `<div class="sp-seg">${opts.map(([v, l]) => `<button data-${key}="${v}">${l}</button>`).join("")}</div>`;
-    const row = (label: string, sub: string, ctl: string, info = "") => `<div class="sp-row"><div class="sp-lbl"><b>${label}</b><span>${sub}</span></div>${ctl}<div class="sp-info" data-info="${label}">${info}</div></div>`;
-    const rows: string[] = [];
-    if (caps.banks === 2) rows.push(row("BATERIAS", "chave geral dos dois bancos", seg("bat", [["off", "OFF"], ["ind", "IND."], ["bb", "BB"], ["be", "BE"], ["both", "AMBAS"]])));
-    else if (caps.banks === 1) rows.push(row("BATERIA", "chave geral", seg("bat", [["off", "OFF"], ["ind", "LIGADA"]])));
-    rows.push(row("COMBUSTÍVEL", "registro do tanque", seg("fuel", [["closed", "FECHADO"], ["open", "ABERTO"]])));
-    if (caps.choke) rows.push(row("AFOGADOR", "carburador: partida a frio", seg("choke", [["off", "EMPURRADO"], ["on", "PUXADO"]])));
-    if (caps.bilgePump) rows.push(row("BOMBA DE PORÃO", "boia automática ou manual", seg("bilge", [["off", "OFF"], ["auto", "AUTO"], ["on", "ON"]])));
-    rows.push(row(caps.lights, "navegação", `<div class="sp-seg"><button data-lights="1">LIGAR / DESLIGAR</button></div>`));
+    const cell = (ctl: string, info: string, wide = false) => `<div class="sw-cell${wide ? " wide" : ""}">${ctl}<div class="rd" data-info="${info}"></div></div>`;
+    const cells: string[] = [];
+    if (caps.banks === 2) cells.push(cell(rotary("bat", "BATERIAS", "chave geral · 2 bancos", [{ v: "off", l: "OFF" }, { v: "ind", l: "IND" }, { v: "bb", l: "BB" }, { v: "be", l: "BE" }, { v: "both", l: "AMBAS" }]), "bat", true));
+    else if (caps.banks === 1) cells.push(cell(rotary("bat", "BATERIA", "chave geral", [{ v: "off", l: "OFF" }, { v: "ind", l: "ON" }]), "bat", true));
+    cells.push(cell(toggle({ attr: "fuel", val: "1", label: "COMBUSTÍVEL", sub: "registro do tanque", on: "ABERTO", off: "FECHADO", variant: "red" }), "fuel"));
+    if (caps.choke) cells.push(cell(pull("choke", "1", "AFOGADOR", "partida a frio"), "choke"));
+    if (caps.bilgePump) cells.push(cell(tri("bilge", "BOMBA PORÃO", "boia ou manual", { v: "on", l: "ON" }, { v: "off", l: "OFF" }, { v: "auto", l: "AUTO" }), "bilge"));
+    cells.push(cell(toggle({ attr: "lights", val: "1", label: caps.lights, sub: "navegação" }), "lights"));
     this.el.innerHTML = `
       <div class="tp-head"><b>⠿ SISTEMAS — ${caps.title}</b><button class="tp-x" aria-label="fechar">×</button></div>
-      ${rows.join("")}
+      <div class="sw-plate"><span class="screw s1"></span><span class="screw s2"></span><span class="screw s3"></span><span class="screw s4"></span>${cells.join("")}</div>
       <p class="sp-note" data-note></p>`;
     makeDraggable(this.el, this.el.querySelector<HTMLElement>(".tp-head")!, "aquarush.spanelPos");
   }
@@ -79,20 +79,27 @@ export class SystemsPanel {
 
   update(t: BoatTelemetry, lightsOn: boolean): void {
     if (!this.open) return;
-    const sel = (key: string, v: string) => { for (const b of this.el.querySelectorAll<HTMLButtonElement>(`[data-${key}]`)) b.classList.toggle("on", b.dataset[key] === v); };
-    sel("bat", t.batterySel === "off" ? "off" : this.caps.banks === 1 ? "ind" : t.batterySel);
-    sel("fuel", t.fuelValveOpen ? "open" : "closed");
-    sel("choke", t.choke ? "on" : "off");
-    sel("bilge", t.bilgeMode);
-    for (const b of this.el.querySelectorAll<HTMLButtonElement>("[data-lights]")) b.classList.toggle("on", lightsOn);
-    const info = (label: string, txt: string) => { const e = this.el.querySelector<HTMLElement>(`[data-info="${label}"]`); if (e && e.textContent !== txt) e.textContent = txt; };
-    if (this.caps.banks === 2) info("BATERIAS", `BB ${t.batteryVs[0]?.toFixed(1)} V · BE ${t.batteryVs[1]?.toFixed(1)} V`);
-    else if (this.caps.banks === 1) info("BATERIA", `${t.batteryV.toFixed(1)} V · ${Math.round(t.batterySoc * 100)} %`);
-    info("COMBUSTÍVEL", t.fuelValveOpen ? `${t.fuelL.toFixed(1)} L no tanque` : `linha: ${Math.round(t.fuelLineFrac * 100)} %`);
-    if (this.caps.choke) info("AFOGADOR", t.coolantC < 40 ? `motor frio (${t.coolantC.toFixed(0)} °C)` : `motor quente (${t.coolantC.toFixed(0)} °C)`);
-    if (this.caps.bilgePump) info("BOMBA DE PORÃO", `${t.bilgePump ? "bombeando" : "parada"} · ${t.bilgeL.toFixed(0)} L`);
-    info(this.caps.lights, lightsOn ? "acesas" : "apagadas");
-    const note = this.el.querySelector<HTMLElement>("[data-note]")!;
+    const el = this.el;
+    setRotary(el, "bat", t.batterySel === "off" ? "off" : this.caps.banks === 1 ? "ind" : t.batterySel);
+    setToggle(el, "fuel", "1", t.fuelValveOpen);
+    setPull(el, "choke", t.choke);
+    setTri(el, "bilge", t.bilgeMode);
+    setToggle(el, "lights", "1", lightsOn);
+    // a lâmpada da bomba acende quando o motor dela está girando (em AUTO, só com a boia)
+    for (const c of el.querySelectorAll<HTMLElement>(".tri[data-tri=bilge]")) c.classList.toggle("run", t.bilgePump);
+    const info = (k: string, txt: string, warn = false) => {
+      const e = el.querySelector<HTMLElement>(`[data-info="${k}"]`);
+      if (!e) return;
+      if (e.textContent !== txt) e.textContent = txt;
+      e.classList.toggle("warn", warn);
+    };
+    if (this.caps.banks === 2) info("bat", `BB ${t.batteryVs[0]?.toFixed(1)} V · BE ${t.batteryVs[1]?.toFixed(1)} V`, t.batterySel === "off");
+    else if (this.caps.banks === 1) info("bat", `${t.batteryV.toFixed(1)} V · ${Math.round(t.batterySoc * 100)} %`, t.batterySel === "off");
+    info("fuel", t.fuelValveOpen ? `${t.fuelL.toFixed(1)} L no tanque` : `linha ${Math.round(t.fuelLineFrac * 100)} %`, !t.fuelValveOpen);
+    if (this.caps.choke) info("choke", `motor ${t.coolantC < 40 ? "frio" : "quente"} · ${t.coolantC.toFixed(0)} °C`, t.choke && t.coolantC > 45);
+    if (this.caps.bilgePump) info("bilge", `${t.bilgePump ? "bombeando" : "parada"} · ${t.bilgeL.toFixed(0)} L`, t.bilgeMode === "off" && t.bilgeL > 20);
+    info("lights", lightsOn ? "acesas" : "apagadas");
+    const note = el.querySelector<HTMLElement>("[data-note]")!;
     const n = !t.fuelValveOpen && t.engine === "running" ? "Registro FECHADO: o motor vai morrer quando acabar o combustível da linha."
       : this.caps.choke && t.choke && t.coolantC > 45 && t.engine === "running" ? "Motor quente com o afogador puxado: mistura rica — empurre o afogador antes que ele afogue."
       : this.caps.choke && !t.choke && t.coolantC < 40 && t.engine !== "running" ? "Motor frio: puxe o afogador para dar a partida (e empurre quando ele esquentar)."

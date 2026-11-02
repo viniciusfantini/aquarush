@@ -13,6 +13,7 @@ import type { BoatTelemetry } from "../sim/boat.ts";
 import type { TurbineSwitch } from "../sim/turbine.ts";
 import { RoundGauge } from "./hud.ts";
 import { makeDraggable } from "./dragPanel.ts";
+import { toggle, tri, setToggle, setTri, isOn } from "./switches.ts";
 
 export type PanelSwitch = TurbineSwitch | "extPwr";
 
@@ -27,14 +28,14 @@ export interface TurbinePanelActions {
   close(): void;
 }
 
-const SWITCHES: { id: PanelSwitch; label: string; sub: string }[] = [
-  { id: "master", label: "BATERIA", sub: "relé da bateria (BAT)" },
-  { id: "extPwr", label: "EXT PWR", sub: "relé da GPU no barramento" },
-  { id: "boostPump", label: "BOMBA COMB.", sub: "pressão de combustível" },
-  { id: "starter", label: "STARTER", sub: "gira o gerador de gás" },
-  { id: "ignition", label: "IGNIÇÃO", sub: "velas (tic-tic)" },
-  { id: "fuelValve", label: "COMBUSTÍVEL", sub: "CORTE ↔ MARCHA LENTA" },
-  { id: "generator", label: "GERADOR", sub: "starter-gerador → barramento" },
+const SWITCHES: { id: PanelSwitch; label: string; sub: string; on?: string; off?: string; variant?: "" | "red" | "guard" }[] = [
+  { id: "master", label: "BAT", sub: "chave geral 24 V" },
+  { id: "extPwr", label: "EXT PWR", sub: "relé da GPU", on: "FECH", off: "ABERTO" },
+  { id: "boostPump", label: "BOMBA COMB.", sub: "pressão" },
+  { id: "starter", label: "STARTER", sub: "gira o N1", variant: "guard" },
+  { id: "ignition", label: "IGNIÇÃO", sub: "velas" },
+  { id: "fuelValve", label: "COMBUSTÍVEL", sub: "condição", on: "LENTA", off: "CORTE", variant: "red" },
+  { id: "generator", label: "GERADOR", sub: "→ barramento" },
 ];
 
 export class TurbinePanel {
@@ -59,7 +60,7 @@ export class TurbinePanel {
         <p>O FADEC faz a sequência: EXT PWR (com a GPU estável) → starter → ignição e combustível a 12 % N1 → acende → starter e ignição desligam a 45 % → marcha lenta 62 % → GERADOR ligado e EXT PWR aberto. Aborta sozinho partida pendurada, sem acendimento e quente (EGT &gt; 780 °C).</p>
       </div>
       <div class="tp-manual">
-        <div class="tp-sw">${SWITCHES.map((s, i) => `<button data-s="${s.id}"><i>${i + 1}</i><b>${s.label}</b><span>${s.sub}</span><em>OFF</em></button>`).join("")}</div>
+        <div class="sw-plate tp-sw"><span class="screw s1"></span><span class="screw s2"></span><span class="screw s3"></span><span class="screw s4"></span>${SWITCHES.map((s, i) => toggle({ attr: "s", val: s.id, label: s.label, sub: s.sub, on: s.on, off: s.off, variant: s.variant, num: i + 1 })).join("")}</div>
         <ol>
           <li>uma fonte no barramento: BATERIA e/ou a GPU (cabo com J, espere ela estabilizar e feche o EXT PWR)</li>
           <li>BOMBA ligada; STARTER: o N1 sobe</li>
@@ -69,9 +70,13 @@ export class TurbinePanel {
           <li>marcha lenta (N1 62 %, EGT ~480 °C, óleo ~70 psi): ligue o <b>GERADOR</b> e abra o <b>EXT PWR</b></li>
         </ol>
       </div>
-      <div class="tp-sys"><span>SISTEMAS</span>
-        <b>REGISTRO DO TANQUE</b><div class="sp-seg"><button data-tank="closed">FECHADO</button><button data-tank="open">ABERTO</button></div>
-        <b>BOMBA DE PORÃO</b><div class="sp-seg"><button data-bilge="off">OFF</button><button data-bilge="auto">AUTO</button><button data-bilge="on">ON</button></div></div>
+      <div class="tp-sys"><span class="tp-sys-t">SISTEMAS</span>
+        <div class="sw-plate"><span class="screw s1"></span><span class="screw s2"></span><span class="screw s3"></span><span class="screw s4"></span>
+          ${toggle({ attr: "bat", val: "1", label: "BAT", sub: "chave geral 24 V", cls: "only-fadec" })}
+          ${toggle({ attr: "tank", val: "1", label: "TANQUE", sub: "registro", on: "ABERTO", off: "FECHADO", variant: "red" })}
+          ${tri("bilge", "BOMBA PORÃO", "boia ou manual", { v: "on", l: "ON" }, { v: "off", l: "OFF" }, { v: "auto", l: "AUTO" })}
+          <div class="tp-sys-rd"><span data-rd="bat"></span><span data-rd="tank"></span><span data-rd="bilge"></span></div>
+        </div></div>
       <div class="tp-foot"><button data-g="gpu">GPU (J)</button><span data-note></span><span data-wear></span></div>`;
     el.addEventListener("click", (e) => {
       const b = (e.target as HTMLElement).closest<HTMLButtonElement>("button");
@@ -81,9 +86,10 @@ export class TurbinePanel {
       else if (b.dataset.f === "start") this.act.fadecStart();
       else if (b.dataset.f === "cut") this.act.fadecCut();
       else if (b.dataset.g) this.act.gpu();
-      else if (b.dataset.tank) this.act.setFuelTank(b.dataset.tank === "open");
+      else if (b.dataset.tank) this.act.setFuelTank(!isOn(b));
       else if (b.dataset.bilge) this.act.setBilge(b.dataset.bilge as "off" | "auto" | "on");
-      else if (b.dataset.s) this.act.setSwitch(b.dataset.s as PanelSwitch, !b.classList.contains("on"));
+      else if (b.dataset.bat) this.act.setSwitch("master", !isOn(b));
+      else if (b.dataset.s) this.act.setSwitch(b.dataset.s as PanelSwitch, !isOn(b));
     });
     document.body.appendChild(el);
     this.el = el;
@@ -130,14 +136,16 @@ export class TurbinePanel {
     };
     for (const s of this.el.querySelectorAll<HTMLElement>("[data-a]")) s.className = ann[s.dataset.a ?? ""] ?? "";
     const sw: Record<PanelSwitch, boolean> = { master: tb.master, extPwr: t.extPwrClosed, boostPump: tb.boostPump, starter: tb.starterSw, ignition: tb.ignitionSw, fuelValve: tb.fuelValve, generator: tb.generator };
-    for (const b of this.el.querySelectorAll<HTMLButtonElement>("[data-s]")) {
-      const id = b.dataset.s as PanelSwitch;
-      const pos = sw[id]; // posição da chave (mesmo sem energia no barramento)
-      b.classList.toggle("on", pos);
-      b.querySelector("em")!.textContent = id === "fuelValve" ? (pos ? "LENTA" : "CORTE") : pos ? "ON" : "OFF";
-    }
-    for (const b of this.el.querySelectorAll<HTMLButtonElement>("[data-tank]")) b.classList.toggle("on", (b.dataset.tank === "open") === t.fuelValveOpen);
-    for (const b of this.el.querySelectorAll<HTMLButtonElement>("[data-bilge]")) b.classList.toggle("on", b.dataset.bilge === t.bilgeMode);
+    // posição das chaves (mesmo sem energia no barramento); o LED de cada uma acende com a função ativa
+    for (const id of Object.keys(sw) as PanelSwitch[]) setToggle(this.el, "s", id, sw[id]);
+    setToggle(this.el, "bat", "1", tb.master);
+    setToggle(this.el, "tank", "1", t.fuelValveOpen);
+    setTri(this.el, "bilge", t.bilgeMode);
+    for (const c of this.el.querySelectorAll<HTMLElement>(".tri[data-tri=bilge]")) c.classList.toggle("run", t.bilgePump);
+    const rd = (k: string, txt: string) => { const e = this.el.querySelector<HTMLElement>(`[data-rd="${k}"]`); if (e && e.textContent !== txt) e.textContent = txt; };
+    rd("bat", `bateria ${Math.round(t.batterySoc * 100)} % · ${t.busBattery ? "no barramento" : "fora"}`);
+    rd("tank", t.fuelValveOpen ? `tanque ${t.fuelL.toFixed(0)} L` : `linha ${Math.round(t.fuelLineFrac * 100)} %`);
+    rd("bilge", `porão ${t.bilgeL.toFixed(0)} L · bomba ${t.bilgePump ? "girando" : "parada"}`);
     this.q<HTMLButtonElement>("[data-g]").textContent = t.gpu ? (t.gpuState === "online" ? "cabo da GPU: recolher (J)" : "GPU partindo… (J)") : "conectar o cabo da GPU (J, só na doca)";
     this.q<HTMLElement>("[data-note]").textContent = tb.pooledL > 0.01 ? `combustível na câmara: ${tb.pooledL.toFixed(2)} L` : "";
     this.q<HTMLElement>("[data-wear]").textContent = tb.seized ? "TURBINA DESTRUÍDA (sobretemperatura) — R leva à oficina"

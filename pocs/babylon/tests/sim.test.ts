@@ -888,6 +888,16 @@ for (const [label, thr] of [["baixa", 0.25], ["alta", 1]] as const) {
   dry.toggleIgnition();
   const dEv: string[] = [];
   run(dry, water, 30, N, openWater, () => dEv.push(...dry.units[0].turb!.drainEvents()));
+  // molinete elétrico da âncora (24 V) puxa do barramento; FADEC com a chave BAT desligada não parte
+  {
+    const an = mk(); an.coldEngines(); an.systems.batterySoc = 0.8;
+    run(an, water, 1, N);
+    const a0 = an.telemetry.batteryA;
+    run(an, water, 3, { ...N, anchor: 1 });
+    check("turbina", "molinete da âncora pagando cabo: corrente da bateria (A, 24 V)", an.telemetry.batteryA - a0, -45, -15, "A", 0);
+    const nb = mk(); nb.coldEngines(); nb.units[0].turb!.master = false;
+    check("turbina", "FADEC com a chave BAT desligada (sem GPU): partida recusada", nb.toggleIgnition() === "noPower" ? 1 : 0, 1, 1, "", 0);
+  }
   // ---- partida MANUAL pelo painel (chave por chave) ----
   const manual = () => { const x = mk(); x.coldEngines(); x.systems.batterySoc = 0.6; const tb = x.units[0].turb!; tb.setFadec(false); tb.cold(); return { x, tb }; };
   {

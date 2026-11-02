@@ -41,6 +41,7 @@ src/
     turbinePanel.ts         painel de partida da turbina (Y): FADEC ou manual com as chaves + sistemas
     systemsPanel.ts         painel de sistemas (Y) dos barcos a pistão: baterias, registro, afogador, bomba de porão, luzes
     dragPanel.ts            janelas arrastáveis pela barra de título (posição salva)
+    switches.ts             chaves de painel em CSS: alavanca, 3 posições, seletor rotativo, puxador
     environment.ts          terreno, árvores, píer, marina, restaurante, piscina
     boatMesh.ts / dinghyMesh.ts / rapidaMesh.ts / turbineMesh.ts   as 4 embarcações procedurais (PBR): motores, rabetas,
                             transmissão de superfície, hélices, canopy e escape da turbina
@@ -91,6 +92,19 @@ A lancha é um **corpo rígido 6DOF** (massa seca de 1030 kg + gasolina, ocupant
 | Avarias | casco: pico de contato > 4× o peso; motor: pé raspando o fundo andando, baixar o motor contra o chão, batidas na carretinha/carro. Casco avariado arrasta mais e abre o furo do porão |
 
 **Água compartilhada:** `GerstnerWater.shaderParams()` envia ao shader exatamente as ondas que a física consulta. `getHeight` inverte o deslocamento horizontal de Gerstner por iteração de ponto fixo. No teste, o desvio médio entre o casco e a superfície é de 3 cm.
+
+## Chaves de painel (v0.57)
+
+Os painéis do Y usam chaves desenhadas em CSS (`presentation/switches.ts`, estilos em `index.html`), sobre uma placa com parafusos:
+
+- **alavanca** (`toggle`): haste de inox com ponta esférica, porca sextavada, legendas gravadas em cima/embaixo e LED verde. Variantes: haste de ponta vermelha (combustível, condição da turbina) e **capa de proteção** vermelha que levanta (STARTER);
+- **alavanca de 3 posições** (`tri`): bomba de porão ON / OFF / AUTO. O LED fica âmbar quando a bomba está armada e verde quando o motor dela está girando;
+- **seletor rotativo** (`rotary`): chave geral de baterias com punho vermelho (OFF / ON; na AR-9 OFF / IND / BB / BE / AMBAS);
+- **puxador** (`pull`): afogador do bote, que sai do painel e mostra a haste quando puxado.
+
+**AR-10, baterias:** barcos a turbina desse porte usam um banco de 24 V (duas baterias de 12 V em série) com **chave geral** (BAT); alguns barcos de corrida têm uma segunda bateria só para os instrumentos e o FADEC. Aqui é um banco com a chave BAT. Ela fica no painel nos dois modos: no FADEC é do piloto (a automação não a liga), e sem BAT e sem GPU o P responde "sem energia no barramento". A âncora da AR-10 ganhou **molinete elétrico** (35 A reais a 24 V).
+
+**Som da bomba de porão:** zumbido do motor DC sempre que a bomba gira (ON mesmo seca, ou AUTO com a boia), mais agudo seca e mais grave bombeando; o chiado da água do jato continua à parte.
 
 ## Painel de sistemas (v0.56, tecla Y)
 
@@ -230,6 +244,7 @@ Limitação: é uma síntese aproximada, não uma gravação. Validar o timbre d
 | Recarregar (v0.19) | ciclo completo para lancha e bote: carregar, rebocar 6 s, voltar de ré (o veículo para com as rodas na água), soltar, sair de ré e carregar de novo na carretinha deslocada: encaixa e prende a cinta (lancha 19,7 s, bote 13,7 s), a proa não atravessa o batente, sem avaria (`node tests/debug-reload.ts [lancha|bote]`) |
 | Avarias e desengate (v0.18) | lancha contra pedra a 15 km/h: casco 17 %, motor 0 %; a 40 km/h: casco 100 %; raso de 0,75 m a 30 km/h com o motor baixado: motor quebrado, não liga; navegando normal a toda: 0 %; R repara. Subir na carretinha com o motor levantado (trim + 8° de tilt): 0 %; soltar a cinta e dar ré devagar com o motor levantado: sai do berço e flutua a 15 m do guincho, sem avaria. Rebocar com o motor baixado: o pé arrasta (100 %); levantado: 0 % |
 | Veículo de reboque (v0.17) | carro e caminhonete: começam com a carretinha exatamente onde estava estacionada; parados na rampa não descem; 8 s acelerando tiram a carretinha da água (traseira 1,9 m acima d'água) a 14–17 km/h, em linha reta alinhada (0°); S freia e engata a ré (−2,5 m/s); de ré virando a carretinha dobra até o batente (80°); andando para a frente realinha (≤4,3°) |
+| Chaves de painel (v0.57) | molinete da AR-10 pagando cabo: −16 A na bateria de 24 V (critério −45…−15 A; no navegador −9,7 → −25,4 A). FADEC com BAT desligada e sem GPU: partida recusada ("noPower"; no navegador o aviso aparece e a fase fica "off"). No navegador: chaves da AR-6 (rotativa ON/OFF), do bote (afogador puxado), da AR-9 (rotativa de 5 posições em BB, registro fechado, bomba em ON girando seca) e da AR-10 (FADEC: BAT/TANQUE/BOMBA; MANUAL: 7 alavancas numeradas, capa no STARTER) |
 | Painel de sistemas (v0.56) | registro fechado: a AR-6 em marcha lenta morre em 96 s (combustível da linha), motivo "combustível"; aberto de novo, pega em 2,3 s. Bomba de porão: OFF não tira (80 L), AUTO esvazia, ON liga seca. Afogador (bote frio, 40 tentativas): sem 7 %, com 85 % por puxada; quente com o afogador: afoga em 15 s. AR-9 com o banco BE zerado: IND. 1 motor, BB 2, BE 0, AMBAS iguala a carga e 2, OFF 0. No navegador: painéis da AR-9 (chave com 5 posições), do bote (afogador com a dica de motor frio) e da AR-10 (relógios maiores + sistemas) |
 | HUD em duas faixas (v0.55.1) | no navegador: barras + relógios grandes em cima e os pequenos alinhados numa linha embaixo, centralizados, nos 4 barcos (bote 2, AR-6 4, AR-9 6, AR-10 7); a popa e a hélice da AR-10 aparecem acima do HUD |
 | Hélice, GPU e layout (v0.55) | GPU: tirando o cabo, fica em "stopping" sem energia e desliga 4,0 s depois. No navegador: tela da GPU ON −0,7 kW → STOPPING 0,0 kW (1500 rpm) → STOP; painel no alto à direita sem tocar o HUD e arrastado para outra posição (salva); câmera com o barco acima dos relógios (popa e hélice visíveis); a hélice nova vista de perto embaixo d'água (render em resolução baixa nessa distância) |
@@ -267,7 +282,7 @@ Limitação: é uma síntese aproximada, não uma gravação. Validar o timbre d
 | 6. Ondas e correnteza | ondas fortes (×2,5): roll ≤ 30°, não emborca; deriva com correnteza de 1,6 m/s: 1,54 m/s |
 | Lago | flutua no spawn; a toda contra a margem, encalha e para sem atravessar o terreno |
 
-Resultado: **537/539 OK + 2 KNOWN** (v0.56.0). Na v0.10, o peso do piloto na posição real (boreste, acima do CG) aumentou o roll em curva com ondas fortes; o `bankCoef` foi para 1800 e o `rollDamping` para 15000, com 1 limitação conhecida (abaixo). Na v0.2 a hélice foi para 0,5 m atrás do espelho, como no modelo visual, e o esterço máximo em alta velocidade caiu de 13° para 11°.
+Resultado: **539/541 OK + 2 KNOWN** (v0.57.0). Na v0.10, o peso do piloto na posição real (boreste, acima do CG) aumentou o roll em curva com ondas fortes; o `bankCoef` foi para 1800 e o `rollDamping` para 15000, com 1 limitação conhecida (abaixo). Na v0.2 a hélice foi para 0,5 m atrás do espelho, como no modelo visual, e o esterço máximo em alta velocidade caiu de 13° para 11°.
 
 ### Navegador (Chrome, Windows 11, WebGL2, `q=med`, ~1370×896)
 

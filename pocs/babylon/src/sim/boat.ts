@@ -1319,7 +1319,7 @@ export class Speedboat {
    * Ignição (tecla P): desliga o motor ou dá partida. Por segurança (como nos motores reais),
    * a partida só funciona em NEUTRO. Retorna o que aconteceu.
    */
-  toggleIgnition(): "stopped" | "starting" | "pulling" | "needNeutral" | "busy" | "noFuel" | "lowBattery" | "hot" | "noPilot" | "broken" | "manual" {
+  toggleIgnition(): "stopped" | "starting" | "pulling" | "needNeutral" | "busy" | "noFuel" | "lowBattery" | "hot" | "noPilot" | "broken" | "manual" | "noPower" {
     if (!this.occupants.some((o) => o.seat === "helm")) return "noPilot";
     if (this.engine !== "running" && this.engineDamage >= 0.95) return "broken";
     if (this.engine === "running") { this.engine = "off"; return "stopped"; }
@@ -1331,6 +1331,8 @@ export class Speedboat {
       if (tb.starting) { tb.abort(); return "stopped"; }
       if (tb.n1 > 8) return "busy"; // ainda girando (spool-down): espere parar
       if (this.gear !== "N") return "needNeutral";
+      // sem fonte no barramento (chave BAT desligada e sem GPU) o FADEC nem acorda
+      if (!tb.master && !this.systems.extOnline) return "noPower";
       if (this.systems.canStart() === "battery") return "lowBattery";
       this.telemetry.stall = ""; this.telemetry.startFail = "";
       tb.start();

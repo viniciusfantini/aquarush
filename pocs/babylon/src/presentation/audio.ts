@@ -72,6 +72,8 @@ export interface AudioState {
   pullStart?: boolean;    // partida na corda (sem motor de arranque elétrico)
   bilgeAlarm?: boolean;   // alarme de porão (bipe intermitente)
   bilgeFlowLps?: number;  // jato da bomba de porão caindo na água
+  bilgePumpOn?: boolean;  // motor da bomba de porão girando (mesmo seca)
+  bilgeWaterL?: number;   // água no porão (a bomba seca gira mais leve e aguda)
   windlassA?: number;     // molinete da âncora (A)
   apparentWind?: number;  // vento aparente (m/s): chiado do vento
   anchorRelay?: boolean;  // molinete sem força: só o relé
@@ -148,6 +150,8 @@ export class EngineAudio {
   private pumpGain!: GainNode;
   private alarmGain!: GainNode;
   private bilgeGain!: GainNode;
+  private bilgeMotorOsc!: OscillatorNode;
+  private bilgeMotorGain!: GainNode;
   private winchOsc!: OscillatorNode;
   private winchGain!: GainNode;
   private underLP!: BiquadFilterNode;
@@ -375,6 +379,12 @@ export class EngineAudio {
     const bgBP = ctx.createBiquadFilter(); bgBP.type = "bandpass"; bgBP.frequency.value = 1400; bgBP.Q.value = 0.7;
     this.bilgeGain = ctx.createGain(); this.bilgeGain.gain.value = 0;
     noiseSrc().connect(bgBP).connect(this.bilgeGain).connect(this.master);
+    // ---- motor da bomba de porão (DC 12 V, centrífuga): zumbido sob o piso, abafado ----
+    this.bilgeMotorOsc = ctx.createOscillator(); this.bilgeMotorOsc.type = "sawtooth"; this.bilgeMotorOsc.frequency.value = 190;
+    const bmBP = ctx.createBiquadFilter(); bmBP.type = "bandpass"; bmBP.frequency.value = 520; bmBP.Q.value = 1.6;
+    const bmLP = ctx.createBiquadFilter(); bmLP.type = "lowpass"; bmLP.frequency.value = 1400;
+    this.bilgeMotorGain = ctx.createGain(); this.bilgeMotorGain.gain.value = 0;
+    this.bilgeMotorOsc.connect(bmBP).connect(bmLP).connect(this.bilgeMotorGain).connect(this.master); this.bilgeMotorOsc.start();
     // ---- vento: chiado grave que abre com a velocidade (rajadas) ----
     this.windLP = ctx.createBiquadFilter(); this.windLP.type = "lowpass"; this.windLP.frequency.value = 300; this.windLP.Q.value = 0.8;
     this.windGain = ctx.createGain(); this.windGain.gain.value = 0;
@@ -506,6 +516,10 @@ export class EngineAudio {
     // alarme de porão: 0,25 s ligado a cada 0,6 s
     this.alarmGain.gain.setTargetAtTime(m * (st.bilgeAlarm && t % 0.6 < 0.25 ? 0.035 : 0), t, 0.005);
     this.bilgeGain.gain.setTargetAtTime(m * Math.min(0.06, 0.05 * (st.bilgeFlowLps ?? 0)), t, 0.1);
+    // motor da bomba: seca = rotor solto (mais agudo, com um chiado de ar); com água = carregada (mais grave)
+    const bilgeWet = (st.bilgeWaterL ?? 0) > 6 && (st.bilgeFlowLps ?? 0) > 0.05;
+    this.bilgeMotorGain.gain.setTargetAtTime(m * (st.bilgePumpOn ? 0.03 : 0), t, st.bilgePumpOn ? 0.08 : 0.25); // desligando: o rotor desacelera
+    this.bilgeMotorOsc.frequency.setTargetAtTime(st.bilgePumpOn ? (bilgeWet ? 165 : 215) + 4 * Math.sin(t * 9) : 60, t, st.bilgePumpOn ? 0.15 : 0.35);
     const aw = st.apparentWind ?? 0;
     this.windGain.gain.setTargetAtTime(m * Math.min(0.12, 0.00025 * aw * aw), t, 0.3);
     this.windLP.frequency.setTargetAtTime(250 + 45 * aw, t, 0.3);

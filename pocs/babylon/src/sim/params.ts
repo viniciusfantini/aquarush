@@ -563,7 +563,8 @@ export const TURBINA: SpeedboatParams = {
   // cabine fechada: sem cockpit aberto para alagar (só a praça de máquinas e o poço do piloto)
   bilge: { pos: v3(0, -0.38, -2.8), maxL: 11000, pumpLph: 5700, pumpA: 5.5, outlet: v3(1.22, 0.22, -3.5), areaM2: 2.0, holeMaxM2: 0.005, bowRise: 0.25, transomY: 0.5, transomW: 0.4,
     sumpL: 1000, floorY: 0.0, floodCenter: v3(0, 0, -0.6), floodLen: 2.0, floodHalfW: 0.5, scupperM2: 0, scupperFromStern: 0.6, shutoffHeadM: 2.7, outletAreaM2: 6.42e-4, capsizeAirFrac: 0.6, ventM2: 1e-5 },
-  anchor: { roller: v3(0, 0.7, 4.9), rodeMax: 30, rateOut: 0.6, rateIn: 0.35, motorA: 0, holdN: 5000 }, // âncora à mão (sem molinete)
+  // molinete elétrico no barramento de 24 V: ~35 A reais (70 A no equivalente 12 V)
+  anchor: { roller: v3(0, 0.7, 4.9), rodeMax: 40, rateOut: 0.8, rateIn: 0.5, motorA: 70, holdN: 5000 },
 
   enginePowerHp: 1100,
   turbine: {
