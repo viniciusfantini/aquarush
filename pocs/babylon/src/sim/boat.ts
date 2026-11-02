@@ -13,6 +13,7 @@ import { type PhysicsWorld, frameQuat } from "./world.ts";
 import type { SpeedboatParams, Occupant, SeatId } from "./params.ts";
 import { PERSON_KG } from "./params.ts";
 import { ENGINE_SYSTEMS } from "./engineSystems.ts";
+import { Turbine, type TurbinePhase } from "./turbine.ts";
 import { type VehicleInput, emptyInput } from "../gameplay/vehicleInput.ts";
 
 const NO_PILOT: VehicleInput = emptyInput();
@@ -115,6 +116,8 @@ export interface BoatTelemetry {
   thrusts: number[];
   engines: EngineState[];
   propRpms: number[];
+  /** turbina (lancha de turbina): N1/N2 %, EGT °C, torque %, óleo psi, fase da partida */
+  turbine: { n1: number; n2: number; egt: number; torque: number; oilPsi: number; fuelLph: number; phase: TurbinePhase; starter: boolean; ignition: boolean; lit: boolean; egtWarn: boolean; hotStarts: number } | null;
   /** por motor/banco (AR-9: cada V8 tem arrefecimento e banco de bateria próprios) */
   coolants: number[];
   batteryVs: number[];
@@ -152,6 +155,10 @@ export class EngineUnit {
   cavitation = 0; propRpmState = 0; immersion = 1; revLimiting = false; limiterPhase = 0; lastThrust = 0; pullCatch = false;
   // última passada da física (telemetria / efeitos)
   axial = 0; ventilation = 1; slip = 0; propW: Vec3 = v3(); intakeSubmerged = true; fuelLph = 0;
+  /** turbina a gás (lancha de turbina); null = motor a pistão */
+  turb: Turbine | null = null;
+  /** carga da hélice para a turbina livre (1 = absorve o torque nominal a 100 % N2) */
+  propLoad = 0.12;
   constructor(index: number, offsetX: number) { this.index = index; this.offsetX = offsetX; }
 }
 
@@ -172,7 +179,16 @@ export class Speedboat {
     if (this.inUnit || this.units.length === 1) return this.u.engine;
     return this.units.some((x) => x.engine === "running") ? "running" : this.units.some((x) => x.engine === "cranking") ? "cranking" : "off";
   }
-  set engine(v: EngineState) { if (this.inUnit) this.u.engine = v; else for (const x of this.units) x.engine = v; }
+  set engine(v: EngineState) {
+    const apply = (x: EngineUnit) => {
+      x.engine = v;
+      // turbina: "desligar" = corta o combustível (spool-down); "ligar" (testes) = marcha lenta
+      if (x.turb) { if (v === "off" && x.turb.phase !== "off") x.turb.cutFuel(); else if (v === "running") x.turb.idle(); }
+    };
+    if (this.inUnit) apply(this.u); else for (const x of this.units) apply(x);
+  }
+  /** Turbinas paradas e frias (reposicionar no píer); os motores a pistão só desligam. */
+  coldEngines(): void { for (const x of this.units) { x.engine = "off"; x.rpm = 0; x.turb?.cold(); } }
   get gear(): Gear { return this.u.gear; }
   set gear(v: Gear) { if (this.inUnit) this.u.gear = v; else for (const x of this.units) x.gear = v; }
   private get wantGear(): Gear { return this.u.wantGear; }
@@ -307,6 +323,7 @@ export class Speedboat {
   constructor(params: SpeedboatParams, pos: Vec3, headingRad = 0) {
     this.params = params;
     this.units = (params.engines ?? [{ x: 0 }]).map((e, i) => new EngineUnit(i, e.x));
+    if (params.turbine) for (const x of this.units) { x.turb = new Turbine(params.turbine); x.rpm = params.idleRpm; }
     this.u = this.units[0];
     this.anchor = new AnchorGear(params.anchor);
     this.systems = new EngineSystems({ ...ENGINE_SYSTEMS, ...params.systems, tankLiters: params.tankLiters, hasBattery: params.electricStart });
@@ -321,7 +338,7 @@ export class Speedboat {
       gear: "N", pitchDeg: 0, rollDeg: 0, wetFraction: 0, planing: false, thrustN: 0, ventilation: 1, cavitation: 0, propImmersion: 1, revLimiter: false, propSlip: 0, propRpm: 0, engine: "running", fuelL: 0, fuelFrac: 1, coolantC: 45, batteryV: 12.6, engineHours: 0, overheatWarn: false, protectMode: false, lowFuel: false, chargeWarn: false, stall: "", trimMotorA: 0, trimRelay: false, jumper: false, jumpCharge: 1, batteryA: 0, bilgeL: 0, bilgeInflowLps: 0, bilgePump: false, bilgeFlowLps: 0, bilgeAlarm: false, bilgeJetPos: v3(), bilgeJetVel: v3(), freeboard: 1, swamped: false, sunk: false, airPocketL: 0,
       anchorOut: 0, anchorState: "recolhida", anchorDepth: 0, anchorScope: 0, anchorTension: 0, anchorRelay: false, windlassA: 0, apparentWind: 0, neutralRev: false, fuelLph: 0, buzzer: false, starterRpm: 0, startFail: "", batterySoc: 0.92, trimPin: 0, pullStart: !params.electricStart,
       distanceM: 0, collisions: 0, draftHull: 0, draftMotor: 0, capsized: false, swimmers: 0, hullDamage: 0, engineDamage: 0, damageEvent: "", damageCount: 0, lastImpact: 0, depth: 0, submergedPoints: params.buoyancyPoints.map(() => false),
-      rpms: [params.idleRpm], gears: ["N"], throttles: [0], thrusts: [0], engines: ["running"], propRpms: [0], coolants: [45], batteryVs: [12.6], batterySocs: [0.92], batteryAs: [0],
+      rpms: [params.idleRpm], gears: ["N"], throttles: [0], thrusts: [0], engines: ["running"], propRpms: [0], coolants: [45], batteryVs: [12.6], batterySocs: [0.92], batteryAs: [0], turbine: null,
     };
   }
 
@@ -510,12 +527,28 @@ export class Speedboat {
       // ré a toda, hélice "patinando") forma bolhas de vapor -> perde empuxo e a rotação sobe.
       const slip = this.gear === "N" ? 0 : clamp(1 - Math.abs(axial) / P.propPitchSpeed, 0, 1);
       const load = Math.abs(thrust) / P.maxThrust;
-      const cavTarget = immersion > 0.9 && this.engine === "running" ? clamp((load * slip - 0.55) / 0.25, 0, 1) : 0;
-      this.cavitation += (cavTarget - this.cavitation) * (1 - Math.exp(-dt / 0.15));
-      thrust *= Math.pow(immersion, 1.5) * (1 - 0.5 * aeration) * (1 - 0.3 * this.cavitation) * (1 - 0.7 * this.engineDamage); // pé/hélice avariados
+      if (P.surfacePiercing) {
+        // HÉLICE DE SUPERFÍCIE: projetada para trabalhar ventilada, com ~metade do disco fora d'água (imersão ~0,45).
+        // Menos imersão = menos carga e menos empuxo; mais imersão (parado, popa baixa) = mais carga (a turbina
+        // "segura" o N2) e rendimento ruim em baixa velocidade. Não cavita (o ar chega antes do vapor).
+        const imm = immersion;
+        const immLoad = imm < 0.45 ? Math.pow(imm / 0.45, 0.8) : 1 + 0.5 * (imm - 0.45) / 0.55;
+        this.u.propLoad = immLoad * (1 - 0.12 * clamp(axial / P.propPitchSpeed, 0, 1)); // passo grande: descarrega pouco com a velocidade
+        this.cavitation = 0;
+        // (o torque absorvido já inclui a imersão; aqui só o rendimento: baixo com o disco todo molhado e devagar)
+        thrust *= lerp(0.62, 1, smoothstep(6, 22, u)) * (1 - 0.7 * this.engineDamage);
+        // "prop walk": a hélice de superfície empurra a popa para o lado da rotação (o piloto corrige no volante)
+        if (thrust !== 0 && P.propWalk) this.addForceAt(scale(right, P.propWalk * Math.abs(thrust) * immersion), propW, "thrust");
+      } else {
+        this.u.propLoad = Math.pow(immersion, 1.5) * (1 - 0.35 * clamp(axial / P.propPitchSpeed, 0, 1));
+        const cavTarget = immersion > 0.9 && this.engine === "running" ? clamp((load * slip - 0.55) / 0.25, 0, 1) : 0;
+        this.cavitation += (cavTarget - this.cavitation) * (1 - Math.exp(-dt / 0.15));
+        thrust *= Math.pow(immersion, 1.5) * (1 - 0.5 * aeration) * (1 - 0.3 * this.cavitation) * (1 - 0.7 * this.engineDamage); // pé/hélice avariados
+      }
       if (thrust !== 0) this.addForceAt(scale(tDir, thrust), propW, "thrust");
       this.lastThrust = thrust;
-      this.u.axial = axial; this.u.ventilation = ventilation; this.u.slip = slip; this.u.intakeSubmerged = intakeSubmerged;
+      // (hélice de superfície: trabalhar ventilada é o normal dela — não conta como "ventilação" na telemetria)
+      this.u.axial = axial; this.u.ventilation = P.surfacePiercing ? 1 : ventilation; this.u.slip = slip; this.u.intakeSubmerged = intakeSubmerged;
 
       // rabeta como "flap": trim gera sustentação/afundamento de popa proporcional a u²
       if (propDepth > 0 && u > 0) {
@@ -639,10 +672,10 @@ export class Speedboat {
     const PROP_PITCH_M = 0.48;
     this.eachUnit((un) => {
       const engaged = un.gear !== "N";
-      const target = engaged ? (un.gear === "R" ? -1 : 1) * un.rpm / 2.0 : (un.axial / PROP_PITCH_M) * 60 * 0.55 * un.immersion;
+      const target = engaged ? (un.gear === "R" ? -1 : 1) * un.rpm / (P.propGear ?? 2) : (un.axial / PROP_PITCH_M) * 60 * 0.55 * un.immersion;
       // solta no ar não há água freando: demora bem mais para parar
       un.propRpmState += (target - un.propRpmState) * (1 - Math.exp(-dt / (engaged ? 0.08 : un.immersion > 0.2 ? 0.6 : 3.5)));
-      un.fuelLph = un.engine === "running" ? P.fuelIdleLph + (P.fuelMaxLph - P.fuelIdleLph) * Math.pow(un.throttleActual, 1.6) * (un.gear === "N" ? 0.3 : 1) : 0;
+      un.fuelLph = un.turb ? un.turb.fuelLph : un.engine === "running" ? P.fuelIdleLph + (P.fuelMaxLph - P.fuelIdleLph) * Math.pow(un.throttleActual, 1.6) * (un.gear === "N" ? 0.3 : 1) : 0;
     });
     t.propRpm = un0.propRpmState;
     t.fuelLph = this.units.reduce((a, x) => a + x.fuelLph, 0);
@@ -1092,7 +1125,7 @@ export class Speedboat {
     t.rpm = this.units[0].rpm;
     t.rpms = this.units.map((x) => x.rpm); t.engines = this.units.map((x) => x.engine); t.propRpms = this.units.map((x) => x.propRpmState);
     t.fuelLph = this.units.filter((x) => x.engine === "running").length * P.fuelIdleLph;
-    for (const x of this.units) x.fuelLph = x.engine === "running" ? P.fuelIdleLph : 0;
+    for (const x of this.units) x.fuelLph = x.turb ? x.turb.fuelLph : x.engine === "running" ? P.fuelIdleLph : 0;
     this.runSystems(dt, { lightsOn: false, trimMotorA: this.trimMotorA, auxA: 0, intakeSubmerged, load: 0 });
     const sys = this.systems;
     t.trim = this.trim; t.trimDeg = trimAngle * 57.2958; t.tiltDeg = this.tilt * 57.2958;
@@ -1119,8 +1152,9 @@ export class Speedboat {
     if (!this.capsized && this.capsizeT > 0.4) {
       this.capsized = true;
       if (this.engine !== "off") { this.engine = "off"; this.telemetry.stall = "capsize"; }
-      // caem para o lado em que o barco deitou (bordo que afundou), afastando-se do casco
-      this.ejectOccupants(this.right.y < 0 ? 1 : -1);
+      // caem para o lado em que o barco deitou (bordo que afundou), afastando-se do casco — menos no
+      // habitáculo fechado: o piloto fica preso no cinto, dentro da célula de segurança (com ar)
+      if (!this.params.enclosedCockpit) this.ejectOccupants(this.right.y < 0 ? 1 : -1);
     }
     this.updateSwimmers(dt, water, world);
   }
@@ -1247,6 +1281,17 @@ export class Speedboat {
     if (!this.occupants.some((o) => o.seat === "helm")) return "noPilot";
     if (this.engine !== "running" && this.engineDamage >= 0.95) return "broken";
     if (this.engine === "running") { this.engine = "off"; return "stopped"; }
+    const tb = this.units[0].turb;
+    if (tb) {
+      // turbina: botão de partida (arranque → ignição + combustível → acende → marcha lenta); de novo aborta
+      if (tb.starting) { tb.abort(); return "stopped"; }
+      if (tb.n1 > 8) return "busy"; // ainda girando (spool-down): espere parar
+      if (this.gear !== "N") return "needNeutral";
+      if (this.systems.canStart() === "battery") return "lowBattery";
+      this.telemetry.stall = ""; this.telemetry.startFail = "";
+      tb.start();
+      return "starting";
+    }
     if (this.engine === "cranking") return "busy";
     if (this.gear !== "N") return "needNeutral";
     const why = this.systems.canStart();
@@ -1309,29 +1354,45 @@ export class Speedboat {
     t.coolantC = Math.max(...t.coolants); t.batteryV = sys.batteryV; t.batterySoc = sys.batterySoc; t.batteryA = sys.batteryA;
     t.engineHours = sys.engineHours;
     t.overheatWarn = B.some((b) => b.overheatWarn); t.protectMode = B.some((b) => b.protect); t.chargeWarn = B.some((b) => b.chargeWarn);
+    const tb = this.units[0].turb;
+    t.turbine = tb ? { n1: tb.n1, n2: tb.n2, egt: tb.egt, torque: tb.torque, oilPsi: tb.oilPsi, fuelLph: tb.fuelLph, phase: tb.phase,
+      starter: tb.starter, ignition: tb.ignition, lit: tb.lit, egtWarn: tb.egtWarn, hotStarts: tb.hotStarts } : null;
   }
 
   /** Estado agregado dos motores para os sistemas (bateria, alternadores, arranques, combustível, temperatura). */
   private systemsEngineState(): { engine: EngineState; rpm: number; load: number; starterLoad: number; alternators: number } {
+    // turbina: o starter-gerador gira com o N1 (rotação "equivalente" para a curva do gerador: 62 % N1 ≈ 1860)
     const cranking = this.units.filter((x) => x.engine === "cranking" && !this.waitsToCrank(x)).length;
     const running = this.units.filter((x) => x.engine === "running");
+    const starter = this.units.reduce((a, x) => a + (x.turb ? x.turb.starterLoad : x.engine === "cranking" && !this.waitsToCrank(x) ? 1 : 0), 0);
     return {
       engine: cranking > 0 ? "cranking" : running.length ? "running" : "off",
-      rpm: Math.max(...this.units.map((x) => (x.engine === "running" ? x.rpm : 0)), 0),
+      rpm: Math.max(...this.units.map((x) => (x.turb ? (x.engine === "running" ? x.turb.n1 * 30 : 0) : x.engine === "running" ? x.rpm : 0)), 0),
       load: Math.max(...this.units.map((x) => x.throttleActual)),
-      starterLoad: cranking,          // corrente de arranque × motores girando o arranque ao mesmo tempo
+      starterLoad: starter,           // corrente de arranque × motores girando o arranque ao mesmo tempo
       alternators: Math.max(1, running.length),
     };
   }
 
   /** Carga do motor 0..1 incluindo a marcha lenta engrenada. */
   private engineLoad(): number {
+    if (this.u.turb) return Math.min(1.4, this.u.turb.torque / 100); // turbina: torque absorvido pela hélice
     const f = this.params.idleThrustFraction;
     return f + (1 - f) * this.throttleActual;
   }
 
   private updateRpm(dt: number, axial: number, ventilation: number): number {
     const P = this.params;
+    const tb = this.u.turb;
+    if (tb) {
+      // turbina: o eixo de saída gira com a turbina livre (N2); o estado do "motor" segue a fase da turbina
+      if (this.u.engine === "off" && tb.burning) tb.cutFuel(); // parada por fora (sem combustível, virou, afundou)
+      tb.update(dt, { lever: this.throttleActual, volts: this.usys.batteryV, fuel: this.usys.fuelL > 0.005 && !this.usys.starving,
+        load: this.gear === "N" || tb.n1 < 1 ? 0.12 : this.u.propLoad, damage: this.engineDamage });
+      this.u.engine = tb.engineState;
+      this.revLimiting = false;
+      return (tb.n2 / 100) * tb.p.n2Rpm;
+    }
     const thr = this.throttleActual;
     // estimativa documentada: rotação cresce com o acelerador; a carga da hélice
     // segura a rotação em baixa velocidade; hélice ventilando dispara a rotação.

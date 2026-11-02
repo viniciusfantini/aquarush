@@ -5,6 +5,7 @@
 import { type Vec3, v3, DEG } from "./math.ts";
 import { floodTable } from "./hullShape.ts";
 import type { EngineSystemsParams } from "./engineSystems.ts";
+import type { TurbineParams } from "./turbine.ts";
 
 export type SeatId = "helm" | "passenger" | "rearLeft" | "rearRight";
 export interface Occupant { seat: SeatId; mass: number }
@@ -21,7 +22,7 @@ export interface BuoyancyPoint {
   incidence: number;
 }
 
-export type VesselKind = "lancha" | "bote" | "rapida";
+export type VesselKind = "lancha" | "bote" | "rapida" | "turbina";
 
 export interface SpeedboatParams {
   kind: VesselKind;
@@ -137,6 +138,16 @@ export interface SpeedboatParams {
   engines?: { x: number }[];
   /** área vélica lateral (Cd·A, m²) e o centro de pressão do vento (local) */
   windage: { sideCdA: number; center: Vec3 };
+  /** turbina a gás de eixo livre no lugar do motor a pistão (N1/N2/EGT, partida por arranque + ignição) */
+  turbine?: TurbineParams;
+  /** redução entre o eixo do motor e a hélice (rpm do motor ÷ rpm da hélice). Ausente = 2 */
+  propGear?: number;
+  /** hélice de superfície (surface piercing): trabalha meio fora d'água, ventilada de propósito */
+  surfacePiercing?: boolean;
+  /** força lateral da hélice ("prop walk") como fração do empuxo (hélice de superfície: forte) */
+  propWalk?: number;
+  /** habitáculo fechado (célula de segurança): virando, o piloto fica preso no cinto, dentro da cabine */
+  enclosedCockpit?: boolean;
 }
 
 const hl = 0.72; // meia-distância transversal dos pontos de flutuação
@@ -481,4 +492,126 @@ export const RAPIDA: SpeedboatParams = {
   windage: { sideCdA: 6.0, center: v3(0, 0.75, 0.8) },
 };
 
-export const VESSELS: Record<VesselKind, SpeedboatParams> = { lancha: SPEEDBOAT, bote: DINGHY, rapida: RAPIDA };
+// ---------------------------------------------------------------------------------------------
+// Lancha de turbina AR-10 (10 m, piloto ÚNICO no centro, habitáculo fechado) — uma turbina a gás de eixo livre
+// (classe ~1100 shp, como os turboeixos usados em barcos de corrida offshore) movendo, por uma caixa de redução,
+// uma transmissão de superfície com HÉLICE DE SUPERFÍCIE (surface piercing): a hélice trabalha com metade do disco
+// fora d'água em planeio (o trim da transmissão ajusta a imersão). Partida, N1, N2, EGT, torque e óleo vêm de
+// `sim/turbine.ts`. Escala da AR-9 (comprimento ×1,16). Origem = CG do barco seco. X boreste, Y cima, Z proa.
+// ---------------------------------------------------------------------------------------------
+const tl = 0.8; // meia-distância transversal dos pontos de flutuação
+const zk = 10 / 8.6;
+
+export const TURBINA: SpeedboatParams = {
+  kind: "turbina",
+  name: "Lancha de turbina AR-10",
+  steering: "remote",
+  trimMode: "power",
+  trimPins: [],
+  electricStart: true,
+  tankLiters: 900,
+  fuelIdleLph: 85,
+  fuelMaxLph: 470,
+  cylinders: 0,
+  maxPeople: 1,
+  length: 10,
+  beam: 2.5,
+  mass: 2900,
+  fuelTankPos: v3(0, -0.35, -1.2),
+  fuelDensity: 0.81, // querosene de aviação / diesel
+  seats: {
+    helm: v3(0, 0.38, -0.55),          // piloto único, no centro, dentro do habitáculo
+    passenger: v3(0, 0.38, -0.55),     // (não usados: piloto único)
+    rearLeft: v3(0, 0.38, -0.55),
+    rearRight: v3(0, 0.38, -0.55),
+  },
+  inertia: v3(28900, 32000, 3900),
+  waterplaneArea: 18.2,
+  pointMaxDepth: 0.9,
+  wetDepth: 0.13,
+  buoyancyPoints: [
+    { p: v3(-tl, -0.42, 3.6 * zk), areaWeight: 0.6, liftWeight: 0.8, incidence: 6 * DEG },
+    { p: v3(tl, -0.42, 3.6 * zk), areaWeight: 0.6, liftWeight: 0.8, incidence: 6 * DEG },
+    { p: v3(-tl, -0.42, 0.57 * zk), areaWeight: 1.1, liftWeight: 1.0, incidence: 3 * DEG },
+    { p: v3(tl, -0.42, 0.57 * zk), areaWeight: 1.1, liftWeight: 1.0, incidence: 3 * DEG },
+    { p: v3(-tl, -0.42, -2.44 * zk), areaWeight: 1.4, liftWeight: 0.2, incidence: 1.5 * DEG },
+    { p: v3(tl, -0.42, -2.44 * zk), areaWeight: 1.4, liftWeight: 0.2, incidence: 1.5 * DEG },
+  ],
+  contactPoints: [
+    v3(0, 0.3, 5.2),
+    v3(0, -0.47, 3.65),
+    v3(0, -0.55, 0),
+    v3(0, -0.55, -4.3),
+    v3(-1.19, 0.4, 2.0), v3(1.19, 0.4, 2.0),
+    v3(-1.24, 0.4, -1.6), v3(1.24, 0.4, -1.6),
+    v3(-1.19, 0.4, -4.75), v3(1.19, 0.4, -4.75),
+    v3(-0.65, 0.4, 3.95), v3(0.65, 0.4, 3.95),
+  ],
+  bunkPoints: [-4.3, -2.3, 0, 2.3].flatMap((z) => [v3(0, -0.55, z), v3(-0.6, -0.43, z), v3(0.6, -0.43, z)]),
+  gunwaleY: 0.5,
+  // cabine fechada: sem cockpit aberto para alagar (só a praça de máquinas e o poço do piloto)
+  bilge: { pos: v3(0, -0.38, -2.8), maxL: 11000, pumpLph: 5700, pumpA: 5.5, outlet: v3(1.22, 0.22, -3.5), areaM2: 2.0, holeMaxM2: 0.005, bowRise: 0.25, transomY: 0.5, transomW: 0.4,
+    sumpL: 1000, floorY: 0.0, floodCenter: v3(0, 0, -0.6), floodLen: 2.0, floodHalfW: 0.5, scupperM2: 0, scupperFromStern: 0.6, shutoffHeadM: 2.7, outletAreaM2: 6.42e-4, capsizeAirFrac: 0.6, ventM2: 1e-5 },
+  anchor: { roller: v3(0, 0.7, 4.9), rodeMax: 30, rateOut: 0.6, rateIn: 0.35, motorA: 0, holdN: 5000 }, // âncora à mão (sem molinete)
+
+  enginePowerHp: 1100,
+  turbine: {
+    shp: 1100, idleN1: 62, maxN1: 101, starterN1Max: 24, lightOffN1: 12, starterCutN1: 45,
+    egtAmbient: 26, egtIdle: 480, egtMax: 640, egtStartLimit: 780, egtRedline: 700,
+    spoolTau: 1.6, accelLimit: 9, n2Rpm: 6000, fuelIdleLph: 85, fuelMaxLph: 470, oilPsiMax: 80, spoolDownTau: 9,
+  },
+  propGear: 2.4,               // eixo de saída 6000 rpm → hélice 2500 rpm
+  surfacePiercing: true,
+  propWalk: 0.05,
+  enclosedCockpit: true,
+  // starter-gerador: bateria de 150 Ah, arranque de ~350 A, gera ~60 A já em marcha lenta; óleo resfriado
+  // pela água do lago (trocador de calor) — o "TEMP" desta lancha é a temperatura do óleo
+  systems: { batteryAh: 150, starterA: 350, altMaxA: 60, altIdleFrac: 0.8, thermostatC: 75, warnC: 105, protectC: 115, shutdownC: 125 },
+  maxThrust: 40000,
+  reverseThrustFactor: 0.35,
+  propPitchSpeed: 60,
+  propPos: v3(0, -0.3, -5.95),   // eixo na altura do fundo no espelho: em planeio metade do disco fica fora d'água
+  propRadius: 0.33,
+  revLimitRpm: 6600,
+  engineResponse: 0.25,
+  idleRpm: 1400,
+  maxRpm: 6000,
+  shiftTime: 1.0,
+  idleThrustFraction: 0,
+
+  maxSteerLow: 20 * DEG,
+  maxSteerHigh: 3.5 * DEG,
+  steerRate: 1.5,
+  gearcaseRudder: 0.06,
+
+  trimUp: 8 * DEG,
+  tiltMax: 12 * DEG,            // a transmissão de superfície sobe um pouco (água rasa / carretinha)
+  tiltRate: 4 * DEG,
+  tiltMaxThrust: 4000,
+  tiltMaxSpeed: 5,
+  tiltMaxRpm: 3000,
+  drivePivot: v3(0, 0.0, -5.05),
+  intakePos: v3(0, -0.45, -5.4),
+  trimDown: -5 * DEG,
+  trimRate: 0.4,
+  driveLiftArea: 0.15,
+
+  planingLiftCoef: 0.6,
+  maxAoa: 14 * DEG,
+  dragFrictionQuad: 24,
+  dragLinear: 90,
+  lateralQuad: 2600,
+  lateralLinear: 2100,
+  keelLift: 4300,
+  yawDamping: 80000,
+  heaveDamping: 4800,
+  waveDragPeakRatio: 0.15,
+  sternTrough: 0.36,
+  bowWave: 0.14,
+  bankCoef: 5200,
+  rollDamping: 43000,
+  airDragCdA: 1.8,
+  windage: { sideCdA: 6.5, center: v3(0, 0.7, 0.5) },
+};
+
+export const VESSELS: Record<VesselKind, SpeedboatParams> = { lancha: SPEEDBOAT, bote: DINGHY, rapida: RAPIDA, turbina: TURBINA };

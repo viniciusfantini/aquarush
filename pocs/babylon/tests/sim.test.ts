@@ -8,7 +8,8 @@ import { Speedboat, NEUTRAL_REV_LIMIT } from "../src/sim/boat.ts";
 import { JUMP_AH } from "../src/sim/engineSystems.ts";
 import { Wind, WIND_LEVELS } from "../src/sim/wind.ts";
 import { jetStreakLocal } from "../src/sim/bilgeJet.ts";
-import { SPEEDBOAT, DINGHY, RAPIDA, PERSON_KG, type Occupant } from "../src/sim/params.ts";
+import { SPEEDBOAT, DINGHY, RAPIDA, TURBINA, PERSON_KG, type Occupant } from "../src/sim/params.ts";
+import { Turbine } from "../src/sim/turbine.ts";
 import { GerstnerWater, WAVE_PRESETS, type CurrentZone } from "../src/sim/water.ts";
 import type { PhysicsWorld } from "../src/sim/world.ts";
 import { buildWorld, RAMP, groundHeight, fromFrame, ROAD_SAMPLES, LOT, YARD, lotDistance, RIVER, RIVER_CURRENT, riverCenterX } from "../src/sim/world.ts";
@@ -799,6 +800,80 @@ for (const [label, thr] of [["baixa", 0.25], ["alta", 1]] as const) {
   check("rápida", "temperatura do motor ligado (°C)", warm.telemetry.coolants[0], 50, 70, "°C", 1);
   check("rápida", "temperatura do motor desligado (°C)", warm.telemetry.coolants[1], 25, 35, "°C", 1);
   check("rápida", "cada banco com o seu alternador: só o banco 1 carrega (A)", warm.telemetry.batteryAs[1], -1, 0.5, "A", 2);
+}
+
+// ---------- Lancha de turbina AR-10: sequência de partida, N1/N2/EGT, hélice de superfície, habitáculo fechado ----------
+{
+  const water = mkWater(0.35);
+  const mk = () => { const b = new Speedboat(TURBINA, v3(0, 0.3, 0)); b.systems.fuelL = 400; b.occupants = [{ seat: "helm", mass: PERSON_KG }]; return b; };
+  const N = { ...emptyInput(), gear: "N" as const };
+  // partida a frio com a bateria a 60 % (a largada do jogo)
+  const b = mk(); b.coldEngines(); b.systems.batterySoc = 0.6;
+  check("turbina", "parada e fria: N1 (%)", b.units[0].turb!.n1, 0, 0, "%", 0);
+  check("turbina", "partida aceita em N", b.toggleIgnition() === "starting" ? 1 : 0, 1, 1, "", 0);
+  const at: Record<string, number> = {}; let egtPeak = 0, lightN1 = 0, minV = 99;
+  run(b, water, 40, N, openWater, (t) => {
+    const tb = b.units[0].turb!;
+    egtPeak = Math.max(egtPeak, tb.egt); minV = Math.min(minV, b.systems.batteryV);
+    for (const e of tb.drainEvents()) { if (at[e] === undefined) at[e] = t; if (e === "ignition") lightN1 = tb.n1; }
+  });
+  const order = ["starter", "ignition", "lightoff", "starterOff", "idle"].every((e, i, a) => at[e] !== undefined && (i === 0 || at[e] >= at[a[i - 1]])) ? 1 : 0;
+  check("turbina", "sequência: arranque → ignição → acende → arranque desliga → marcha lenta", order, 1, 1, "", 0);
+  check("turbina", "ignição + combustível em N1 (%)", lightN1, 11.5, 14, "%", 1);
+  check("turbina", "acende (light-off) depois da ignição (s)", at.lightoff - at.ignition, 0.8, 2, "s", 1);
+  check("turbina", "pico de EGT na partida, bateria a 60 % (°C)", egtPeak, 550, 760, "°C", 0);
+  check("turbina", "tempo até a marcha lenta (s)", at.idle, 12, 35, "s", 1);
+  check("turbina", "tensão mínima no arranque (V)", minV, 9, 12.5, "V", 1);
+  const T = b.telemetry.turbine!;
+  check("turbina", "marcha lenta: N1 (%)", T.n1, 61, 63, "%", 1);
+  check("turbina", "marcha lenta: EGT (°C)", T.egt, 440, 520, "°C", 0);
+  check("turbina", "marcha lenta: pressão do óleo (psi)", T.oilPsi, 50, 80, "psi", 0);
+  check("turbina", "marcha lenta: o starter-gerador carrega a bateria (A)", b.systems.batteryA, 5, 80, "A", 0);
+  // corte: desacelera; nova partida só com o N1 abaixo de 8 %
+  b.toggleIgnition();
+  run(b, water, 3, N);
+  check("turbina", "girando ainda (N1 alto): nova partida recusada", b.toggleIgnition() === "busy" ? 1 : 0, 1, 1, "", 0);
+  let stopT = -1;
+  run(b, water, 60, N, openWater, (t) => { if (stopT < 0 && b.units[0].turb!.n1 < 8) stopT = t + 3; });
+  check("turbina", "spool-down: N1 abaixo de 8 % depois do corte (s)", stopT, 15, 45, "s", 0);
+  // bateria fraca: arranque lento → mais combustível que ar → PARTIDA QUENTE (a 40 %); fraca demais → PENDURADA (a 15 %)
+  const startWith = (soc: number) => {
+    const x = mk(); x.coldEngines(); x.systems.batterySoc = soc; x.toggleIgnition();
+    const ev: string[] = []; let peak = 0;
+    run(x, water, 40, N, openWater, () => { const tb = x.units[0].turb!; peak = Math.max(peak, tb.egt); ev.push(...tb.drainEvents()); });
+    return { ev, peak };
+  };
+  const hot = startWith(0.4), hung = startWith(0.15);
+  check("turbina", "bateria a 40 %: partida QUENTE (EGT passa de 780 °C e o combustível corta)", hot.ev.includes("hotStart") && !hot.ev.includes("idle") ? 1 : 0, 1, 1, "", 0);
+  check("turbina", "partida quente: o corte segura a EGT (pico, °C)", hot.peak, 780, 830, "°C", 0);
+  check("turbina", "bateria a 15 %: partida PENDURADA (o arranque não chega a 12 % N1, não acende)", hung.ev.includes("hungStart") && !hung.ev.includes("lightoff") ? 1 : 0, 1, 1, "", 0);
+  // sem combustível: gira, abre a ignição mas não acende
+  const dry = mk(); dry.coldEngines(); dry.systems.fuelL = 0;
+  dry.toggleIgnition();
+  const dEv: string[] = [];
+  run(dry, water, 30, N, openWater, () => dEv.push(...dry.units[0].turb!.drainEvents()));
+  check("turbina", "sem combustível: não acende (aborta)", dEv.includes("noLightOff") && !dEv.includes("lightoff") ? 1 : 0, 1, 1, "", 0);
+  // a toda: velocidade, rotação e a hélice de superfície trabalhando com ~metade do disco fora d'água
+  const f = mk(); let t100 = -1, immSum = 0, immN = 0;
+  run(f, water, 3, N);
+  run(f, water, 60, { ...emptyInput(), gear: "F", throttle: 1 }, openWater, (t) => { if (t100 < 0 && f.telemetry.speedKmh >= 100) t100 = t; if (t > 40) { immSum += f.telemetry.propImmersion; immN++; } });
+  const F = f.telemetry;
+  check("turbina", "velocidade final a toda (km/h)", F.speedKmh, 130, 170, "km/h", 1);
+  check("turbina", "0→100 km/h (s)", t100, 5, 15, "s", 1);
+  check("turbina", "a toda: N2 (%) — governador da turbina livre", F.turbine!.n2, 92, 104, "%", 1);
+  check("turbina", "a toda: EGT abaixo do limite de operação (°C)", F.turbine!.egt, 560, 700, "°C", 0);
+  check("turbina", "hélice de superfície em planeio: imersão média do disco", immSum / immN, 0.3, 0.65, "", 2);
+  check("turbina", "consumo a toda (L/h)", F.fuelLph, 330, 480, "L/h", 0);
+  // neutro com a manete toda à frente (turbina sem carga): o governador segura o N2
+  const tn = new Turbine(TURBINA.turbine!); tn.idle();
+  for (let i = 0; i < 120 * 10; i++) tn.update(1 / 120, { lever: 1, volts: 13.5, fuel: true, load: 0.12 });
+  check("turbina", "sem carga a toda: o governador limita o N2 (%)", tn.n2, 98, 105, "%", 1);
+  // virou: o piloto fica no habitáculo fechado (ninguém na água) e a turbina apaga
+  const c = mk();
+  c.rot = qFromAxisAngle(v3(0, 0, 1), Math.PI * 0.97);
+  run(c, mkWater(0.35), 10, emptyInput());
+  check("turbina", "virou: piloto preso no habitáculo (pessoas na água)", c.swimmers.length, 0, 0, "", 0);
+  check("turbina", "virou: a turbina apaga (spool-down)", c.units[0].turb!.burning ? 0 : 1, 1, 1, "", 0);
 }
 
 // ---------- Vento: 5 níveis, deriva, banda, âncora ----------

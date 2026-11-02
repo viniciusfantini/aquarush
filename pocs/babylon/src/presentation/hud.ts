@@ -84,12 +84,18 @@ class RoundGauge {
   }
 }
 
-export interface HudOpts { speedMax: number; temp: boolean; battery: boolean; trimPins: number; gear?: "bar" | "dial"; /** dois motores: um conta-giros por motor (BB / BE) */ twin?: boolean }
+export interface HudOpts { speedMax: number; temp: boolean; battery: boolean; trimPins: number; gear?: "bar" | "dial"; /** dois motores: um conta-giros por motor (BB / BE) */ twin?: boolean; /** turbina: N1, EGT, torque, N2, óleo e luzes da partida */ turbine?: boolean }
 
 export class Hud {
   private speedG!: RoundGauge;
   private rpmG!: RoundGauge;
   private rpmG2: RoundGauge | null = null;
+  /** turbina: EGT (grande), torque, N2 e pressão de óleo (pequenos) + luzes da sequência de partida */
+  private egtG: RoundGauge | null = null;
+  private tqG: RoundGauge | null = null;
+  private n2G: RoundGauge | null = null;
+  private oilG: RoundGauge | null = null;
+  private annun: HTMLElement | null = null;
   private fuelG!: RoundGauge;
   private tempG: RoundGauge | null = null;
   private voltG: RoundGauge | null = null;
@@ -163,7 +169,14 @@ export class Hud {
     this.pins = opts.trimPins;
     const sm = opts.speedMax;
     this.speedG = new RoundGauge(big, { title: "km/h", min: 0, max: sm, labels: Array.from({ length: 6 }, (_, i) => (sm / 5) * i), minor: sm / 20, big: true });
-    if (opts.twin) {
+    this.egtG = this.tqG = this.n2G = this.oilG = null;
+    this.annun?.remove(); this.annun = null;
+    if (opts.turbine) {
+      // turbina: N1 (gerador de gás, %) e EGT (gases de escape, °C) grandes; vermelho no limite de partida/operação
+      this.rpmG = new RoundGauge(big, { title: "N1 %", min: 0, max: 110, labels: [0, 20, 40, 60, 80, 100], minor: 5, redFrom: 102, big: true });
+      this.egtG = new RoundGauge(big, { title: "EGT °C", min: 0, max: 900, labels: [0, 300, 600, 900], minor: 50, redFrom: 700, big: true });
+      this.rpmG2 = null;
+    } else if (opts.twin) {
       // V8 de centro: faixa até 6000 rpm, vermelho a partir de 5000 (um relógio por motor, bombordo e boreste)
       const rpmOpts = (t: string) => ({ title: t, min: 0, max: 6000, labels: [0, 1000, 2000, 3000, 4000, 5000, 6000], minor: 250, redFrom: 5000, big: true, labelFmt: (v: number) => String(v / 1000) });
       this.rpmG = new RoundGauge(big, rpmOpts("RPM BB"));
@@ -172,12 +185,24 @@ export class Hud {
       this.rpmG = new RoundGauge(big, { title: "RPM x1000", min: 0, max: 7000, labels: [0, 1000, 2000, 3000, 4000, 5000, 6000, 7000], minor: 250, redFrom: 6000, big: true, labelFmt: (v) => String(v / 1000) });
       this.rpmG2 = null;
     }
+    if (opts.turbine) {
+      this.tqG = new RoundGauge(small, { title: "TORQUE %", min: 0, max: 120, labels: [0, 60, 120], minor: 10, redFrom: 105 });
+      this.n2G = new RoundGauge(small, { title: "N2 %", min: 0, max: 120, labels: [0, 60, 120], minor: 10, redFrom: 104 });
+      this.oilG = new RoundGauge(small, { title: "ÓLEO psi", min: 0, max: 100, labels: [0, 50, 100], minor: 10, redFrom: 0, redTo: 25 });
+      // luzes da sequência de partida (como no painel de uma turbina)
+      const an = document.createElement("div");
+      an.id = "g-annun";
+      an.style.cssText = "display:flex;gap:4px;justify-content:center;margin-top:4px;font:600 9.5px/1 system-ui,sans-serif;letter-spacing:.04em";
+      an.innerHTML = ["ARRANQUE", "IGNIÇÃO", "CHAMA", "EGT"].map((k) => `<span data-k="${k}" style="padding:3px 5px;border-radius:4px;border:1px solid rgba(255,255,255,.18);color:rgba(255,255,255,.35);background:rgba(0,0,0,.25)">${k}</span>`).join("");
+      small.parentElement?.insertBefore(an, this.fuelAut);
+      this.annun = an;
+    }
     this.fuelG = new RoundGauge(small, { title: "COMBUST.", min: 0, max: 1, labels: [0, 0.5, 1], minor: 0.125, redFrom: 0, redTo: 0.12, labelFmt: (v) => (v === 0 ? "E" : v === 1 ? "F" : "½") });
     // dois motores: um relógio de temperatura e um de bateria para cada (BB = bombordo, BE = boreste: bancos separados)
     const tw = !!opts.twin;
     const tempOpts = (t: string) => ({ title: t, min: 40, max: 120, labels: [40, 80, 120], minor: 10, redFrom: 90 });
     const voltOpts = (t: string) => ({ title: t, min: 8, max: 16, labels: [8, 12, 16], minor: 1, redFrom: 8, redTo: 11.5 });
-    this.tempG = opts.temp ? new RoundGauge(small, tempOpts(tw ? "TEMP BB" : "TEMP")) : null;
+    this.tempG = opts.temp && !opts.turbine ? new RoundGauge(small, tempOpts(tw ? "TEMP BB" : "TEMP")) : null; // turbina: temp. do óleo vai no relógio de óleo
     this.tempG2 = opts.temp && tw ? new RoundGauge(small, tempOpts("TEMP BE")) : null;
     this.voltG = opts.battery ? new RoundGauge(small, voltOpts(tw ? "BAT. BB" : "BATERIA")) : null;
     this.voltG2 = opts.battery && tw ? new RoundGauge(small, voltOpts("BAT. BE")) : null;
@@ -191,6 +216,21 @@ export class Hud {
       const r0 = t.rpms[0], r1 = t.rpms[1], g = t.gears ?? [];
       this.rpmG.set(r0, `${Math.round(r0 / 10) * 10}`, `${g[0] ?? t.gear} · ${t.engineHours.toFixed(1).padStart(6, "0")} h`, t.revLimiter);
       this.rpmG2.set(r1, `${Math.round(r1 / 10) * 10}`, `${g[1] ?? t.gear}`, t.revLimiter);
+    } else if (this.egtG && t.turbine) {
+      const tb = t.turbine;
+      const phase: Record<string, string> = { off: "parada", starter: "ARRANQUE", lightoff: "IGNIÇÃO", accel: "acelerando", running: `${t.engineHours.toFixed(1).padStart(6, "0")} h`, spooldown: "desacelerando" };
+      this.rpmG.set(tb.n1, tb.n1.toFixed(1), phase[tb.phase] ?? "", tb.n1 > 102);
+      this.egtG.set(tb.egt, `${tb.egt.toFixed(0)}`, tb.egtWarn ? "LIMITE" : tb.lit ? "chama" : "", tb.egtWarn || (tb.phase === "accel" && tb.egt > 720));
+      this.tqG?.set(tb.torque, `${tb.torque.toFixed(0)}`, "", tb.torque > 105);
+      this.n2G?.set(tb.n2, `${tb.n2.toFixed(0)}`, `${Math.round(t.propRpm)} rpm`, tb.n2 > 104);
+      this.oilG?.set(tb.oilPsi, `${tb.oilPsi.toFixed(0)}`, `${t.coolantC.toFixed(0)}°C`, (tb.phase === "running" && tb.oilPsi < 25) || t.overheatWarn);
+      if (this.annun) {
+        const on: Record<string, [boolean, string]> = { ARRANQUE: [tb.starter, "#ffb020"], "IGNIÇÃO": [tb.ignition, "#ffb020"], CHAMA: [tb.lit, "#3ddc84"], EGT: [tb.egtWarn || (tb.phase === "accel" && tb.egt > 720), "#ff4040"] };
+        for (const el of Array.from(this.annun.children) as HTMLElement[]) {
+          const [lit, c] = on[el.dataset.k ?? ""] ?? [false, ""];
+          el.style.color = lit ? "#111" : "rgba(255,255,255,.35)"; el.style.background = lit ? c : "rgba(0,0,0,.25)"; el.style.borderColor = lit ? c : "rgba(255,255,255,.18)";
+        }
+      }
     } else this.rpmG.set(t.rpm, `${Math.round(t.rpm / 10) * 10}`, `${t.engineHours.toFixed(1).padStart(6, "0")} h`, t.revLimiter);
     const autonomy = t.fuelLph > 0.1 ? t.fuelL / t.fuelLph : 0;
     const autTxt = t.engine === "running" && autonomy > 0 ? ` · ${Math.floor(autonomy)}h${String(Math.floor((autonomy % 1) * 60)).padStart(2, "0")}` : "";

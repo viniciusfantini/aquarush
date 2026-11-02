@@ -11,6 +11,8 @@ export interface Obb { x: number; z: number; hw: number; hl: number; yaw: number
 export interface Pump { x: number; z: number; lanes: number[] /* z do centro de cada faixa */ }
 
 const L = LOT;
+/** vagas ocupadas pelos conjuntos que não estão em uso */
+const PARKED_STALLS = [0, 3, 4];
 const CAN = { x: L.cx + 15, z: L.cz + 10 };
 /**
  * Pátio grande (76 × 50 m): posto perto da entrada (leste), loja e oficina no fundo (oeste), vaga do outro
@@ -25,16 +27,17 @@ export const STATION = {
   islandLen: 4, islandW: 1.0,
   shop: { x: L.cx - 25, z: L.cz + 12, w: 12, d: 9, h: 3.6 },          // loja (porta para +X)
   workshop: { x: L.cx - 25, z: L.cz - 11, w: 12, d: 12, h: 5.0 },     // oficina (portões para +X)
-  /** vagas dos outros dois conjuntos (veículo + carretinha, de frente para a saída, +X): vagas 0 e 3 */
-  parking: [0, 3].map((k) => ({ x: L.cx + 22, z: L.cz - 19 + k * 4.6, yaw: Math.PI / 2 })),
-  /** vagas longas (carro + carretinha), lado a lado ao sul; a 1ª e a última são dos outros conjuntos */
-  stalls: [0, 1, 2, 3].map((k) => ({ x: L.cx + 15, z: L.cz - 19 + k * 4.6, len: 24, w: 4.6 })),
+  /** vagas dos outros três conjuntos (veículo + carretinha, de frente para a saída, +X): vagas 0, 3 e 4 */
+  parking: PARKED_STALLS.map((k) => ({ x: L.cx + 22, z: L.cz - 21 + k * 4.2, yaw: Math.PI / 2 })),
+  /** vagas longas (carro + carretinha), lado a lado ao sul; 0, 3 e 4 são dos outros conjuntos, 1 e 2 livres */
+  stalls: [0, 1, 2, 3, 4].map((k) => ({ x: L.cx + 15, z: L.cz - 21 + k * 4.2, len: 24, w: 4.2 })),
 };
 
 /** O veículo (com a carretinha) está estacionado dentro de uma vaga livre, alinhado e parado? (índice ou −1) */
 export const parkedStall = (car: Obb, trailer: Obb, speed: number): number => {
   if (speed > 0.15 || Math.abs(Math.sin(car.yaw)) < 0.95) return -1;
-  for (let k = 1; k < STATION.stalls.length - 1; k++) { // 0 e a última: ocupadas pelos outros conjuntos
+  for (let k = 0; k < STATION.stalls.length; k++) {
+    if (PARKED_STALLS.includes(k)) continue; // ocupadas pelos outros conjuntos
     const s = STATION.stalls[k];
     const inside = (o: Obb) => Math.abs(o.z - s.z) < s.w / 2 - 0.5 && Math.abs(o.x - s.x) < s.len / 2 - o.hl * 0.6;
     if (inside(car) && inside(trailer)) return k;

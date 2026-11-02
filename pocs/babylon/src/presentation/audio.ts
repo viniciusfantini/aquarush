@@ -79,6 +79,21 @@ export interface AudioState {
   rpm2?: number;
   throttle2?: number;
   engine2?: "off" | "cranking" | "running";
+  /** turbina a gás (lancha de turbina): substitui o som do motor a pistão */
+  turbine?: { n1: number; n2: number; egt: number; power: number; starter: boolean; ignition: boolean; lit: boolean; fuelLph: number };
+}
+
+/** Nós da síntese da turbina (criados no start, silenciosos até haver uma turbina). */
+interface TurbineVoice {
+  shaft: OscillatorNode; shaftG: GainNode;     // eixo do gerador de gás (N1/60 Hz): zumbido grave
+  comp: OscillatorNode; compG: GainNode;       // apito do compressor (o "uííí" que sobe com o N1)
+  blade: OscillatorNode; bladeG: GainNode;     // passagem das pás (agudo, chiado metálico)
+  ptur: OscillatorNode; pturG: GainNode;       // turbina livre (N2)
+  vib: OscillatorNode;                         // leve instabilidade do tom (não soa "eletrônico")
+  combLP: BiquadFilterNode; combG: GainNode;   // rugido da combustão (ruído)
+  rumbleG: GainNode;                           // jato do escape (grave)
+  hissBP: BiquadFilterNode; hissG: GainNode;   // ar entrando nas tomadas
+  starter: OscillatorNode; starterG: GainNode; // starter-gerador (zunido elétrico)
 }
 
 export class EngineAudio {
@@ -113,6 +128,9 @@ export class EngineAudio {
   private worklet: AudioWorkletNode | null = null;
   private worklet2: AudioWorkletNode | null = null;
   private worklet2Gain!: GainNode;
+  private tv: TurbineVoice | null = null;
+  private igniterT = 0;
+  private igniterSide = 1;
   private workletGain!: GainNode;
   private starterGain!: GainNode;
   private starterLfo!: OscillatorNode;
@@ -360,6 +378,31 @@ export class EngineAudio {
     this.winchGain = ctx.createGain(); this.winchGain.gain.value = 0;
     this.winchOsc.connect(wBP).connect(this.winchGain).connect(this.master); this.winchOsc.start();
 
+    // ---- turbina a gás (só a lancha de turbina usa; o resto do tempo fica em silêncio) ----
+    {
+      const osc = (type: OscillatorType, f: number) => { const o = ctx.createOscillator(); o.type = type; o.frequency.value = f; o.start(); return o; };
+      const gain = () => { const g = ctx.createGain(); g.gain.value = 0; g.connect(this.master); return g; };
+      const shaft = osc("triangle", 260), shaftG = gain(); shaft.connect(shaftG);
+      const comp = osc("sine", 1600), compG = gain(); comp.connect(compG);
+      const blade = osc("sawtooth", 4400), bladeG = gain();
+      const bladeBP = ctx.createBiquadFilter(); bladeBP.type = "bandpass"; bladeBP.frequency.value = 5200; bladeBP.Q.value = 1.4;
+      blade.connect(bladeBP).connect(bladeG);
+      const ptur = osc("sine", 900), pturG = gain(); ptur.connect(pturG);
+      // vibrato lento e pequeno nos tons (o fluxo de ar nunca é perfeitamente estável)
+      const vib = osc("sine", 5.3), vibG = ctx.createGain(); vibG.gain.value = 9;
+      vib.connect(vibG); for (const o of [comp, blade, ptur]) vibG.connect(o.detune);
+      const combLP = ctx.createBiquadFilter(); combLP.type = "lowpass"; combLP.frequency.value = 500; combLP.Q.value = 0.5;
+      const combG = gain(); noiseSrc().connect(combLP).connect(combG);
+      const rumLP = ctx.createBiquadFilter(); rumLP.type = "lowpass"; rumLP.frequency.value = 140; rumLP.Q.value = 0.9;
+      const rumbleG = gain(); noiseSrc().connect(rumLP).connect(rumbleG);
+      const hissBP = ctx.createBiquadFilter(); hissBP.type = "bandpass"; hissBP.frequency.value = 3000; hissBP.Q.value = 0.6;
+      const hissG = gain(); noiseSrc().connect(hissBP).connect(hissG);
+      const starter = osc("sawtooth", 200), starterG = gain();
+      const stBP = ctx.createBiquadFilter(); stBP.type = "bandpass"; stBP.frequency.value = 900; stBP.Q.value = 1.2;
+      starter.connect(stBP).connect(starterG);
+      this.tv = { shaft, shaftG, comp, compG, blade, bladeG, ptur, pturG, vib, combLP, combG, rumbleG, hissBP, hissG, starter, starterG };
+    }
+
     // ---- motor por síntese física (explosões → tubos de escape → cubo da hélice) ----
     this.workletGain = ctx.createGain(); this.workletGain.gain.value = 0;
     const cowl = ctx.createBiquadFilter(); cowl.type = "peaking"; cowl.frequency.value = 700; cowl.Q.value = 1.1; cowl.gain.value = 3;
@@ -397,7 +440,7 @@ export class EngineAudio {
       const cut = st.revLimiter && Math.floor(t * 16) % 2 === 1;
       this.worklet.port.postMessage({ cylinders: this.cylinders, rpm: st.rpm, load: st.revLimiter ? 0.3 : load, combustion: running && !cut ? 1 : 0, wet: st.propInWater ? 1 : 0, volume: 1 });
       const twin = st.rpm2 !== undefined;
-      this.workletGain.gain.setTargetAtTime(m * dist * (twin ? 0.4 : 0.55), t, 0.05);
+      this.workletGain.gain.setTargetAtTime(st.turbine ? 0 : m * dist * (twin ? 0.4 : 0.55), t, 0.05);
       if (this.worklet2) {
         if (twin) {
           const run2 = st.engine2 === "running";
@@ -407,11 +450,12 @@ export class EngineAudio {
         this.worklet2Gain.gain.setTargetAtTime(twin ? m * dist * 0.4 : 0, t, 0.05);
       }
     }
-    const legacy = useW || !running ? 0 : 1; // osciladores antigos só sem worklet
+    const legacy = useW || !running || st.turbine ? 0 : 1; // osciladores antigos só sem worklet (e nunca na turbina)
+    this.updateTurbine(st, t, m, dist);
     // arranque: volume e tom acompanham a rotação (bateria fraca = "rrr… rrr…" lento e grave);
     // travado (tensão baixa demais) só estala o solenoide
     const sRpm = st.engine === "cranking" && !st.pullStart ? st.starterRpm ?? 250 : 0;
-    this.starterGain.gain.setTargetAtTime(m * (st.engine === "cranking" ? 0.09 * Math.min(1, Math.max(0, (sRpm - 20) / 200)) : 0), t, 0.03);
+    this.starterGain.gain.setTargetAtTime(m * (st.engine === "cranking" && !st.turbine ? 0.09 * Math.min(1, Math.max(0, (sRpm - 20) / 200)) : 0), t, 0.03);
     this.st1.frequency.setTargetAtTime(500 + 2.6 * sRpm, t, 0.05);
     if (st.engine === "cranking" && !st.pullStart && sRpm < 40 && t > this.solenoidT) { this.solenoidT = t + 0.35; this.clunk(false); }
     this.buzzGain.gain.setTargetAtTime(m * (st.buzzer ? 0.05 : 0), t, 0.008);
@@ -458,9 +502,82 @@ export class EngineAudio {
     // água, esguicho, cavitação
     this.waterGain.gain.setTargetAtTime(m * Math.min(st.speed / 22, 1) * 0.11, t, 0.15);
     this.waterFilter.frequency.setTargetAtTime(400 + st.speed * 40, t, 0.2);
-    this.telltaleGain.gain.setTargetAtTime(running ? m * (0.004 + 0.009 * r) * (st.cockpit ? 0.5 : 1) : 0, t, 0.2);
+    this.telltaleGain.gain.setTargetAtTime(running && !st.turbine ? m * (0.004 + 0.009 * r) * (st.cockpit ? 0.5 : 1) : 0, t, 0.2);
     this.cavGain.gain.setTargetAtTime(m * Math.min(st.boil, 1) * 0.14 * (0.3 + load), t, 0.05);
     this.cavLfo.frequency.setTargetAtTime(20 + rpm / 120, t, 0.1);
+  }
+
+  /**
+   * Turbina a gás: os tons acompanham o N1 (gerador de gás) e o N2 (turbina livre) reais da simulação.
+   * Sobe de um zunido grave no arranque para o apito agudo da marcha lenta; com potência, o rugido da combustão e
+   * o jato do escape crescem. Desligando, o apito desce devagar (spool-down) até sumir.
+   */
+  private updateTurbine(st: AudioState, t: number, m: number, dist: number): void {
+    const v = this.tv;
+    if (!v) return;
+    const T = st.turbine;
+    const set = (g: GainNode, x: number, tau = 0.08) => g.gain.setTargetAtTime(m * x, t, tau);
+    if (!T) { for (const g of [v.shaftG, v.compG, v.bladeG, v.pturG, v.combG, v.rumbleG, v.hissG, v.starterG]) set(g, 0, 0.05); return; }
+    const n1 = Math.max(0, T.n1) / 100, n2 = Math.max(0, T.n2) / 100, p = Math.min(1.2, Math.max(0, T.power));
+    // habitáculo fechado: dentro da cabine o som chega bem mais baixo (e sem os agudos)
+    const cab = st.cockpit ? 0.55 : 1;
+    const hi = st.cockpit ? 0.35 : 1;
+    const spin = Math.min(1, n1 / 0.2); // abaixo de ~20 % o apito ainda é fraco
+    v.shaft.frequency.setTargetAtTime(30 + 420 * n1, t, 0.05);
+    v.comp.frequency.setTargetAtTime(120 + 2600 * n1, t, 0.05);
+    v.blade.frequency.setTargetAtTime(300 + 7200 * n1, t, 0.05);
+    v.ptur.frequency.setTargetAtTime(60 + 1850 * n2, t, 0.08);
+    set(v.shaftG, dist * cab * 0.05 * spin * (0.4 + 0.6 * n1));
+    set(v.compG, dist * cab * hi * 0.028 * spin * (0.5 + 0.5 * n1));
+    set(v.bladeG, dist * cab * hi * 0.012 * n1 * n1);
+    set(v.pturG, dist * cab * 0.012 * Math.min(1, n2 * 1.5));
+    // combustão e jato: só com chama; crescem com o combustível/potência
+    const flame = T.lit ? 1 : 0;
+    v.combLP.frequency.setTargetAtTime(350 + 2600 * p + 600 * n1, t, 0.1);
+    set(v.combG, dist * cab * flame * (0.05 + 0.2 * p), 0.12);
+    set(v.rumbleG, dist * cab * flame * (0.06 + 0.32 * p), 0.15);
+    v.hissBP.frequency.setTargetAtTime(1500 + 4500 * n1, t, 0.1);
+    set(v.hissG, dist * cab * hi * 0.05 * n1 * n1);
+    // starter-gerador: zunido elétrico que sobe com o N1 enquanto o arranque está ligado
+    v.starter.frequency.setTargetAtTime(90 + 22 * T.n1, t, 0.05);
+    set(v.starterG, dist * (T.starter ? 0.05 : 0), 0.04);
+    // velas de ignição: "tic… tic…" (~4 por segundo, alternando os dois lados)
+    if (T.ignition && t > this.igniterT) { this.igniterT = t + 0.24; this.igniterSnap(dist * cab); }
+  }
+
+  /** Estalo de uma vela de ignição da turbina (descarga de alta energia). */
+  private igniterSnap(level: number): void {
+    const ctx = this.ctx;
+    if (!ctx || this.muted || this.silenced) return;
+    const t = ctx.currentTime;
+    const n = ctx.createBufferSource(); n.buffer = this.noise;
+    const hp = ctx.createBiquadFilter(); hp.type = "highpass"; hp.frequency.value = 2500;
+    const pan = ctx.createStereoPanner(); pan.pan.value = 0.35 * (this.igniterSide = -this.igniterSide);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.22 * level, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.025);
+    n.connect(hp).connect(g).connect(pan).connect(this.master);
+    n.start(t, Math.random()); n.stop(t + 0.03);
+  }
+
+  /** Acendimento da turbina (light-off): "vuum" grave do combustível pegando fogo na câmara. */
+  lightOff(): void {
+    const ctx = this.ctx;
+    if (!ctx || this.muted || this.silenced) return;
+    const t = ctx.currentTime;
+    const n = ctx.createBufferSource(); n.buffer = this.noise;
+    const lp = ctx.createBiquadFilter(); lp.type = "lowpass"; lp.Q.value = 0.7;
+    lp.frequency.setValueAtTime(180, t); lp.frequency.linearRampToValueAtTime(900, t + 0.25); lp.frequency.exponentialRampToValueAtTime(200, t + 1.2);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(0.5, t + 0.08); g.gain.exponentialRampToValueAtTime(0.001, t + 1.4);
+    n.connect(lp).connect(g).connect(this.master);
+    n.start(t, Math.random()); n.stop(t + 1.5);
+    const o = ctx.createOscillator(); o.type = "sine";
+    o.frequency.setValueAtTime(70, t); o.frequency.exponentialRampToValueAtTime(38, t + 0.5);
+    const og = ctx.createGain();
+    og.gain.setValueAtTime(0.0001, t); og.gain.linearRampToValueAtTime(0.4, t + 0.04); og.gain.exponentialRampToValueAtTime(0.001, t + 0.6);
+    o.connect(og).connect(this.master);
+    o.start(t); o.stop(t + 0.65);
   }
 
   /** "Clunk" metálico do câmbio da rabeta ao engrenar (F/R) ou soltar (N). */
