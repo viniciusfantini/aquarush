@@ -1268,7 +1268,7 @@ export class Speedboat {
       const dSub = clamp(h - 0.05 - s.pos.y, -0.5, 0.6);
       const inWater = h - s.pos.y > -0.3;
       const ay = -G + (dSub > -0.3 ? (G + 60 * dSub) : 0) - (inWater ? 4 * s.vel.y : 0);
-      // nado: depois de ~1 s se recuperando, a pessoa nada (até ~0,35 m/s: de colete a braçada rende pouco) para o
+      // nado: depois de ~1 s se recuperando, a pessoa nada (até ~0,55 m/s: de colete a braçada rende menos que sem ele) para o
       // seu lugar em volta do barco (elipse um pouco maior que o casco) e fica ali, acompanhando o barco
       const fwdH = this.forward;
       const yawB = Math.atan2(fwdH.x, fwdH.z);
@@ -1300,9 +1300,9 @@ export class Speedboat {
       let swx = holding ? this.vel.x : cur.x, swz = holding ? this.vel.z : cur.z;
       let effort = 0;
       if (s.t > 1 && inWater && dT > 0.25) {
-        const sp = Math.min(0.35, dT * 0.5);
+        const sp = Math.min(0.55, dT * 0.6);
         swx += (dxT / dT) * sp; swz += (dzT / dT) * sp;
-        effort = clamp(sp / 0.35, 0.3, 1);
+        effort = clamp(sp / 0.55, 0.3, 1);
         s.yaw = Math.atan2(dxT, dzT); // de frente para onde nada
       } else if (s.t > 1) {
         // de frente para o barco — ou, afundado, para o centro do grupo

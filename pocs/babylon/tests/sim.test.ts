@@ -1360,7 +1360,7 @@ for (const [label, thr] of [["baixa", 0.25], ["alta", 1]] as const) {
     if (backAt < 0 && b.swimmers.length === 0) backAt = t;
   });
   check("abandonar", "saltam para fora do casco (afastamento máximo, m)", maxOut, 1.3, 6, "m", 1);
-  check("abandonar", "nadam de volta (de colete, ~0,35 m/s) e sobem com o barco de pé (s)", backAt, 6, 30, "s", 1);
+  check("abandonar", "nadam de volta (de colete, ~0,55 m/s) e sobem com o barco de pé (s)", backAt, 4, 30, "s", 1);
   check("abandonar", "a bordo de novo: os dois ocupantes nos seus lugares", b.occupants.length === 2 && b.occupants.some((o) => o.seat === "helm") ? 1 : 0, 1, 1, "", 0);
   // pulando com o barco a ~40 km/h: na água a pessoa perde o embalo (não "segue" o barco) e nada devagar;
   // o barco sem piloto para e eles voltam a bordo quando ele está a menos de ~3 km/h
@@ -1372,9 +1372,9 @@ for (const [label, thr] of [["baixa", 0.25], ["alta", 1]] as const) {
   run(f, water, 6, { ...emptyInput(), gear: "N" });
   const swSpd = Math.max(...f.swimmers.map((s2) => Math.hypot(s2.vel.x, s2.vel.z)));
   let fBack = -1;
-  // (o barco desliza ~80 m até parar; de colete, a 0,35 m/s, a volta leva uns 4–5 min — é o tempo real de nado)
+  // (o barco desliza ~80 m até parar; de colete, a ~0,55 m/s, a volta leva uns 2–3 min — é o tempo de nado)
   run(f, water, 420, { ...emptyInput(), gear: "N" }, openWater, (t) => { if (fBack < 0 && f.swimmers.length === 0) fBack = t; });
-  check("abandonar", `pulando a ${vJump.toFixed(0)} km/h: 6 s depois, nadando devagar (m/s)`, swSpd, 0, 0.45, "m/s", 2);
+  check("abandonar", `pulando a ${vJump.toFixed(0)} km/h: 6 s depois, só a velocidade de nado (m/s)`, swSpd, 0, 0.65, "m/s", 2);
   check("abandonar", "o barco desliza e para; eles nadam até ele e sobem (s)", fBack, 60, 420, "s", 0);
   // AR-10 virada: o piloto fica preso no cinto (habitáculo fechado); o espaço o tira da cabine — e com o barco virado ninguém volta
   const h = new Speedboat(TURBINA, v3(0, 0.3, 0)); h.systems.fuelL = 100; h.occupants = [{ seat: "helm", mass: PERSON_KG }];

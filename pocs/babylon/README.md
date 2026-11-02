@@ -98,6 +98,8 @@ A lancha é um **corpo rígido 6DOF** (massa seca de 1030 kg + gasolina, ocupant
 
 ## Abandonar o barco — barra de espaço (v0.63)
 
+**v0.63.5:** nado de colete até ~0,55 m/s (antes 0,35): voltam a bordo em 4,9 s de perto; pulando a 65 km/h, em 173 s.
+
 **v0.63.2:** longe do casco a pessoa não acompanha mais o barco (só quem segura o cabo de mão, a < 0,6 m do lugar); volta a bordo com o barco a até 3 km/h. Pulando a 65 km/h, 6 s depois ela nada a 0,35 m/s; o barco desliza ~80 m e para, e a volta leva 274 s.
 
 **v0.63.1:** dois toques — o 1º espaço tira só os passageiros (o piloto fica no comando e o motor segue ligado); o 2º (ou sem passageiros) tira o piloto, e o corta-circuito desliga o motor. Nado de colete até ~0,35 m/s (antes 0,7): no teste, voltam a bordo em 6,7 s.
