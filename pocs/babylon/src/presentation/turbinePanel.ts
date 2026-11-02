@@ -63,9 +63,9 @@ export class TurbinePanel {
       <div class="tp-head" title="arraste para mover"><b>⠿ PARTIDA DA TURBINA</b>
         <span class="tp-fl" data-fl title="quem comanda a partida: FADEC (automático, protege) ou MANUAL (você mexeu numa chave)">FADEC</span>
         <button class="tp-ck" data-ck>CHECKLIST</button><button class="tp-x" aria-label="fechar">×</button></div>
+      <div class="tp-grid">
       <div class="tp-gauges"></div>
       <div class="tp-ann">${["BAT", "EXT PWR", "GEN", "STARTER", "IGNIÇÃO", "CHAMA", "EGT ALTA", "ÓLEO QUENTE"].map((k) => `<span data-a="${k}">${k}</span>`).join("")}</div>
-      <div class="tp-row">
         <div class="sw-plate tp-sw">${SCR}${SWITCHES.map((s, i) => s.id === "fuelValve"
           // a manete de condição do combustível é um seletor rotativo (como os registros), não uma chave elétrica
           ? rotary("fv", "COMBUSTÍVEL", "condição", [{ v: "cut", l: "CORTE" }, { v: "idle", l: "LENTA" }], { num: i + 1, cls: "fuel" })
@@ -75,16 +75,15 @@ export class TurbinePanel {
           <div class="rb-w"><button class="rb rb-stop" data-f="cut" title="STOP: corta o combustível (no FADEC também aborta a partida)"><span>STOP</span></button></div>
           </div>
         </div>
-      </div>
-      <div class="tp-row">
         <div class="sw-plate tp-sysp">${SCR}
           ${cell(rotary("bsel", "BATERIAS", "2 × 12 V em série", [{ v: "off", l: "OFF" }, { v: "bus", l: "BUS" }, { v: "both", l: "BOTH" }]), "bat")}
           ${cell(rotary("tank", "TANQUE", "registro", [{ v: "closed", l: "FECHADO" }, { v: "open", l: "ABERTO" }], { cls: "fuel" }), "tank")}
           ${cell(tri("bilge", "BOMBA PORÃO", "boia ou manual", { v: "on", l: "ON" }, { v: "off", l: "OFF" }, { v: "auto", l: "AUTO" }), "bilge")}
+          <div class="sw-cell tp-gpu"><span class="tp-gpu-l">GPU DA DOCA</span><button data-g="gpu">CONECTAR (J)</button><div class="rd" data-rd="gpu"></div></div>
         </div>
         <div class="sw-plate tp-lev">${SCR}</div>
-      </div>
-      <div class="tp-foot"><button data-g="gpu">GPU (J)</button><div class="msg-rd" data-msg><span></span></div></div>`;
+        <div class="tp-foot"><div class="msg-rd" data-msg><span></span></div></div>
+      </div>`;
     el.addEventListener("click", (e) => {
       const b = (e.target as HTMLElement).closest<HTMLButtonElement>("button");
       if (!b) return;
@@ -178,7 +177,8 @@ export class TurbinePanel {
     rd("bat", `${Math.round(t.batterySoc * 100)} % · ${t.busBattery ? "24 V no barram." : "fora"}`);
     rd("tank", t.fuelValveOpen ? `${t.fuelL.toFixed(0)} L no tanque` : `linha ${Math.round(t.fuelLineFrac * 100)} %`);
     rd("bilge", `${t.bilgePump ? "bombeando" : "parada"} · ${t.bilgeL.toFixed(0)} L`);
-    this.q<HTMLButtonElement>("[data-g]").textContent = t.gpu ? (t.gpuState === "online" ? "cabo da GPU: recolher (J)" : "GPU partindo… (J)") : "conectar o cabo da GPU (J, só na doca)";
+    this.q<HTMLButtonElement>("[data-g]").textContent = t.gpu ? (t.gpuState === "online" ? "RECOLHER (J)" : "PARTINDO… (J)") : "CONECTAR (J)";
+    rd("gpu", !t.gpu && t.gpuState === "off" ? "só atracado na doca" : t.gpuState === "online" ? (t.extPwr ? `no barram. · ${t.gpuKw.toFixed(1)} kW` : "estável · fora do barram.") : t.gpuState === "starting" ? "diesel partindo" : "desligando");
     // display de avisos no pé do painel (caixa fixa, o texto rola): avaria/starter/desgaste e combustível na câmara
     const wear = tb.seized ? "TURBINA DESTRUÍDA (sobretemperatura) — R leva à oficina"
       : tb.starterLock > 0 ? `starter superaquecido: aguarde ${tb.starterLock.toFixed(0)} s`

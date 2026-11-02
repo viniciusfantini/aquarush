@@ -96,6 +96,10 @@ A lancha é um **corpo rígido 6DOF** (massa seca de 1030 kg + gasolina, ocupant
 
 > Referência completa da lógica elétrica e dos motores: [`docs/SISTEMAS_ELETRICOS_E_MOTORES.md`](../../docs/SISTEMAS_ELETRICOS_E_MOTORES.md).
 
+## Painel da AR-10 horizontal (v0.62.3)
+
+Em grade (`.tp-grid`): no alto os 8 mostradores e, ao lado, os anunciadores em 2 colunas; no meio a botoeira de partida (as 7 chaves + START/STOP) e, embaixo dela, sistemas (baterias, tanque, bomba de porão) com a **GPU da doca** (botão do cabo + estado); à direita, numa coluna, as manetes (potência e marcha, buzina e trim); no pé, o display de avisos. 960 × 555 px (antes 690 × 694) — não cobre o HUD. Em tela estreita (< 900 px) a grade vira uma coluna só.
+
 ## Painéis estreitos (v0.62.1 → revisto na v0.62.2)
 
 **v0.62.2:** a largura mínima ficou ruim; agora a AR-10 tem 690 px (mostradores e anunciadores numa linha, as 7 chaves + START/STOP numa botoeira só) e o painel de sistemas até 640 px (PARTIDA e COMANDO lado a lado quando cabem), com mais folga entre a barra do trim e o botão e em volta da buzina.
