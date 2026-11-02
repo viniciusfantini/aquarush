@@ -61,8 +61,8 @@
     #tpanel.open, #spanel.open { display: block; }
     body.menu-mode #tpanel, body.menu-mode #spanel { display: none; }
     #tpanel button, #spanel button { font: inherit; color: inherit; cursor: pointer; }
-    #spanel { width: fit-content; min-width: 360px; max-width: min(500px, calc(100vw - 24px)); }
-    #spanel .sp-top { flex-direction: column; } #spanel .sp-top .sw-plate { flex: none; }
+    #spanel { width: fit-content; min-width: 360px; max-width: min(640px, calc(100vw - 24px)); }
+    #spanel .sp-top > div { flex: 1 1 auto; }
     #spanel .rot { width: 116px; } #spanel .rot .dial { width: 110px; height: 84px; } #spanel .tg { width: 72px; } #spanel .tg.tri { width: 88px; }
     .sp-top { display: flex; flex-wrap: wrap; gap: 0 10px; } .sp-top > div { display: flex; flex-direction: column; } .sp-top .sw-plate { flex: 1; align-items: center; } .sp-grow { flex: 1; }
     .sp-note { margin: 8px 0 0; font-size: 12px; color: #ffc23a; min-height: 0; }
@@ -304,7 +304,7 @@
     .tr b { font-size: 10.5px; letter-spacing: 0.07em; color: #e9eef2; font-weight: 800; text-shadow: 0 1px 0 rgba(0,0,0,0.8); }
     .tr small { font-size: 9px; color: var(--dim); text-align: center; }
     .tr .mt-rd.warn { color: #ffc23a; }
-    .tr-row { display: flex; align-items: center; gap: 8px; }
+    .tr-row { display: flex; align-items: center; gap: 14px; }
     /* vista de lado: espelho de popa à direita, o motor/pé gira no pivô (trim + tilt) */
     .tr-view { position: relative; width: 92px; height: 84px; border-radius: 6px; overflow: hidden; background: linear-gradient(180deg, #16222c, #0e1820 52%, #0b2a3a 52%, #08202d); box-shadow: inset 0 1px 4px rgba(0,0,0,0.7); }
     .tr-water { position: absolute; left: 0; right: 0; top: 52%; height: 1px; background: rgba(120,200,230,0.6); }
@@ -346,16 +346,15 @@
     .lev { gap: 8px 16px; }
     .tr-bar { height: 70px; }
     .tr-rocker button { height: 32px; }
-    /* largura mínima: mostradores em 2 linhas de 4, as faixas quebram em linhas */
-    #tpanel { width: min(492px, calc(100vw - 24px)); padding: 10px 12px 12px; }
-    #tpanel .tp-gauges { grid-template-columns: repeat(4, 1fr); row-gap: 4px; }
-    #tpanel .tp-ann span { flex: 1 1 22%; }
-    #tpanel .tp-row > .tp-sysp, #tpanel .tp-row > .tp-lev { flex: 1 1 100%; justify-content: center; }
-    #tpanel .tp-sw { justify-content: center; row-gap: 4px; }
-    #tpanel .tp-gauges .gauge.small { width: 72px; height: 72px; }
-    #tpanel .rot .dial { height: 80px; }
-    #tpanel .tp-auto { padding: 10px 8px 6px; }
-    #tpanel .pl-track { width: 100px; height: 120px; } #tpanel .lev { gap: 8px 12px; } #tpanel .tg.tri { width: 88px; }
+    /* AR-10: largura intermediária — mostradores e anunciadores numa linha; chaves + START/STOP numa botoeira só */
+    #tpanel { width: min(690px, calc(100vw - 24px)); padding: 10px 12px 12px; }
+    #tpanel .tp-gauges .gauge.small { width: 74px; height: 74px; }
+    #tpanel .tp-sw { justify-content: center; flex-wrap: nowrap; gap: 4px 2px; }
+    #tpanel .tp-auto { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; margin-left: 8px; padding-left: 12px; border-left: 1px solid rgba(255,255,255,0.12); }
+    #tpanel .rot .dial { height: 84px; }
+    #tpanel .tp-row > .tp-sysp { flex: none; }
+    #tpanel .tp-row > .tp-lev { flex: 1; justify-content: center; }
+    #tpanel .pl-track { width: 122px; height: 120px; } #tpanel .lev { gap: 8px 12px; } #tpanel .tg.tri { width: 88px; }
     #tpanel .tg { width: 64px; }
     #tpanel .rot { width: 118px; }
     #tpanel .rot .dial { width: 110px; height: 88px; }
@@ -381,7 +380,8 @@
     .rb-start.lit { box-shadow: 0 0 0 4px #1b1f24, 0 0 0 5px rgba(61,220,132,0.7), 0 0 12px 3px rgba(61,220,132,0.55); }
     .rb-stop { background: radial-gradient(circle at 40% 35%, #ff7a6e, #d62a20 55%, #7d120c); }
     /* buzina (botão preto com aro cromado) e apito (laranja) */
-    .hb-w { display: flex; flex-direction: column; align-items: center; gap: 3px; align-self: center; }
+    .hb-w { display: flex; flex-direction: column; align-items: center; gap: 6px; align-self: center; margin: 0 6px 0 10px; }
+    .lev .tr { margin-left: 8px; }
     .hb-w b { font-size: 9.5px; letter-spacing: 0.08em; color: #e9eef2; font-weight: 800; }
     .hb { width: 46px; height: 46px; border-radius: 50%; border: none; padding: 0; font-size: 7.5px !important; font-weight: 900; letter-spacing: 0.06em; color: #cfd6dc !important;
       background: radial-gradient(circle at 40% 30%, #4c545d, #17191d 65%, #0b0d0f); box-shadow: 0 0 0 3px #9aa3ab, 0 0 0 5px #3a4046, 0 3px 6px rgba(0,0,0,0.6); }

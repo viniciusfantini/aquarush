@@ -69,10 +69,11 @@ export class TurbinePanel {
         <div class="sw-plate tp-sw">${SCR}${SWITCHES.map((s, i) => s.id === "fuelValve"
           // a manete de condição do combustível é um seletor rotativo (como os registros), não uma chave elétrica
           ? rotary("fv", "COMBUSTÍVEL", "condição", [{ v: "cut", l: "CORTE" }, { v: "idle", l: "LENTA" }], { num: i + 1, cls: "fuel" })
-          : toggle({ attr: "s", val: s.id, label: s.label, sub: s.sub, on: s.on, off: s.off, variant: s.variant, num: i + 1 })).join("")}</div>
-        <div class="sw-plate tp-auto">${SCR}
+          : toggle({ attr: "s", val: s.id, label: s.label, sub: s.sub, on: s.on, off: s.off, variant: s.variant, num: i + 1 })).join("")}
+          <div class="tp-auto">
           <div class="rb-w"><button class="rb rb-start" data-f="start" title="partida automática: o FADEC faz a sequência e protege"><span>START</span></button><b>FADEC</b></div>
           <div class="rb-w"><button class="rb rb-stop" data-f="cut" title="STOP: corta o combustível (no FADEC também aborta a partida)"><span>STOP</span></button></div>
+          </div>
         </div>
       </div>
       <div class="tp-row">

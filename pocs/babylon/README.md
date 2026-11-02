@@ -96,9 +96,11 @@ A lancha é um **corpo rígido 6DOF** (massa seca de 1030 kg + gasolina, ocupant
 
 > Referência completa da lógica elétrica e dos motores: [`docs/SISTEMAS_ELETRICOS_E_MOTORES.md`](../../docs/SISTEMAS_ELETRICOS_E_MOTORES.md).
 
-## Painéis estreitos (v0.62.1)
+## Painéis estreitos (v0.62.1 → revisto na v0.62.2)
 
-Os painéis do Y ocupam a menor largura possível: AR-10 com 492 px (antes 830) — mostradores em 2 linhas de 4, anunciadores em 2 linhas, faixa de chaves em 2 linhas ao lado de START/STOP, sistemas e manetes empilhados; sistemas dos barcos a pistão com ~470 px (antes até 760) — PARTIDA, COMANDO e SISTEMAS empilhados, cada um na largura do painel. O botão redondo vermelho da AR-10 diz **STOP** (sem legenda embaixo); o verde, START, com "FADEC" embaixo.
+**v0.62.2:** a largura mínima ficou ruim; agora a AR-10 tem 690 px (mostradores e anunciadores numa linha, as 7 chaves + START/STOP numa botoeira só) e o painel de sistemas até 640 px (PARTIDA e COMANDO lado a lado quando cabem), com mais folga entre a barra do trim e o botão e em volta da buzina.
+
+v0.62.1: os painéis do Y ocupavam a menor largura possível: AR-10 com 492 px (antes 830) — mostradores em 2 linhas de 4, anunciadores em 2 linhas, faixa de chaves em 2 linhas ao lado de START/STOP, sistemas e manetes empilhados; sistemas dos barcos a pistão com ~470 px (antes até 760) — PARTIDA, COMANDO e SISTEMAS empilhados, cada um na largura do painel. O botão redondo vermelho da AR-10 diz **STOP** (sem legenda embaixo); o verde, START, com "FADEC" embaixo.
 
 ## Painel da AR-10 sempre completo, checklist, buzina/apito (v0.62)
 
