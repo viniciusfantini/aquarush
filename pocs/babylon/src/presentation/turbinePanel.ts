@@ -79,7 +79,6 @@ export class TurbinePanel {
           ${cell(rotary("bsel", "BATERIAS", "2 × 12 V em série", [{ v: "off", l: "OFF" }, { v: "bus", l: "BUS" }, { v: "both", l: "BOTH" }]), "bat")}
           ${cell(rotary("tank", "TANQUE", "registro", [{ v: "closed", l: "FECHADO" }, { v: "open", l: "ABERTO" }], { cls: "fuel" }), "tank")}
           ${cell(tri("bilge", "BOMBA PORÃO", "boia ou manual", { v: "on", l: "ON" }, { v: "off", l: "OFF" }, { v: "auto", l: "AUTO" }), "bilge")}
-          <div class="sw-cell tp-gpu"><span class="tp-gpu-l">GPU DA DOCA</span><button data-g="gpu">CONECTAR (J)</button><div class="rd" data-rd="gpu"></div></div>
         </div>
         <div class="sw-plate tp-lev">${SCR}</div>
         <div class="tp-foot"><div class="msg-rd" data-msg><span></span></div></div>
@@ -177,8 +176,7 @@ export class TurbinePanel {
     rd("bat", `${Math.round(t.batterySoc * 100)} % · ${t.busBattery ? "24 V no barram." : "fora"}`);
     rd("tank", t.fuelValveOpen ? `${t.fuelL.toFixed(0)} L no tanque` : `linha ${Math.round(t.fuelLineFrac * 100)} %`);
     rd("bilge", `${t.bilgePump ? "bombeando" : "parada"} · ${t.bilgeL.toFixed(0)} L`);
-    this.q<HTMLButtonElement>("[data-g]").textContent = t.gpu ? (t.gpuState === "online" ? "RECOLHER (J)" : "PARTINDO… (J)") : "CONECTAR (J)";
-    rd("gpu", !t.gpu && t.gpuState === "off" ? "só atracado na doca" : t.gpuState === "online" ? (t.extPwr ? `no barram. · ${t.gpuKw.toFixed(1)} kW` : "estável · fora do barram.") : t.gpuState === "starting" ? "diesel partindo" : "desligando");
+    // (a GPU da doca é um comando externo: fica na barra de atalhos do HUD — J — e no próprio carrinho da doca)
     // display de avisos no pé do painel (caixa fixa, o texto rola): avaria/starter/desgaste e combustível na câmara
     const wear = tb.seized ? "TURBINA DESTRUÍDA (sobretemperatura) — R leva à oficina"
       : tb.starterLock > 0 ? `starter superaquecido: aguarde ${tb.starterLock.toFixed(0)} s`

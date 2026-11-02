@@ -96,9 +96,11 @@ A lancha é um **corpo rígido 6DOF** (massa seca de 1030 kg + gasolina, ocupant
 
 > Referência completa da lógica elétrica e dos motores: [`docs/SISTEMAS_ELETRICOS_E_MOTORES.md`](../../docs/SISTEMAS_ELETRICOS_E_MOTORES.md).
 
-## Painel da AR-10 horizontal (v0.62.3)
+## Painel da AR-10 horizontal (v0.62.3 → equilibrado na v0.62.4)
 
-Em grade (`.tp-grid`): no alto os 8 mostradores e, ao lado, os anunciadores em 2 colunas; no meio a botoeira de partida (as 7 chaves + START/STOP) e, embaixo dela, sistemas (baterias, tanque, bomba de porão) com a **GPU da doca** (botão do cabo + estado); à direita, numa coluna, as manetes (potência e marcha, buzina e trim); no pé, o display de avisos. 960 × 555 px (antes 690 × 694) — não cobre o HUD. Em tela estreita (< 900 px) a grade vira uma coluna só.
+**v0.62.4:** 840 × 555 px em faixas independentes (flex): [mostradores | anunciadores em 2 colunas] / [botoeira de partida: 7 chaves + START/STOP] / [sistemas | manetes] / [avisos]. A **GPU da doca não fica no Y** (comando externo): cabo pelo J, na barra de atalhos à esquerda do HUD, e o estado no visor do carrinho.
+
+v0.62.3, em grade (`.tp-grid`): no alto os 8 mostradores e, ao lado, os anunciadores em 2 colunas; no meio a botoeira de partida (as 7 chaves + START/STOP) e, embaixo dela, sistemas (baterias, tanque, bomba de porão) com a **GPU da doca** (botão do cabo + estado); à direita, numa coluna, as manetes (potência e marcha, buzina e trim); no pé, o display de avisos. 960 × 555 px (antes 690 × 694) — não cobre o HUD. Em tela estreita (< 900 px) a grade vira uma coluna só.
 
 ## Painéis estreitos (v0.62.1 → revisto na v0.62.2)
 
