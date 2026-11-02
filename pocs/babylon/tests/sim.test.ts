@@ -1013,6 +1013,26 @@ for (const [label, thr] of [["baixa", 0.25], ["alta", 1]] as const) {
     run(f2, water, 30, { ...emptyInput(), gear: "F", throttle: 1 });
     check("turbina", "resfriamento a toda (L/s)", f2.telemetry.coolingLps, 2.6, 3.2, "L/s", 2);
   }
+  {
+    // temperatura do óleo: com a água do trocador estabiliza; sem água esquenta, alarma e desgasta (sem corte automático)
+    const o = mk(); run(o, water, 300, N);
+    check("turbina", "óleo em marcha lenta na água, 5 min (°C)", o.telemetry.turbine!.oilC, 70, 90, "°C", 0);
+    run(o, water, 120, { ...emptyInput(), gear: "F", throttle: 1 });
+    check("turbina", "óleo a toda na água, 2 min (°C)", o.telemetry.turbine!.oilC, 80, 100, "°C", 0);
+    check("turbina", "óleo a toda na água: sem alarme", o.telemetry.turbine!.oilHot ? 0 : 1, 1, 1, "", 0);
+    const tb = new Turbine(TURBINA.turbine!); tb.idle();
+    let hotAt = -1, dmgAt = -1, runningAtDmg = false;
+    for (let i = 0; i < 120 * 150; i++) {
+      tb.update(1 / 120, { lever: 0, volts: 13.6, fuel: true, load: 0.12, coolingFrac: 0 }); // tomada d'água fora da água
+      const ev = tb.drainEvents();
+      if (hotAt < 0 && ev.includes("oilHot")) hotAt = i / 120;
+      if (dmgAt < 0 && ev.includes("oilDamage")) { dmgAt = i / 120; runningAtDmg = tb.running; }
+    }
+    check("turbina", "fora d'água: alarme de óleo quente (s)", hotAt, 20, 90, "s", 0);
+    check("turbina", "fora d'água: óleo passa do limite e os mancais começam a se desgastar (s)", dmgAt, 30, 120, "s", 0);
+    check("turbina", "sem corte automático: a turbina continua rodando com o óleo no limite", runningAtDmg ? 1 : 0, 1, 1, "", 0);
+    check("turbina", "fora d'água por 2,5 min: desgaste dos mancais (%)", tb.wear * 100, 20, 100, "%", 0);
+  }
   check("turbina", "sem combustível: não acende (aborta)", dEv.includes("noLightOff") && !dEv.includes("lightoff") ? 1 : 0, 1, 1, "", 0);
   // a toda: velocidade, rotação e a hélice de superfície trabalhando com ~metade do disco fora d'água
   const f = mk(); let t100 = -1, immSum = 0, immN = 0;

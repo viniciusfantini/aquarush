@@ -55,7 +55,7 @@
     #splash-play:hover, #splash-play:focus-visible { filter: brightness(1.1); outline: none; }
     .sp-ver { font-size: 11px; color: rgba(244,248,251,0.4); letter-spacing: 0.08em; }
     /* ---------------- painel de partida da turbina (Y) ---------------- */
-    #tpanel { position: fixed; right: 14px; bottom: 236px; z-index: 3; width: min(560px, calc(100vw - 24px)); max-height: calc(100vh - 290px); overflow-y: auto;
+    #tpanel { position: fixed; right: 14px; bottom: 318px; z-index: 3; width: min(560px, calc(100vw - 24px)); max-height: calc(100vh - 336px); overflow-y: auto;
       display: none; padding: 12px 14px 14px; border-radius: 14px; background: rgba(8, 18, 26, 0.9); border: 1px solid rgba(255,255,255,0.18); box-shadow: 0 10px 40px rgba(0,0,0,0.5);
       backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); font-size: 13px; color: var(--fg); pointer-events: auto; user-select: none; }
     #tpanel.open { display: block; }
@@ -67,8 +67,8 @@
     .tp-mode button { padding: 5px 12px; background: transparent; border: none; font-weight: 700; letter-spacing: 0.08em; font-size: 12px; color: var(--dim); }
     .tp-mode button.sel { background: var(--accent); color: #04222a; }
     .tp-x { width: 28px; height: 28px; border-radius: 50%; border: 1px solid rgba(255,255,255,0.25); background: transparent; font-size: 18px; line-height: 1; }
-    .tp-gauges { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; margin-bottom: 8px; justify-items: center; }
-    .tp-gauges .gauge.small { width: 74px; height: 74px; }
+    .tp-gauges { display: grid; grid-template-columns: repeat(8, 1fr); gap: 2px; margin-bottom: 8px; justify-items: center; }
+    .tp-gauges .gauge.small { width: 64px; height: 64px; }
     .tp-read div { display: grid; gap: 2px; text-align: center; padding: 6px 2px; border-radius: 8px; background: rgba(255,255,255,0.06); }
     .tp-read span { font-size: 9.5px; color: var(--dim); letter-spacing: 0.06em; }
     .tp-read b { font-size: 16px; font-variant-numeric: tabular-nums; }
@@ -124,7 +124,8 @@
     #g-anchor.drag #h-anc-icon, #g-anchor.drag #h-anc { color: #ff5a4e; animation: blink 0.35s steps(2) infinite; }
     #h-anc-st { font-size: 10px; color: var(--dim); }
     /* barra de atalhos do momento (teclado + toque) */
-    #ctx-keys { position: absolute; left: 16px; bottom: 30px; display: flex; flex-wrap: wrap; gap: 6px; max-width: min(46vw, calc(100vw - 32px)); pointer-events: auto; }
+    /* atalhos: ficam à esquerda do HUD; com muitos, as linhas crescem para CIMA (não invadem os relógios) */
+    #ctx-keys { position: absolute; left: 16px; bottom: 30px; display: flex; flex-wrap: wrap-reverse; align-content: flex-start; gap: 6px; max-width: max(250px, calc(100vw - 900px)); pointer-events: auto; }
     #ctx-keys .ctx { font: inherit; font-size: 12.5px; color: var(--fg); background: rgba(8, 20, 30, 0.62); border: 1px solid rgba(255,255,255,0.22); border-radius: 999px; padding: 5px 11px; display: flex; align-items: center; gap: 6px; backdrop-filter: blur(4px); }
     #ctx-keys .ctx[data-a] { cursor: pointer; }
     #ctx-keys .ctx[data-a]:hover { border-color: var(--accent); }
@@ -205,7 +206,9 @@
     #h-debug span { color: var(--dim); }
     #h-debug b { font-weight: 600; font-variant-numeric: tabular-nums; }
 
-    #h-help { position: absolute; right: 18px; top: 16px; padding: 12px 16px; font-size: 12.5px; line-height: 1.7; max-width: 300px; }
+    #h-help { position: absolute; left: 18px; top: 92px; padding: 10px 12px; font-size: 12px; line-height: 1.55; width: 300px; max-height: calc(100vh - 92px - 130px); overflow-y: auto; pointer-events: auto; }
+    #h-help .t span { float: right; font-weight: 400; letter-spacing: 0; color: var(--dim); font-size: 11px; }
+    #h-help .n { margin-top: 4px; color: var(--dim); font-size: 11px; line-height: 1.4; }
     #h-help.hidden { display: none; }
     #h-help kbd { display: inline-block; min-width: 22px; text-align: center; padding: 0 5px; border-radius: 5px; background: rgba(255,255,255,0.16); font-family: inherit; font-size: 11.5px; }
     #h-help .t { font-weight: 700; letter-spacing: 0.12em; margin-bottom: 4px; }
@@ -285,26 +288,19 @@
       <div id="h-debug" class="panel"></div>
     </div>
     <div id="h-help" class="panel">
-      <div class="t">CONTROLES</div>
-      <div>Manete: toque <kbd>S</kbd>/<kbd>↓</kbd> → <b>N</b>, de novo → <b>R</b> (ré lenta)</div>
-      <div>toque <kbd>W</kbd>/<kbd>↑</kbd> → <b>N</b>, de novo → <b>F</b> (frente lenta) · <b>segure</b> para acelerar</div>
-      <div><kbd>A</kbd><kbd>D</kbd>/<kbd>←</kbd><kbd>→</kbd> direção</div>
-      <div id="help-trim"><kbd>E</kbd> trim + (proa sobe) · <kbd>Q</kbd> trim − (proa desce)</div>
-      <div id="help-twin" style="display:none"><kbd>Z</kbd> / <kbd>X</kbd> segurado: empuxo diferencial (um motor em ré, o outro à frente) — gira no lugar para bombordo / boreste. Só na AR-9 (dois motores)</div>
-      <div><kbd>C</kbd> câmera · <span id="help-lights"><kbd>L</kbd> luzes</span> · <kbd>R</kbd> <span id="help-reset">reposicionar</span></div>
-      <div id="help-occ"><kbd>O</kbd> embarque (1 · carona · 2 na popa · 4) — só atracado na vaga do píer, onde as pessoas esperam</div>
-      <div><kbd>0</kbd>/<kbd>G</kbd> água vidro · <kbd>1</kbd> calma · <kbd>2</kbd> lago · <kbd>3</kbd> forte · <kbd>V</kbd> alterna</div>
-      <div id="help-ign"><kbd>P</kbd> liga/desliga o motor (partida só em <b>N</b>) · <kbd>N</kbd>+<kbd>W</kbd> acelera em neutro (sem engatar) · <kbd>J</kbd> jump start (bateria zerada) · <kbd>Esc</kbd> pausa</div>
-      <div><kbd>+</kbd> / <kbd>−</kbd> âncora de proa: segure para pagar / recolher o cabo (filame ~5:1 segura; pouco cabo garra) · bomba de porão automática (alarme quando aciona)</div>
-      <div><kbd>T</kbd> vento: nenhum → fraco → moderado → forte → tempestade (o barco deriva e adorna; carneirinhos na água — as ondas ficam nas teclas 0–3)</div>
-      <div>Rampa: alinhe e suba o barco na carretinha (devagar, de proa). Com a cinta presa você passa a dirigir o carro: <kbd>W</kbd> frente · <kbd>S</kbd> freio/ré · <kbd>A</kbd><kbd>D</kbd> · <kbd>U</kbd> passa o comando ao barco (no seco alterna carro ↔ barco; com a carretinha na água, o 2º U solta a cinta) · <kbd>I</kbd> desacopla/acopla a carretinha do carro</div>
-      <div>Estrada da rampa até o pátio: posto (pare o carro ao lado da bomba, motor do barco desligado: <kbd>F</kbd> abastece o barco), loja e oficina</div>
-      <div>Vaga no píer (lado leste, faixa amarela) e poitas P1–P3 (a leste, em água funda): chegue devagar e o barco é amarrado sozinho · <kbd>M</kbd> solta as amarras · <kbd>K</kbd> (barco amarrado) vai para o carro e volta</div>
-      <div>O jogo começa no <b>fim do cânion</b> (rio ao norte, balizado com boias vermelhas e verdes): o combustível inicial não dá — abasteça no posto</div>
-      <div><kbd>B</kbd> buzina (do carro, quando você estiver nele; senão do barco)</div>
-      <div><kbd>F3</kbd> telemetria · <kbd>H</kbd> ajuda</div>
-      <div>Mouse: arraste para orbitar a câmera</div>
-      <div>Gamepad: RT/LT, analógico, LB/RB trim, Y câmera</div>
+      <div class="t">CONTROLES <span>H fecha</span></div>
+      <div><kbd>W</kbd><kbd>S</kbd> manete: toque F/N/R, segure acelera</div>
+      <div><kbd>A</kbd><kbd>D</kbd> direção</div>
+      <div id="help-trim"><kbd>E</kbd><kbd>Q</kbd> trim + / −</div>
+      <div id="help-twin" style="display:none"><kbd>Z</kbd><kbd>X</kbd> empuxo diferencial (gira no lugar)</div>
+      <div id="help-ign"><kbd>P</kbd> liga/desliga (em N)</div>
+      <div id="help-occ"><kbd>O</kbd> embarque (só na vaga do píer)</div>
+      <div><kbd>M</kbd> amarras · <kbd>K</kbd> carro · <kbd>+</kbd><kbd>−</kbd> âncora</div>
+      <div><kbd>C</kbd> câmera · <span id="help-lights"><kbd>L</kbd> luzes</span> · <kbd>B</kbd> buzina</div>
+      <div><kbd>T</kbd> vento · <kbd>0</kbd>–<kbd>3</kbd> <kbd>V</kbd> ondas</div>
+      <div><kbd>U</kbd> barco ↔ carro · <kbd>I</kbd> carretinha · <kbd>F</kbd> abastece</div>
+      <div><kbd>R</kbd> <span id="help-reset">píer</span> · <kbd>Esc</kbd> pausa · <kbd>F3</kbd> dados</div>
+      <div class="n">Arraste o mouse para girar a câmera. Comece no fim do cânion e abasteça no posto (estrada da rampa).</div>
     </div>
     <div id="h-toast"></div>
     <div id="ctx-keys"></div>

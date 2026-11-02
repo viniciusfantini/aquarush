@@ -131,6 +131,8 @@ export interface BoatTelemetry {
     /** modo e chaves do painel de partida; combustível acumulado sem queimar (L); desgaste por sobretemperatura */
     fadec: boolean; master: boolean; boostPump: boolean; fuelValve: boolean; pooledL: number; wear: number;
     generator: boolean; starterLock: number; seized: boolean;
+    /** temperatura do óleo (°C) e os alarmes: quente (luz + som) e acima do limite (mancais se desgastando) */
+    oilC: number; oilHot: boolean; oilRed: boolean;
     /** barramento energizado: sem ele os instrumentos, luzes e velas ficam apagados */
     powered: boolean;
     /** posição das chaves (o starter/ignição acima são "funcionando": chave E energia) */
@@ -1138,6 +1140,7 @@ export class Speedboat {
     this.immersion = clamp((propDepth + P.propRadius) / (2 * P.propRadius), 0, 1);
     const intakeSubmerged = water.getHeight(intakeW.x, intakeW.z) - intakeW.y > 0.02;
     this.eachUnit((un) => {
+      un.intakeSubmerged = intakeSubmerged; // na carretinha a tomada d'água fica fora da água
       un.rpm = this.updateRpm(dt, 0, 1); // lenta
       const engaged = un.gear !== "N" && un.engine === "running";
       un.propRpmState += ((engaged ? (un.gear === "R" ? -1 : 1) * un.rpm / 2 : 0) - un.propRpmState) * (1 - Math.exp(-dt / (engaged ? 0.08 : 3.5)));
@@ -1351,6 +1354,7 @@ export class Speedboat {
     if (!this.systems2) {
       const sys = this.systems;
       sys.update(dt, { ...this.systemsEngineState(), ...(h.load !== undefined ? { load: h.load } : {}), fuelLph: t.fuelLph, intakeSubmerged: h.intakeSubmerged, lightsOn: h.lightsOn, trimMotorA: h.trimMotorA, auxA: h.auxA });
+      if (this.units[0].turb) sys.coolantC = this.units[0].turb.oilC; // turbina: a "temperatura do motor" é a do óleo
       if (sys.stallReason && this.engine === "running") { this.engine = "off"; t.stall = sys.stallReason; }
       return;
     }
@@ -1364,6 +1368,7 @@ export class Speedboat {
         lightsOn: house && h.lightsOn, trimMotorA: house ? h.trimMotorA : 0, auxA: house ? h.auxA : 0,
       });
       if (!house) this.systems.fuelL = sys.fuelL;
+      if (x.turb) sys.coolantC = x.turb.oilC; // turbina: a "temperatura do motor" é a do óleo
       if (sys.stallReason && x.engine === "running") { x.engine = "off"; t.stall = sys.stallReason; }
     });
   }
@@ -1388,7 +1393,7 @@ export class Speedboat {
     t.turbine = tb ? { n1: tb.n1, n2: tb.n2, egt: tb.egt, torque: tb.torque, oilPsi: tb.oilPsi, fuelLph: tb.fuelLph, phase: tb.phase,
       starter: tb.starter && tb.powered, ignition: tb.ignition && tb.powered, lit: tb.lit, egtWarn: tb.egtWarn, hotStarts: tb.hotStarts, powered: tb.powered, starterSw: tb.starter, ignitionSw: tb.ignition,
       fadec: tb.fadec, master: tb.master, boostPump: tb.boostPump, fuelValve: tb.fuelValve, pooledL: tb.pooledL, wear: tb.wear,
-      generator: tb.generator, starterLock: tb.starterLockT, seized: tb.seizedOn } : null;
+      generator: tb.generator, starterLock: tb.starterLockT, seized: tb.seizedOn, oilC: tb.oilC, oilHot: tb.oilC > tb.p.oilWarnC, oilRed: tb.oilC > tb.p.oilRedC } : null;
   }
 
   /** Estado agregado dos motores para os sistemas (bateria, alternadores, arranques, combustível, temperatura). */
@@ -1423,8 +1428,10 @@ export class Speedboat {
       this.usys.batteryOn = tb.master;
       this.usys.genOn = tb.generator && !tb.starter;
       this.usys.autoExt = tb.fadec; // FADEC fecha/abre o EXT PWR sozinho; no manual é a chave do painel
+      // água do trocador de calor do óleo: bomba mecânica (∝ N1), só com a tomada d'água submersa
+      const coolingFrac = P.cooling ? (this.u.intakeSubmerged ? clamp(tb.n1 / 100, 0, 1.05) : 0) : 1;
       tb.update(dt, { lever: this.throttleActual, volts: this.usys.batteryV, fuel: this.usys.fuelL > 0.005 && !this.usys.starving,
-        load: this.gear === "N" || tb.n1 < 1 ? 0.12 : this.u.propLoad, damage: this.engineDamage });
+        load: this.gear === "N" || tb.n1 < 1 ? 0.12 : this.u.propLoad, damage: this.engineDamage, coolingFrac });
       this.u.engine = tb.engineState;
       this.revLimiting = false;
       if (tb.wear > this.engineDamage) this.engineDamage = tb.wear; // sobretemperatura = avaria do motor

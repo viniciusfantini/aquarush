@@ -102,6 +102,7 @@ export class Hud {
   private tqG: RoundGauge | null = null;
   private n2G: RoundGauge | null = null;
   private oilG: RoundGauge | null = null;
+  private oilTG: RoundGauge | null = null;
   private annun: HTMLElement | null = null;
   private fuelG!: RoundGauge;
   private tempG: RoundGauge | null = null;
@@ -178,7 +179,7 @@ export class Hud {
     this.pins = opts.trimPins;
     const sm = opts.speedMax;
     this.speedG = new RoundGauge(big, { title: "km/h", min: 0, max: sm, labels: Array.from({ length: 6 }, (_, i) => (sm / 5) * i), minor: sm / 20, big: true });
-    this.egtG = this.tqG = this.n2G = this.oilG = null;
+    this.egtG = this.tqG = this.n2G = this.oilG = this.oilTG = null;
     this.annun?.remove(); this.annun = null;
     if (opts.turbine) {
       // turbina: N1 (gerador de gás, %) e EGT (gases de escape, °C) grandes; vermelho no limite de partida/operação
@@ -198,6 +199,8 @@ export class Hud {
       this.tqG = new RoundGauge(small, { title: "TORQUE %", min: 0, max: 120, labels: [0, 60, 120], minor: 10, bands: [{ from: 0, to: 100, c: "g" }, { from: 100, to: 105, c: "y" }, { from: 105, to: 120, c: "r" }] });
       this.n2G = new RoundGauge(small, { title: "N2 %", min: 0, max: 120, labels: [0, 60, 120], minor: 10, bands: [{ from: 40, to: 103, c: "g" }, { from: 104, to: 120, c: "r" }] });
       this.oilG = new RoundGauge(small, { title: "ÓLEO psi", min: 0, max: 100, labels: [0, 50, 100], minor: 10, bands: [{ from: 0, to: 25, c: "r" }, { from: 25, to: 45, c: "y" }, { from: 45, to: 85, c: "g" }, { from: 90, to: 100, c: "r" }] });
+      // temperatura do óleo: normal ~75–95 °C; alarme a 110 °C; acima de 120 °C os mancais se desgastam
+      this.oilTG = new RoundGauge(small, { title: "ÓLEO °C", min: 0, max: 150, labels: [0, 75, 150], minor: 15, bands: [{ from: 60, to: 105, c: "g" }, { from: 105, to: 120, c: "y" }, { from: 120, to: 150, c: "r" }] });
       // luzes da sequência de partida (como no painel de uma turbina)
       const an = document.createElement("div");
       an.id = "g-annun";
@@ -240,7 +243,8 @@ export class Hud {
       set(this.egtG, tb.egt, `${tb.egt.toFixed(0)}`, tb.egtWarn ? "LIMITE" : tb.lit ? "chama" : "", tb.egtWarn || (tb.phase === "accel" && tb.egt > 720));
       set(this.tqG, tb.torque, `${tb.torque.toFixed(0)}`, "", tb.torque > 105);
       set(this.n2G, tb.n2, `${tb.n2.toFixed(0)}`, `${Math.round(t.propRpm)} rpm`, tb.n2 > 104);
-      set(this.oilG, tb.oilPsi, `${tb.oilPsi.toFixed(0)}`, `${t.coolantC.toFixed(0)}°C`, (tb.phase === "running" && tb.oilPsi < 25) || t.overheatWarn);
+      set(this.oilG, tb.oilPsi, `${tb.oilPsi.toFixed(0)}`, "", tb.phase === "running" && tb.oilPsi < 25);
+      set(this.oilTG, tb.oilC, `${tb.oilC.toFixed(0)}`, tb.oilRed ? "DANO" : tb.oilHot ? "QUENTE" : "", tb.oilHot);
       if (this.annun) {
         // GPU: pisca (âmbar) enquanto o diesel dela parte e estabiliza; verde e acesa com a energia externa chaveada
         const blink = Math.floor(performance.now() / 350) % 2 === 0;

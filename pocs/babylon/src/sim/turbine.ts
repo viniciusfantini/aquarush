@@ -37,11 +37,14 @@ export interface TurbineParams {
   fuelMaxLph: number;
   oilPsiMax: number;
   spoolDownTau: number;   // s: N1 desacelerando sem combustível
+  oilWarnC: number;       // °C: alarme de óleo quente (luz + som); não corta nada
+  oilRedC: number;        // °C: acima disso os mancais começam a se danificar (desgaste → avaria → trava)
 }
 
 export type TurbinePhase = "off" | "starter" | "lightoff" | "accel" | "running" | "spooldown";
 export type TurbineEvent = "starter" | "ignition" | "lightoff" | "starterOff" | "idle" | "hotStart" | "noLightOff" | "hungStart"
-  | "shutdown" | "flameout" | "abort" | "overtemp" | "starterOverspeed" | "wetStart" | "earlyFuel" | "starterHot" | "starterLocked" | "seized";
+  | "shutdown" | "flameout" | "abort" | "overtemp" | "starterOverspeed" | "wetStart" | "earlyFuel" | "starterHot" | "starterLocked" | "seized"
+  | "oilHot" | "oilDamage";
 
 /** chaves do painel de partida (manual) */
 export type TurbineSwitch = "master" | "boostPump" | "ignition" | "starter" | "fuelValve" | "generator";
@@ -52,6 +55,9 @@ export interface TurbineInput {
   fuel: boolean;      // há combustível no tanque
   load: number;       // carga da hélice (1 = absorve 100 % do torque a 100 % N2; ~0,03 em neutro)
   damage?: number;    // avaria do motor 0..1 (perde potência)
+  /** água do mar passando pelo trocador de calor do óleo, como fração da vazão a 100 % N1 (bomba mecânica: ∝ N1;
+   *  0 = tomada d'água fora da água) */
+  coolingFrac?: number;
 }
 
 /** N1 mínimo para a câmara acender (fluxo de ar suficiente) e para se sustentar sem o starter */
@@ -83,8 +89,17 @@ export class Turbine {
   hotStarts = 0;
   /** combustível que entrou na câmara sem queimar (L) — partida molhada */
   pooledL = 0;
-  /** desgaste por sobretemperatura (0..1): perde potência (só acontece no manual; o FADEC protege) */
+  /** desgaste (0..1): sobretemperatura do escape no manual (o FADEC protege) ou óleo quente (ninguém protege) */
   wear = 0;
+  /**
+   * Temperatura do óleo de lubrificação (°C). O óleo esquenta com a rotação e a potência (mancais, engrenagens da
+   * caixa de redução) e é resfriado no trocador de calor pela água do mar; a válvula termostática do trocador o
+   * segura em ~75 °C. Sem água (tomada fora d'água, barco na carretinha) só o ar o resfria: ele sobe sem parar.
+   * Não há corte automático: acima de `oilWarnC` acende o alarme; acima de `oilRedC` os mancais se desgastam.
+   */
+  oilC = 26;
+  private oilHotOn = false;
+  private oilRedOn = false;
   private lightT = 0;       // tempo com combustível + ignição esperando acender
   private sinceLight = 99;  // s desde o acendimento
   private sfLight = 1;      // força do arranque no acendimento (bateria boa = 1; sem starter = 0)
@@ -123,7 +138,7 @@ export class Turbine {
 
   /** Fria e parada (reposicionar no píer). No FADEC a bateria fica ligada; no manual, tudo desligado. */
   cold(): void {
-    this.n1 = 0; this.n2 = 0; this.egt = this.p.egtAmbient; this.oilPsi = 0;
+    this.n1 = 0; this.n2 = 0; this.egt = this.p.egtAmbient; this.oilPsi = 0; this.oilC = this.p.egtAmbient; this.oilHotOn = this.oilRedOn = false;
     this.torque = 0; this.power = 0; this.fuelLph = 0; this.starterLoad = 0; this.pooledL = 0;
     this.lit = this.running = false; this.starter = this.ignition = this.fuelValve = this.generator = false;
     this.starterOnT = 0; this.starterLockT = 0; this.earlyL = 0; this.earlyLight = 0; this.n1Light = 12;
@@ -133,7 +148,7 @@ export class Turbine {
   }
   /** Em marcha lenta (estado inicial dos testes, como os motores a pistão começam ligados). */
   idle(): void {
-    this.n1 = this.p.idleN1; this.n2 = 45; this.egt = this.p.egtIdle; this.oilPsi = this.oilAt(this.p.idleN1);
+    this.n1 = this.p.idleN1; this.n2 = 45; this.egt = this.p.egtIdle; this.oilPsi = this.oilAt(this.p.idleN1); this.oilC = 78;
     this.master = this.boostPump = this.fuelValve = this.generator = true; this.starter = this.ignition = false;
     this.lit = this.running = true; this.seq = "none"; this.pooledL = 0;
   }
@@ -298,6 +313,20 @@ export class Turbine {
     this.burst *= 1 - k(2.5);
     this.egt += (egtTarget + this.burst - this.egt) * k(this.burst > 30 ? 0.5 : egtTau);
     this.oilPsi += (this.oilAt(this.n1) - this.oilPsi) * k(0.8);
+    // ---- temperatura do óleo: calor dos mancais/engrenagens (∝ rotação e potência) − trocador de calor − ar ----
+    {
+      const amb = P.egtAmbient;
+      const heat = this.n1 > 5 ? 0.35 * (this.n1 / 100) + 0.55 * smoothstep(5, 30, this.n1) + 1.6 * Math.min(1.1, this.power) : 0; // °C/s
+      const cool = 0.12 * clamp(inp.coolingFrac ?? 1, 0, 1.05) * Math.max(0, this.oilC - 70) + 0.0025 * (this.oilC - amb);      // °C/s
+      this.oilC += (heat - cool) * dt;
+      if (this.oilC > P.oilWarnC && !this.oilHotOn) { this.oilHotOn = true; this.events.push("oilHot"); }
+      if (this.oilC < P.oilWarnC - 5) this.oilHotOn = false;
+      // acima do limite os mancais se desgastam (sem corte automático): ~1 % a cada 2,5 s a 145 °C
+      if (this.oilC > P.oilRedC) {
+        this.wear = Math.min(1, this.wear + dt * (this.oilC - P.oilRedC) / 2500);
+        if (!this.oilRedOn) { this.oilRedOn = true; this.events.push("oilDamage"); }
+      } else if (this.oilC < P.oilRedC - 5) this.oilRedOn = false;
+    }
     // sobretemperatura sem proteção (manual): desgasta a turbina
     const over = this.egt > P.egtStartLimit;
     if (over && !this.fadec) this.wear = Math.min(1, this.wear + dt * (this.egt - P.egtStartLimit) / 600);

@@ -39,7 +39,7 @@ export class TurbinePanel {
   private open = false;
   private readonly act: TurbinePanelActions;
   private readonly q = <T extends HTMLElement>(sel: string) => this.el.querySelector<T>(sel)!;
-  private readonly g: Record<"n1" | "egt" | "n2" | "tq" | "oil" | "bus" | "gpu", RoundGauge>;
+  private readonly g: Record<"n1" | "egt" | "n2" | "tq" | "oil" | "oilT" | "bus" | "gpu", RoundGauge>;
 
   constructor(act: TurbinePanelActions) {
     this.act = act;
@@ -50,7 +50,7 @@ export class TurbinePanel {
         <div class="tp-mode"><button data-mode="fadec">FADEC</button><button data-mode="manual">MANUAL</button></div>
         <button class="tp-x" aria-label="fechar">×</button></div>
       <div class="tp-gauges"></div>
-      <div class="tp-ann">${["BAT", "EXT PWR", "GEN", "STARTER", "IGNIÇÃO", "CHAMA", "EGT ALTA"].map((k) => `<span data-a="${k}">${k}</span>`).join("")}</div>
+      <div class="tp-ann">${["BAT", "EXT PWR", "GEN", "STARTER", "IGNIÇÃO", "CHAMA", "EGT ALTA", "ÓLEO QUENTE"].map((k) => `<span data-a="${k}">${k}</span>`).join("")}</div>
       <div class="tp-fadec">
         <button class="tp-big" data-f="start">PARTIDA</button><button class="tp-big warn" data-f="cut">CORTE / ABORTAR</button>
         <p>O FADEC faz a sequência: EXT PWR (com a GPU estável) → starter → ignição e combustível a 12 % N1 → acende → starter e ignição desligam a 45 % → marcha lenta 62 % → GERADOR ligado e EXT PWR aberto. Aborta sozinho partida pendurada, sem acendimento e quente (EGT &gt; 780 °C).</p>
@@ -87,6 +87,7 @@ export class TurbinePanel {
       n2: new RoundGauge(box, { title: "N2 %", min: 0, max: 120, labels: [0, 60, 120], minor: 10, bands: [{ from: 40, to: 103, c: "g" }, { from: 104, to: 120, c: "r" }] }),
       tq: new RoundGauge(box, { title: "TORQUE %", min: 0, max: 120, labels: [0, 60, 120], minor: 10, bands: [{ from: 0, to: 100, c: "g" }, { from: 100, to: 105, c: "y" }, { from: 105, to: 120, c: "r" }] }),
       oil: new RoundGauge(box, { title: "ÓLEO psi", min: 0, max: 100, labels: [0, 50, 100], minor: 10, bands: [{ from: 0, to: 25, c: "r" }, { from: 25, to: 45, c: "y" }, { from: 45, to: 85, c: "g" }, { from: 90, to: 100, c: "r" }] }),
+      oilT: new RoundGauge(box, { title: "ÓLEO °C", min: 0, max: 150, labels: [0, 75, 150], minor: 15, bands: [{ from: 60, to: 105, c: "g" }, { from: 105, to: 120, c: "y" }, { from: 120, to: 150, c: "r" }] }),
       bus: new RoundGauge(box, { title: "BARRAM. V", min: 16, max: 32, labels: [16, 24, 32], minor: 2, bands: [{ from: 16, to: 22, c: "r" }, { from: 22, to: 24, c: "y" }, { from: 24, to: 29.5, c: "g" }, { from: 30, to: 32, c: "r" }] }),
       gpu: new RoundGauge(box, { title: "GPU A", min: 0, max: 600, labels: [0, 300, 600], minor: 50, bands: [{ from: 0, to: 500, c: "g" }, { from: 500, to: 600, c: "r" }] }),
     };
@@ -108,13 +109,15 @@ export class TurbinePanel {
     set(this.g.egt, tb.egt, tb.egt.toFixed(0), "", tb.egt > 780);
     set(this.g.n2, tb.n2, tb.n2.toFixed(0), `${Math.round(t.propRpm)} rpm`, tb.n2 > 104);
     set(this.g.tq, tb.torque, tb.torque.toFixed(0), "", tb.torque > 105);
-    set(this.g.oil, tb.oilPsi, tb.oilPsi.toFixed(0), `${t.coolantC.toFixed(0)}°C`, tb.phase === "running" && tb.oilPsi < 25);
+    set(this.g.oil, tb.oilPsi, tb.oilPsi.toFixed(0), "", tb.phase === "running" && tb.oilPsi < 25);
+    set(this.g.oilT, tb.oilC, tb.oilC.toFixed(0), tb.oilRed ? "DANO" : tb.oilHot ? "QUENTE" : "", tb.oilHot);
     set(this.g.bus, t.batteryV, t.batteryV.toFixed(1), t.busBattery ? `bat ${t.batteryA > 0.5 ? "+" : ""}${t.batteryA.toFixed(0)} A` : "bat fora", t.batteryV < 22);
     set(this.g.gpu, t.gpuA, t.gpuA.toFixed(0), t.extPwr ? `${t.gpuKw.toFixed(1)} kW` : "", t.gpuA > 500);
     const ann: Record<string, string> = {
       BAT: t.busBattery ? "g" : "", GEN: t.busGen ? "g" : tb.generator && tb.phase === "running" ? "a" : "",
       "EXT PWR": t.extPwr ? "g" : t.gpu && (t.gpuState === "starting" || (t.gpuState === "online" && !t.extPwrClosed)) && blink ? "a" : "",
       STARTER: tb.starter ? "a" : "", "IGNIÇÃO": tb.ignition ? "a" : "", CHAMA: tb.lit ? "g" : "", "EGT ALTA": on && tb.egt > 720 ? "r" : "",
+      "ÓLEO QUENTE": on && tb.oilRed ? (blink ? "r" : "") : on && tb.oilHot ? "r" : "",
     };
     for (const s of this.el.querySelectorAll<HTMLElement>("[data-a]")) s.className = ann[s.dataset.a ?? ""] ?? "";
     const sw: Record<PanelSwitch, boolean> = { master: tb.master, extPwr: t.extPwrClosed, boostPump: tb.boostPump, starter: tb.starterSw, ignition: tb.ignitionSw, fuelValve: tb.fuelValve, generator: tb.generator };

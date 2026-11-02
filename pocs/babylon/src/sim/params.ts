@@ -566,6 +566,7 @@ export const TURBINA: SpeedboatParams = {
     shp: 1100, idleN1: 62, maxN1: 101, starterN1Max: 24, lightOffN1: 12, starterCutN1: 45,
     egtAmbient: 26, egtIdle: 480, egtMax: 640, egtStartLimit: 780, egtRedline: 700,
     spoolTau: 1.6, accelLimit: 9, n2Rpm: 6000, fuelIdleLph: 85, fuelMaxLph: 470, oilPsiMax: 80, spoolDownTau: 9,
+    oilWarnC: 110, oilRedC: 120,
   },
   propGear: 2.4,               // eixo de saída 6000 rpm → hélice 2500 rpm
   surfacePiercing: true,
@@ -576,7 +577,8 @@ export const TURBINA: SpeedboatParams = {
   // sistema de 24 V (como nas turbinas: duas baterias de 12 V/75 Ah em série + starter-gerador de 28 V). Valores em
   // "equivalente 12 V" (ver EngineSystemsParams.nominalV): 150 Ah ≙ 75 Ah a 24 V; arranque 350 A ≙ ~175 A a 24 V;
   // gerador 120 A ≙ 60 A a 28 V. Óleo resfriado pela água do lago (trocador de calor): o "TEMP" é a do óleo
-  systems: { nominalV: 24, batteryAh: 150, starterA: 350, altMaxA: 120, altIdleFrac: 0.8, thermostatC: 75, warnC: 105, protectC: 115, shutdownC: 125 },
+  // (a temperatura vem do modelo de óleo da turbina; turbina não tem corte automático por temperatura: protect/shutdown fora)
+  systems: { nominalV: 24, batteryAh: 150, starterA: 350, altMaxA: 120, altIdleFrac: 0.8, thermostatC: 75, warnC: 110, protectC: 999, shutdownC: 999 },
   maxThrust: 40000,
   reverseThrustFactor: 0.35,
   propPitchSpeed: 60,

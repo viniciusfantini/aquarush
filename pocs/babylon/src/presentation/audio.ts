@@ -75,6 +75,7 @@ export interface AudioState {
   windlassA?: number;     // molinete da âncora (A)
   apparentWind?: number;  // vento aparente (m/s): chiado do vento
   anchorRelay?: boolean;  // molinete sem força: só o relé
+  oilAlarm?: boolean;     // turbina: óleo quente — alarme de dois tons ("master caution") até alguém resolver
   /** 2º motor (AR-9, dois V8): rotação, carga e estado próprios — uma segunda voz de síntese */
   rpm2?: number;
   throttle2?: number;
@@ -132,6 +133,8 @@ export class EngineAudio {
   /** diesel da GPU (gerador da doca): pulsos de combustão, batida de diesel, zunido do gerador e o starter */
   private dv: { pulse: OscillatorNode; pulseLP: BiquadFilterNode; pulseG: GainNode; knockAM: GainNode; knockLfo: OscillatorNode; knockG: GainNode; whine: OscillatorNode; whineG: GainNode; crank: OscillatorNode; crankG: GainNode } | null = null;
   private dRpm = 0;
+  private cautionOsc: OscillatorNode | null = null;
+  private cautionG: GainNode | null = null;
   private dLoadS = 0;
   private igniterT = 0;
   private igniterSide = 1;
@@ -407,6 +410,15 @@ export class EngineAudio {
       this.tv = { shaft, shaftG, comp, compG, blade, bladeG, ptur, pturG, vib, combLP, combG, rumbleG, hissBP, hissG, starter, starterG };
     }
 
+    // ---- alarme de dois tons (master caution) ----
+    {
+      const o = ctx.createOscillator(); o.type = "square"; o.frequency.value = 950; o.start();
+      const bp = ctx.createBiquadFilter(); bp.type = "bandpass"; bp.frequency.value = 1100; bp.Q.value = 1.2;
+      const g = ctx.createGain(); g.gain.value = 0;
+      o.connect(bp).connect(g).connect(this.master);
+      this.cautionOsc = o; this.cautionG = g;
+    }
+
     // ---- diesel da GPU (4 cilindros, 4 tempos, governado em 1500 rpm para 50 Hz no gerador) ----
     {
       const pulse = ctx.createOscillator(); pulse.type = "sawtooth"; pulse.frequency.value = 50; pulse.start();
@@ -485,6 +497,12 @@ export class EngineAudio {
     if (st.engine === "cranking" && !st.pullStart && sRpm < 40 && t > this.solenoidT) { this.solenoidT = t + 0.35; this.clunk(false); }
     this.buzzGain.gain.setTargetAtTime(m * (st.buzzer ? 0.05 : 0), t, 0.008);
     if ((st.trimRelay || st.anchorRelay) && t > this.solenoidT) { this.solenoidT = t + 0.45; this.clunk(false); } // relé estalando sem força
+    // óleo quente: "piu-pou" de dois tons a cada 0,9 s (alarme de cautela da turbina)
+    if (this.cautionOsc && this.cautionG) {
+      const ph = t % 0.9, onA = !!st.oilAlarm && ph < 0.36;
+      this.cautionOsc.frequency.setValueAtTime(ph < 0.18 ? 950 : 720, t);
+      this.cautionG.gain.setTargetAtTime(m * (onA ? 0.045 : 0), t, 0.01);
+    }
     // alarme de porão: 0,25 s ligado a cada 0,6 s
     this.alarmGain.gain.setTargetAtTime(m * (st.bilgeAlarm && t % 0.6 < 0.25 ? 0.035 : 0), t, 0.005);
     this.bilgeGain.gain.setTargetAtTime(m * Math.min(0.06, 0.05 * (st.bilgeFlowLps ?? 0)), t, 0.1);

@@ -45,7 +45,7 @@ import { BoatCamera } from "./presentation/cameras.ts";
 import { Hud } from "./presentation/hud.ts";
 import { EngineAudio } from "./presentation/audio.ts";
 
-const BUILD = "poc-babylon 0.53.0";
+const BUILD = "poc-babylon 0.54.0";
 /** Escala visual da rotação da hélice (proporcional ao RPM, abaixo do limite estroboscópico). */
 const PROP_VISUAL_SCALE = 0.12;
 
@@ -394,6 +394,13 @@ const boot = async () => {
   };
   const leaveCar = (toast = true) => { carOnly = false; setPeopleVisible(true); cam.resetOrbit(); if (toast) hud.showToast("De volta ao barco"); };
   let ctxKey = "";
+  /** A barra de atalhos ocupa só o espaço à esquerda dos relógios do HUD; com muitos botões ela cresce para cima. */
+  const fitCtxBar = () => {
+    const g = document.getElementById("gauges")?.getBoundingClientRect();
+    if (g && g.width > 0 && innerWidth > 900) ctxBar.style.maxWidth = `${Math.max(240, g.left - 36)}px`;
+    else ctxBar.style.maxWidth = "";
+  };
+  window.addEventListener("resize", fitCtxBar);
   const ctxBar = document.getElementById("ctx-keys")!;
   ctxBar.addEventListener("click", (e) => { const a = (e.target as HTMLElement).closest<HTMLElement>("[data-a]")?.dataset.a; if (a) input.pushAction(a as Action); });
   // ---- dirigindo o veículo de reboque (barco preso na carretinha pela cinta) ----
@@ -543,19 +550,14 @@ const boot = async () => {
       : { speedMax: twin ? 140 : 100, temp: true, battery: true, trimPins: 0, gear: "bar", twin });
     document.getElementById("help-twin")!.style.display = twin ? "" : "none";
     document.getElementById("help-trim")!.innerHTML = isBote
-      ? "<kbd>E</kbd>/<kbd>Q</kbd> trim manual (sem acelerar): pino 1 · 2 · 3 → <kbd>E</kbd> de novo levanta o motor (tilt)"
-      : "<kbd>E</kbd> trim + (proa sobe) · <kbd>Q</kbd> trim − (proa desce)";
-    document.getElementById("help-occ")!.innerHTML = isBote
-      ? "<kbd>O</kbd> embarque (1 · 1 no meio · 1 na popa · 3) — só atracado na vaga do píer, onde as pessoas esperam; muda o peso e o equilíbrio"
-      : kind === "rapida" ? "<kbd>O</kbd> embarque (1 · piloto + navegador) — só atracado na vaga do píer, onde as pessoas esperam"
-      : turbine ? "Piloto único, no habitáculo fechado (célula de segurança: virando, ele fica preso no cinto, dentro da cabine)"
-      : "<kbd>O</kbd> embarque (1 · carona · 2 na popa · 4) — só atracado na vaga do píer, onde as pessoas esperam; muda o peso e o equilíbrio";
-    document.getElementById("help-ign")!.innerHTML = isBote
-      ? "<kbd>P</kbd> puxa a corda / desliga (partida só em <b>N</b>) · <kbd>N</kbd>+<kbd>W</kbd> acelera em neutro · <kbd>Esc</kbd> pausa"
-      : turbine ? "<kbd>P</kbd> partida da turbina (em <b>N</b>): arranque → ignição e combustível a 12 % N1 → acende (EGT sobe) → arranque desliga a 45 % → marcha lenta 62 % (~20 s). <kbd>P</kbd> de novo aborta a partida ou corta o combustível (a turbina desacelera ~40 s; só dá nova partida com o N1 abaixo de 8 %). Bateria fraca = partida pendurada ou QUENTE (EGT > 780 °C). <kbd>J</kbd> GPU (gerador a diesel de 28 V, só atracado na vaga do píer; sem jump start) · <kbd>Y</kbd> painel de partida: FADEC (automático) ou MANUAL (chave por chave: bateria, bomba, starter, ignição, combustível) · <kbd>Esc</kbd> pausa"
-      : "<kbd>P</kbd> liga/desliga o motor (partida só em <b>N</b>) · <kbd>N</kbd>+<kbd>W</kbd> acelera em neutro (sem engatar) · <kbd>J</kbd> jump start (bateria zerada) · <kbd>Esc</kbd> pausa";
-    document.getElementById("help-lights")!.innerHTML = isBote ? "<kbd>L</kbd> lanterna de mão" : "<kbd>L</kbd> luzes de navegação";
-    document.getElementById("help-reset")!.textContent = `reposicionar (${START_FUEL[kind]} L)`;
+      ? "<kbd>E</kbd><kbd>Q</kbd> trim manual (pinos 1–3, depois tilt)"
+      : "<kbd>E</kbd><kbd>Q</kbd> trim + / −";
+    document.getElementById("help-occ")!.innerHTML = turbine ? "piloto único (habitáculo fechado)" : "<kbd>O</kbd> embarque (só na vaga do píer)";
+    document.getElementById("help-ign")!.innerHTML = isBote ? "<kbd>P</kbd> corda (partida em N) · <kbd>N</kbd>+<kbd>W</kbd> acelera em neutro"
+      : turbine ? "<kbd>P</kbd> partida FADEC / corte · <kbd>Y</kbd> painel de partida (manual) · <kbd>J</kbd> GPU (na doca)"
+      : "<kbd>P</kbd> liga/desliga (em N) · <kbd>N</kbd>+<kbd>W</kbd> neutro · <kbd>J</kbd> jump start";
+    document.getElementById("help-lights")!.innerHTML = isBote ? "<kbd>L</kbd> lanterna" : "<kbd>L</kbd> luzes";
+    document.getElementById("help-reset")!.textContent = `píer (${START_FUEL[kind]} L)`;
     document.getElementById("h-charge")!.style.display = isBote ? "none" : "";
     const rapFloor = (V.vis as BoatVisual & { floor?: number }).floor ?? 0.02;
     cam.headLocal = isBote ? new Vector3(V.P.seats.helm.x, DINGHY_FLOOR + 1.22, V.P.seats.helm.z + 0.02)
@@ -953,6 +955,7 @@ const boot = async () => {
       const key = K.map((k) => k[0] + k[1]).join("|");
       if (key !== ctxKey) {
         ctxKey = key;
+        fitCtxBar(); // não invadir os relógios (o HUD muda de largura conforme o barco)
         ctxBar.innerHTML = K.map(([k, label, act]) => `<button class="ctx${act === "unhitch" || act === "moor" || act === "car" || (act === "jump" && !T.jumper && T.batterySoc < 0.08) || (act === "couple" && !V.rig.coupled) ? " hot" : ""}"${act ? ` data-a="${act}"` : " disabled"}>${k.split(" ").map((x) => `<kbd>${x}</kbd>`).join("")} ${label}</button>`).join("");
       }
     }
@@ -977,7 +980,9 @@ const boot = async () => {
         earlyFuel: `Combustível aberto CEDO (acendeu com N1 em ${tb.n1.toFixed(0)} %): pouco ar para o combustível — a EGT dispara (partida quente)`,
         starterHot: "STARTER SUPERAQUECIDO: mais de 40 s ligado — o térmico desarmou; espere ~60 s para usar de novo",
         starterLocked: "Starter ainda quente (térmico desarmado) — aguarde esfriar",
-        seized: "TURBINA DESTRUÍDA pela sobretemperatura: travou. R leva à oficina do píer (reparo)",
+        seized: "TURBINA DESTRUÍDA (sobretemperatura do escape ou do óleo): travou. R leva à oficina do píer (reparo)",
+        oilHot: `ÓLEO QUENTE: ${tb.oilC.toFixed(0)} °C — a turbina NÃO corta sozinha. Sem água no trocador (tomada fora d'água?) ela esquenta: reduza ou corte`,
+        oilDamage: `ÓLEO ACIMA DE ${V.P.turbine!.oilRedC} °C: os mancais estão se desgastando — corte a turbina (P / CORTE) antes que ela trave`,
       };
       if (mode === "game" && tmsg[e]) hud.showToast(tmsg[e]!);
     }
@@ -1106,6 +1111,7 @@ const boot = async () => {
     audio.update({
       rpm: T.rpm, throttle: T.throttle, speed: Math.hypot(boat.vel.x, boat.vel.z), boil: Math.max(T.cavitation, 1 - T.ventilation),
       inGear: T.gear !== "N", propInWater: T.propImmersion > 0.5, revLimiter: T.revLimiter, cockpit: cam.mode === "cockpit", engine: T.engine, trimMotorA: T.trimMotorA, trimRelay: T.trimRelay, bilgeAlarm: mode === "game" && T.bilgeAlarm && !T.capsized && !T.sunk, bilgeFlowLps: T.bilgeFlowLps, windlassA: T.windlassA, apparentWind: T.apparentWind, anchorRelay: T.anchorRelay, buzzer: T.buzzer, starterRpm: T.starterRpm, pullStart: T.pullStart,
+      oilAlarm: mode === "game" && !!T.turbine?.oilHot && !T.sunk,
       // AR-9: o 2º V8 tem voz própria (rotação/carga/estado dele)
       ...(boat.units.length > 1 ? { rpm: T.rpms[0], throttle: T.throttles[0], rpm2: T.rpms[1], throttle2: T.throttles[1], engine2: T.engines[1], engine: T.engines[0] } : {}),
       // turbina: N1/N2, EGT (chama), arranque e velas de ignição — síntese própria (apito do compressor, rugido da combustão)
