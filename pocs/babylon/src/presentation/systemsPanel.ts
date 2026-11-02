@@ -10,6 +10,7 @@
 
 import type { BoatTelemetry } from "../sim/boat.ts";
 import { makeDraggable } from "./dragPanel.ts";
+import { LeverControls, type LeverCmd, type LeverKind } from "./levers.ts";
 import { toggle, tri, rotary, pull, ignKey, rope, setToggle, setTri, setRotary, setPull, setKey, setRope, bindKeySpring } from "./switches.ts";
 
 export type BatterySel = "off" | "ind" | "bb" | "be" | "both";
@@ -25,6 +26,7 @@ export interface SystemsPanelActions {
   setKey(engine: number, pos: KeyPos): void;  // chave de ignição de um motor
   pullStart(): void;                          // bote: puxar a corda (= P)
   stopEngine(): void;                         // bote: botão STOP
+  setLever(engine: number, cmd: LeverCmd): void; // manete do painel (vai para o InputManager)
   close(): void;
 }
 
@@ -35,6 +37,7 @@ export interface SystemsPanelCaps {
   choke: boolean;
   bilgePump: boolean;
   lights: string;       // "LUZES" / "LANTERNA"
+  levers: LeverKind;    // tipo de manete do barco
 }
 
 const plate = (inner: string, cls = "") => `<div class="sw-plate ${cls}"><span class="screw s1"></span><span class="screw s2"></span><span class="screw s3"></span><span class="screw s4"></span>${inner}</div>`;
@@ -45,7 +48,8 @@ export class SystemsPanel {
   private readonly act: SystemsPanelActions;
   private readonly title: HTMLElement;
   private readonly body: HTMLElement;
-  private caps: SystemsPanelCaps = { title: "", banks: 1, keys: [], choke: false, bilgePump: true, lights: "LUZES" };
+  private caps: SystemsPanelCaps = { title: "", banks: 1, keys: [], choke: false, bilgePump: true, lights: "LUZES", levers: "binnacle" };
+  private levers: LeverControls | null = null;
 
   constructor(act: SystemsPanelActions) {
     this.act = act;
@@ -92,13 +96,19 @@ export class SystemsPanel {
     cells.push(cell(toggle({ attr: "lights", val: "1", label: caps.lights, sub: caps.banks ? "navegação" : "a pilha" }), "lights"));
     this.title.textContent = `⠿ SISTEMAS — ${caps.title}`;
     this.body.innerHTML = `
-      <div class="sp-sec">PARTIDA</div>${plate(start, "sp-start")}
+      <div class="sp-top"><div><div class="sp-sec">PARTIDA</div>${plate(start, "sp-start")}</div>
+        <div class="sp-grow"><div class="sp-sec">COMANDO</div>${plate("", "sp-lev")}</div></div>
       <div class="sp-sec">SISTEMAS</div>${plate(cells.join(""))}
       <p class="sp-note" data-note></p>`;
+    this.levers = new LeverControls(caps.levers, (i, c) => this.act.setLever(i, c));
+    this.body.querySelector<HTMLElement>(".sp-lev")!.appendChild(this.levers.el);
   }
 
   get isOpen(): boolean { return this.open; }
   setOpen(on: boolean): void { this.open = on; this.el.classList.toggle("open", on); }
+
+  /** Posição das manetes: o comando atual por motor (do InputManager). */
+  updateLevers(cmds: LeverCmd[]): void { if (this.open) this.levers?.update(cmds); }
 
   update(t: BoatTelemetry, lightsOn: boolean): void {
     if (!this.open) return;

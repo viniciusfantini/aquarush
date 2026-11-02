@@ -1,14 +1,14 @@
 # AQUA RUSH — Sistemas elétricos e de motores (referência para qualquer IA ou dev)
 
 Este documento descreve **toda a lógica** dos sistemas elétricos, de combustível, de arrefecimento, de partida e
-dos motores das 4 embarcações da POC 1 (Babylon.js, `pocs/babylon`), como estão no código na **v0.58.0**. Serve
+dos motores das 4 embarcações da POC 1 (Babylon.js, `pocs/babylon`), como estão no código na **v0.59.0**. Serve
 para continuar o trabalho em outra IA/ferramenta ou portar para Unity/Unreal sem precisar redescobrir as regras.
 
 > Fonte da verdade = o código. Se divergir, vale o código e este arquivo deve ser corrigido.
 > Arquivos: `src/sim/engineSystems.ts` (combustível, temperatura, bateria, alternador, booster, GPU, barramento),
 > `src/sim/turbine.ts` (turbina a gás + FADEC), `src/sim/boat.ts` (motores `EngineUnit`, partida, chaves,
 > roteamento de baterias, porão), `src/sim/anchor.ts` (molinete), `src/sim/params.ts` (parâmetros = contrato entre
-> as POCs). Testes: `tests/sim.test.ts` (`npm run test:sim`, hoje **552/554 + 2 KNOWN**).
+> as POCs). Testes: `tests/sim.test.ts` (`npm run test:sim`, hoje **561/563 + 2 KNOWN**).
 
 ---
 
@@ -34,7 +34,7 @@ para continuar o trabalho em outra IA/ferramenta ou portar para Unity/Unreal sem
 |---|---|---|---|---|
 | Motor | popa 4T 150 hp | popa 15 hp de cana, **carburado** | 2 × V8 de centro com rabeta (300 hp cada) | turbina a gás de eixo livre ~1100 shp |
 | Partida | elétrica (chave/P) | **corda** (`electricStart: false`) | elétrica, **uma chave por motor** | FADEC ou manual por chaves |
-| Elétrico | 12 V, 1 banco 50 Ah | **sem bateria** (`hasBattery: false`) | 12 V, **2 bancos de 100 Ah** (um por motor) | **24 V**, 1 banco (150 Ah eq.) com chave **BAT** |
+| Elétrico | 12 V, 1 banco 50 Ah | **sem bateria** (`hasBattery: false`) | 12 V, **2 bancos de 100 Ah** (um por motor) | **24 V** = 2 × 12 V em série (150 Ah eq.), seletor **OFF/BUS/BOTH** + chave **BAT** (mestre do barramento) |
 | Arranque | 170 A | — | 200 A cada | starter-gerador (350 A eq.) |
 | Alternador | 35 A (27 % na lenta) | — | 35 A por motor | gerador 120 A eq. (80 % já na lenta), chave **GEN** |
 | Linha de combustível após o registro | 0,08 L | 0,04 L | 0,2 L | 0,3 L |
@@ -71,7 +71,9 @@ temporário (`START_FUEL` em `main.ts`: 5 L lancha/bote, 20 L AR-9, 120 L AR-10)
 O **amperímetro** é `batteryA` (+ carregando, − descarregando).
 
 ### 3.4 Barramento com até três fontes (relés)
-- **BAT** (`batteryOn`) — a bateria no barramento.
+- **Mestre do barramento** (`busOn`, só a AR-10: chave BAT **e** seletor fora de OFF) — sem ele nenhuma fonte chega
+  ao barramento (`source` = 0 V, `extOnline` falso, o gerador não carrega). Nos barcos a pistão é sempre true.
+- **Bateria** (`batteryOn`) — a bateria no barramento.
 - **GEN** (`genOn`) — o alternador / starter-gerador.
 - **GPU** (`extOnline` = GPU estável **e** relé EXT PWR fechado).
 
@@ -104,7 +106,21 @@ cruzeiro (rpm ≥ 2000 e folga de alternador ≥ 10 A) a ~10 A.
 | `be` | — | o banco **BE** alimenta tudo; o BB fica isolado |
 | `both` | — | bancos em **paralelo**: depois do passo a SOC e a tensão se igualam (ponderadas pela capacidade) |
 
-\* Na AR-10 a chave geral é o `Turbine.master` (BAT), copiada para `systems.batteryOn` a cada passo.
+\* Na AR-10 o seletor é outro (abaixo).
+
+### AR-10: seletor OFF / BUS / BOTH + chave BAT (v0.59)
+As duas baterias de 12 V ficam **em série** (24 V); por isso não há "1"/"2" (uma sozinha daria 12 V).
+
+| Seletor | BAT ligada | Efeito |
+|---|---|---|
+| `off` | — | barramento isolado (`busOn` falso): nada funciona; com a turbina rodando, o solenoide fecha e ela apaga |
+| `bus` | sim | baterias **fora**; o barramento fica só com a GPU (EXT PWR) ou com o gerador (turbina rodando com GEN). Sem GPU e sem gerador: 0 V |
+| `both` | sim | as duas em série no barramento (24 V) + GPU/gerador se houver |
+| qualquer | **não** | BAT é o **mestre do barramento**: desligada, nada chega a ele (nem GPU, nem gerador) |
+
+No código (`updateRpm`, ramo da turbina): `bus = tb.master && sel !== "off"`; `usys.busOn = bus`;
+`usys.batteryOn = bus && sel !== "bus"`; `usys.genOn = tb.generator && !tb.starter`. A largada é em `both`.
+FADEC (`toggleIgnition`): sem `bus`, ou em `bus` sem a GPU estável → `"noPower"`.
 
 - A temperatura e o combustível de cada motor continuam por motor; só a parte elétrica muda de rota.
 - `bankFor(i)` = banco que alimenta o motor `i` (em `bb` → 0, em `be` → 1, senão o próprio). A partida e a tensão do
@@ -119,9 +135,10 @@ cruzeiro (rpm ≥ 2000 e folga de alternador ≥ 10 A) a ~10 A.
   (13,6–14,2 V). A bateria para de carregar; o painel avisa do risco de queimar o regulador (load dump). Com o motor
   parado e a chave em OFF: sem partida, sem bomba de porão, sem luzes.
 - **Bote:** magneto, sem bateria — nada muda.
-- **AR-10:** com o **GERADOR** ligado a turbina segue (o gerador segura o barramento). Sem gerador e sem GPU o
-  barramento cai; o **solenoide de corte de combustível** (normalmente fechado) perde a tensão e, depois de
-  **0,3 s** sem barramento (`Turbine.unpoweredT`), fecha → a chama apaga.
+- **AR-10:** seletor em **BUS** com o **GERADOR** ligado: a turbina segue (o gerador segura o barramento). Sem gerador
+  e sem GPU o barramento cai; o **solenoide de corte de combustível** (normalmente fechado) perde a tensão e, depois
+  de **0,3 s** sem barramento (`Turbine.unpoweredT`), fecha → a chama apaga. **BAT desligada** (mestre) ou seletor em
+  **OFF**: o barramento cai na hora, mesmo com o gerador → apaga.
 
 ---
 
@@ -157,7 +174,8 @@ o getter `engine` agrega (algum ligado = "running") e os setters valem para todo
 ### 7.1 Chave de ignição por motor (v0.58) — `Speedboat.setKey(i, "off" | "on" | "start")`
 - **OFF:** ignição desligada; se o motor estiver ligado/girando, para.
 - **ON:** ignição ligada e **autoteste** (`testT` = 1,1 s, alarme apitando) **se** o banco do motor tiver
-  `supplyV(2) > 9 V`; sem tensão, nada apita.
+  `supplyV(2) > 9 V`; sem tensão, nada apita. **Energizar depois:** com a chave já em ON e o motor parado, quando o
+  banco ganha tensão (chave geral ligada) o autoteste apita (`EngineUnit.keyLive` guarda o estado do passo anterior).
 - **START** (momentâneo, com mola): só em N; gira o arranque **enquanto segurada** (`manualCrank`, sem o limite de
   4 s). Ao soltar o painel manda `"on"`: se não pegou, o arranque para e registra `startFail`.
 - Engatado → `"needNeutral"`; sem piloto no posto → `"noPilot"`; avariado (≥ 95 %) → `"broken"`.
@@ -205,7 +223,10 @@ mais o EXT PWR da GPU no `EngineSystems`.
 - Combustível chega à câmara: válvula aberta **e** barramento há < 0,3 s **e** tanque **e** (bomba ligada ou N1 > 45 %).
 - **Acende** com combustível + ignição + N1 ≥ 9 % depois de ~1,1 s. Acesa: acelera com o starter; sem starter só se
   sustenta acima de **40 % N1** (abaixo: rollback, esquenta). Chega à lenta (≥ 61,5 %) → `running`.
-- Starter: a embreagem solta acima de 60 % N1; uso contínuo > 40 s → superaquece e trava 60 s (`starterLockT`).
+- Starter-gerador (sem embreagem): no **FADEC** o controle de partida corta o starter (a 45 %; "speed switch" de reserva
+  a 60 %). No **MANUAL ninguém corta** — é o piloto: esquecido ligado acima de 60 % N1 gera o evento
+  `starterOverspeed` (aviso), aquece **4× mais rápido** e o térmico desarma. Uso contínuo > 40 s (equivalentes) →
+  superaquece e trava 60 s (`starterLockT`). O gerador só gera com o starter desligado.
 - N2 (turbina livre): torque disponível ∝ gás·(2 − N2), carga da hélice ∝ carga·N2² (lei da hélice).
 
 ### 8.3 FADEC (padrão) — camada que aciona as mesmas chaves (`fadecStep`)
@@ -221,7 +242,7 @@ O piloto pode mexer na BAT mesmo no FADEC (`setSwitch("master")`).
 - **Combustível cedo** (antes de 12 % N1, `earlyL`) → partida quente.
 - **Rollback / pendurada:** desligar o starter abaixo de 40 % N1.
 - **Sobretemperatura:** EGT > 780 °C desgasta (`wear`); ≥ 95 % → turbina **travada** (`seizedOn`, vira avaria).
-- Starter superaquecido (40 s), embreagem solta a 60 %.
+- Starter superaquecido (40 s; acima de 60 % N1 conta 4×) — sem corte automático no manual.
 
 ### 8.5 Óleo e água de resfriamento
 - `oilC`: calor ∝ N1 e potência; resfriamento pelo trocador de calor (água do mar) ∝ vazão acima de 70 °C + perda
@@ -255,7 +276,13 @@ girando → `"busy"`.
   IGNIÇÃO, COMBUSTÍVEL rotativo, GERADOR) e SISTEMAS (BAT no FADEC, tanque rotativo, bomba de porão).
 - `switches.ts`: `toggle` (LED = `lit`, posição = `on`), `tri` (`armed` âmbar / `run` verde), `rotary`, `ignKey`
   + `bindKeySpring` (START com mola), `pull`, `rope`.
-- `dragPanel.ts`: janelas arrastáveis (posição em `localStorage`).
+- `dragPanel.ts`: janelas arrastáveis (posição em `localStorage`; o painel inteiro fica dentro da tela).
+- `levers.ts` (`LeverControls`, v0.59): manetes por tipo — `binnacle` (AR-6: manete única de topo, p ∈ [−1, 1], N em
+  |p| < 0,12, lenta engrenada até 0,2, acelerador = (|p| − 0,2)/0,8), `twin` (AR-9: duas, independentes), `tiller`
+  (bote: punho giratório + câmbio F-N-R), `turbine` (AR-10: potência em T + marcha). O painel é um **dispositivo de
+  entrada**: `InputManager.setPanelLever(i, cmd, motores)` → `touchLever` (um motor) ou `panelLevers` → `engineCmd`
+  (dois). Teclado/gamepad (W/S, N) retomam e limpam as manetes do painel. Trocar a marcha no câmbio separado volta o
+  acelerador para a lenta (a sim só engata com `throttleActual < 0,12`).
 
 ---
 
@@ -278,7 +305,9 @@ Grupos "sistemas", "bateria", "amperímetro", "neutro", "porão", "rápida", "tu
 - AR-9 BE zerado: IND 1 motor, BB 2, BE 0, AMBAS iguala e 2, OFF 0; BB zerado em BE: 2.
 - Chave: ON apita e não gira; START segurada pega em ~1,2 s; soltar → ON e ligado; OFF para; engatado recusa;
   bateria zerada 8 s não pega; AR-9 só BB → só BB.
-- Chave geral OFF com os motores ligados (pistão): seguem. AR-10: BAT off com GEN → segue; sem GEN → apaga em ~0,4 s.
+- Chave geral OFF com os motores ligados (pistão): seguem. Chave em ON sem bateria: silêncio; ligou a geral: apita.
+- AR-10: BUS com GEN → segue; BUS sem GEN → apaga em ~0,4 s; BAT (mestre) off → apaga; FADEC em OFF / BUS sem GPU
+  recusam; BUS + GPU parte com a bateria fora; manual: starter não desacopla sozinho e desarma esquecido ligado.
 - Registro fechado: AR-6 morre em ~96 s; afogador frio 7 % × 85 %; quente afoga em ~15 s.
 - Turbina: sequência FADEC, pico de EGT 550–760 °C a 60 % de bateria, marcha lenta em 12–35 s, 24 V mínimo no
   arranque 18–25 V, GPU, partida quente a 43 %, partida manual errada (molhada, cedo, rollback), óleo, molinete −16 A.

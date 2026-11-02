@@ -3,7 +3,8 @@
 export const makeDraggable = (el: HTMLElement, head: HTMLElement, storageKey: string): void => {
   const place = (x: number, y: number) => {
     const w = el.offsetWidth || 560, h = el.offsetHeight || 300;
-    const nx = Math.min(Math.max(4, x), innerWidth - w - 4), ny = Math.min(Math.max(4, y), innerHeight - Math.min(h, 120));
+    // o painel inteiro fica dentro da tela (se couber); senão, ao menos a barra de título
+    const nx = Math.min(Math.max(4, x), innerWidth - w - 4), ny = Math.max(4, Math.min(y, innerHeight - (h < innerHeight - 8 ? h + 4 : 120)));
     el.style.left = `${nx}px`; el.style.top = `${ny}px`; el.style.right = "auto"; el.style.bottom = "auto";
   };
   try {
@@ -28,5 +29,7 @@ export const makeDraggable = (el: HTMLElement, head: HTMLElement, storageKey: st
   };
   head.addEventListener("pointerup", end); head.addEventListener("pointercancel", end);
   // ao redimensionar, só reposiciona um painel VISÍVEL (o escondido tem retângulo 0,0 e iria para o canto)
+  // ao abrir (ou quando o conteúdo muda de tamanho) o painel volta para dentro da tela
+  new ResizeObserver(() => { if (el.offsetWidth === 0) return; const r = el.getBoundingClientRect(); place(r.left, r.top); }).observe(el);
   addEventListener("resize", () => { if (!el.style.left || el.offsetWidth === 0) return; const r = el.getBoundingClientRect(); place(r.left, r.top); });
 };

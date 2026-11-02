@@ -1,0 +1,153 @@
+// Manetes de acelerador no painel do Y, uma por tipo de comando (CSS em index.html):
+//  • "binnacle" — lancha AR-6 (motor de popa): manete única de topo, marcha + acelerador na mesma alavanca
+//    (ré ← N → frente, com detentes em N e na lenta engrenada);
+//  • "twin"     — AR-9 (dois V8): duas manetes lado a lado, bombordo (punho vermelho) e boreste (verde),
+//    independentes — empuxo diferencial na mão;
+//  • "tiller"   — bote AR-3 (cana): punho giratório do acelerador (tartaruga ↔ lebre) + alavanca de câmbio F-N-R
+//    na lateral do motor;
+//  • "turbine"  — AR-10: manete de potência em T num trilho reto (LENTA → MÁX) + alavanca de marcha F-N-R separada.
+// O painel NÃO comanda a simulação: ele é mais um dispositivo de entrada — manda {marcha, acelerador} por motor para o
+// InputManager, que monta o VehicleInput (contrato único). A posição mostrada é a da manete (o comando), não um
+// instrumento.
+
+export type Gear = "F" | "N" | "R";
+export interface LeverCmd { gear: Gear; throttle: number }
+export type LeverKind = "binnacle" | "twin" | "tiller" | "turbine";
+
+const ARC = 50; // graus de curso da manete de topo para cada lado
+
+/** posição p ∈ [−1, 1] da manete combinada ↔ comando (detente de N em |p| < 0,12; lenta engrenada até 0,2) */
+const pToCmd = (p: number): LeverCmd => {
+  const a = Math.abs(p);
+  if (a < 0.12) return { gear: "N", throttle: 0 };
+  return { gear: p > 0 ? "F" : "R", throttle: Math.min(1, Math.max(0, (a - 0.2) / 0.8)) };
+};
+const cmdToP = (c: LeverCmd): number => c.gear === "N" ? 0 : (c.gear === "F" ? 1 : -1) * (c.throttle <= 0.001 ? 0.17 : 0.2 + 0.8 * c.throttle);
+
+const gearSel = (idx: number) => `<div class="gs" data-gs="${idx}"><span class="gs-slot"></span><span class="gs-knob"></span>
+  ${(["F", "N", "R"] as Gear[]).map((g) => `<button data-lg="${idx}" data-gear="${g}">${g}</button>`).join("")}</div>`;
+
+export class LeverControls {
+  readonly el: HTMLElement;
+  private readonly kind: LeverKind;
+  private readonly n: number;
+  private readonly onChange: (i: number, c: LeverCmd) => void;
+  /** comando de cada manete enquanto o piloto a segura (mostrado no lugar do que vem do input) */
+  private drag: (LeverCmd | null)[] = [];
+  private shown: LeverCmd[] = [];
+
+  constructor(kind: LeverKind, onChange: (i: number, c: LeverCmd) => void) {
+    this.kind = kind; this.onChange = onChange;
+    this.n = kind === "twin" ? 2 : 1;
+    const el = document.createElement("div");
+    el.className = `lev lev-${kind}`;
+    if (kind === "binnacle" || kind === "twin") {
+      const unit = (i: number, label: string, cls: string) => `<div class="mt" data-mt="${i}">
+        <div class="mt-house"><span class="mt-arc"></span>
+          <i class="mt-l r">R</i><i class="mt-l n">N</i><i class="mt-l f">F</i>
+          <span class="mt-arm ${cls}"><span class="mt-knob"></span></span><span class="mt-hub"></span></div>
+        <em class="mt-rd">N</em><b>${label}</b></div>`;
+      el.innerHTML = kind === "twin"
+        ? `${unit(0, "BOMBORDO", "port")}${unit(1, "BORESTE", "stbd")}<small class="lev-tip">arraste cada manete · F à direita</small>`
+        : `${unit(0, "MANETE", "")}<small class="lev-tip">arraste: N no meio · F à direita · R à esquerda</small>`;
+    } else if (kind === "tiller") {
+      el.innerHTML = `<div class="tl"><div class="tl-grip" data-grip="0"><span class="tl-ridges"></span><span class="tl-mark"></span></div>
+          <div class="tl-scale"><span>🐢 LENTO</span><span>RÁPIDO 🐇</span></div><em class="mt-rd">0 %</em><b>PUNHO DO ACELERADOR</b><small>arraste para os lados (gira o punho)</small></div>
+        <div class="tl-shift">${gearSel(0)}<b>CÂMBIO</b><small>no motor</small></div>`;
+    } else {
+      el.innerHTML = `<div class="pl"><div class="pl-track" data-pl="0"><span class="pl-slot"></span>
+            <i class="pl-l max">MÁX</i><i class="pl-l idle">LENTA</i><span class="pl-handle"><span class="pl-t"></span></span></div>
+          <em class="mt-rd">0 %</em><b>POTÊNCIA</b><small>manete em T (N1)</small></div>
+        <div class="tl-shift">${gearSel(0)}<b>MARCHA</b><small>só com a potência na lenta</small></div>`;
+    }
+    this.el = el;
+    for (let i = 0; i < this.n; i++) { this.drag.push(null); this.shown.push({ gear: "N", throttle: 0 }); }
+    this.bind();
+  }
+
+  private send(i: number, c: LeverCmd): void { this.drag[i] = c; this.onChange(i, c); this.paint(i, c); }
+
+  private bind(): void {
+    const el = this.el;
+    // manete de topo: o ângulo do ponteiro em volta do pivô define a posição
+    for (const house of el.querySelectorAll<HTMLElement>(".mt-house")) {
+      const i = Number(house.parentElement!.dataset.mt);
+      const at = (e: PointerEvent) => {
+        const r = house.getBoundingClientRect();
+        const px = r.left + r.width / 2, py = r.bottom - 16;
+        const ang = (Math.atan2(e.clientX - px, py - e.clientY) * 180) / Math.PI;
+        this.send(i, pToCmd(Math.max(-1, Math.min(1, ang / ARC))));
+      };
+      this.drag1(house, at, i);
+    }
+    // punho giratório: arrastar para os lados
+    const grip = el.querySelector<HTMLElement>(".tl-grip");
+    if (grip) {
+      let x0 = 0, t0 = 0;
+      grip.addEventListener("pointerdown", (e) => { x0 = e.clientX; t0 = this.shown[0].throttle; grip.setPointerCapture(e.pointerId); e.preventDefault(); this.drag[0] = { ...this.shown[0] }; });
+      grip.addEventListener("pointermove", (e) => {
+        if (!this.drag[0] || !grip.hasPointerCapture(e.pointerId)) return;
+        this.send(0, { gear: this.shown[0].gear, throttle: Math.max(0, Math.min(1, t0 + (e.clientX - x0) / 140)) });
+      });
+      const up = () => { this.drag[0] = null; };
+      grip.addEventListener("pointerup", up); grip.addEventListener("pointercancel", up);
+    }
+    // manete de potência (trilho vertical)
+    const track = el.querySelector<HTMLElement>(".pl-track");
+    if (track) {
+      const at = (e: PointerEvent) => {
+        const r = track.getBoundingClientRect();
+        const f = 1 - (e.clientY - r.top - 12) / (r.height - 24);
+        this.send(0, { gear: this.shown[0].gear, throttle: Math.max(0, Math.min(1, f)) });
+      };
+      this.drag1(track, at, 0);
+    }
+    // câmbio separado F-N-R (bote e turbina)
+    el.addEventListener("click", (e) => {
+      const b = (e.target as HTMLElement).closest<HTMLElement>("button[data-lg]");
+      if (!b) return;
+      const g = b.dataset.gear as Gear;
+      // como no motor real, o câmbio só entra com o acelerador na lenta: o punho/potência volta para a lenta
+      this.onChange(0, { gear: g, throttle: 0 }); this.paint(0, { gear: g, throttle: 0 });
+    });
+  }
+
+  private drag1(target: HTMLElement, at: (e: PointerEvent) => void, i: number): void {
+    target.addEventListener("pointerdown", (e) => { target.setPointerCapture(e.pointerId); e.preventDefault(); at(e); });
+    target.addEventListener("pointermove", (e) => { if (target.hasPointerCapture(e.pointerId)) at(e); });
+    const up = () => { this.drag[i] = null; };
+    target.addEventListener("pointerup", up); target.addEventListener("pointercancel", up);
+    target.addEventListener("dblclick", () => this.send(i, { gear: "N", throttle: 0 }));
+  }
+
+  /** Mostra os comandos atuais (do InputManager); a manete que o piloto está segurando fica onde a mão está. */
+  update(cmds: LeverCmd[]): void {
+    for (let i = 0; i < this.n; i++) {
+      const c = this.drag[i] ?? cmds[i] ?? cmds[0];
+      const s = this.shown[i];
+      if (c.gear !== s.gear || Math.abs(c.throttle - s.throttle) > 0.004) this.paint(i, c);
+    }
+  }
+
+  private paint(i: number, c: LeverCmd): void {
+    this.shown[i] = { ...c };
+    const el = this.el, pct = `${Math.round(c.throttle * 100)} %`;
+    if (this.kind === "binnacle" || this.kind === "twin") {
+      const u = el.querySelector<HTMLElement>(`.mt[data-mt="${i}"]`)!;
+      u.querySelector<HTMLElement>(".mt-arm")!.style.transform = `rotate(${cmdToP(c) * ARC}deg)`;
+      u.querySelector<HTMLElement>(".mt-rd")!.textContent = c.gear === "N" ? "N" : `${c.gear} · ${pct}`;
+      u.dataset.g = c.gear;
+      return;
+    }
+    if (this.kind === "tiller") {
+      el.querySelector<HTMLElement>(".tl-ridges")!.style.backgroundPositionX = `${-c.throttle * 46}px`;
+      el.querySelector<HTMLElement>(".tl-mark")!.style.left = `${8 + c.throttle * 84}%`;
+    } else {
+      el.querySelector<HTMLElement>(".pl-handle")!.style.bottom = `calc(${c.throttle * 100}% - ${c.throttle * 24}px)`;
+    }
+    el.querySelector<HTMLElement>(".mt-rd")!.textContent = `${c.gear} · ${pct}`;
+    const gs = el.querySelector<HTMLElement>(".gs")!;
+    gs.dataset.pos = c.gear;
+    for (const b of gs.querySelectorAll<HTMLElement>("button")) b.classList.toggle("on", b.dataset.gear === c.gear);
+  }
+}

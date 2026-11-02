@@ -898,17 +898,34 @@ for (const [label, thr] of [["baixa", 0.25], ["alta", 1]] as const) {
     const nb = mk(); nb.coldEngines(); nb.units[0].turb!.master = false;
     check("turbina", "FADEC com a chave BAT desligada (sem GPU): partida recusada", nb.toggleIgnition() === "noPower" ? 1 : 0, 1, 1, "", 0);
   }
-  // chave BAT desligada com a turbina em marcha lenta: o GERADOR mantém o barramento; sem ele (e sem GPU) o solenoide
-  // de combustível perde a tensão, fecha e a chama apaga
+  // seletor de baterias em BUS (baterias fora) com a turbina em marcha lenta: o GERADOR mantém o barramento; sem ele
+  // (e sem GPU) o solenoide de combustível perde a tensão, fecha e a chama apaga. A chave BAT (mestre) desligada
+  // derruba o barramento inteiro, mesmo com o gerador
   {
     const r = mk(); r.coldEngines(); r.systems.batterySoc = 0.8;
     r.toggleIgnition(); run(r, water, 40, N);
     const tb = r.units[0].turb!;
-    tb.setSwitch("master", false); run(r, water, 8, N);
-    check("turbina", "BAT desligada em marcha lenta com o GERADOR ligado: segue acesa", tb.lit && tb.running ? 1 : 0, 1, 1, "", 0);
+    r.batterySel = "bus"; run(r, water, 8, N);
+    check("turbina", "seletor em BUS em marcha lenta com o GERADOR ligado: segue acesa", tb.lit && tb.running ? 1 : 0, 1, 1, "", 0);
     tb.generator = false; let outAt = -1;
     run(r, water, 5, N, openWater, (t) => { if (outAt < 0 && !tb.lit) outAt = t; });
-    check("turbina", "BAT e GERADOR desligados (sem GPU): o solenoide fecha e a chama apaga (s)", outAt, 0.2, 1.5, "s", 2);
+    check("turbina", "BUS sem GERADOR e sem GPU: o solenoide fecha e a chama apaga (s)", outAt, 0.2, 1.5, "s", 2);
+    const m = mk(); m.coldEngines(); m.systems.batterySoc = 0.8;
+    m.toggleIgnition(); run(m, water, 40, N);
+    const tm = m.units[0].turb!; let mOut = -1;
+    tm.setSwitch("master", false);
+    run(m, water, 5, N, openWater, (t) => { if (mOut < 0 && !tm.lit) mOut = t; });
+    check("turbina", "chave BAT (mestre) desligada em marcha lenta: o barramento cai e a chama apaga (s)", mOut, 0.2, 1.5, "s", 2);
+    // FADEC: seletor em OFF recusa; em BUS sem GPU recusa; em BUS com a GPU estável parte
+    const o = mk(); o.coldEngines(); o.batterySel = "off";
+    check("turbina", "FADEC com o seletor de baterias em OFF: partida recusada", o.toggleIgnition() === "noPower" ? 1 : 0, 1, 1, "", 0);
+    const g = mk(); g.coldEngines(); g.batterySel = "bus";
+    check("turbina", "FADEC em BUS sem GPU: partida recusada", g.toggleIgnition() === "noPower" ? 1 : 0, 1, 1, "", 0);
+    g.systems.gpu = true; run(g, water, 6, N);
+    const gr = g.toggleIgnition(); let gIdle = -1;
+    run(g, water, 40, N, openWater, (t) => { if (gIdle < 0 && g.units[0].turb!.running) gIdle = t; });
+    check("turbina", "FADEC em BUS com a GPU: parte só pela GPU (marcha lenta, s)", gr === "starting" ? gIdle : -1, 8, 30, "s", 1);
+    check("turbina", "BUS: as baterias ficam fora (corrente, A)", g.telemetry.batteryA, 0, 0, "A", 1);
   }
   // ---- partida MANUAL pelo painel (chave por chave) ----
   const manual = () => { const x = mk(); x.coldEngines(); x.systems.batterySoc = 0.6; const tb = x.units[0].turb!; tb.setFadec(false); tb.cold(); return { x, tb }; };
@@ -958,8 +975,9 @@ for (const [label, thr] of [["baixa", 0.25], ["alta", 1]] as const) {
   }
   // ---- barramento: BAT, EXT PWR (GPU) e GEN; defeitos de sequência ----
   {
-    // BAT desligada mas a GPU no barramento: os periféricos funcionam (o starter gira)
+    // baterias fora (seletor em BUS, BAT ligada) e a GPU no barramento: os periféricos funcionam (o starter gira)
     const { x, tb } = manual();
+    x.batterySel = "bus"; tb.setSwitch("master", true);
     x.systems.gpu = true;
     run(x, water, 6, N);                                   // diesel da GPU estabiliza
     tb.setSwitch("boostPump", true); tb.setSwitch("starter", true);
@@ -968,8 +986,10 @@ for (const [label, thr] of [["baixa", 0.25], ["alta", 1]] as const) {
     check("turbina", "manual: GPU estável mas EXT PWR aberto — barramento sem fonte (V)", x.telemetry.batteryV, 0, 1, "V", 1);
     x.systems.extPwr = true;
     run(x, water, 6, N);
-    check("turbina", "BAT desligada + GPU (EXT PWR): o starter gira pelo barramento (N1, %)", tb.n1, 12, 30, "%", 1);
-    check("turbina", "BAT desligada + GPU: barramento na tensão da GPU (V)", x.telemetry.batteryV, 26, 29, "V", 1);
+    check("turbina", "BUS (baterias fora) + GPU (EXT PWR): o starter gira pelo barramento (N1, %)", tb.n1, 12, 30, "%", 1);
+    check("turbina", "BUS + GPU: barramento na tensão da GPU (V)", x.telemetry.batteryV, 26, 29, "V", 1);
+    tb.setSwitch("master", false); run(x, water, 1, N);
+    check("turbina", "BUS + GPU com a chave BAT (mestre) desligada: barramento sem tensão (V)", x.telemetry.batteryV, 0, 1, "V", 1);
   }
   {
     // marcha lenta no manual: sem a chave GEN a bateria não carrega; ligando, carrega. Depois BAT desligada:
@@ -986,11 +1006,11 @@ for (const [label, thr] of [["baixa", 0.25], ["alta", 1]] as const) {
     tb.setSwitch("generator", true); run(x, water, 3, N);
     check("turbina", "GEN ligado: o gerador carrega a bateria (A)", x.telemetry.batteryA, 5, 60, "A", 0);
     const soc0 = x.systems.batterySoc;
-    tb.setSwitch("master", false); run(x, water, 10, N);
-    check("turbina", "BAT desligada com a turbina rodando: o gerador segura o barramento (V)", x.telemetry.batteryV, 26, 29.5, "V", 1);
-    check("turbina", "BAT desligada: a bateria fica fora (corrente, A)", x.telemetry.batteryA, 0, 0, "A", 1);
-    check("turbina", "BAT desligada: carga da bateria inalterada (pontos de %)", Math.abs(x.systems.batterySoc - soc0) * 100, 0, 0.01, "%", 3);
-    check("turbina", "BAT desligada: a turbina continua rodando", tb.running ? 1 : 0, 1, 1, "", 0);
+    x.batterySel = "bus"; run(x, water, 10, N);
+    check("turbina", "seletor em BUS com a turbina rodando: o gerador segura o barramento (V)", x.telemetry.batteryV, 26, 29.5, "V", 1);
+    check("turbina", "BUS: a bateria fica fora (corrente, A)", x.telemetry.batteryA, 0, 0, "A", 1);
+    check("turbina", "BUS: carga da bateria inalterada (pontos de %)", Math.abs(x.systems.batterySoc - soc0) * 100, 0, 0.01, "%", 3);
+    check("turbina", "BUS: a turbina continua rodando", tb.running ? 1 : 0, 1, 1, "", 0);
   }
   {
     // periféricos no amperímetro: só a bateria no barramento, bomba e ignição ligadas (sem starter)
@@ -1021,6 +1041,20 @@ for (const [label, thr] of [["baixa", 0.25], ["alta", 1]] as const) {
     run(x, water, 45, N, openWater, () => ev.push(...tb.drainEvents()));
     check("turbina", "manual: starter > 40 s seguidos superaquece e trava", ev.includes("starterHot") && !tb.starter && tb.starterLockT > 0 ? 1 : 0, 1, 1, "", 0);
     check("turbina", "starter travado: não religa enquanto quente", tb.setSwitch("starter", true) ? 0 : 1, 1, 1, "", 0);
+  }
+  {
+    // manual: o starter NÃO desacopla sozinho (o corte automático é do FADEC); esquecido ligado acima de 60 % N1 avisa,
+    // esquenta 4× mais rápido e o térmico desarma
+    const { x, tb } = manual();
+    for (const sw of ["master", "boostPump", "starter"] as const) tb.setSwitch(sw, true);
+    const ev: string[] = []; let st = 0, at62 = false, hotAt = -1;
+    run(x, water, 45, N, openWater, (t) => {
+      if (st === 0 && tb.n1 >= 12) { tb.setSwitch("ignition", true); tb.setSwitch("fuelValve", true); st = 1; }
+      if (tb.n1 > 61.5 && !at62) at62 = tb.starter;
+      for (const e of tb.drainEvents()) { ev.push(e); if (e === "starterHot" && hotAt < 0) hotAt = t; }
+    });
+    check("turbina", "manual: acima de 60 % N1 o starter continua ligado (não desacopla sozinho)", at62 ? 1 : 0, 1, 1, "", 0);
+    check("turbina", "manual: starter esquecido ligado — avisa e o térmico desarma (s)", ev.includes("starterOverspeed") ? hotAt : -1, 15, 40, "s", 0);
   }
   {
     // desgaste total por sobretemperatura: a turbina trava (avaria do motor) e a oficina conserta
@@ -1194,6 +1228,13 @@ for (const [label, thr] of [["baixa", 0.25], ["alta", 1]] as const) {
     z.coldEngines(); z.systems.batterySoc = 0; run(z, water, 0.5, N);
     z.setKey(0, "on"); z.setKey(0, "start"); run(z, water, 8, N); z.setKey(0, "on");
     check("sistemas", "bateria zerada: START segurada 8 s não pega", z.units[0].engine === "off" && z.telemetry.startFail !== "" ? 1 : 0, 1, 1, "", 0);
+    // chave de ignição em ON com a chave geral em OFF (nada apita); ligando a chave geral → autoteste
+    const q = new Speedboat(SPEEDBOAT, v3(0, 0.25, 0)); q.systems.fuelL = 50; q.occupants = [{ seat: "helm", mass: PERSON_KG }];
+    q.coldEngines(); q.systems.batterySoc = 0.8; q.batterySel = "off"; run(q, water, 0.5, N);
+    q.setKey(0, "on"); run(q, water, 0.3, N);
+    const quiet = !q.telemetry.buzzer;
+    q.batterySel = "ind"; run(q, water, 0.3, N);
+    check("sistemas", "chave em ON sem bateria: silêncio; ligou a chave geral: autoteste apita", quiet && q.telemetry.buzzer ? 1 : 0, 1, 1, "", 0);
     // AR-9: só a chave de bombordo → só o motor BB
     const x = new Speedboat(RAPIDA, v3(0, 0.3, 0)); x.systems.fuelL = 100; x.occupants = [{ seat: "helm", mass: PERSON_KG }];
     x.coldEngines(); for (const s2 of x.banks) { s2.batterySoc = 0.8; s2.coolantC = 60; } run(x, water, 0.5, N);

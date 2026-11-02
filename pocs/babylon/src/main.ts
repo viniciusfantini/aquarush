@@ -46,7 +46,7 @@ import { BoatCamera } from "./presentation/cameras.ts";
 import { Hud } from "./presentation/hud.ts";
 import { EngineAudio } from "./presentation/audio.ts";
 
-const BUILD = "poc-babylon 0.58.0";
+const BUILD = "poc-babylon 0.59.0";
 /** Escala visual da rotação da hélice (proporcional ao RPM, abaixo do limite estroboscópico). */
 const PROP_VISUAL_SCALE = 0.12;
 
@@ -569,7 +569,8 @@ const boot = async () => {
     audio.cylinders = V.P.cylinders;
     tpanel.setOpen(false); spanel.setOpen(false);
     spanel.configure({ title: V.P.name, banks: !V.P.electricStart ? 0 : V.boat.systems2 ? 2 : 1,
-      keys: !V.P.electricStart || V.P.turbine ? [] : V.boat.units.length > 1 ? ["IGNIÇÃO BB", "IGNIÇÃO BE"] : ["IGNIÇÃO"], choke: !!V.P.carbureted, bilgePump: V.P.bilge.pumpLph > 0, lights: isBote ? "LANTERNA" : "LUZES" });
+      keys: !V.P.electricStart || V.P.turbine ? [] : V.boat.units.length > 1 ? ["IGNIÇÃO BB", "IGNIÇÃO BE"] : ["IGNIÇÃO"],
+      levers: isBote ? "tiller" : V.boat.units.length > 1 ? "twin" : "binnacle", choke: !!V.P.carbureted, bilgePump: V.P.bilge.pumpLph > 0, lights: isBote ? "LANTERNA" : "LUZES" });
     lights = false; input.setLights(false);
     setNavLights(V.vis, false); V.dinghy?.setLantern(false);
     hud.setLights(false, isBote ? "LANTERNA" : "LUZES");
@@ -593,7 +594,7 @@ const boot = async () => {
     for (const bk of b.banks) if (bk.p.hasBattery) bk.batterySoc = START_BATTERY; // bateria(s) a 60 %
     b.engine = "off"; // começa desligado: dê a partida (P)
     for (const x of b.units) { x.key = "off"; x.manualCrank = false; x.testT = 0; }
-    b.batterySel = "ind"; b.bilgeMode = "auto"; b.choke = false; b.systems.fuelValveOpen = true;
+    b.batterySel = b.params.turbine ? "both" : "ind"; b.bilgeMode = "auto"; b.choke = false; b.systems.fuelValveOpen = true;
     if (b.params.carbureted) b.systems.coolantC = 24; // bote carburado: motor frio, pede o afogador
     b.coldEngines(); // (turbina parada e fria, N1 = 0)
     b.systems.fuelL = START_FUEL[V.kind];
@@ -628,6 +629,13 @@ const boot = async () => {
     fadecCut: () => { const tb = V.boat.units[0].turb; if (tb && (tb.running || tb.starting)) input.pushAction("ignition"); },
     gpu: () => input.pushAction("jump"),
     setFuelTank: (open) => setFuelValve(open),
+    setBattery: (sel) => {
+      V.boat.batterySel = sel;
+      hud.showToast(sel === "off" ? "Baterias em OFF: barramento isolado (nem as baterias nem a GPU chegam a ele)"
+        : sel === "bus" ? "Baterias em BUS: baterias fora — o barramento fica só com a GPU (EXT PWR) ou o gerador"
+        : "Baterias em BOTH: as duas de 12 V em série = 24 V no barramento");
+    },
+    setLever: (cmd) => input.setPanelLever(0, cmd, 1),
     setBilge: (mode) => setBilgeMode(mode),
     close: () => tpanel.setOpen(false),
   });
@@ -661,6 +669,7 @@ const boot = async () => {
       else if (pos === "off" && before !== "off") hud.showToast(`Chave${name} em OFF: ignição desligada`);
       else if (pos === "on" && before === "off") hud.showToast(b.units[i].testT > 0 ? `Chave${name} em ON — autoteste… segure START para dar partida` : `Chave${name} em ON — sem tensão: nem o autoteste apita`);
     },
+    setLever: (i, cmd) => input.setPanelLever(i, cmd, V.boat.units.length),
     pullStart: () => { if (V.boat.engine !== "running") input.pushAction("ignition"); },
     stopEngine: () => { if (V.boat.engine === "running") input.pushAction("ignition"); },
     close: () => spanel.setOpen(false),
@@ -805,7 +814,7 @@ const boot = async () => {
         const tb = boat.telemetry.turbine;
         const tm: Record<string, string> = { stopped: tb && tb.phase === "running" ? "Combustível cortado" : "Partida abortada", starting: "Partida da turbina: arranque girando o gerador de gás…",
           busy: `Turbina ainda girando (N1 ${tb ? tb.n1.toFixed(0) : 0} %) — espere passar de 8 % para nova partida`, needNeutral: "Coloque em N para dar partida", lowBattery: "Bateria descarregada: o arranque não gira — atraque na doca e conecte a GPU (J)",
-          noPower: "Sem energia no barramento: ligue a chave BAT no painel (Y) — ou a GPU na doca (J)" };
+          noPower: "Sem energia no barramento: chave BAT ligada e baterias em BOTH (ou BUS com a GPU da doca, J) — painel Y" };
         if (tm[r]) { hud.showToast(tm[r]); return; }
       }
       const msg: Record<string, string> = { stopped: "Motor desligado", pulling: "Puxando a corda…", starting: "Chave ligada — autoteste…", busy: "Dando partida…", needNeutral: "Coloque em N para dar partida", noFuel: "Sem combustível — R para voltar ao píer e abastecer", lowBattery: "Bateria descarregada: nem o relé de partida arma — J conecta o jump start", hot: "Motor quente demais — espere esfriar" };
@@ -1021,7 +1030,7 @@ const boot = async () => {
         shutdown: "Combustível cortado: a turbina desacelera (spool-down ~40 s)",
         overtemp: `SOBRETEMPERATURA: EGT ${tb.egt.toFixed(0)} °C (limite ${V.P.turbine!.egtStartLimit}) — corte o COMBUSTÍVEL! No manual nada protege: a turbina desgasta`,
         wetStart: "Partida MOLHADA: o combustível acumulado na câmara queimou de uma vez (labareda) — abra o combustível só com a ignição ligada e N1 em 12 %",
-        starterOverspeed: "Starter desengatado: N1 acima de 50–60 % (proteção de sobrevelocidade)",
+        starterOverspeed: "Starter ainda ligado acima de 60 % N1 — desligue: no manual ninguém corta, e ele esquenta rápido",
         earlyFuel: `Combustível aberto CEDO (acendeu com N1 em ${tb.n1.toFixed(0)} %): pouco ar para o combustível — a EGT dispara (partida quente)`,
         starterHot: "STARTER SUPERAQUECIDO: mais de 40 s ligado — o térmico desarmou; espere ~60 s para usar de novo",
         starterLocked: "Starter ainda quente (térmico desarmado) — aguarde esfriar",
@@ -1077,6 +1086,8 @@ const boot = async () => {
       audio.updateGpu(isTurb ? T.gpuState : "off", T.gpuT, Vector3.Distance(cpos, gpuCart.root.position), cam.mode === "cockpit", T.gpuKw);
       gpuCart.updateDiesel(isTurb ? T.gpuState : "off", T.gpuT, T.gpuKw, paused ? 0 : dtReal);
       tpanel.update(T);
+      { const ec = vin.engineCmd, cm = ec && ec.length ? ec : [{ gear: vin.gear, throttle: vin.throttle }];
+        tpanel.updateLevers(cm); spanel.updateLevers(cm.length >= boat.units.length ? cm : [cm[0], cm[0]]); }
       spanel.update(T, lights);
     }
     if (boat.systems.jumperAutoOff !== lastJumperOff) { if (mode === "game") hud.showToast(`O motor pegou — jump start desconectado (carga ${Math.round(T.jumpCharge * 100)} %, recarrega em cruzeiro)`); lastJumperOff = boat.systems.jumperAutoOff; }

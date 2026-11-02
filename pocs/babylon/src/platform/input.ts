@@ -39,6 +39,20 @@ export class InputManager {
   touchAnchor = 0;
   /** alavanca touch (quando ativa, define marcha e acelerador diretamente) */
   touchLever: { gear: GearCommand; throttle: number } | null = null;
+  /** manetes do painel do Y com dois motores (AR-9): uma por motor; null = segue a manete principal */
+  panelLevers: ({ gear: GearCommand; throttle: number } | null)[] = [];
+  /**
+   * Manete do painel do Y: com um motor vira a alavanca principal (como a touch); com dois, cada uma comanda o seu
+   * motor (`engineCmd`). Teclado/gamepad retomam o comando no próximo toque.
+   */
+  setPanelLever(i: number, cmd: { gear: GearCommand; throttle: number }, engines: number): void {
+    if (engines < 2) { this.touchLever = { ...cmd }; return; }
+    const cur = this.touchLever ?? { gear: this.gear, throttle: this.state.throttle };
+    while (this.panelLevers.length < engines) this.panelLevers.push(null);
+    for (let k = 0; k < engines; k++) if (!this.panelLevers[k]) this.panelLevers[k] = { ...cur };
+    this.panelLevers[i] = { ...cmd };
+    this.lastDevice = "touch";
+  }
   private lights = false;
   lastDevice: "teclado" | "gamepad" | "touch" = "teclado";
   private gpPrev: boolean[] = [];
@@ -102,7 +116,7 @@ export class InputManager {
     const up = upAmt > 0.3, down = downAmt > 0.3;
     // N segurado = botão de aceleração em neutro da manete: a manete fica em N e "para frente" só sobe o giro
     const nHeld = this.k("KeyN");
-    if (nHeld && this.gear !== "N") { this.touchLever = null; this.setGear("N"); }
+    if (nHeld && this.gear !== "N") { this.touchLever = null; this.panelLevers = []; this.setGear("N"); }
     if (!nHeld && up && !this.prevUp) this.press("up");
     if (!nHeld && down && !this.prevDown) this.press("down");
     if (!up && !down) { this.holdTime = 0; this.pressShifted = false; } else this.holdTime += dt;
@@ -140,11 +154,16 @@ export class InputManager {
     s.engineCmd = spin === 0 ? undefined : spin < 0
       ? [{ gear: "R", throttle: 0.45 }, { gear: "F", throttle: 0.18 }]
       : [{ gear: "F", throttle: 0.18 }, { gear: "R", throttle: 0.45 }];
+    // manetes independentes do painel (dois motores): cada uma no seu motor; a "principal" segue a de bombordo
+    if (spin === 0 && this.panelLevers.length) {
+      s.engineCmd = this.panelLevers.map((c) => c ?? { gear: s.gear, throttle: s.throttle });
+      s.gear = s.engineCmd[0].gear; s.throttle = s.engineCmd[0].throttle; s.reverse = s.gear === "R";
+    }
     return s;
   }
 
   private press(dir: "up" | "down"): void {
-    this.touchLever = null; // teclado/gamepad assumem a manete
+    this.touchLever = null; this.panelLevers = []; // teclado/gamepad assumem a manete
     const next = GEAR_STEP[this.gear][dir];
     this.pressShifted = next !== this.gear;
     this.holdTime = 0;

@@ -105,7 +105,9 @@ export class Turbine {
   private sfLight = 1;      // força do arranque no acendimento (bateria boa = 1; sem starter = 0)
   private quietCut = false;
   /** tempo sem tensão no barramento (s): passa de 0,3 s, o solenoide de combustível fecha */
-  private unpoweredT = 0; // o próximo apagar foi um corte intencional (sem aviso de flameout)
+  private unpoweredT = 0;
+  /** aviso "starter ligado acima de 60 % N1" já dado (manual) */
+  private starterHiWarn = false; // o próximo apagar foi um corte intencional (sem aviso de flameout)
   private seq: "none" | "start" = "none"; // sequência do FADEC em andamento
   private seqT = 0;
   private overtempOn = false;
@@ -188,7 +190,6 @@ export class Turbine {
   /** Aciona uma chave do painel (só no modo manual). Devolve o novo estado. */
   setSwitch(s: TurbineSwitch, on: boolean): boolean {
     if (this.fadec && s !== "master") return this[s]; // no FADEC só a chave geral (BAT) é do piloto
-    if (s === "starter" && on && this.n1 > 50) { this.events.push("starterOverspeed"); return false; } // embreagem do starter não engata
     if (s === "starter" && on && this.starterLockT > 0) { this.events.push("starterLocked"); return false; } // ainda quente
     if (s === "fuelValve" && !on && this.lit) this.quietCut = true;
     this[s] = on;
@@ -240,10 +241,15 @@ export class Turbine {
     // combustível chega à câmara com a válvula aberta e pressão (bomba elétrica; acima de ~45 % N1 a bomba do motor basta)
     // (a válvula é um solenoide normalmente fechado: sem barramento ela fecha — BAT e GEN desligados e sem GPU = apaga)
     const fuelFlow = this.fuelValve && this.unpoweredT < 0.3 && inp.fuel && (pumpOn || this.n1 > 45);
-    // starter: a embreagem solta acima de ~60 % (proteção de sobrevelocidade)
-    if (this.starter && this.n1 > 60) { this.starter = false; this.events.push(this.fadec ? "starterOff" : "starterOverspeed"); }
+    // starter-gerador (sem embreagem): quem tira o modo de partida é o controle de partida. No FADEC, o "speed switch"
+    // corta acima de ~60 % N1 (reserva, ele já corta a 45 %); no MANUAL ninguém corta — é o piloto. Esquecido ligado
+    // acima de 60 % ele só puxa corrente e esquenta 4× mais rápido (o térmico desarma em ~10 s e trava)
+    const starterHigh = this.starter && powered && this.n1 > 60;
+    if (starterHigh && this.fadec) { this.starter = false; this.events.push("starterOff"); }
+    else if (starterHigh && !this.starterHiWarn) { this.starterHiWarn = true; this.events.push("starterOverspeed"); }
+    if (!this.starter) this.starterHiWarn = false;
     // limite de uso do starter (~40 s contínuos): superaquece, o térmico desarma e ele fica travado ~60 s
-    this.starterOnT = this.starter && powered ? this.starterOnT + dt : Math.max(0, this.starterOnT - dt * 0.5);
+    this.starterOnT = this.starter && powered ? this.starterOnT + dt * (this.starter && this.n1 > 60 ? 4 : 1) : Math.max(0, this.starterOnT - dt * 0.5);
     if (this.starter && this.starterOnT > 40) { this.starter = false; this.starterLockT = 60; this.starterOnT = 0; this.events.push("starterHot"); }
     this.starterLoad = this.starter && powered ? clamp(1 - 0.5 * this.n1 / P.starterCutN1, 0.3, 1) : 0;
     // periféricos (equivalente 12 V; a 24 V a corrente real é a metade): bomba ~8 A, velas ~3 A, solenoide ~0,8 A,

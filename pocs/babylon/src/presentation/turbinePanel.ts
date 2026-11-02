@@ -13,6 +13,7 @@ import type { BoatTelemetry } from "../sim/boat.ts";
 import type { TurbineSwitch } from "../sim/turbine.ts";
 import { RoundGauge } from "./hud.ts";
 import { makeDraggable } from "./dragPanel.ts";
+import { LeverControls, type LeverCmd } from "./levers.ts";
 import { toggle, tri, rotary, setToggle, setTri, setRotary, isOn } from "./switches.ts";
 
 export type PanelSwitch = TurbineSwitch | "extPwr";
@@ -25,6 +26,8 @@ export interface TurbinePanelActions {
   gpu(): void;          // = tecla J (cabo da GPU: conectar/desconectar)
   setFuelTank(open: boolean): void;              // registro do tanque (sistemas do barco)
   setBilge(mode: "off" | "auto" | "on"): void;   // bomba de porão
+  setBattery(sel: "off" | "bus" | "both"): void;  // seletor de baterias (24 V: duas de 12 V em série)
+  setLever(cmd: LeverCmd): void;                  // manete de potência + marcha (vai para o InputManager)
   close(): void;
 }
 
@@ -43,6 +46,7 @@ export class TurbinePanel {
   private open = false;
   private readonly act: TurbinePanelActions;
   private readonly q = <T extends HTMLElement>(sel: string) => this.el.querySelector<T>(sel)!;
+  private readonly levers: LeverControls;
   private readonly g: Record<"n1" | "egt" | "n2" | "tq" | "oil" | "oilT" | "bus" | "gpu", RoundGauge>;
 
   constructor(act: TurbinePanelActions) {
@@ -75,11 +79,13 @@ export class TurbinePanel {
       </div>
       <div class="tp-sys"><span class="tp-sys-t">SISTEMAS</span>
         <div class="sw-plate"><span class="screw s1"></span><span class="screw s2"></span><span class="screw s3"></span><span class="screw s4"></span>
-          ${toggle({ attr: "bat", val: "1", label: "BAT", sub: "chave geral 24 V", cls: "only-fadec" })}
+          ${rotary("bsel", "BATERIAS", "2 × 12 V em série", [{ v: "off", l: "OFF" }, { v: "bus", l: "BUS" }, { v: "both", l: "BOTH" }])}
+          ${toggle({ attr: "bat", val: "1", label: "BAT", sub: "mestre do barramento", cls: "only-fadec" })}
           ${rotary("tank", "TANQUE", "registro", [{ v: "closed", l: "FECHADO" }, { v: "open", l: "ABERTO" }], { cls: "fuel" })}
           ${tri("bilge", "BOMBA PORÃO", "boia ou manual", { v: "on", l: "ON" }, { v: "off", l: "OFF" }, { v: "auto", l: "AUTO" })}
           <div class="tp-sys-rd"><span data-rd="bat"></span><span data-rd="tank"></span><span data-rd="bilge"></span></div>
         </div></div>
+      <div class="tp-sys"><span class="tp-sys-t">MANETES</span><div class="sw-plate tp-lev"></div></div>
       <div class="tp-foot"><button data-g="gpu">GPU (J)</button><span data-note></span><span data-wear></span></div>`;
     el.addEventListener("click", (e) => {
       const b = (e.target as HTMLElement).closest<HTMLButtonElement>("button");
@@ -90,6 +96,7 @@ export class TurbinePanel {
       else if (b.dataset.f === "cut") this.act.fadecCut();
       else if (b.dataset.g) this.act.gpu();
       else if (b.dataset.tank) this.act.setFuelTank(b.dataset.tank === "open");
+      else if (b.dataset.bsel) this.act.setBattery(b.dataset.bsel as "off" | "bus" | "both");
       else if (b.dataset.fv) this.act.setSwitch("fuelValve", b.dataset.fv === "idle");
       else if (b.dataset.bilge) this.act.setBilge(b.dataset.bilge as "off" | "auto" | "on");
       else if (b.dataset.bat) this.act.setSwitch("master", !isOn(b));
@@ -98,6 +105,8 @@ export class TurbinePanel {
     document.body.appendChild(el);
     this.el = el;
     makeDraggable(el, this.q<HTMLElement>(".tp-head"), "aquarush.tpanelPos");
+    this.levers = new LeverControls("turbine", (_i, c) => this.act.setLever(c));
+    this.q<HTMLElement>(".tp-lev").appendChild(this.levers.el);
     // instrumentos analógicos com faixas (os mesmos limites da simulação: idle 62 %, partida 780 °C, operação 700 °C)
     const box = this.q<HTMLElement>(".tp-gauges");
     this.g = {
@@ -112,6 +121,9 @@ export class TurbinePanel {
     };
     this.setOpen(false);
   }
+
+  /** Posição das manetes (o comando atual, do InputManager). */
+  updateLevers(cmds: LeverCmd[]): void { if (this.open) this.levers.update(cmds); }
 
   get isOpen(): boolean { return this.open; }
   setOpen(on: boolean): void { this.open = on; this.el.classList.toggle("open", on); }
@@ -146,9 +158,10 @@ export class TurbinePanel {
     setRotary(this.el, "fv", tb.fuelValve ? "idle" : "cut");
     setToggle(this.el, "bat", "1", tb.master, lit.master);
     setRotary(this.el, "tank", t.fuelValveOpen ? "open" : "closed");
+    setRotary(this.el, "bsel", t.batterySel === "off" ? "off" : t.batterySel === "bus" ? "bus" : "both");
     setTri(this.el, "bilge", t.bilgeMode, on && t.bilgeMode !== "off", t.bilgePump);
     const rd = (k: string, txt: string) => { const e = this.el.querySelector<HTMLElement>(`[data-rd="${k}"]`); if (e && e.textContent !== txt) e.textContent = txt; };
-    rd("bat", `bateria ${Math.round(t.batterySoc * 100)} % · ${t.busBattery ? "no barramento" : "fora"}`);
+    rd("bat", `baterias ${Math.round(t.batterySoc * 100)} % · ${t.busBattery ? "no barramento (24 V)" : t.batterySel === "bus" ? "fora (BUS: GPU/gerador)" : "fora"}`);
     rd("tank", t.fuelValveOpen ? `tanque ${t.fuelL.toFixed(0)} L` : `linha ${Math.round(t.fuelLineFrac * 100)} %`);
     rd("bilge", `porão ${t.bilgeL.toFixed(0)} L · bomba ${t.bilgePump ? "girando" : "parada"}`);
     this.q<HTMLButtonElement>("[data-g]").textContent = t.gpu ? (t.gpuState === "online" ? "cabo da GPU: recolher (J)" : "GPU partindo… (J)") : "conectar o cabo da GPU (J, só na doca)";

@@ -120,7 +120,12 @@ export class EngineSystems {
    */
   extPwr = false;
   autoExt = true;
-  get extOnline(): boolean { return this.gpuOnline && this.extPwr; }
+  get extOnline(): boolean { return this.gpuOnline && this.extPwr && this.busOn; }
+  /**
+   * Barramento principal energizável (AR-10: chave BAT **e** seletor de baterias fora de OFF). Desligado, nenhuma
+   * fonte chega a ele — nem a bateria, nem a GPU, nem o gerador. Nos barcos a pistão fica sempre true.
+   */
+  busOn = true;
   /**
    * BARRAMENTO (24 V na turbina) com três fontes, cada uma no seu relé: a BATERIA (`batteryOn`, chave BAT), a GPU
    * (EXT PWR, quando "online") e o GERADOR do motor (`genOn`, chave GEN; o starter-gerador da turbina). Os
@@ -178,6 +183,7 @@ export class EngineSystems {
   private get source(): { v: number; r: number } {
     const v = this.restV, r = this.internalR + 0.003;
     if (this.extOnline) return { v: GPU_V12, r: GPU_R }; // fonte de solo no barramento (EXT PWR fechado)
+    if (!this.busOn) return { v: 0, r: 0.004 };            // barramento desligado (BAT / seletor em OFF)
     if (!this.batteryOn) return { v: this.genLive ? 13.8 : 0, r: 0.004 }; // bateria fora: só o gerador (se girando)
     if (!this.jumper) return { v, r };
     // booster: 12,9 V cheio, cai devagar com a descarga e despenca nas últimas reservas
@@ -264,7 +270,7 @@ export class EngineSystems {
     else {
     // o alternador carrega desde a marcha lenta (~9 A a 750 rpm) e chega ao máximo por volta de 3000 rpm
     // (sem o relé do gerador — chave GEN — ou sem alternador funcionando, nada carrega)
-    const charging = running && s.rpm > 550 && this.genOn && (s.alternators ?? 1) > 0;
+    const charging = running && s.rpm > 550 && this.genOn && this.busOn && (s.alternators ?? 1) > 0;
     let drain = (s.lightsOn ? 2.5 : 0.3) + (s.trimMotorA ?? 0) + (s.auxA ?? 0); // A (instrumentos + luzes + trim + molinete/bomba de porão)
     if (s.engine === "cranking") drain += P.starterA * (s.starterLoad ?? 1); // motor de arranque
     // corrente que a bateria aceita cai perto da carga cheia (o regulador limita): o alternador fornece só o necessário

@@ -95,7 +95,7 @@ export interface BoatTelemetry {
   gpuA: number;          // corrente que a GPU entrega ao barramento (A reais) — o amperímetro do HUD é só o da bateria
   coolingLps: number;    // água de resfriamento do óleo saindo pelo espelho (turbina; bomba mecânica ∝ N1) — L/s
   /** painel de sistemas: registro do combustível, linha (0..1), bomba de porão, chave de baterias, afogador */
-  fuelValveOpen: boolean; fuelLineFrac: number; bilgeMode: "auto" | "on" | "off"; batterySel: "off" | "ind" | "bb" | "be" | "both"; choke: boolean;
+  fuelValveOpen: boolean; fuelLineFrac: number; bilgeMode: "auto" | "on" | "off"; batterySel: BatterySel; choke: boolean;
   batteryA: number;      // amperímetro: + carregando, − descarregando (A)
   bilgeL: number;        // água no porão (L)
   bilgeInflowLps: number; // entrada de água (L/s): furo no casco + água por cima da borda
@@ -166,6 +166,7 @@ export interface Swimmer {
 }
 
 export type IgnitionKey = "off" | "on" | "start";
+export type BatterySel = "off" | "ind" | "bb" | "be" | "both" | "bus";
 
 export interface ForceDebug { p: Vec3; f: Vec3; kind: "buoy" | "lift" | "thrust" | "contact" }
 
@@ -185,6 +186,8 @@ export class EngineUnit {
   manualCrank = false;
   /** autoteste da chave deste motor (s restantes; o alarme apita) */
   testT = 0;
+  /** o banco deste motor tinha tensão no passo anterior (chave em ON + bateria ligada depois = autoteste) */
+  keyLive = false;
   cavitation = 0; propRpmState = 0; immersion = 1; revLimiting = false; limiterPhase = 0; lastThrust = 0; pullCatch = false;
   // última passada da física (telemetria / efeitos)
   axial = 0; ventilation = 1; slip = 0; propW: Vec3 = v3(); intakeSubmerged = true; fuelLph = 0;
@@ -282,7 +285,12 @@ export class Speedboat {
    * a casa no de bombordo — o normal), "bb" ou "be" (um banco alimenta os dois motores e a casa; o outro fica
    * isolado), "both" (os dois em paralelo) e "off".
    */
-  batterySel: "off" | "ind" | "bb" | "be" | "both" = "ind";
+  /**
+   * Chave de baterias. Pistão: "off"/"ind" (um banco) ou "off"/"ind"/"bb"/"be"/"both" (AR-9). AR-10 (24 V, duas
+   * baterias de 12 V em série): "off" (barramento isolado), "bus" (barramento SEM as baterias: só a GPU/gerador),
+   * "both" (as duas em série = 24 V no barramento). A chave BAT (`Turbine.master`) continua sendo o mestre do barramento.
+   */
+  batterySel: BatterySel = "ind";
   /** afogador (motor carburado) puxado */
   choke = false;
   private chokeRichT = 0;
@@ -1341,8 +1349,9 @@ export class Speedboat {
       if (tb.starting) { tb.abort(); return "stopped"; }
       if (tb.n1 > 8) return "busy"; // ainda girando (spool-down): espere parar
       if (this.gear !== "N") return "needNeutral";
-      // sem fonte no barramento (chave BAT desligada e sem GPU) o FADEC nem acorda
-      if (!tb.master && !this.systems.extOnline) return "noPower";
+      // sem barramento (BAT desligada, seletor em OFF) ou sem fonte nele (baterias fora e sem GPU) o FADEC nem acorda
+      const sel = this.batterySel, bus = tb.master && sel !== "off";
+      if (!bus || (sel === "bus" && !(this.systems.gpuOnline && (this.systems.extPwr || tb.fadec)))) return "noPower";
       if (this.systems.canStart() === "battery") return "lowBattery";
       this.telemetry.stall = ""; this.telemetry.startFail = "";
       tb.start();
@@ -1426,7 +1435,14 @@ export class Speedboat {
    */
   private runSystems(dt: number, h: { lightsOn: boolean; trimMotorA: number; auxA: number; intakeSubmerged: boolean; load?: number }): void {
     const t = this.telemetry;
-    for (const x of this.units) x.testT = Math.max(0, x.testT - dt);
+    for (const x of this.units) {
+      x.testT = Math.max(0, x.testT - dt);
+      if (x.turb || !this.params.electricStart) continue;
+      // chave já em ON e a bateria chega agora (chave geral ligada): a central acorda e faz o autoteste (apito)
+      const live = this.bankFor(x.index).supplyV(2) > 9;
+      if (live && !x.keyLive && x.key === "on" && x.engine === "off") x.testT = 1.1;
+      x.keyLive = live;
+    }
     if (!this.systems2) {
       const sys = this.systems;
       if (!this.units[0].turb) sys.batteryOn = this.batterySel !== "off";
@@ -1521,7 +1537,11 @@ export class Speedboat {
       // turbina: o eixo de saída gira com a turbina livre (N2); o estado do "motor" segue a fase da turbina
       if (this.u.engine === "off" && tb.burning) tb.cutFuel(); // parada por fora (sem combustível, virou, afundou)
       // chaves do painel → relés do barramento: BAT e GEN (o starter-gerador só gera com o starter desligado)
-      this.usys.batteryOn = tb.master;
+      // AR-10: BAT = mestre do barramento; o seletor decide se as baterias (em série, 24 V) entram ("both") ou só a
+      // GPU/gerador ("bus"); "off" isola tudo
+      const sel = this.batterySel, bus = tb.master && sel !== "off";
+      this.usys.busOn = bus;
+      this.usys.batteryOn = bus && sel !== "bus";
       this.usys.genOn = tb.generator && !tb.starter;
       this.usys.autoExt = tb.fadec; // FADEC fecha/abre o EXT PWR sozinho; no manual é a chave do painel
       // água do trocador de calor do óleo: bomba mecânica (∝ N1), só com a tomada d'água submersa
