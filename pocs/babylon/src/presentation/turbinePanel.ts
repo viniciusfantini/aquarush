@@ -155,7 +155,9 @@ export class TurbinePanel {
     set(this.g.bus, t.batteryV, t.batteryV.toFixed(1), t.busBattery ? `bat ${t.batteryA > 0.5 ? "+" : ""}${t.batteryA.toFixed(0)} A` : "bat fora", t.batteryV < 22);
     set(this.g.gpu, t.gpuA, t.gpuA.toFixed(0), t.extPwr ? `${t.gpuKw.toFixed(1)} kW` : "", t.gpuA > 500);
     const ann: Record<string, string> = {
-      BAT: t.busBattery ? "g" : "", GEN: t.busGen ? "g" : tb.generator && tb.phase === "running" ? "a" : "",
+      // BAT = a bateria está ALIMENTANDO o barramento (descarregando): acende na partida só com a bateria e apaga quando o
+      // gerador (ou a GPU) assume e ela passa a carregar
+      BAT: t.busBattery && t.batteryA < -1 ? "a" : "", GEN: t.busGen ? "g" : tb.generator && tb.phase === "running" ? "a" : "",
       // verde = GPU no barramento; âmbar piscando = GPU disponível/partindo mas fora do barramento (relé aberto ou sem
       // MAIN — a luz é alimentada pela própria GPU); vermelho piscando = EXT PWR em ON sem GPU conectada (falha)
       "EXT PWR": t.extPwr ? "g" : t.extPwrFault ? (blink ? "r" : "") : t.gpu && (t.gpuState === "starting" || t.gpuState === "online") && blink ? "a" : "",

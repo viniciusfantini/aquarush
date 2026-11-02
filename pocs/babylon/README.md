@@ -98,6 +98,8 @@ A lancha é um **corpo rígido 6DOF** (massa seca de 1030 kg + gasolina, ocupant
 
 ## AR-10: chave GOV e sobrevelocidade do N2 (v0.64)
 
+**v0.64.2:** luz **BAT** = bateria alimentando o barramento (descarregando): parada −9,7 A acesa, partida −164 A acesa, gerador no barramento +15,3 A apagada.
+
 **v0.64.1:** a proteção automática de sobrevelocidade saiu (pedido do usuário): com o GOV desligado, acima de 106 % de N2 o desgaste sobe ∝ excesso (`(N2 − 106)/100` por segundo) até a turbina travar — no teste, N2 a 125 %, 9 % de desgaste em 3 s e quebrou em 7,6 s. Com o GOV ligado, a toda com ondas, nenhum desgaste. Luz **GOV** (verde) no lugar da CHAMA: acende enquanto o governador limita o combustível (`Turbine.govActing`). Os displays de avisos não criam rolagem no painel (`contain: paint`; painéis com `overflow-x: hidden`).
 
 
