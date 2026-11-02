@@ -5,6 +5,7 @@
 - O jogo é de navegação aquática 3D para **mobile e navegador**. As premissas estão em `docs/AQUA_RUSH_GDD_COMPLETO_v2.docx`. Para ler e buscar, use `docs/GDD_texto_extraido.txt`.
 - **Fase atual: POC comparativa** (GDD §10). A mesma fatia jogável será feita em três tecnologias, da mais simples para a mais complexa: Babylon.js (feita), Unity 6 + URP e Unreal. **Não transformar POC em jogo completo.** A economia, o multiplayer e o mapa completo estão fora do escopo (GDD A.14).
 - O usuário escreve em português. Docs, comentários e UI são em **pt-BR**.
+- A POC 1 tem **4 embarcações** na mesma física (`VESSELS` em `params.ts`, `?barco=`): **lancha AR-6** (`lancha`, motor de popa 150 hp), **bote AR-3** (`bote`, 15 hp de cana), **lancha rápida AR-9** (`rapida`, dois V8 de centro com rabeta) e **lancha de turbina AR-10** (`turbina`, turbina a gás, hélice de superfície, habitáculo fechado, 24 V).
 
 ## Regras do GDD que valem para todo código
 
@@ -13,7 +14,7 @@
 3. **O HUD lê só a telemetria real** (`BoatTelemetry`). Nada de valores decorativos.
 4. **`VehicleInput` é o único contrato** entre dispositivos e controladores. Os controladores não sabem a origem do comando.
 5. **Nada é marcado como concluído sem um teste executado e o resultado registrado** (README da POC).
-6. Os parâmetros dos barcos (`pocs/babylon/src/sim/params.ts`: `SPEEDBOAT` e `DINGHY`) são o **contrato entre as POCs**. As POCs Unity e Unreal devem usar a mesma massa, as mesmas dimensões, os 6 pontos e os mesmos coeficientes.
+6. Os parâmetros dos barcos (`pocs/babylon/src/sim/params.ts`: `SPEEDBOAT`, `DINGHY`, `RAPIDA` e `TURBINA`, mais a turbina em `turbine.ts`) são o **contrato entre as POCs**. As POCs Unity e Unreal devem usar a mesma massa, as mesmas dimensões, os 6 pontos e os mesmos coeficientes.
 
 ## POC 1: Babylon (`pocs/babylon`)
 
@@ -36,14 +37,16 @@ npm run dev            # abrir http://localhost:5173, F3 mostra a telemetria; wi
 ```
 
 - Ao mexer em `params.ts` ou `boat.ts`, **rode `test:sim` e atualize a tabela de resultados** em `pocs/babylon/README.md`.
-- Para calibrar, use `node tests/debug-trim.ts` (forças por ponto em regime permanente) e `node tests/debug-turn.ts <acelerador> <t_curva>`.
+- Para calibrar, use `node tests/debug-trim.ts` (forças por ponto em regime permanente) e `node tests/debug-turn.ts <acelerador> <t_curva>`. Por barco: `node tests/debug-rapida.ts` (AR-9), `node tests/debug-turbina.ts [trim]` (AR-10: partida, velocidade, imersão da hélice) e `node tests/debug-trailer.ts lancha|bote|rapida|turbina`.
+- No navegador a física só anda com a aba em primeiro plano (o `requestAnimationFrame` é estrangulado em segundo plano): medições de FPS ou de tempo feitas com a aba escondida saem erradas.
 - Uma limitação nova vai para o README da POC e, se for o caso, para o mapa `KNOWN` em `tests/sim.test.ts`. Nunca afrouxe um critério só para passar.
 
 ## Mapa dos sistemas (POC 1)
 
 | Sistema | Simulação (`src/sim`) | Visual / UI (`src/presentation`, `main.ts`) | Testes (`tests/sim.test.ts`) |
 |---|---|---|---|
-| Casco, planeio, trim/tilt, cavitação | `boat.ts`, `params.ts` | `boatMesh.ts`, `dinghyMesh.ts` | testes 1–6, "power trim", "bote" |
+| Casco, planeio, trim/tilt, cavitação | `boat.ts`, `params.ts` | `boatMesh.ts`, `dinghyMesh.ts`, `rapidaMesh.ts`, `turbineMesh.ts` | testes 1–6, "power trim", "bote", "rápida", "turbina" |
+| Menu e troca de barco | `params.ts` (`VESSELS`) | `main.ts` (`makeVessel`, `activate`, `parkInLot`: os outros conjuntos nas vagas 0, 3 e 4 de `STATION.parking`), `index.html` (`.pick-b`) | — |
 | Forma do casco (fonte única) | `hullShape.ts` | `boatMesh.ts` importa | "afundar" |
 | Motor, combustível, temperatura, bateria, alternador, amperímetro, jump start | `engineSystems.ts`, `boat.ts` | `hud.ts`, `helm.ts`, `audio.ts` | "sistemas", "bateria", "amperímetro", "neutro" |
 | Porão, bomba, alagar/afundar, jato, água visível dentro | `boat.ts` (`updateBilge`, `updateSlosh`), `bilgeJet.ts` | `boatGear.ts` (jato + água solta sobre o piso, `alphaIndex` −1 para não ser escondida pela tampa do cockpit), `hud.ts` | "porão", "afundar", "jato" |
@@ -60,11 +63,11 @@ npm run dev            # abrir http://localhost:5173, F3 mostra a telemetria; wi
 | Barco virado / bolsa de ar / afundar | `boat.ts` (`airL`, `bilge.capsizeAirFrac`/`ventM2`, `sinkSpot`) | `hud.ts` ("VIRADO · ar preso"; `setQuiet` some com os alertas ao afundar), `audio.ts` (`siren(2)` ao virar, `silenceAll` ao afundar) | "virado", "emborcamento" |
 | Emborcamento e pessoas na água | `boat.ts` (`updateCapsize`, `ejectOccupants`, `updateSwimmers`) | `pilot.ts` (`float`, `stand`, `board`) | "emborcamento" |
 
-AR-10 (turbina): 10 m, seca 2900 kg, ~1100 shp, 150 km/h, marcha lenta N1 62 % / EGT ~480 °C, partida ~21 s (pico de EGT ~660 °C a 60 % de bateria; 780 °C = partida quente), 85–430 L/h, começa com 120 L (temporário).
+AR-10 (turbina): 10 m, seca 2900 kg, ~1100 shp, 24 V (~19 V no arranque, ~28 V com o gerador), 150 km/h, marcha lenta N1 62 % / EGT ~480 °C, partida ~21 s (pico de EGT ~660 °C a 60 % de bateria; 780 °C = partida quente), 85–430 L/h, começa com 120 L (temporário).
 
 AR-9 (rápida): 8,6 m, seca 2500 kg, 2 × 13,5 kN, 96,6 km/h, 210 L/h a pleno, dois bancos de 100 Ah (um por motor), arranque 200 A, começa com 20 L (temporário).
 
-Valores de referência (lancha): massa seca 1030 kg; empuxo máximo 8,5 t; borda livre seca 64 cm; 1.500 L em água calma = 36 cm de borda livre (com ondas fortes vira); alagada ~2.900 L; afunda ~3.850 L; bomba 1500 GPH ≈ 1,15 L/s; alternador 35 A; bateria 50 Ah; booster 10 Ah/200 A. Largada: atracada na vaga do píer, motor desligado, bateria 60 %, **5 L de gasolina (temporário)**.
+Valores de referência (lancha): massa seca 1030 kg; empuxo máximo 8,5 t; borda livre seca 64 cm; 1.500 L em água calma = 36 cm de borda livre (com ondas fortes vira); alagada ~2.900 L; afunda ~3.850 L; bomba 1500 GPH ≈ 1,15 L/s; alternador 35 A; bateria 50 Ah; booster 10 Ah/200 A. Largada (todos os barcos): atracada na vaga do píer, motor desligado (turbina fria), bateria 60 %, combustível **temporário** em `START_FUEL` (main.ts): 5 L na lancha e no bote, 20 L na AR-9, 120 L na AR-10.
 
 ## Decisões registradas
 

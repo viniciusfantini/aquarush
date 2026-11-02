@@ -1,4 +1,5 @@
-// Parâmetros físicos documentados da lancha provisória da POC.
+// Parâmetros físicos documentados das 4 embarcações da POC: lancha AR-6 (SPEEDBOAT), bote AR-3 (DINGHY),
+// lancha rápida AR-9 (RAPIDA, dois V8) e lancha de turbina AR-10 (TURBINA; a turbina em turbine.ts).
 // Estes valores são o "contrato" entre as POCs (Babylon, Unity, Unreal):
 // a mesma massa, dimensões, potência e coeficientes devem ser usados nas três.
 

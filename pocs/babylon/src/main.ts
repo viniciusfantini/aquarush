@@ -62,7 +62,7 @@ const WATER_PRESETS = [
  */
 /** Carga da bateria na largada (a lancha começa desligada, com a bateria a 60 %). */
 const START_BATTERY = 0.6;
-// TEMPORÁRIO (pedido do usuário, v0.35): 5 L nos dois barcos para os testes de bateria/âncora/porão.
+// TEMPORÁRIO (pedido do usuário, v0.35): 5 L na lancha e no bote para os testes de bateria/âncora/porão.
 // A regra de jogo (não chegar ao fim do cânion) volta com { lancha: 0.25, bote: 0.05 }.
 // A AR-9 (dois V8, ~210 L/h a pleno) começa com 20 L e a AR-10 (turbina, ~85 L/h só em marcha lenta, ~400 L/h a
 // toda) com 120 L — também temporários.
@@ -1020,7 +1020,7 @@ const boot = async () => {
     });
   });
 
-  // começa no menu com a prévia do barco (ou direto no jogo com ?barco=lancha|bote)
+  // começa no menu com a prévia do barco (ou direto no jogo com ?barco=lancha|bote|rapida|turbina)
   activate(V.kind);
   if (isKind(urlKind)) startGame(); else showMenu();
 

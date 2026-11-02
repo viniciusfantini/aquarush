@@ -145,7 +145,7 @@ export interface Swimmer {
 export interface ForceDebug { p: Vec3; f: Vec3; kind: "buoy" | "lift" | "thrust" | "contact" }
 
 /**
- * Estado de UM motor + rabeta/pé (lancha e bote têm um; a lancha rápida, dois). Rotação, marcha, acelerador,
+ * Estado de UM motor + rabeta/pé (lancha, bote e lancha de turbina têm um — na turbina, `turb`; a lancha rápida, dois). Rotação, marcha, acelerador,
  * partida e hélice são por motor; o empuxo de cada um age na posição da sua rabeta (deslocada em X) — daí o
  * empuxo diferencial (um em frente e o outro em ré giram o barco no lugar).
  */

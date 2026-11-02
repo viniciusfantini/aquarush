@@ -15,10 +15,12 @@ src/
     math.ts                 vetores/quaternions (X direita, Y cima, Z proa)
     water.ts                IWaterSurface + GerstnerWater (altura, normal, correnteza, profundidade)
     world.ts                relevo do lago (função), ilha, rio, rampa, estrada, pátios, píer (colisores), correnteza
-    params.ts               PARÂMETROS DOCUMENTADOS da lancha e do bote (contrato comum entre as 3 POCs)
+    params.ts               PARÂMETROS DOCUMENTADOS das 4 embarcações: SPEEDBOAT (AR-6), DINGHY (AR-3), RAPIDA (AR-9), TURBINA (AR-10) — contrato entre as 3 POCs
     hullShape.ts            forma do casco da lancha (seções) — fonte única do visual e da hidrostática do porão
-    engineSystems.ts        combustível, arrefecimento, bateria/alternador/amperímetro, jump start, horímetro
-    boat.ts                 corpo rígido 6DOF (forças e torques), controles, porão/bomba, alagar/afundar, emborcamento, avarias
+    engineSystems.ts        combustível, arrefecimento, bateria/alternador/amperímetro, jump start, horímetro (12 ou 24 V: `nominalV`)
+    turbine.ts              turbina a gás de eixo livre: N1, N2, EGT, torque, óleo, governador, sequência de partida, falhas
+    boat.ts                 corpo rígido 6DOF (forças e torques), controles, N motores (EngineUnit: pistão ou turbina), hélice comum ou de superfície,
+                            bancos de bateria, porão/bomba, alagar/afundar, emborcamento (habitáculo fechado), avarias
     anchor.ts               âncora de proa: cabo, unhar, garrar, molinete
     bilgeJet.ts             jato da bomba de porão como linha de emissão (referencial do barco)
     wind.ts                 vento em 5 níveis com rajadas
@@ -27,25 +29,28 @@ src/
     trailer.ts              carretinha (berço, postes, batente, cinta do guincho)
     towVehicle.ts           carro/caminhonete + carretinha articulada (TowRig)
     station.ts              posto, loja, oficina, vagas, frota de exposição (obstáculos)
-  gameplay/vehicleInput.ts  contrato VehicleInput (GDD 9.2): marcha, acelerador, direção, trim, âncora, neutro, bomba
-  platform/input.ts         adaptadores teclado / gamepad / touch → VehicleInput
+  gameplay/vehicleInput.ts  contrato VehicleInput (GDD 9.2): marcha, acelerador, direção, trim, âncora, neutro, bomba, comando por motor (engineCmd)
+  platform/input.ts         adaptadores teclado / gamepad / touch → VehicleInput (Z/X = empuxo diferencial)
   presentation/             WATER RENDERING + INTERACTION + UI
     waterMaterial.ts        shader GLSL: MESMAS ondas da física + esteira + reflexo planar + vidro + carneirinhos
     wakeMap.ts              mapa de esteira top-down (V de Kelvin, espuma da hélice, fervura de cavitação)
-    waterInteraction.ts     orquestra o mapa de esteira + partículas (spray, rooster tail, bolhas, névoa)
+    waterInteraction.ts     orquestra o mapa de esteira + partículas (spray, rooster tail, bolhas, névoa — um conjunto por hélice)
+    exhaustFx.ts            fumaça e fogo do escape da turbina (pela fase, chama, EGT e potência)
     environment.ts          terreno, árvores, píer, marina, restaurante, piscina
-    boatMesh.ts / dinghyMesh.ts  lancha e bote procedurais (PBR), motores e hélices
+    boatMesh.ts / dinghyMesh.ts / rapidaMesh.ts / turbineMesh.ts   as 4 embarcações procedurais (PBR): motores, rabetas,
+                            transmissão de superfície, hélices, canopy e escape da turbina
     boatGear.ts             âncora + cabo, jato da bomba de porão (gotas, espuma)
     helm.ts / pilot.ts      posto do piloto (painel, volante, manete, chave) e pessoas com IK (sentadas, em pé, na água)
     ramp.ts                 rampa, carretinhas, carro e caminhonete
     station.ts / restaurant.ts / fleet.ts / mooring.ts   estrada, posto, restaurante, frota de exposição, boias e cabos
     cameras.ts              externa (mola + órbita) e cockpit
-    hud.ts                  HUD que lê só a telemetria real (relógios, amperímetro, âncora, porão, vento)
-    audio.ts + engineWorklet.js  motor/água/buzina/alarme/molinete/vento procedurais (Web Audio)
+    hud.ts                  HUD que lê só a telemetria real (relógios por barco: um ou dois motores, painel de turbina; âncora, porão, vento)
+    audio.ts + engineWorklet.js  motor de popa, V8 (2 vozes), turbina, água, buzina, alarme, molinete, vento (Web Audio, procedurais)
   main.ts                   bootstrap + laço com física em passo fixo e render interpolado
 tests/
   sim.test.ts               roteiro GDD A.12 + sistemas (headless, PASS/FAIL)
-  debug-*.ts                diagnósticos: curva, trim, carretinha, rampa, âncora, porão, alagar, vento, etc.
+  debug-*.ts                diagnósticos: curva, trim, carretinha (`debug-trailer.ts lancha|bote|rapida|turbina`), rampa, âncora, porão,
+                            alagar, vento, AR-9 (`debug-rapida.ts`), AR-10 (`debug-turbina.ts [trim]`), etc.
 ```
 
 ## Modelo físico (resumo)
@@ -224,7 +229,8 @@ Resultado: **477/479 OK + 2 KNOWN** (v0.48.2). Na v0.10, o peso do piloto na pos
 
 ### Navegador (Chrome, Windows 11, WebGL2, `q=med`, ~1370×896)
 
-- A cena fica pronta em **~450–840 ms** no servidor de desenvolvimento local.
+- A cena fica pronta em **~450–840 ms** no servidor de desenvolvimento local (v0.2). Na v0.48, com as 4 embarcações e o mundo completo, **2,7–6,8 s** no servidor de desenvolvimento (Vite sem bundle; inclui compilar os shaders).
+- v0.48.2 (Chrome automatizado pela extensão, 1775×1218, `med`, 388 malhas ativas): **27–45 FPS** parado no píer, com bastante variação entre medições na mesma máquina; a fumaça da turbina no acendimento (~850 partículas) custou ~2 FPS (45 → 43). Precisa ser medido de novo sem a automação ligada.
 - v0.1: **~86 FPS** navegando a 66 km/h. A física custa **0,14 ms/frame**.
 - v0.2 (reflexo planar, mapa de esteira 512², PBR): **~85 FPS** a 1775×1161, com 94 malhas ativas.
 - A convenção de quaternions da simulação bate com a da Babylon (verificado em `__aqua.checkConvention()`).
@@ -235,14 +241,17 @@ Resultado: **477/479 OK + 2 KNOWN** (v0.48.2). Na v0.10, o peso do piloto na pos
 
 1. **Ângulo de planeio baixo**: em velocidade final a lancha roda com ~0,6° (uma lancha real roda com 3–5°). O pico do hump (8°) está correto. O teste marca isso como `KNOWN`.
 2. **Trim × velocidade invertido**: trim − deixa a lancha *mais rápida* no modelo. Na prática, um trim + moderado costuma ganhar velocidade. A atitude responde corretamente ao trim. Próximo passo: modelo de comprimento molhado (Savitsky) no lugar da saturação por ponto.
-3. **Bundle grande**: 6,3 MB (1,4 MB gzip), porque importa `@babylonjs/core` inteiro. Dá para otimizar com imports por caminho na fase P5.
+3. **Bundle grande**: 6,6 MB (1,5 MB gzip) no arquivo principal e 7,7 MB no total (v0.48.2), porque importa `@babylonjs/core` inteiro. Dá para otimizar com imports por caminho na fase P5.
 4. Em `low` não há reflexo planar (só o céu). Sem dia/noite nem chuva (o vento existe desde a v0.36, sem ondas de vento no lago).
-10. **Rolagem em ondas fortes com água no porão** (v0.46.1, KNOWN no teste 6): desde a v0.43 a lancha embarca 200–330 L nesse cenário (curva a 80 % no mar forte) e o peso extra deixa os picos de rolagem em ~40–42° (sem água: 32,9°). Ela não emborca. O GDD não fixa número para o teste 6; o limite de 40° era nosso.
 5. Colisão por pontos: um objeto fino entre dois pontos de contato pode atravessar o costado.
-6. ~~Combustível, danos e porão ainda não existem~~: resolvidos (v0.9, v0.18, v0.34–v0.41). O empuxo é por 6 pontos de área constante: bate com o volume do casco desenhado até a borda, mas não modela compartimentos estanques separados (a água de dentro é uma carga só).
-7. ~~A física não sente a esteira~~: resolvido na v0.5 (`WaterWithWake`). A espuma continua só visual.
-9. ~~Adesivo "60" × física de 150 hp~~: resolvido na v0.7 (o adesivo lê `enginePowerHp`).
-8. As bolhas são partículas desenhadas antes da água. Com a água vidro e muito transparente, a profundidade delas é aproximada.
+6. **Rolagem em ondas fortes com água no porão** (v0.46.1, KNOWN no teste 6): desde a v0.43 a lancha embarca 200–330 L nesse cenário (curva a 80 % no mar forte) e o peso extra deixa os picos de rolagem em ~40–42° (sem água: 32,9°). Ela não emborca. O GDD não fixa número para o teste 6; o limite de 40° era nosso.
+7. **AR-9 sem chave de paralelo de baterias** (v0.47.1): cada V8 tem o seu banco; com o banco de boreste zerado só o motor de bombordo pega e não há como ligar os dois bancos (barcos reais têm a chave de emergência). O jump start liga só no banco de bombordo.
+8. **Painel 3D da AR-9 e da AR-10 é o da AR-6** (velocímetro até 100 km/h e conta-giros). Os instrumentos certos (dois conta-giros; N1, EGT, torque, N2, óleo) estão só no HUD.
+9. **Turbina**: modelo de desempenho simplificado (curvas de N1, EGT e torque calibradas para o comportamento esperado, não tiradas de um manual de turbina). O sistema de 24 V é o mesmo modelo elétrico de 12 V com a escala ×2/÷2 na telemetria. A hélice de superfície usa a imersão como única variável (sem modelo de ventilação por pá); o trim + não deixa a AR-10 mais rápida (mesma causa da limitação 2).
+10. ~~Combustível, danos e porão ainda não existem~~: resolvidos (v0.9, v0.18, v0.34–v0.41). O empuxo é por 6 pontos de área constante: bate com o volume do casco desenhado até a borda, mas não modela compartimentos estanques separados (a água de dentro é uma carga só).
+11. ~~A física não sente a esteira~~: resolvido na v0.5 (`WaterWithWake`). A espuma continua só visual.
+12. ~~Adesivo "60" × física de 150 hp~~: resolvido na v0.7 (o adesivo lê `enginePowerHp`).
+13. As bolhas são partículas desenhadas antes da água. Com a água vidro e muito transparente, a profundidade delas é aproximada.
 
 ## Próximos passos (POC 1)
 
@@ -250,5 +259,7 @@ Resultado: **477/479 OK + 2 KNOWN** (v0.48.2). Na v0.10, o peso do piloto na pos
 - [ ] Corrigir o ângulo de planeio e o efeito do trim na velocidade (limitações 1 e 2)
 - [ ] Reduzir o bundle (imports por caminho) e medir o tempo de carregamento em produção
 - [x] Publicar o `dist/` (GitHub Pages) para testar por URL no celular (`npm run deploy`)
-- [ ] Voltar o combustível inicial ao valor de jogo (hoje 5 L, temporário para testes)
+- [ ] Voltar o combustível inicial ao valor de jogo (hoje 5 L na lancha e no bote, 20 L na AR-9 e 120 L na AR-10, temporários para testes) e calcular o valor da AR-9 e da AR-10
+- [ ] Painel 3D próprio da AR-9 (dois conta-giros) e da AR-10 (instrumentos de turbina) e chave de paralelo de baterias na AR-9
+- [ ] Botões touch para o empuxo diferencial (Z/X) da AR-9
 - [ ] Gravar vídeo do roteiro de testes para a matriz comparativa
