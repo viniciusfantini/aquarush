@@ -1,14 +1,14 @@
 # AQUA RUSH — Sistemas elétricos e de motores (referência para qualquer IA ou dev)
 
 Este documento descreve **toda a lógica** dos sistemas elétricos, de combustível, de arrefecimento, de partida e
-dos motores das 4 embarcações da POC 1 (Babylon.js, `pocs/babylon`), como estão no código na **v0.62.1**. Serve
+dos motores das 4 embarcações da POC 1 (Babylon.js, `pocs/babylon`), como estão no código na **v0.63.5**. Serve
 para continuar o trabalho em outra IA/ferramenta ou portar para Unity/Unreal sem precisar redescobrir as regras.
 
 > Fonte da verdade = o código. Se divergir, vale o código e este arquivo deve ser corrigido.
 > Arquivos: `src/sim/engineSystems.ts` (combustível, temperatura, bateria, alternador, booster, GPU, barramento),
 > `src/sim/turbine.ts` (turbina a gás + FADEC), `src/sim/boat.ts` (motores `EngineUnit`, partida, chaves,
 > roteamento de baterias, porão), `src/sim/anchor.ts` (molinete), `src/sim/params.ts` (parâmetros = contrato entre
-> as POCs). Testes: `tests/sim.test.ts` (`npm run test:sim`, hoje **569/571 + 2 KNOWN**).
+> as POCs). Testes: `tests/sim.test.ts` (`npm run test:sim`, hoje **578/580 + 2 KNOWN**).
 
 ---
 
@@ -289,9 +289,15 @@ girando → `"busy"`.
 
 - `systemsPanel.ts` (AR-6, AR-3, AR-9): seção **PARTIDA** (chaves OFF·ON·START por motor ou corda + STOP) e
   **SISTEMAS** (baterias rotativa, registro rotativo, afogador puxador, bomba 3 posições, luzes).
-- `turbinePanel.ts` (AR-10): 8 relógios analógicos com faixas (N1, EGT, N2, torque, óleo psi, óleo °C, barramento,
-  GPU A), anunciadores, FADEC (PARTIDA/CORTE) ou MANUAL (7 etapas numeradas: BAT, EXT PWR, BOMBA, STARTER com capa,
-  IGNIÇÃO, COMBUSTÍVEL rotativo, GERADOR) e SISTEMAS (BAT no FADEC, tanque rotativo, bomba de porão).
+- `turbinePanel.ts` (AR-10, v0.62.7 — 700 px, em faixas): 8 relógios analógicos com faixas (N1, EGT, N2, torque,
+  óleo psi, óleo °C, barramento, GPU A); anunciadores (BAT, EXT PWR, GEN, STARTER, IGNIÇÃO, CHAMA, EGT ALTA, ÓLEO
+  QUENTE) em 4 colunas; a **botoeira de partida** (7 chaves numeradas: MAIN, EXT PWR, BOMBA COMB., STARTER com capa,
+  IGNIÇÃO, COMBUSTÍVEL rotativo CORTE/LENTA, GERADOR) sempre à vista; **sistemas** (seletor de baterias OFF/BUS/BOTH,
+  tanque rotativo, bomba de porão) com a seção **START (em cima, legenda AUTO-START) / STOP (embaixo)** ao lado;
+  **manetes** (potência em T, marcha F-N-R hidráulica, buzina, trim) numa faixa embaixo; display de avisos no pé.
+  No título: indicador FADEC/MANUAL (não é seletor) e o botão **CHECKLIST** (janela `ChecklistPanel`). A **GPU da
+  doca não fica no Y**: é comando externo (J, na barra de atalhos à esquerda do HUD; estado no visor do carrinho).
+  O aviso "SEM PRESSÃO" do câmbio hidráulico (manete engatada com a turbina parada) vai para o display de avisos.
 - `switches.ts`: `toggle` (LED = `lit`, posição = `on`), `tri` (`armed` âmbar / `run` verde), `rotary`, `ignKey`
   + `bindKeySpring` (START com mola), `pull`, `rope`.
 - **Avisos** de sistemas/motor (`sysToast` em main.ts): com o painel do Y aberto vão para o display do pé dele
@@ -312,6 +318,24 @@ girando → `"busy"`.
 
 ---
 
+- **Alertas do HUD** (`hud.ts`): reserva de combustível = aviso **laranja fixo** "RESERVA · x L" (mostrador normal);
+  só **pisca** quando acaba ("SEM COMBUSTÍVEL", mostrador vermelho). Avarias de casco/motor: laranja fixo até 80 %,
+  **piscando rápido** (vermelho/laranja) acima de 80 % (classes `.chip.warn.steady` / `.chip.warn.crit`).
+
+---
+
+## 10b. Abandonar o barco e pessoas na água (`boat.ts`, v0.63)
+
+- **Barra de espaço** → `Speedboat.abandonShip()`: 1º toque, só os **passageiros** pulam (o piloto segue no comando);
+  2º toque (ou sem passageiros), o **piloto** pula e o **corta-circuito** (cordão preso a ele) desliga o motor
+  (`stall = "lanyard"`; na turbina = corte de combustível). Na **AR-10 virada** (habitáculo fechado, o piloto fica
+  preso no cinto ao virar) é assim que ele sai da cabine.
+- Na água (`updateSwimmers`): colete (centro ~5 cm abaixo da superfície), arrasto, correnteza; depois de ~1 s nadam
+  até o seu lugar em volta do casco a até **~0,55 m/s**. Só quem está junto do casco (< 0,6 m do lugar) acompanha o
+  barco (segura o cabo de mão); longe, a pessoa fica parada na água e avança só o que nada.
+- **Volta a bordo** sozinha (`occupants`, contador `reboarded`) a ~0,45 m do lugar, depois de 2,5 s na água, com o
+  barco **de pé, não afundado e a até 3 km/h**. Barco virado ou afundado: ninguém volta (R recomeça).
+
 ## 11. Telemetria relevante (`BoatTelemetry`)
 
 `engine`, `engines[]`, `keys[]`, `rpm`, `rpms[]`, `startFail`, `stall`, `buzzer`, `starterRpm`, `pullStart`,
@@ -319,7 +343,8 @@ girando → `"busy"`.
 `houseV`, `nominalV`, `batterySel`, `busBattery`, `busGen`, `jumper`, `jumpCharge`, `gpu`, `gpuState`, `gpuA`,
 `gpuKw`, `extPwr`, `extPwrClosed`, `fuelL`, `fuelValveOpen`, `fuelLineFrac`, `choke`, `coolantC`, `coolants[]`,
 `overheatWarn`, `protectMode`, `chargeWarn`, `bilgeL`, `bilgeMode`, `bilgePump`, `bilgeFlowLps`, `bilgeAlarm`,
-`windlassA`, `coolingLps`, `turbine { n1, n2, egt, torque, oilPsi, oilC, oilHot, oilRed, phase, lit, powered,
+`windlassA`, `coolingLps`, `extPwrFault`, `keys[]`, `houseV`, `swimmers`, `capsized`, `hullDamage`,
+`engineDamage`, `turbine { n1, n2, egt, torque, oilPsi, oilC, oilHot, oilRed, phase, lit, powered,
 starter, ignition, starterSw, ignitionSw, master, boostPump, fuelValve, generator, fadec, pooledL, wear, seized,
 starterLock }`.
 
@@ -335,6 +360,9 @@ Grupos "sistemas", "bateria", "amperímetro", "neutro", "porão", "rápida", "tu
 - AR-10: BUS com GEN → segue; BUS sem GEN → apaga em ~0,4 s; BAT (mestre) off → apaga; FADEC em OFF / BUS sem GPU
   recusam; BUS + GPU parte com a bateria fora; manual: starter não desacopla sozinho e desarma esquecido ligado.
 - Registro fechado: AR-6 morre em ~96 s; afogador frio 7 % × 85 %; quente afoga em ~15 s.
+- Abandonar: 1º espaço só o passageiro, 2º o piloto (corta-circuito); afastamento ~3,3 m; voltam a bordo em ~5 s;
+  pulando a 65 km/h, 6 s depois só a velocidade de nado e a volta em ~3 min; AR-10 virada: o piloto sai e fica na água.
+- AR-10: câmbio hidráulico (parada não engata; cortada volta a N); EXT PWR sem MAIN sem efeito; falha do EXT PWR sem GPU.
 - Turbina: sequência FADEC, pico de EGT 550–760 °C a 60 % de bateria, marcha lenta em 12–35 s, 24 V mínimo no
   arranque 18–25 V, GPU, partida quente a 43 %, partida manual errada (molhada, cedo, rollback), óleo, molinete −16 A.
 
