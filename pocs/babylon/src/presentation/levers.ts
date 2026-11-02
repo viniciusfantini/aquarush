@@ -56,18 +56,18 @@ export class LeverControls {
         <div class="mt-house"><span class="mt-arc"></span>
           <i class="mt-l r">R</i><button class="mt-nbtn" data-nb="${i}" title="botão de neutro: arme com a manete em N e empurre para acelerar sem engatar">N</button><i class="mt-l f">F</i>
           <span class="mt-arm ${cls}"><span class="mt-knob"></span></span><span class="mt-hub"></span></div>
-        <em class="mt-rd rd"><span>N</span></em><b>${label}</b></div>`;
+        <em class="mt-rd">N</em><b>${label}</b></div>`;
       el.innerHTML = kind === "twin"
         ? `${unit(0, "BOMBORDO", "port")}${unit(1, "BORESTE", "stbd")}<small class="lev-tip">arraste cada manete · clique no N para acelerar em neutro</small>`
         : `${unit(0, "MANETE", "")}<small class="lev-tip">arraste: F à direita · R à esquerda · clique no N para acelerar em neutro</small>`;
     } else if (kind === "tiller") {
       el.innerHTML = `<div class="tl"><div class="tl-grip" data-grip="0"><span class="tl-ridges"></span><span class="tl-mark"></span></div>
-          <div class="tl-scale"><span>🐢 LENTO</span><span>RÁPIDO 🐇</span></div><em class="mt-rd rd"><span>N · 0 %</span></em><b>PUNHO DO ACELERADOR</b><small>gire (arraste para os lados) · em N acelera em neutro</small></div>
+          <div class="tl-scale"><span>🐢 LENTO</span><span>RÁPIDO 🐇</span></div><em class="mt-rd">N · 0 %</em><b>PUNHO DO ACELERADOR</b><small>gire (arraste para os lados) · em N acelera em neutro</small></div>
         <div class="tl-shift">${gearSel(0)}<b>CÂMBIO</b><small>no motor</small></div>`;
     } else {
       el.innerHTML = `<div class="pl"><div class="pl-track" data-pl="0"><span class="pl-slot"></span>
             <i class="pl-l max">MÁX</i><i class="pl-l idle">LENTA</i><span class="pl-handle"><span class="pl-t"></span></span></div>
-          <em class="mt-rd rd"><span>N · 0 %</span></em><b>POTÊNCIA</b><small>manete em T (N1)</small></div>
+          <em class="mt-rd">N · 0 %</em><b>POTÊNCIA</b><small>manete em T (N1)</small></div>
         <div class="tl-shift">${gearSel(0)}<b>MARCHA</b><small>hidráulica: só engata com a turbina rodando</small></div>`;
     }
     this.el = el;
@@ -170,7 +170,7 @@ export class LeverControls {
     if (this.kind === "binnacle" || this.kind === "twin") {
       const u = el.querySelector<HTMLElement>(`.mt[data-mt="${i}"]`)!;
       u.querySelector<HTMLElement>(".mt-arm")!.style.transform = `rotate(${cmdToP(c) * ARC}deg)`;
-      u.querySelector<HTMLElement>(".mt-rd span")!.textContent = txt;
+      u.querySelector<HTMLElement>(".mt-rd")!.textContent = txt;
       u.dataset.g = c.neutral && c.throttle > 0 ? "NA" : c.gear;
       u.querySelector<HTMLElement>(".mt-nbtn")!.classList.toggle("on", this.nBtn[i]);
       return;
@@ -181,7 +181,7 @@ export class LeverControls {
     } else {
       el.querySelector<HTMLElement>(".pl-handle")!.style.bottom = `calc(${c.throttle * 100}% - ${c.throttle * 24}px)`;
     }
-    el.querySelector<HTMLElement>(".mt-rd span")!.textContent = txt;
+    el.querySelector<HTMLElement>(".mt-rd")!.textContent = txt;
     const gs = el.querySelector<HTMLElement>(".gs")!;
     gs.dataset.pos = c.gear;
     for (const b of gs.querySelectorAll<HTMLElement>("button")) b.classList.toggle("on", b.dataset.gear === c.gear);

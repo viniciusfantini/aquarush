@@ -83,10 +83,10 @@ export class TurbinePanel {
           ${toggle({ attr: "bat", val: "1", label: "BAT", sub: "mestre do barramento", cls: "only-fadec" })}
           ${rotary("tank", "TANQUE", "registro", [{ v: "closed", l: "FECHADO" }, { v: "open", l: "ABERTO" }], { cls: "fuel" })}
           ${tri("bilge", "BOMBA PORÃO", "boia ou manual", { v: "on", l: "ON" }, { v: "off", l: "OFF" }, { v: "auto", l: "AUTO" })}
-          <div class="tp-sys-rd"><div class="rd" data-rd="bat"><span></span></div><div class="rd" data-rd="tank"><span></span></div><div class="rd" data-rd="bilge"><span></span></div></div>
+          <div class="tp-sys-rd"><span data-rd="bat"></span><span data-rd="tank"></span><span data-rd="bilge"></span></div>
         </div></div>
       <div class="tp-sys"><span class="tp-sys-t">MANETES</span><div class="sw-plate tp-lev"></div></div>
-      <div class="tp-foot"><button data-g="gpu">GPU (J)</button><span data-note></span><span data-wear></span></div>`;
+      <div class="tp-foot"><button data-g="gpu">GPU (J)</button><div class="msg-rd" data-msg><span></span></div></div>`;
     el.addEventListener("click", (e) => {
       const b = (e.target as HTMLElement).closest<HTMLButtonElement>("button");
       if (!b) return;
@@ -160,7 +160,7 @@ export class TurbinePanel {
     setRotary(this.el, "tank", t.fuelValveOpen ? "open" : "closed");
     setRotary(this.el, "bsel", t.batterySel === "off" ? "off" : t.batterySel === "bus" ? "bus" : "both");
     setTri(this.el, "bilge", t.bilgeMode, on && t.bilgeMode !== "off", t.bilgePump);
-    const rd = (k: string, txt: string) => setRd(this.el.querySelector<HTMLElement>(`[data-rd="${k}"]`), txt);
+    const rd = (k: string, txt: string) => { const e = this.el.querySelector<HTMLElement>(`[data-rd="${k}"]`); if (e && e.textContent !== txt) e.textContent = txt; };
     // câmbio hidráulico: sem a turbina rodando a alavanca mexe, mas a marcha não engata
     const sm = this.el.querySelector<HTMLElement>(".lev .tl-shift small");
     const smTxt = t.engine === "running" ? (t.gear === "N" ? "hidráulica: pronta para engatar" : `engatada: ${t.gear}`) : "SEM PRESSÃO: turbina parada, não engata";
@@ -169,9 +169,12 @@ export class TurbinePanel {
     rd("tank", t.fuelValveOpen ? `tanque ${t.fuelL.toFixed(0)} L` : `linha ${Math.round(t.fuelLineFrac * 100)} %`);
     rd("bilge", `porão ${t.bilgeL.toFixed(0)} L · bomba ${t.bilgePump ? "girando" : "parada"}`);
     this.q<HTMLButtonElement>("[data-g]").textContent = t.gpu ? (t.gpuState === "online" ? "cabo da GPU: recolher (J)" : "GPU partindo… (J)") : "conectar o cabo da GPU (J, só na doca)";
-    this.q<HTMLElement>("[data-note]").textContent = tb.pooledL > 0.01 ? `combustível na câmara: ${tb.pooledL.toFixed(2)} L` : "";
-    this.q<HTMLElement>("[data-wear]").textContent = tb.seized ? "TURBINA DESTRUÍDA (sobretemperatura) — R leva à oficina"
+    // display de avisos no pé do painel (caixa fixa, o texto rola): avaria/starter/desgaste e combustível na câmara
+    const wear = tb.seized ? "TURBINA DESTRUÍDA (sobretemperatura) — R leva à oficina"
       : tb.starterLock > 0 ? `starter superaquecido: aguarde ${tb.starterLock.toFixed(0)} s`
       : tb.wear > 0.005 ? `desgaste da turbina ${(tb.wear * 100).toFixed(0)} %` : "";
+    const pooled = tb.pooledL > 0.01 ? `combustível na câmara: ${tb.pooledL.toFixed(2)} L` : "";
+    const msg = [wear, pooled].filter(Boolean).join(" · ");
+    setRd(this.q<HTMLElement>("[data-msg]"), msg, msg !== "");
   }
 }

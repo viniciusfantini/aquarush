@@ -281,8 +281,8 @@ girando → `"busy"`.
 - `switches.ts`: `toggle` (LED = `lit`, posição = `on`), `tri` (`armed` âmbar / `run` verde), `rotary`, `ignKey`
   + `bindKeySpring` (START com mola), `pull`, `rope`.
 - `dragPanel.ts`: janelas arrastáveis (posição em `localStorage`; o painel inteiro fica dentro da tela).
-- Displays de informação (`setRd`): caixa fixa, texto rola se não couber; tema por barco (`data-disp`): `lcd`
-  (AR-6), `vfd` (AR-9), `grey` (bote), `glass` (AR-10). Bote: lanterna de mão (`lantern`), não chave.
+- Display de avisos no pé dos painéis (`setRd`, `.msg-rd`): caixa fixa, texto rola se não couber; tema por barco
+  (`data-disp`): `lcd` (AR-6), `vfd` (AR-9), `grey` (bote), `glass` (AR-10). As leituras embaixo das chaves são texto simples. Bote: lanterna de mão (`lantern`), não chave.
 - `levers.ts` (`LeverControls`, v0.59–0.60; `LeverCmd.neutral` = acelerar em neutro): manetes por tipo — `binnacle` (AR-6: manete única de topo, p ∈ [−1, 1], N em
   |p| < 0,12, lenta engrenada até 0,2, acelerador = (|p| − 0,2)/0,8), `twin` (AR-9: duas, independentes), `tiller`
   (bote: punho giratório + câmbio F-N-R), `turbine` (AR-10: potência em T + marcha). O painel é um **dispositivo de

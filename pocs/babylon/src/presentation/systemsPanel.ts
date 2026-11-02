@@ -83,7 +83,7 @@ export class SystemsPanel {
   /** Monta o painel de chaves do barco ativo. */
   configure(caps: SystemsPanelCaps): void {
     this.caps = caps;
-    const cell = (ctl: string, info: string) => `<div class="sw-cell">${ctl}<div class="rd" data-info="${info}"><span></span></div></div>`;
+    const cell = (ctl: string, info: string) => `<div class="sw-cell">${ctl}<div class="rd" data-info="${info}"></div></div>`;
     this.el.dataset.disp = caps.display;
     // partida: chave(s) de ignição ou a corda
     const start = caps.keys.length
@@ -102,7 +102,7 @@ export class SystemsPanel {
       <div class="sp-top"><div><div class="sp-sec">PARTIDA</div>${plate(start, "sp-start")}</div>
         <div class="sp-grow"><div class="sp-sec">COMANDO</div>${plate("", "sp-lev")}</div></div>
       <div class="sp-sec">SISTEMAS</div>${plate(cells.join(""))}
-      <p class="sp-note" data-note></p>`;
+      <div class="msg-rd" data-note><span></span></div>`;
     this.levers = new LeverControls(caps.levers, (i, c) => this.act.setLever(i, c));
     this.body.querySelector<HTMLElement>(".sp-lev")!.appendChild(this.levers.el);
   }
@@ -132,7 +132,12 @@ export class SystemsPanel {
       setKey(el, i, key, key !== "off" && bankV > 9);
     });
     if (!c.keys.length) setRope(el, t.engine === "running" ? "running" : t.engine === "cranking" ? "cranking" : "off");
-    const info = (k: string, s: string, warn = false) => setRd(el.querySelector<HTMLElement>(`[data-info="${k}"]`), s, warn);
+    const info = (k: string, s: string, warn = false) => {
+      const e = el.querySelector<HTMLElement>(`[data-info="${k}"]`);
+      if (!e) return;
+      if (e.textContent !== s) e.textContent = s;
+      e.classList.toggle("warn", warn);
+    };
     c.keys.forEach((_, i) => {
       const eng = t.engines[i], rpm = t.rpms[i] ?? t.rpm;
       info(`key${i}`, eng === "running" ? `ligado · ${Math.round(rpm)} rpm` : eng === "cranking" ? `arranque · ${Math.round(rpm)} rpm` : t.keys[i] === "on" ? "ignição ligada" : "desligado", t.startFail !== "" && eng === "off" && t.keys[i] === "on");
@@ -151,6 +156,6 @@ export class SystemsPanel {
       : sel === "off" && c.banks > 0 && t.engine === "running" ? "Chave geral em OFF com o motor ligado: o alternador segura a ignição, mas a bateria não carrega (e a queda de carga pode queimar o regulador)."
       : sel === "off" && c.banks > 0 ? "Chave de baterias em OFF: sem partida, sem bomba de porão, sem luzes (as chaves ficam onde estão, só os LEDs apagam)."
       : c.keys.length && t.keys.some((k) => k === "on") && t.engine !== "running" ? "Chave em ON: segure START até o motor pegar (só em N)." : "";
-    if (note.textContent !== n) note.textContent = n;
+    setRd(note, n, n !== ""); // display de avisos: caixa fixa no pé do painel, o texto rola
   }
 }
