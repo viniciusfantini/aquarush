@@ -96,7 +96,10 @@ A lancha é um **corpo rígido 6DOF** (massa seca de 1030 kg + gasolina, ocupant
 
 > Referência completa da lógica elétrica e dos motores: [`docs/SISTEMAS_ELETRICOS_E_MOTORES.md`](../../docs/SISTEMAS_ELETRICOS_E_MOTORES.md).
 
-## Painel da AR-10 horizontal (v0.62.3 → equilibrado na v0.62.4)
+## Painel da AR-10 (v0.62.3 → v0.62.5)
+
+**v0.62.5:** 700 px de largura, em faixas: mostradores / anunciadores (4 colunas) / botoeira de partida (7 chaves + START/STOP, com mais folga entre o START, o texto FADEC e o STOP) / sistemas / manetes / avisos.
+
 
 **v0.62.4:** 840 × 555 px em faixas independentes (flex): [mostradores | anunciadores em 2 colunas] / [botoeira de partida: 7 chaves + START/STOP] / [sistemas | manetes] / [avisos]. A **GPU da doca não fica no Y** (comando externo): cabo pelo J, na barra de atalhos à esquerda do HUD, e o estado no visor do carrinho.
 
