@@ -1,7 +1,7 @@
 # AQUA RUSH — Sistemas elétricos e de motores (referência para qualquer IA ou dev)
 
 Este documento descreve **toda a lógica** dos sistemas elétricos, de combustível, de arrefecimento, de partida e
-dos motores das 4 embarcações da POC 1 (Babylon.js, `pocs/babylon`), como estão no código na **v0.64.2**. Serve
+dos motores das 4 embarcações da POC 1 (Babylon.js, `pocs/babylon`), como estão no código na **v0.64.3**. Serve
 para continuar o trabalho em outra IA/ferramenta ou portar para Unity/Unreal sem precisar redescobrir as regras.
 
 > Fonte da verdade = o código. Se divergir, vale o código e este arquivo deve ser corrigido.
@@ -114,7 +114,7 @@ cruzeiro (rpm ≥ 2000 e folga de alternador ≥ 10 A) a ~10 A.
 ### AR-10: seletor OFF / BUS / BOTH + chave MAIN (v0.59; MAIN desde a v0.60.2)
 > No painel a antiga chave BAT chama-se **MAIN**: ela liga o barramento dos sistemas eletrônicos (`Turbine.master` →
 > `busOn`), não a bateria. A **espia** da MAIN acende com a chave em ON **e** o barramento com tensão de qualquer
-> fonte (baterias em BOTH, GPU, gerador). Abaixo, "BAT" = MAIN. O anunciador **BAT** do painel (v0.64.2) acende quando a bateria está **alimentando** o barramento (corrente de descarga > 1 A) e apaga quando o gerador ou a GPU assumem e ela passa a carregar.
+> fonte (baterias em BOTH, GPU, gerador). Abaixo, "BAT" = MAIN. O anunciador **BAT** do painel (v0.64.2) acende quando a bateria está **alimentando** o barramento (corrente de descarga > 1 A) e apaga quando o gerador ou a GPU assumem e ela passa a carregar. O anunciador **GEN** (v0.64.3, "cockpit escuro") acende enquanto o gerador está **fora** do barramento e apaga quando ele entra.
 
 As duas baterias de 12 V ficam **em série** (24 V); por isso não há "1"/"2" (uma sozinha daria 12 V).
 
