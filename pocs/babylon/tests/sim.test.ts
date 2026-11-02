@@ -4,7 +4,7 @@ declare const performance: { now(): number };
 // direto no módulo de simulação. Uso: `npm run test:sim` (Node >= 22.18, type stripping nativo).
 // Saída: tabela de medições + PASS/FAIL por critério. Código de saída != 0 se algo falhar.
 
-import { Speedboat, NEUTRAL_REV_LIMIT } from "../src/sim/boat.ts";
+import { Speedboat } from "../src/sim/boat.ts";
 import { JUMP_AH } from "../src/sim/engineSystems.ts";
 import { Wind, WIND_LEVELS } from "../src/sim/wind.ts";
 import { jetStreakLocal } from "../src/sim/bilgeJet.ts";
@@ -1263,7 +1263,8 @@ for (const [label, thr] of [["baixa", 0.25], ["alta", 1]] as const) {
     const nb = new Speedboat(DINGHY, v3(0, 0.25, 0)); nb.systems.fuelL = 5; nb.occupants = [{ seat: "helm", mass: PERSON_KG }]; nb.systems.coolantC = 60;
     run(nb, water, 2, N); const idleR = nb.telemetry.rpm;
     run(nb, water, 4, { ...N, throttle: 0.6, neutralThrottle: true });
-    check("sistemas", "bote: punho girado em N acelera em neutro (rpm acima da lenta)", nb.telemetry.rpm - idleR, 800, 3000, "rpm", 0);
+    // (sem limite em N desde a v0.60.4: o teto é a rotação máxima do bote menos a lenta)
+    check("sistemas", "bote: punho girado em N acelera em neutro (rpm acima da lenta)", nb.telemetry.rpm - idleR, 800, DINGHY.maxRpm - idleR, "rpm", 0);
     check("sistemas", "bote: acelerando em N a marcha continua em N", nb.telemetry.gear === "N" ? 1 : 0, 1, 1, "", 0);
     // AR-9: só a chave de bombordo → só o motor BB
     const x = new Speedboat(RAPIDA, v3(0, 0.3, 0)); x.systems.fuelL = 100; x.occupants = [{ seat: "helm", mass: PERSON_KG }];
@@ -1351,7 +1352,8 @@ for (const [label, thr] of [["baixa", 0.25], ["alta", 1]] as const) {
   check("neutro", "N sem o botão: acelerador ignorado (rpm)", b.telemetry.rpm, 600, 900, "rpm", 0);
   let maxSpeed = 0, maxThrust = 0;
   run(b, water, 5, { ...emptyInput(), gear: "N", throttle: 1, neutralThrottle: true }, openWater, () => { maxSpeed = Math.max(maxSpeed, Math.abs(b.telemetry.speedKmh)); maxThrust = Math.max(maxThrust, Math.abs(b.telemetry.thrustN)); });
-  check("neutro", "N + botão: o giro sobe (rpm)", b.telemetry.rpm, 2500, NEUTRAL_REV_LIMIT + 50, "rpm", 0);
+  // sem limite próprio em neutro (pedido do usuário, v0.60.4): a pleno o giro vai à rotação máxima, abaixo do corte de giro
+  check("neutro", "N + botão a pleno: o giro sobe à rotação máxima, sem limite em N (rpm)", b.telemetry.rpm, SPEEDBOAT.maxRpm * 0.9, SPEEDBOAT.revLimitRpm, "rpm", 0);
   check("neutro", "N + botão: sem empuxo (N)", maxThrust, 0, 1, "N", 0);
   check("neutro", "N + botão: a lancha não anda (km/h)", maxSpeed, 0, 0.5, "km/h", 2);
   // soltando o botão e pedindo F: só engata depois que o giro cai

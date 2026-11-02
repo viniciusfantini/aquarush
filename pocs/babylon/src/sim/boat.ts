@@ -22,7 +22,6 @@ import { AnchorGear, type AnchorState } from "./anchor.ts";
 
 const RHO = 1000;     // água doce, kg/m³
 /** Rotação máxima em neutro (a central do motor limita o giro sem carga na hélice). */
-export const NEUTRAL_REV_LIMIT = 3000;
 const RHO_AIR = 1.2;
 
 export type Gear = "F" | "N" | "R";
@@ -1040,7 +1039,8 @@ export class Speedboat {
         if (this.shiftTimer <= 0 && this.throttleActual < 0.12 && pressure) this.gear = this.wantGear;
       }
       // aceleração em neutro (botão da manete segurado com a marcha em N): o motor sobe o giro sem
-      // engatar — para aquecer ou testar. Só em N; a rotação fica limitada pela central (NEUTRAL_REV_LIMIT).
+      // engatar — para aquecer ou testar. Só em N. Sem limite próprio em neutro (por ora nenhum barco precisa): vale o
+      // corte de giro normal do motor (revLimitRpm).
       this.neutralRev = this.gear === "N" && this.wantGear === "N" && !!input.neutralThrottle && this.engine === "running";
       let target = (this.gear === "N" && !this.neutralRev) || this.engine !== "running" ? 0 : cmd;
       if (this.usys.protect) target = Math.min(target, 0.3);   // modo de proteção (deste motor)
@@ -1569,7 +1569,6 @@ export class Speedboat {
     // limitador de giro: corta a ignição em pulsos quando passa do limite
     // modo de proteção (superaquecimento): a central limita a rotação; falta de combustível: engasga
     if (this.usys.protect) target = Math.min(target, this.usys.p.protectRpm);
-    if (this.gear === "N") target = Math.min(target, NEUTRAL_REV_LIMIT); // central limita o giro em neutro
     if (this.usys.starving) target = Math.min(target, P.idleRpm * 0.8);
     // afogador: frio, acelera a lenta; quente, a mistura fica rica — gira baixo, "engasga" e afoga em ~15 s
     if (P.carbureted && this.choke && this.engine === "running") {

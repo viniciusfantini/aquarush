@@ -210,7 +210,7 @@ o getter `engine` agrega (algum ligado = "running") e os setters valem para todo
 ### 7.5 Neutro, limitador, câmbio e proteção
 - Acelerar em N (`VehicleInput.neutralThrottle`): teclado N + W, ou pelo painel — botão **N** da manete de topo
   (AR-6/AR-9: só arma em N, desarma ao voltar a N), punho da cana em N (bote), potência em N (AR-10). Limitado a
-  3000 rpm (`NEUTRAL_REV_LIMIT`). Com dois motores cada manete acelera o seu (o `engineCmd` leva o acelerador).
+  sem limite próprio em N (removido na v0.60.4; vale o corte de giro `revLimitRpm`). Com dois motores cada manete acelera o seu (o `engineCmd` leva o acelerador).
 - **Câmbio hidráulico** (`params.hydraulicShift`, só a AR-10): sem o motor rodando não há pressão nas embreagens — a
   marcha não engata e, se estava engatada, volta para N. Câmbio mecânico (popa, rabeta): engata até parado. Limitador de giro em pulsos acima de `revLimitRpm`.
 - Passagem obrigatória por N ao trocar de marcha (`shiftTime`); lenta engrenada dá um empuxo mínimo.

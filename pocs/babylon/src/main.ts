@@ -10,7 +10,7 @@ import {
 import { SkyMaterial } from "@babylonjs/materials/sky/skyMaterial";
 
 import { readUrlConfig, PHYSICS_DT, MAX_SUBSTEPS } from "./core/config.ts";
-import { Speedboat, NEUTRAL_REV_LIMIT } from "./sim/boat.ts";
+import { Speedboat } from "./sim/boat.ts";
 import { JUMP_AH, JUMP_MAX_A, GPU_V } from "./sim/engineSystems.ts";
 import { Wind, MS_TO_KNOTS } from "./sim/wind.ts";
 import { VESSELS, PERSON_KG, type VesselKind, type SeatId, type SpeedboatParams } from "./sim/params.ts";
@@ -46,7 +46,7 @@ import { BoatCamera } from "./presentation/cameras.ts";
 import { Hud } from "./presentation/hud.ts";
 import { EngineAudio } from "./presentation/audio.ts";
 
-const BUILD = "poc-babylon 0.60.3";
+const BUILD = "poc-babylon 0.60.4";
 /** Escala visual da rotação da hélice (proporcional ao RPM, abaixo do limite estroboscópico). */
 const PROP_VISUAL_SCALE = 0.12;
 
@@ -1105,7 +1105,7 @@ const boot = async () => {
     if (boat.systems.jumperAutoOff !== lastJumperOff) { if (mode === "game") hud.showToast(`O motor pegou — jump start desconectado (carga ${Math.round(T.jumpCharge * 100)} %, recarrega em cruzeiro)`); lastJumperOff = boat.systems.jumperAutoOff; }
     if (T.trimRelay && !trimRelayWarned && mode === "game") { hud.showToast("Trim sem força: bateria zerada — só o relé estala (J conecta o jump start)"); trimRelayWarned = true; }
     if (!T.trimRelay && input.state.trim === 0) trimRelayWarned = false;
-    if (T.neutralRev && !neutralRevWarned && mode === "game") hud.showToast(`Acelerando em neutro (N segurado): o giro sobe sem engatar — limitado a ${NEUTRAL_REV_LIMIT} rpm`);
+    if (T.neutralRev && !neutralRevWarned && mode === "game") hud.showToast("Acelerando em neutro: o giro sobe sem engatar (sem limite em N — cuidado com o corte de giro)");
     neutralRevWarned = T.neutralRev;
     if (T.lowFuel && !lowFuelWarned && T.engine === "running" && mode === "game") { hud.showToast(`Combustível na reserva: ${T.fuelL.toFixed(1)} L`); lowFuelWarned = true; }
     if (!T.lowFuel) lowFuelWarned = false;
