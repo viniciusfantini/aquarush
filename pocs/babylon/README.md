@@ -98,7 +98,7 @@ A lancha é um **corpo rígido 6DOF** (massa seca de 1030 kg + gasolina, ocupant
 
 ## AR-10: chave GOV e sobrevelocidade do N2 (v0.64)
 
-**v0.65.1:** o TESTE ficou com 18 px, no canto direito da botoeira (posição absoluta), sem alargar o painel.
+**v0.65.2:** o TESTE (18 px) fica no lugar da próxima chave depois do GOV, centrado na altura dos LEDs; o painel continua com 744 px.
 
 **v0.65.0:** botão **TESTE** (segurar: todas as luzes e LEDs acesos + alarme, só com energia no barramento); relógios com 88 px; luzes em duas linhas — BAT, STARTER, IGNIÇÃO, GERADOR, GOV / EXT PWR, ÓLEO QUENTE, EGT ALTA, CHAMA, N2 SOBREV. Menu inicial em ordem de potência: bote, AR-6, AR-9, AR-10.
 
