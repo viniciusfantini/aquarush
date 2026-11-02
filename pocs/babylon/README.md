@@ -36,6 +36,7 @@ src/
     wakeMap.ts              mapa de esteira top-down (V de Kelvin, espuma da hélice, fervura de cavitação)
     waterInteraction.ts     orquestra o mapa de esteira + partículas (spray, rooster tail, bolhas, névoa — um conjunto por hélice)
     exhaustFx.ts            fumaça e fogo do escape da turbina (pela fase, chama, EGT e potência)
+    gpuCart.ts              GPU da doca (fonte de solo de 28 V) e o cabo até a tomada da AR-10
     environment.ts          terreno, árvores, píer, marina, restaurante, piscina
     boatMesh.ts / dinghyMesh.ts / rapidaMesh.ts / turbineMesh.ts   as 4 embarcações procedurais (PBR): motores, rabetas,
                             transmissão de superfície, hélices, canopy e escape da turbina
@@ -46,7 +47,8 @@ src/
     cameras.ts              externa (mola + órbita) e cockpit
     hud.ts                  HUD que lê só a telemetria real (relógios por barco: um ou dois motores, painel de turbina; âncora, porão, vento)
     audio.ts + engineWorklet.js  motor de popa, V8 (2 vozes), turbina, água, buzina, alarme, molinete, vento (Web Audio, procedurais)
-  main.ts                   bootstrap + laço com física em passo fixo e render interpolado
+  main.ts                   bootstrap, splash → escolha do barco → jogo, laço com física em passo fixo e render interpolado
+index.html                  HUD, splash (idioma, embarcações, esportes), menu de escolha do barco
 tests/
   sim.test.ts               roteiro GDD A.12 + sistemas (headless, PASS/FAIL)
   debug-*.ts                diagnósticos: curva, trim, carretinha (`debug-trailer.ts lancha|bote|rapida|turbina`), rampa, âncora, porão,
@@ -85,6 +87,16 @@ A lancha é um **corpo rígido 6DOF** (massa seca de 1030 kg + gasolina, ocupant
 
 **Água compartilhada:** `GerstnerWater.shaderParams()` envia ao shader exatamente as ondas que a física consulta. `getHeight` inverte o deslocamento horizontal de Gerstner por iteração de ponto fixo. No teste, o desvio médio entre o casco e a superfície é de 3 cm.
 
+## Tela de splash (v0.49)
+
+A abertura (`#splash` em `index.html`, fluxo em `main.ts`: `showSplash` → `leaveSplash` → `showMenu`) fica **sobre a cena real do lago**, desfocada, com a câmera girando em volta do barco:
+
+- marca AQUA RUSH e chamada;
+- **idioma**: Português (Brasil) com a bandeira (selecionado, guardado em `localStorage` `aquarush.lang`) e English com a bandeira dos EUA e o selo **SOON** (não clica; ainda não há tradução);
+- **embarcações**: as 4, com silhuetas laterais em SVG, classe, nome e ficha curta; clicar numa vai para a escolha do barco já com ela selecionada;
+- **esportes e atividades** do GDD (§4.2 e A.8): wakeboard, esqui aquático, boia rebocada, parasail, banana boat, passeio turístico e desafios, com ícones SVG próprios. **Só vitrine**: a jogabilidade dessas atividades ainda não existe;
+- **JOGAR** → escolha do barco. Com `?barco=` na URL o jogo pula a splash e o menu.
+
 ## Lancha de turbina AR-10 (v0.48)
 
 Quarta embarcação: **10 m, piloto único no centro, habitáculo fechado**, uma **turbina a gás de eixo livre** (~1100 shp) e uma transmissão de superfície com **hélice de superfície** (`TURBINA` em `params.ts`, modelo em `sim/turbine.ts`, visual em `presentation/turbineMesh.ts`).
@@ -93,6 +105,7 @@ Quarta embarcação: **10 m, piloto único no centro, habitáculo fechado**, uma
 - **Partida (P, em N)**, como num turboeixo real: o **arranque** (starter-gerador, ~350 A) gira o gerador de gás; a **12 % N1** abrem a **ignição** (velas estalando) e o **combustível**; **acende** ~1 s depois (EGT sobe de uma vez, "vuum"); o gerador de gás acelera com o arranque ajudando e a EGT faz um pico (~660 °C com a bateria a 60 %); a **45 % N1** o arranque e a ignição desligam; **marcha lenta** a 62 % (~21 s no total). P de novo aborta a partida ou corta o combustível: a turbina desacelera (~18 s até 8 % N1) e só aceita nova partida abaixo de 8 % N1. **Falhas**: bateria a ~40 % → arranque lento, mais combustível que ar → **partida quente** (EGT passa de 780 °C, o combustível corta); bateria a ≤ 30 % → **partida pendurada** (o arranque não leva o N1 a 12 %); sem combustível → **não acende**. O jump start ajuda.
 - **Hélice de superfície**: trabalha ventilada de propósito, com ~metade do disco fora d'água em planeio (imersão média 0,48 a toda). Menos imersão = menos carga e menos empuxo; mais imersão (parado, popa baixa) = mais carga e rendimento ruim em baixa velocidade. O **trim** da transmissão muda a imersão (trim −5° carrega mais a hélice). Força lateral da hélice ("prop walk") de 5 % do empuxo. Não conta como "ventilação" no alerta.
 - **Habitáculo fechado**: virando, o piloto fica preso no cinto, dentro da célula de segurança (ninguém vai para a água) e a turbina apaga. Afundando, ele sai pela escotilha.
+- **GPU da doca** (v0.49, no lugar do jump start): fonte de solo de **28 V DC** (`EngineSystems.gpu`; no modelo "equivalente 12 V" = 14 V com resistência de 2,5 mΩ e energia da rede). Segura o barramento na partida (arranque mais forte → turbina mais fria), alimenta as cargas e carrega a bateria. **Só conecta atracado na vaga do píer** (J); desconecta sozinha quando a turbina chega à marcha lenta (`gpuAutoOff`, como se faz com o cabo) ou ao soltar as amarras. O carrinho amarelo (`presentation/gpuCart.ts`) fica no píer à ré da vaga, com carretel, painel, placa "GPU 28 V DC · 600 A" e lâmpada verde ligada; conectada, um cabo desce do carrinho, corre pelo convés e cai em barriga até a **tomada externa** no costado da lancha (há uma em cada bordo).
 - **Sistema elétrico de 24 V** (v0.48.2, como nas turbinas: duas baterias de 12 V em série + starter-gerador de 28 V): o modelo elétrico continua em "equivalente 12 V" (`EngineSystemsParams.nominalV`) e a telemetria mostra a tensão real (×2) e a corrente real (÷2). Arranque: ~19,4 V sob ~175 A; marcha lenta com o gerador: 27,8 V. O voltímetro vai de 16 a 32 V (vermelho abaixo de 23 V). Buzina, luzes e o voltímetro do painel 3D usam a tensão relativa.
 - **Painel**: **N1 %** e **EGT °C** grandes; **TORQUE %**, **N2 %** (com a rotação da hélice), **ÓLEO psi** (com a temperatura do óleo), combustível, bateria e amperímetro pequenos; luzes **ARRANQUE / IGNIÇÃO / CHAMA / EGT** da sequência de partida. Todos leem `BoatTelemetry.turbine`.
 - **Som** (síntese própria, `EngineAudio.updateTurbine`): zumbido do eixo e **apito do compressor** que sobem com o N1, passagem das pás (agudo), tom da turbina livre (N2), **rugido da combustão** e **jato do escape** com a potência, ar nas tomadas, **zunido do starter-gerador**, **estalos das velas** ("tic… tic…", alternando os lados) e o **"vuum" do acendimento**. Dentro do habitáculo tudo chega mais baixo e sem os agudos. Desligando, o apito desce com o N1 (spool-down).
@@ -197,6 +210,7 @@ Limitação: é uma síntese aproximada, não uma gravação. Validar o timbre d
 | Recarregar (v0.19) | ciclo completo para lancha e bote: carregar, rebocar 6 s, voltar de ré (o veículo para com as rodas na água), soltar, sair de ré e carregar de novo na carretinha deslocada: encaixa e prende a cinta (lancha 19,7 s, bote 13,7 s), a proa não atravessa o batente, sem avaria (`node tests/debug-reload.ts [lancha|bote]`) |
 | Avarias e desengate (v0.18) | lancha contra pedra a 15 km/h: casco 17 %, motor 0 %; a 40 km/h: casco 100 %; raso de 0,75 m a 30 km/h com o motor baixado: motor quebrado, não liga; navegando normal a toda: 0 %; R repara. Subir na carretinha com o motor levantado (trim + 8° de tilt): 0 %; soltar a cinta e dar ré devagar com o motor levantado: sai do berço e flutua a 15 m do guincho, sem avaria. Rebocar com o motor baixado: o pé arrasta (100 %); levantado: 0 % |
 | Veículo de reboque (v0.17) | carro e caminhonete: começam com a carretinha exatamente onde estava estacionada; parados na rampa não descem; 8 s acelerando tiram a carretinha da água (traseira 1,9 m acima d'água) a 14–17 km/h, em linha reta alinhada (0°); S freia e engata a ré (−2,5 m/s); de ré virando a carretinha dobra até o batente (80°); andando para a frente realinha (≤4,3°) |
+| GPU da doca e splash (v0.49) | AR-10 com a bateria a 15 % (sozinha: partida pendurada) e a GPU: pega e chega à marcha lenta em 19,1 s, pico de EGT 629 °C (mais fria), barramento mínimo 25,3 V, a GPU é desconectada sozinha na marcha lenta e a bateria carrega +3,4 pontos de % durante a partida. No navegador: GPU conectada atracado (28,0 V, +13 A, lâmpada verde, cabo do carrinho à tomada), desconecta na marcha lenta, reconecta atracado e cai ao soltar as amarras; splash sem erros no console, o card da AR-10 abre a escolha já com ela selecionada, English com SOON não muda nada |
 | Lancha de turbina AR-10 (v0.48–0.48.2) | partida a frio com a bateria a 60 %: arranque → ignição e combustível a 12,0 % N1 → acende 1,1 s depois → arranque desliga a 45 % → marcha lenta em 20,6 s; pico de EGT 659 °C; sistema de 24 V: tensão mínima 19,4 V no arranque, 27,8 V em marcha lenta com o gerador carregando (+15 A); marcha lenta: N1 62 %, EGT 484 °C, óleo 70 psi, o starter-gerador carrega +30 A. Cortada: nova partida recusada com o N1 alto; N1 abaixo de 8 % em 18 s. Bateria a 40 %: partida quente (EGT 780 °C, combustível cortado); a 15 %: pendurada (não acende); sem combustível: não acende. A toda: 150 km/h, 0→100 em 9,1 s, N2 99,9 %, EGT 631 °C, 434 L/h, imersão média da hélice 0,48. Sem carga a toda: o governador segura o N2 em 103 %. Virou: ninguém na água (habitáculo fechado) e a turbina apaga. Carretinha (`node tests/debug-trailer.ts turbina`): sobe e prende a cinta, sem avaria. No navegador: a mesma sequência (acende aos ~5 s, marcha lenta aos ~22 s), 147 km/h a toda com N1 98 % e EGT 630 °C; menu com as 4 embarcações, sem erros no console |
 | Lancha rápida AR-9, dois V8 (v0.47–0.47.1) | dois bancos: com o 1º já ligado, o arranque do 2º não mexe no banco 1 (13,5 V); banco de boreste zerado: só bombordo pega; só bombordo ligado 3 min: 54 °C contra 29 °C do desligado, e o banco de boreste não carrega (−0,3 A); no navegador, as duas hélices emitem (1,1 m entre os jatos), esguicho 0. 8,6 m, 2.500 kg seca, 2 × 300 hp (rabetas a ±0,55 m do centro): máx. **96,6 km/h**, 0→60 km/h em 4,3 s, os dois motores no mesmo giro a toda (0 rpm de diferença), 210 L/h a pleno; **empuxo diferencial** (BB em ré 45 %, BE à frente 18 %) por 10 s: gira 69° para bombordo e se desloca só 3 m; invertido: 69° para boreste; só o motor de boreste a 60 %: 49 km/h e a proa cai para bombordo (3 °/s); chave liga os dois **um de cada vez** (o 2º pega 1,5 s depois do 1º); largada com a bateria a 60 %: os dois pegam em 3,4 s, tensão mínima 10,3 V (banco de 100 Ah). Carretinha de 8,6 m (`node tests/debug-trailer.ts rapida`): sobe e assenta centralizada (0,00 m, 6,3°); sem levantar a rabeta, o pé raspa na rampa (motor 6 %). No navegador: os dois V8 pegam em sequência, Z por 8 s gira 32° junto ao píer, a toda 98 km/h com os dois a 4.940 rpm |
 | Barco virado (v0.46) | casco inteiro: a bolsa de ar segura o barco virado (2.657 L de ar após 3 min, não afunda); casco 30 %: o ar escapa pelo furo e afunda em 41 s; casco 100 %: em 9 s; afundou: as 3 pessoas se juntam (no máx. 0,89 m entre elas); bote inflável virado e furado: não afunda |
@@ -225,7 +239,7 @@ Limitação: é uma síntese aproximada, não uma gravação. Validar o timbre d
 | 6. Ondas e correnteza | ondas fortes (×2,5): roll ≤ 30°, não emborca; deriva com correnteza de 1,6 m/s: 1,54 m/s |
 | Lago | flutua no spawn; a toda contra a margem, encalha e para sem atravessar o terreno |
 
-Resultado: **477/479 OK + 2 KNOWN** (v0.48.2). Na v0.10, o peso do piloto na posição real (boreste, acima do CG) aumentou o roll em curva com ondas fortes; o `bankCoef` foi para 1800 e o `rollDamping` para 15000, com 1 limitação conhecida (abaixo). Na v0.2 a hélice foi para 0,5 m atrás do espelho, como no modelo visual, e o esterço máximo em alta velocidade caiu de 13° para 11°.
+Resultado: **482/484 OK + 2 KNOWN** (v0.49.0). Na v0.10, o peso do piloto na posição real (boreste, acima do CG) aumentou o roll em curva com ondas fortes; o `bankCoef` foi para 1800 e o `rollDamping` para 15000, com 1 limitação conhecida (abaixo). Na v0.2 a hélice foi para 0,5 m atrás do espelho, como no modelo visual, e o esterço máximo em alta velocidade caiu de 13° para 11°.
 
 ### Navegador (Chrome, Windows 11, WebGL2, `q=med`, ~1370×896)
 
@@ -262,4 +276,6 @@ Resultado: **477/479 OK + 2 KNOWN** (v0.48.2). Na v0.10, o peso do piloto na pos
 - [ ] Voltar o combustível inicial ao valor de jogo (hoje 5 L na lancha e no bote, 20 L na AR-9 e 120 L na AR-10, temporários para testes) e calcular o valor da AR-9 e da AR-10
 - [ ] Painel 3D próprio da AR-9 (dois conta-giros) e da AR-10 (instrumentos de turbina) e chave de paralelo de baterias na AR-9
 - [ ] Botões touch para o empuxo diferencial (Z/X) da AR-9
+- [ ] Atividades da splash (wakeboard, esqui, boia, parasail, banana boat, passeio, desafios): hoje só vitrine
+- [ ] Tradução para inglês (o seletor já existe, com o selo SOON)
 - [ ] Gravar vídeo do roteiro de testes para a matriz comparativa

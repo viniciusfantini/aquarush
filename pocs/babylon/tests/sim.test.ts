@@ -846,6 +846,21 @@ for (const [label, thr] of [["baixa", 0.25], ["alta", 1]] as const) {
     return { ev, peak };
   };
   const hot = startWith(0.4), hung = startWith(0.15);
+  // GPU da doca (28 V): com a bateria a 15 % (que sozinha dá partida pendurada) a turbina pega, mais fria, e a GPU
+  // é desconectada sozinha quando chega à marcha lenta; enquanto isso a bateria carrega
+  const g = mk(); g.coldEngines(); g.systems.batterySoc = 0.15; g.systems.gpu = true;
+  const socBefore = g.systems.batterySoc;
+  g.toggleIgnition();
+  const gEv: string[] = []; let gPeak = 0, gMinV = 99, gIdle = -1;
+  run(g, water, 40, N, openWater, (t) => {
+    const tb = g.units[0].turb!; gPeak = Math.max(gPeak, tb.egt); if (tb.starting) gMinV = Math.min(gMinV, g.telemetry.batteryV);
+    for (const e of tb.drainEvents()) { gEv.push(e); if (e === "idle" && gIdle < 0) gIdle = t; }
+  });
+  check("turbina", "GPU, bateria a 15 %: a turbina pega (marcha lenta, s)", gIdle, 10, 30, "s", 1);
+  check("turbina", "GPU: partida mais fria (pico de EGT, °C)", gPeak, 500, 680, "°C", 0);
+  check("turbina", "GPU: barramento firme no arranque (mínima, V)", gMinV, 24, 29, "V", 1);
+  check("turbina", "GPU: desconectada sozinha na marcha lenta", !g.systems.gpu && g.systems.gpuAutoOff === 1 ? 1 : 0, 1, 1, "", 0);
+  check("turbina", "GPU: a bateria carregou durante a partida (pontos de %)", (g.systems.batterySoc - socBefore) * 100, 0.5, 30, "%", 1);
   check("turbina", "bateria a 40 %: partida QUENTE (EGT passa de 780 °C e o combustível corta)", hot.ev.includes("hotStart") && !hot.ev.includes("idle") ? 1 : 0, 1, 1, "", 0);
   check("turbina", "partida quente: o corte segura a EGT (pico, °C)", hot.peak, 780, 830, "°C", 0);
   check("turbina", "bateria a 15 %: partida PENDURADA (o arranque não chega a 12 % N1, não acende)", hung.ev.includes("hungStart") && !hung.ev.includes("lightoff") ? 1 : 0, 1, 1, "", 0);

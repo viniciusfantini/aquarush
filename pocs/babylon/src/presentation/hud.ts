@@ -249,7 +249,7 @@ export class Hud {
       [this.voltG, this.voltG2].forEach((g, i) => { const v = t.batteryVs[i] ?? t.batteryV; g?.set(v, `${v.toFixed(1)} V`, voltTag(i), v < 12.2); });
     } else {
       this.tempG?.set(t.coolantC, `${t.coolantC.toFixed(0)}°C`, t.protectMode ? "PROTEÇÃO" : t.overheatWarn ? "QUENTE" : "", t.overheatWarn);
-      this.voltG?.set(t.batteryV, `${t.batteryV.toFixed(1)} V`, t.jumper ? "jump" : t.engine === "running" && t.batteryV > 13.2 * this.vk ? "carga" : `${Math.round(t.batterySoc * 100)}%`, t.chargeWarn);
+      this.voltG?.set(t.batteryV, `${t.batteryV.toFixed(1)} V`, t.gpu ? "GPU" : t.jumper ? "jump" : t.engine === "running" && t.batteryV > 13.2 * this.vk ? "carga" : `${Math.round(t.batterySoc * 100)}%`, t.chargeWarn);
     }
     const amps = t.batteryA;
     this.ampG?.set(Math.max(-60, Math.min(30, amps)), `${amps > 0.5 ? "+" : ""}${amps.toFixed(0)} A`, amps > 0.5 ? "carga" : amps < -0.5 ? "consumo" : "", amps < -40);
@@ -353,6 +353,7 @@ export class Hud {
         ["bolsa de ar (virado, L)", t.airPocketL.toFixed(0)],
         ["âncora (m · N)", `${t.anchorOut.toFixed(1)} · ${t.anchorTension.toFixed(0)}`],
         ["jump start", `${t.jumper ? "conectado · " : ""}${(t.jumpCharge * 100).toFixed(0)} %`],
+        ["GPU (doca)", t.gpu ? "conectada" : "—"],
         ["arranque (rpm)", t.starterRpm.toFixed(0)],
         ["distância (m)", t.distanceM.toFixed(0)],
         ["profundidade (m)", t.depth.toFixed(1)],

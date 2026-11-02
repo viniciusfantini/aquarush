@@ -104,6 +104,13 @@ export const buildTurbina = (scene: Scene): BoatVisual & { floor: number } => {
     exhausts.push(n);
   }
 
+  // ---- tomada de força externa (GPU) nos dois costados, à ré: tampa preta com aro amarelo ----
+  for (const s of [-1, 1]) {
+    const t = H.tOf(-2.8), sc = H.sec(t), y = keel + sc.s - 0.1;
+    K.rbox(0.02, 0.16, 0.2, 0.01, s * (sc.hs + 0.005), y, -2.8, M.yellow, root);
+    K.rbox(0.024, 0.11, 0.14, 0.01, s * (sc.hs + 0.008), y, -2.8, M.black, root);
+  }
+
   // ---- abas de trim no espelho e cunhos ----
   for (const s of [-1, 1]) {
     K.box(0.42, 0.02, 0.32, s * 0.75, keel + 0.12, -L / 2 - 0.14, M.steel, root);

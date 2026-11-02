@@ -37,6 +37,43 @@
     body.menu-mode #ui { display: none; }
     @media (max-height: 520px) { #menu .pick-b span:last-child { display: none; } #menu .brand { font-size: 22px; } }
     .pick-b span { font-size: 12.5px; color: var(--dim); letter-spacing: 0; }
+    /* ---------------- splash: abertura (marca, idioma, embarcações e esportes) ---------------- */
+    #splash { position: fixed; inset: 0; z-index: 6; overflow-y: auto; -webkit-overflow-scrolling: touch;
+      background: radial-gradient(120% 90% at 50% 0%, rgba(6, 40, 52, 0.25), rgba(4, 14, 22, 0.62) 70%), linear-gradient(180deg, rgba(4,14,22,0.1), rgba(4,14,22,0.8));
+      backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px); transition: opacity 0.45s; }
+    #splash.hidden { opacity: 0; pointer-events: none; }
+    #splash .sp-wrap { max-width: 1120px; min-height: 100%; margin: 0 auto; padding: max(18px, env(safe-area-inset-top)) 16px 28px; display: grid; gap: 22px; align-content: center; }
+    .sp-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+    .sp-brand { display: grid; gap: 6px; }
+    .sp-logo { font-size: clamp(34px, 7vw, 64px); font-weight: 800; letter-spacing: 0.22em; line-height: 1; background: linear-gradient(180deg, #ffffff 30%, #7fe9dd); -webkit-background-clip: text; background-clip: text; color: transparent; text-shadow: none; }
+    .sp-logo .wave { display: block; height: 6px; margin-top: 10px; width: min(280px, 60vw); border-radius: 3px; background: linear-gradient(90deg, var(--accent), #2a8fd6, transparent); }
+    .sp-tag { font-size: 14px; color: var(--dim); letter-spacing: 0.04em; max-width: 520px; }
+    .sp-lang { display: flex; gap: 8px; flex-shrink: 0; }
+    .sp-lang button { position: relative; display: flex; align-items: center; gap: 8px; padding: 7px 12px 7px 8px; border-radius: 999px; border: 1px solid rgba(255,255,255,0.28); background: rgba(8,20,30,0.55); color: var(--fg); font: inherit; font-size: 13px; cursor: pointer; }
+    .sp-lang button svg { width: 26px; height: 18px; border-radius: 3px; box-shadow: 0 0 0 1px rgba(0,0,0,0.25); flex-shrink: 0; }
+    .sp-lang button.sel { border-color: var(--accent); background: rgba(14,70,72,0.75); box-shadow: 0 0 0 2px rgba(41,211,194,0.3); }
+    .sp-lang button.soon { cursor: not-allowed; color: rgba(244,248,251,0.55); }
+    .sp-lang button.soon svg { filter: saturate(0.55) brightness(0.85); }
+    .soon-tag { position: absolute; top: -9px; right: -8px; transform: rotate(8deg); background: #ffcf2e; color: #1b1300; font-size: 9.5px; font-weight: 800; letter-spacing: 0.12em; padding: 2px 6px; border-radius: 4px; box-shadow: 0 2px 6px rgba(0,0,0,0.35); }
+    .sp-h { font-size: 12px; letter-spacing: 0.22em; color: var(--accent); font-weight: 700; margin: 0 0 10px; }
+    .sp-boats { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 12px; }
+    .sp-boat { display: grid; gap: 4px; padding: 12px 14px 14px; border-radius: 14px; border: 1px solid rgba(255,255,255,0.16); background: linear-gradient(180deg, rgba(20,60,74,0.6), rgba(8,20,30,0.78)); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); color: var(--fg); font: inherit; text-align: left; cursor: pointer; transition: transform 0.15s, border-color 0.15s; }
+    .sp-boat:hover, .sp-boat:focus-visible { transform: translateY(-2px); border-color: var(--accent); outline: none; }
+    .sp-boat svg { width: 100%; height: 74px; }
+    .sp-boat b { font-size: 16px; }
+    .sp-boat .cls { font-size: 11px; letter-spacing: 0.14em; color: var(--accent); text-transform: uppercase; }
+    .sp-boat span:last-child { font-size: 12.5px; color: var(--dim); }
+    .sp-sports { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+    @media (max-width: 900px) { .sp-sports { grid-template-columns: repeat(2, 1fr); } }
+    .sp-sport { backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); display: grid; grid-template-columns: 44px 1fr; gap: 4px 10px; align-items: center; padding: 11px 12px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.14); background: rgba(8,20,30,0.6); }
+    .sp-sport svg { grid-row: span 2; width: 44px; height: 44px; color: #7fe9dd; }
+    .sp-sport b { font-size: 14px; }
+    .sp-sport span { font-size: 11.5px; color: var(--dim); line-height: 1.3; }
+    .sp-foot { display: flex; flex-direction: column; align-items: center; gap: 8px; padding-top: 4px; }
+    #splash-play { font: inherit; font-size: 18px; letter-spacing: 0.22em; padding: 14px 46px; border-radius: 999px; border: none; background: var(--accent); color: #04222a; font-weight: 800; cursor: pointer; box-shadow: 0 6px 24px rgba(41,211,194,0.35); }
+    #splash-play:hover, #splash-play:focus-visible { filter: brightness(1.1); outline: none; }
+    .sp-ver { font-size: 11px; color: rgba(244,248,251,0.4); letter-spacing: 0.08em; }
+    @media (max-width: 560px) { .sp-head { flex-direction: column; } .sp-boat svg { height: 60px; } }
     #loading-msg { font-size: 12px; letter-spacing: 0.15em; color: var(--dim); min-height: 1em; }
 
     /* relógios (SVG) — canto inferior direito, sem sobreposição */
@@ -174,14 +211,37 @@
     <div class="brand">AQUA RUSH</div>
     <div id="loading-msg">carregando o lago…</div>
   </div>
+  <div id="splash" class="hidden" role="dialog" aria-label="AQUA RUSH">
+    <div class="sp-wrap">
+      <div class="sp-head">
+        <div class="sp-brand">
+          <div class="sp-logo">AQUA RUSH<span class="wave"></span></div>
+          <div class="sp-tag">Navegação aquática em mundo aberto: lagos, rios e cânions, embarcações de verdade e esportes na água.</div>
+        </div>
+        <div class="sp-lang" role="group" aria-label="Idioma">
+          <button class="sel" data-lang="pt-BR" aria-pressed="true"><svg viewBox="0 0 28 20"><rect width="28" height="20" fill="#009c3b"/><path d="M14 2.2 L25.6 10 L14 17.8 L2.4 10 Z" fill="#ffdf00"/><circle cx="14" cy="10" r="4.6" fill="#002776"/><path d="M9.6 9.1 Q14 7.6 18.4 10.4" stroke="#fff" stroke-width="0.9" fill="none"/></svg>Português (Brasil)</button>
+          <button class="soon" data-lang="en" aria-disabled="true" title="English — soon"><svg viewBox="0 0 28 20"><rect width="28" height="20" fill="#fff"/><rect y="0.000" width="28" height="1.538" fill="#b22234"/><rect y="3.077" width="28" height="1.538" fill="#b22234"/><rect y="6.154" width="28" height="1.538" fill="#b22234"/><rect y="9.231" width="28" height="1.538" fill="#b22234"/><rect y="12.308" width="28" height="1.538" fill="#b22234"/><rect y="15.385" width="28" height="1.538" fill="#b22234"/><rect y="18.462" width="28" height="1.538" fill="#b22234"/><rect width="12.5" height="10.8" fill="#3c3b6e"/><circle cx="1.40" cy="1.20" r="0.45" fill="#fff"/><circle cx="3.80" cy="1.20" r="0.45" fill="#fff"/><circle cx="6.20" cy="1.20" r="0.45" fill="#fff"/><circle cx="8.60" cy="1.20" r="0.45" fill="#fff"/><circle cx="11.00" cy="1.20" r="0.45" fill="#fff"/><circle cx="2.60" cy="2.95" r="0.45" fill="#fff"/><circle cx="5.00" cy="2.95" r="0.45" fill="#fff"/><circle cx="7.40" cy="2.95" r="0.45" fill="#fff"/><circle cx="9.80" cy="2.95" r="0.45" fill="#fff"/><circle cx="1.40" cy="4.70" r="0.45" fill="#fff"/><circle cx="3.80" cy="4.70" r="0.45" fill="#fff"/><circle cx="6.20" cy="4.70" r="0.45" fill="#fff"/><circle cx="8.60" cy="4.70" r="0.45" fill="#fff"/><circle cx="11.00" cy="4.70" r="0.45" fill="#fff"/><circle cx="2.60" cy="6.45" r="0.45" fill="#fff"/><circle cx="5.00" cy="6.45" r="0.45" fill="#fff"/><circle cx="7.40" cy="6.45" r="0.45" fill="#fff"/><circle cx="9.80" cy="6.45" r="0.45" fill="#fff"/><circle cx="1.40" cy="8.20" r="0.45" fill="#fff"/><circle cx="3.80" cy="8.20" r="0.45" fill="#fff"/><circle cx="6.20" cy="8.20" r="0.45" fill="#fff"/><circle cx="8.60" cy="8.20" r="0.45" fill="#fff"/><circle cx="11.00" cy="8.20" r="0.45" fill="#fff"/><circle cx="2.60" cy="9.95" r="0.45" fill="#fff"/><circle cx="5.00" cy="9.95" r="0.45" fill="#fff"/><circle cx="7.40" cy="9.95" r="0.45" fill="#fff"/><circle cx="9.80" cy="9.95" r="0.45" fill="#fff"/></svg>English<span class="soon-tag">SOON</span></button>
+        </div>
+      </div>
+      <section>
+        <h2 class="sp-h">EMBARCAÇÕES</h2>
+        <div class="sp-boats"><button class="sp-boat" data-kind="lancha"><svg viewBox="0 0 200 70" aria-hidden="true"><path d="M0 52 Q25 49 50 52 T100 52 T150 52 T200 52 V70 H0 Z" fill="#1d6f86" opacity="0.55"/><path d="M26 40 H150 Q172 39 190 30 L183 47 Q162 57 122 57 H34 Q27 56 26 50 Z" fill="#f2f5f7"/><path d="M28 49 H170 L166 52 Q150 57 122 57 H34 Q29 56 28 52 Z" fill="#1b4d8c"/><path d="M92 40 L104 29 H118 L112 40 Z" fill="#9fd3ea" stroke="#2a3a44" stroke-width="1.5"/><rect x="12" y="30" width="15" height="14" rx="3" fill="#2a2f35"/><rect x="17" y="43" width="5" height="17" fill="#2a2f35"/></svg><span class="cls">Passeio · motor de popa</span><b>Lancha AR-6</b><span>6 m · 150 hp · até 4 pessoas · power trim e partida na chave</span></button><button class="sp-boat" data-kind="bote"><svg viewBox="0 0 200 70" aria-hidden="true"><path d="M0 52 Q25 49 50 52 T100 52 T150 52 T200 52 V70 H0 Z" fill="#1d6f86" opacity="0.55"/><rect x="44" y="38" width="122" height="17" rx="8.5" fill="#56616e"/><path d="M150 38 Q178 36 182 46 Q178 55 158 55 Z" fill="#56616e"/><rect x="50" y="44" width="110" height="3" fill="#ffb21a" opacity="0.9"/><rect x="30" y="30" width="13" height="12" rx="3" fill="#2a2f35"/><rect x="34" y="41" width="5" height="18" fill="#2a2f35"/><path d="M43 34 L62 31" stroke="#2a2f35" stroke-width="3" stroke-linecap="round"/></svg><span class="cls">Apoio · inflável</span><b>Bote de apoio AR-3</b><span>3,1 m · 15 hp · até 3 pessoas · cana do leme e partida na corda</span></button><button class="sp-boat" data-kind="rapida"><svg viewBox="0 0 200 70" aria-hidden="true"><path d="M0 52 Q25 49 50 52 T100 52 T150 52 T200 52 V70 H0 Z" fill="#1d6f86" opacity="0.55"/><path d="M14 41 H150 Q178 40 196 33 L188 47 Q166 57 126 57 H22 Q15 56 14 50 Z" fill="#f2f5f7"/><path d="M15 47 H178 L174 50 H15 Z" fill="#c8102e"/><path d="M15 50 H174 L170 53 Q160 57 126 57 H22 Q16 56 15 53 Z" fill="#ffc21a"/><path d="M84 41 L94 34 H112 L108 41 Z" fill="#9fd3ea" stroke="#20262c" stroke-width="1.5"/><path d="M30 41 H74 Q74 36 66 36 H36 Q30 36 30 41 Z" fill="#20262c"/><rect x="8" y="47" width="10" height="10" fill="#20262c"/></svg><span class="cls">Esportiva · dois V8</span><b>Lancha rápida AR-9</b><span>8,6 m · 2 × 300 hp · 2 lugares · empuxo diferencial</span></button><button class="sp-boat" data-kind="turbina"><svg viewBox="0 0 200 70" aria-hidden="true"><path d="M0 52 Q25 49 50 52 T100 52 T150 52 T200 52 V70 H0 Z" fill="#1d6f86" opacity="0.55"/><path d="M16 41 H150 Q180 40 198 32 L190 47 Q168 57 128 57 H24 Q17 56 16 50 Z" fill="#3a434d"/><path d="M17 48 H180 L176 51 H17 Z" fill="#ffc21a"/><path d="M17 51 H176 L172 54 Q162 57 128 57 H24 Q18 56 17 54 Z" fill="#111"/><path d="M88 41 Q90 26 108 26 Q126 26 128 41 Z" fill="#9fd3ea" opacity="0.85" stroke="#20262c" stroke-width="1.5"/><path d="M30 41 H82 Q82 33 72 33 H38 Q30 33 30 41 Z" fill="#2a3138"/><path d="M34 34 Q26 34 22 28 L16 21" stroke="#d9dde2" stroke-width="7" fill="none" stroke-linecap="round"/><path d="M16 50 H8" stroke="#9aa3ad" stroke-width="3"/><ellipse cx="6" cy="51" rx="2.5" ry="7" fill="#c9ced4"/></svg><span class="cls">Corrida · turbina a gás</span><b>Lancha de turbina AR-10</b><span>10 m · 1100 shp · piloto único no habitáculo · hélice de superfície</span></button></div>
+      </section>
+      <section>
+        <h2 class="sp-h">ESPORTES E ATIVIDADES</h2>
+        <div class="sp-sports"><div class="sp-sport"><svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="27" cy="9" r="4"/><path d="M27 13 L22 25 L30 31 M22 25 L15 22 M25 18 L33 15 L42 6"/><path d="M8 37 Q24 31 40 35" stroke-width="3.2"/><path d="M4 43 Q12 40 20 43 T36 43 T44 42"/></svg><b>Wakeboard</b><span>Reboque o atleta, manobras e nota do passeio</span></div><div class="sp-sport"><svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="24" cy="8" r="4"/><path d="M24 12 L22 24 L27 33 M22 24 L17 33 M23 16 L33 13 L44 7"/><path d="M8 35 L30 38 M10 39 L33 41" stroke-width="2.6"/><path d="M4 45 Q12 42 20 45 T36 45 T44 44"/></svg><b>Esqui aquático</b><span>Velocidade e trajetória certas até o fim do percurso</span></div><div class="sp-sport"><svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="24" cy="24" r="13"/><circle cx="24" cy="24" r="6"/><path d="M15 15 L19 19 M33 15 L29 19 M15 33 L19 29 M33 33 L29 29"/><path d="M4 42 Q12 39 20 42 T36 42 T44 41"/></svg><b>Boia rebocada</b><span>Curvas e arrancadas sem derrubar ninguém</span></div><div class="sp-sport"><svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 18 Q24 1 41 18 Q24 12 7 18 Z"/><path d="M7 18 L24 33 L41 18 M16 14 L24 33 L32 14"/><circle cx="24" cy="36" r="3"/><path d="M24 39 L36 46"/></svg><b>Parasail</b><span>Paraquedas rebocado: controle de altura e rota</span></div><div class="sp-sport"><svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 30 Q24 44 42 26 Q40 22 36 25 Q24 36 10 26 Z"/><circle cx="15" cy="23" r="3"/><circle cx="24" cy="25" r="3"/><circle cx="33" cy="21" r="3"/><path d="M4 44 Q12 41 20 44 T36 44 T44 43"/></svg><b>Banana boat</b><span>Passeio em grupo pela represa</span></div><div class="sp-sport"><svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M24 42 Q12 28 12 19 A12 12 0 0 1 36 19 Q36 28 24 42 Z"/><circle cx="24" cy="19" r="4.5"/></svg><b>Passeio turístico</b><span>Leve passageiros aos pontos panorâmicos</span></div><div class="sp-sport"><svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="24" cy="27" r="15"/><path d="M24 27 L31 19 M20 6 H28 M24 6 V12 M38 12 L41 9"/></svg><b>Desafios</b><span>Radar de velocidade, percurso sem colisão e recordes</span></div></div>
+      </section>
+      <div class="sp-foot"><button id="splash-play">JOGAR ▶</button><div class="sp-ver" id="splash-ver"></div></div>
+    </div>
+  </div>
   <div id="menu" class="hidden">
     <div class="menu-top"><div class="brand">AQUA RUSH</div><div class="pick-t">Escolha a embarcação — a prévia está no lago</div></div>
     <div class="menu-bottom">
       <div class="pick-row">
-        <button class="pick-b" data-kind="lancha"><b>Lancha AR-6</b><span>6 m · 150 hp · até 4 pessoas · tanque 120 L (começa quase vazio: 0,25 L)</span><span>volante, manete, power trim elétrico, partida na chave, luzes de navegação</span></button>
-        <button class="pick-b" data-kind="bote"><b>Bote de apoio AR-3</b><span>3,1 m · 15 hp · até 3 pessoas · tanque 10 L (começa quase vazio: 0,05 L)</span><span>cana do leme no motor, partida na corda, trim manual (3 furos + tilt), lanterna de mão</span></button>
+        <button class="pick-b" data-kind="lancha"><b>Lancha AR-6</b><span>6 m · 150 hp · até 4 pessoas · tanque 120 L (começa com 5 L)</span><span>volante, manete, power trim elétrico, partida na chave, luzes de navegação</span></button>
+        <button class="pick-b" data-kind="bote"><b>Bote de apoio AR-3</b><span>3,1 m · 15 hp · até 3 pessoas · tanque 10 L (começa com 5 L)</span><span>cana do leme no motor, partida na corda, trim manual (3 furos + tilt), lanterna de mão</span></button>
         <button class="pick-b" data-kind="rapida"><b>Lancha rápida AR-9</b><span>8,6 m · 2 × V8 300 hp · 2 pessoas · tanque 380 L (começa com 20 L)</span><span>dois motores de centro com rabeta, um conta-giros por motor, empuxo diferencial (Z/X) para girar no lugar</span></button>
-        <button class="pick-b" data-kind="turbina"><b>Lancha de turbina AR-10</b><span>10 m · turbina a gás de 1100 shp · piloto único no habitáculo fechado · 900 L (começa com 120 L)</span><span>hélice de superfície, partida de turbina (arranque → ignição → acende), N1, N2, EGT, torque e óleo no painel</span></button>
+        <button class="pick-b" data-kind="turbina"><b>Lancha de turbina AR-10</b><span>10 m · turbina a gás de 1100 shp · piloto único no habitáculo fechado · 900 L (começa com 120 L)</span><span>hélice de superfície, partida de turbina (arranque → ignição → acende), N1, N2, EGT, torque e óleo no painel, 24 V e GPU na doca</span></button>
       </div>
       <button id="menu-play">PILOTAR ▶</button>
     </div>

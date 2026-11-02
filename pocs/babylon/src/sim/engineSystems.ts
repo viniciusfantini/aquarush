@@ -51,6 +51,13 @@ export const JUMP_AH = 10;
 export const JUMP_MAX_A = 200;
 /** Resistência interna do booster (Ω): a 200 A a tensão cai ~2,4 V. */
 const JUMP_R = 0.012;
+/**
+ * GPU (ground power unit, fonte de solo da doca): 28 V DC estabilizados, como as usadas para dar partida em
+ * turbinas. No modelo "equivalente 12 V" (ver `nominalV`) = 14 V com resistência baixíssima e energia da rede
+ * (não descarrega). Fornece a partida e as cargas e ainda carrega a bateria.
+ */
+export const GPU_V = 28;
+const GPU_V12 = 14.0, GPU_R = 0.0025;
 
 export interface EngineSystemsInput {
   engine: "off" | "cranking" | "running";
@@ -87,6 +94,12 @@ export class EngineSystems {
   jumperAutoOff = 0;
   /** corrente na bateria (A): + carregando, − descarregando (o amperímetro do painel) */
   batteryA = 0;
+  /** GPU da doca conectada (só a lancha de turbina usa; quem decide se está na doca é o jogo) */
+  gpu = false;
+  /** desconexões automáticas da GPU (a turbina chegou à marcha lenta) — o HUD avisa */
+  gpuAutoOff = 0;
+  /** corrente fornecida pela GPU no último passo (A, equivalente 12 V) */
+  gpuA = 0;
   /** corrente do alternador no último passo (A) */
   private altA = 0;
   /** pedido de desligamento (sem combustível ou superaquecimento extremo) */
@@ -116,6 +129,7 @@ export class EngineSystems {
   /** Fonte vista pelos consumidores: bateria sozinha ou em paralelo com o booster (12,9 V, 6 mΩ). */
   private get source(): { v: number; r: number } {
     const v = this.restV, r = this.internalR + 0.003;
+    if (this.gpu) return { v: GPU_V12, r: GPU_R }; // fonte de solo: segura o barramento
     if (!this.jumper) return { v, r };
     // booster: 12,9 V cheio, cai devagar com a descarga e despenca nas últimas reservas
     const c = this.jumpCharge;
@@ -184,17 +198,21 @@ export class EngineSystems {
     this.altA = alt;
     // o motor pegou com o booster ligado: ele é desconectado sozinho (como a pessoa faria)
     if (running && this.prevEngine === "cranking" && this.jumper) { this.jumper = false; this.jumperAutoOff++; }
+    // idem a GPU: com a turbina em marcha lenta o cabo é retirado (o starter-gerador assume)
+    if (running && this.prevEngine === "cranking" && this.gpu) { this.gpu = false; this.gpuAutoOff++; }
     this.prevEngine = s.engine;
     // booster ligado (e com carga): ele fornece as cargas do barco; a bateria fica só com o alternador
-    const boosting = this.jumper && this.jumpCharge > 0;
+    const boosting = this.jumper && this.jumpCharge > 0 && !this.gpu;
     this.jumpA = boosting ? Math.max(0, drain - alt) : 0;
+    // GPU: fornece tudo o que falta e carrega a bateria pelo que ela aceita (até ~40 A equivalentes)
+    this.gpuA = this.gpu ? Math.max(0, drain - alt) + Math.min(40, 3 + 60 * (1 - this.batterySoc)) : 0;
     if (this.jumpA > JUMP_MAX_A) { this.jumper = false; this.jumperTrips++; this.jumpA = 0; } // proteção de sobrecorrente
     // descarga em Ah (mesma escala de tempo de jogo da bateria)
     if (this.jumpA > 0) this.jumpCharge = Math.max(0, this.jumpCharge - (this.jumpA * dt * P.batteryTimeScale) / 3600 / JUMP_AH);
     // em cruzeiro (alternador folgado) ele recarrega na tomada 12 V do barco a ~10 A (≈ 6 min de 0 a 100 %)
     // (só em cruzeiro, com folga de alternador: o carregador do booster puxa ~10 A da tomada 12 V)
     if (running && s.rpm >= 2000 && altCap - drain >= 10) this.jumpCharge = Math.min(1, this.jumpCharge + (10 * dt * P.batteryTimeScale) / 3600 / JUMP_AH);
-    const battNet = this.jumpA > 0 ? alt : alt - drain;
+    const battNet = this.gpu ? Math.min(40, 3 + 60 * (1 - this.batterySoc)) : this.jumpA > 0 ? alt : alt - drain;
     this.batteryA = battNet;
     this.batterySoc = clamp(this.batterySoc + (battNet * dt * P.batteryTimeScale) / 3600 / this.p.batteryAh, 0, 1);
     const src = this.source;
