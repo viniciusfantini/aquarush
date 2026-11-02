@@ -257,7 +257,7 @@ export class Hud {
     } else this.rpmG.set(t.rpm, `${Math.round(t.rpm / 10) * 10}`, `${t.engineHours.toFixed(1).padStart(6, "0")} h`, t.revLimiter);
     const autonomy = t.fuelLph > 0.1 ? t.fuelL / t.fuelLph : 0;
     const autTxt = t.engine === "running" && autonomy > 0 ? ` · ${Math.floor(autonomy)}h${String(Math.floor((autonomy % 1) * 60)).padStart(2, "0")}` : "";
-    this.fuelG.set(t.fuelFrac, `${t.fuelL.toFixed(1)} L`, `${t.fuelLph.toFixed(1)} L/h`, t.lowFuel);
+    this.fuelG.set(t.fuelFrac, `${t.fuelL.toFixed(1)} L`, `${t.fuelLph.toFixed(1)} L/h`, t.fuelL <= 0.05); // mostrador vermelho só sem combustível
     this.fuelAut.textContent = autTxt ? `autonomia${autTxt.replace(" ·", "")}` : "";
     if (this.tempG2 || this.voltG2) {
       // dois motores: cada relógio lê o seu motor/banco (o alarme acende só no que está quente/descarregado)
@@ -330,8 +330,11 @@ export class Hud {
     this.cav.classList.toggle("warn", t.cavitation > 0.25);
     this.vent.classList.toggle("warn", t.ventilation < 0.75 && t.throttle > 0.15 && t.propImmersion > 0.2);
     this.hotChip.classList.toggle("warn", t.overheatWarn);
-    this.lowFuelChip.classList.toggle("warn", t.lowFuel);
-    if (t.lowFuel) this.lowFuelChip.textContent = `COMBUSTÍVEL BAIXO · ${t.fuelL.toFixed(1)} L`;
+    // reserva: aviso laranja ACESO (fixo); só pisca quando acaba
+    const empty = t.fuelL <= 0.05;
+    this.lowFuelChip.classList.toggle("warn", t.lowFuel || empty);
+    this.lowFuelChip.classList.toggle("steady", t.lowFuel && !empty);
+    if (t.lowFuel || empty) { const txt = empty ? "SEM COMBUSTÍVEL" : `RESERVA · ${t.fuelL.toFixed(1)} L`; if (this.lowFuelChip.textContent !== txt) this.lowFuelChip.textContent = txt; }
     this.chargeChip.classList.toggle("warn", t.chargeWarn && t.engine === "running");
     // profundímetro: escala de 0 a 5 m de cima para baixo; água até o fundo; marcas do calado (casco amarelo, motor vermelho)
     const D = 5, y = (m: number) => `${Math.min(100, (m / D) * 100)}%`;
