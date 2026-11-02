@@ -10,7 +10,7 @@
 
 import type { BoatTelemetry } from "../sim/boat.ts";
 import { makeDraggable } from "./dragPanel.ts";
-import { LeverControls, type LeverCmd, type LeverKind } from "./levers.ts";
+import { LeverControls, type LeverCmd, type LeverKind, type TrimOpts, type TrimState } from "./levers.ts";
 import { toggle, tri, rotary, pull, ignKey, rope, lantern, setToggle, setTri, setRotary, setPull, setKey, setRope, setRd, bindKeySpring } from "./switches.ts";
 
 export type BatterySel = "off" | "ind" | "bb" | "be" | "both";
@@ -27,6 +27,7 @@ export interface SystemsPanelActions {
   pullStart(): void;                          // bote: puxar a corda (= P)
   stopEngine(): void;                         // bote: botão STOP
   setLever(engine: number, cmd: LeverCmd): void; // manete do painel (vai para o InputManager)
+  setTrim(dir: number): void;                     // botão de trim segurado (+1 sobe, −1 desce, 0 solta)
   close(): void;
 }
 
@@ -39,6 +40,7 @@ export interface SystemsPanelCaps {
   lights: string;       // "LUZES" / "LANTERNA"
   levers: LeverKind;    // tipo de manete do barco
   display: "lcd" | "vfd" | "grey"; // estilo dos displays de informação (LCD verde, VFD âmbar, LCD cinza)
+  trim: TrimOpts | null; // controle de trim do barco (power trim ou pino)
 }
 
 const plate = (inner: string, cls = "") => `<div class="sw-plate ${cls}"><span class="screw s1"></span><span class="screw s2"></span><span class="screw s3"></span><span class="screw s4"></span>${inner}</div>`;
@@ -49,7 +51,9 @@ export class SystemsPanel {
   private readonly act: SystemsPanelActions;
   private readonly title: HTMLElement;
   private readonly body: HTMLElement;
-  private caps: SystemsPanelCaps = { title: "", banks: 1, keys: [], choke: false, bilgePump: true, lights: "LUZES", levers: "binnacle", display: "lcd" };
+  private caps: SystemsPanelCaps = { title: "", banks: 1, keys: [], choke: false, bilgePump: true, lights: "LUZES", levers: "binnacle", display: "lcd", trim: null };
+  private flashMsg = "";
+  private flashT = -1e9;
   private levers: LeverControls | null = null;
 
   constructor(act: SystemsPanelActions) {
@@ -105,13 +109,16 @@ export class SystemsPanel {
       <div class="msg-rd" data-note><span></span></div>`;
     this.levers = new LeverControls(caps.levers, (i, c) => this.act.setLever(i, c));
     this.body.querySelector<HTMLElement>(".sp-lev")!.appendChild(this.levers.el);
+    this.levers.setTrim(caps.trim, (d) => this.act.setTrim(d));
   }
 
   get isOpen(): boolean { return this.open; }
   setOpen(on: boolean): void { this.open = on; this.el.classList.toggle("open", on); }
 
   /** Posição das manetes: o comando atual por motor (do InputManager). */
-  updateLevers(cmds: LeverCmd[]): void { if (this.open) this.levers?.update(cmds); }
+  updateLevers(cmds: LeverCmd[], trim: TrimState | null = null): void { if (this.open) { this.levers?.update(cmds); this.levers?.updateTrim(trim); } }
+  /** Aviso de sistemas/motor no display do pé do painel (fica ~6 s; depois volta o aviso de estado). */
+  flash(msg: string): void { this.flashMsg = msg; this.flashT = performance.now(); }
 
   update(t: BoatTelemetry, lightsOn: boolean): void {
     if (!this.open) return;
@@ -156,6 +163,8 @@ export class SystemsPanel {
       : sel === "off" && c.banks > 0 && t.engine === "running" ? "Chave geral em OFF com o motor ligado: o alternador segura a ignição, mas a bateria não carrega (e a queda de carga pode queimar o regulador)."
       : sel === "off" && c.banks > 0 ? "Chave de baterias em OFF: sem partida, sem bomba de porão, sem luzes (as chaves ficam onde estão, só os LEDs apagam)."
       : c.keys.length && t.keys.some((k) => k === "on") && t.engine !== "running" ? "Chave em ON: segure START até o motor pegar (só em N)." : "";
-    setRd(note, n, n !== ""); // display de avisos: caixa fixa no pé do painel, o texto rola
+    // display de avisos: caixa fixa no pé do painel, o texto rola; um aviso novo de sistemas/motor fica ~6 s
+    const flashing = performance.now() - this.flashT < 6000;
+    setRd(note, flashing ? this.flashMsg : n, !flashing && n !== "");
   }
 }

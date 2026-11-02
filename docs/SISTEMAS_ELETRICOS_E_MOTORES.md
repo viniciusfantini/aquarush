@@ -1,7 +1,7 @@
 # AQUA RUSH — Sistemas elétricos e de motores (referência para qualquer IA ou dev)
 
 Este documento descreve **toda a lógica** dos sistemas elétricos, de combustível, de arrefecimento, de partida e
-dos motores das 4 embarcações da POC 1 (Babylon.js, `pocs/babylon`), como estão no código na **v0.60.0**. Serve
+dos motores das 4 embarcações da POC 1 (Babylon.js, `pocs/babylon`), como estão no código na **v0.61.0**. Serve
 para continuar o trabalho em outra IA/ferramenta ou portar para Unity/Unreal sem precisar redescobrir as regras.
 
 > Fonte da verdade = o código. Se divergir, vale o código e este arquivo deve ser corrigido.
@@ -287,6 +287,11 @@ girando → `"busy"`.
   IGNIÇÃO, COMBUSTÍVEL rotativo, GERADOR) e SISTEMAS (BAT no FADEC, tanque rotativo, bomba de porão).
 - `switches.ts`: `toggle` (LED = `lit`, posição = `on`), `tri` (`armed` âmbar / `run` verde), `rotary`, `ignKey`
   + `bindKeySpring` (START com mola), `pull`, `rope`.
+- **Avisos** de sistemas/motor (`sysToast` em main.ts): com o painel do Y aberto vão para o display do pé dele
+  (`flash`, ~6 s); fechado, aviso normal do HUD.
+- **Trim no painel** (`LeverControls.setTrim/updateTrim`): power trim (AR-6 TRIM/TILT, AR-9 rabetas juntas, AR-10
+  transmissão de superfície) = botão basculante momentâneo (→ `input.touchTrim`, igual a E/Q) + vista do pé girando
+  (trim + tilt) + barra (trim verde, tilt âmbar); bote = pino de regulagem (furos 1..N, T = tilt travado) com ▲▼.
 - `dragPanel.ts`: janelas arrastáveis (posição em `localStorage`; o painel inteiro fica dentro da tela).
 - Display de avisos no pé dos painéis (`setRd`, `.msg-rd`): caixa fixa, texto rola se não couber; tema por barco
   (`data-disp`): `lcd` (AR-6), `vfd` (AR-9), `grey` (bote), `glass` (AR-10). As leituras embaixo das chaves são texto simples. Bote: lanterna de mão (`lantern`), não chave.

@@ -13,7 +13,7 @@ import type { BoatTelemetry } from "../sim/boat.ts";
 import type { TurbineSwitch } from "../sim/turbine.ts";
 import { RoundGauge } from "./hud.ts";
 import { makeDraggable } from "./dragPanel.ts";
-import { LeverControls, type LeverCmd } from "./levers.ts";
+import { LeverControls, type LeverCmd, type TrimOpts, type TrimState } from "./levers.ts";
 import { toggle, tri, rotary, setToggle, setTri, setRotary, setRd, isOn } from "./switches.ts";
 
 export type PanelSwitch = TurbineSwitch | "extPwr";
@@ -28,6 +28,7 @@ export interface TurbinePanelActions {
   setBilge(mode: "off" | "auto" | "on"): void;   // bomba de porão
   setBattery(sel: "off" | "bus" | "both"): void;  // seletor de baterias (24 V: duas de 12 V em série)
   setLever(cmd: LeverCmd): void;                  // manete de potência + marcha (vai para o InputManager)
+  setTrim(dir: number): void;                     // botão de trim da transmissão de superfície (segurado)
   close(): void;
 }
 
@@ -123,7 +124,12 @@ export class TurbinePanel {
   }
 
   /** Posição das manetes (o comando atual, do InputManager). */
-  updateLevers(cmds: LeverCmd[]): void { if (this.open) this.levers.update(cmds); }
+  updateLevers(cmds: LeverCmd[], trim: TrimState | null = null): void { if (this.open) { this.levers.update(cmds); this.levers.updateTrim(trim); } }
+  configureTrim(opts: TrimOpts | null): void { this.levers.setTrim(opts, (d) => this.act.setTrim(d)); }
+  private flashMsg = "";
+  private flashT = -1e9;
+  /** Aviso de sistemas/motor no display do pé do painel (fica ~6 s; depois volta o aviso de estado). */
+  flash(msg: string): void { this.flashMsg = msg; this.flashT = performance.now(); }
 
   get isOpen(): boolean { return this.open; }
   setOpen(on: boolean): void { this.open = on; this.el.classList.toggle("open", on); }
@@ -177,6 +183,7 @@ export class TurbinePanel {
       : tb.wear > 0.005 ? `desgaste da turbina ${(tb.wear * 100).toFixed(0)} %` : "";
     const pooled = tb.pooledL > 0.01 ? `combustível na câmara: ${tb.pooledL.toFixed(2)} L` : "";
     const msg = [wear, pooled].filter(Boolean).join(" · ");
-    setRd(this.q<HTMLElement>("[data-msg]"), msg, msg !== "");
+    const flashing = performance.now() - this.flashT < 6000;
+    setRd(this.q<HTMLElement>("[data-msg]"), flashing ? this.flashMsg : msg, !flashing && msg !== "");
   }
 }

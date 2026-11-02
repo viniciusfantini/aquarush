@@ -297,6 +297,41 @@
     .lan.on .lan-lens { background: radial-gradient(circle at 45% 40%, #ffffff, #fff1b0 40%, #ffcf4a 75%); box-shadow: inset 0 0 0 2px #e8edf0, 0 0 14px 4px rgba(255,220,120,0.75); }
     .lan.on .lan-beam { opacity: 1; }
     .lan:hover .lan-head { box-shadow: 0 3px 5px rgba(0,0,0,0.6), 0 0 0 2px rgba(41,211,194,0.5); }
+    /* ---------------- trim no painel (levers.ts: setTrim/updateTrim) ---------------- */
+    .tr { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+    .tr b { font-size: 10.5px; letter-spacing: 0.07em; color: #e9eef2; font-weight: 800; text-shadow: 0 1px 0 rgba(0,0,0,0.8); }
+    .tr small { font-size: 9px; color: var(--dim); text-align: center; }
+    .tr .mt-rd.warn { color: #ffc23a; }
+    .tr-row { display: flex; align-items: center; gap: 8px; }
+    /* vista de lado: espelho de popa à direita, o motor/pé gira no pivô (trim + tilt) */
+    .tr-view { position: relative; width: 92px; height: 84px; border-radius: 6px; overflow: hidden; background: linear-gradient(180deg, #16222c, #0e1820 52%, #0b2a3a 52%, #08202d); box-shadow: inset 0 1px 4px rgba(0,0,0,0.7); }
+    .tr-water { position: absolute; left: 0; right: 0; top: 52%; height: 1px; background: rgba(120,200,230,0.6); }
+    .tr-hull { position: absolute; left: 58px; right: -6px; top: 14px; height: 36px; border-radius: 0 0 0 10px; background: linear-gradient(180deg, #e9edf0, #b5bdc4); box-shadow: -1px 0 0 #6c757d; }
+    .tr-leg { position: absolute; left: 47px; top: 6px; width: 8px; height: 66px; transform-origin: 50% 14px; transition: transform 0.08s linear; }
+    .tr-leg::before { content: ""; position: absolute; left: -5px; top: 0; width: 18px; height: 20px; border-radius: 6px 6px 4px 4px; background: linear-gradient(180deg, #f4f6f8, #9aa3ab); } /* capô */
+    .tr-leg::after { content: ""; position: absolute; left: 1px; top: 18px; width: 6px; height: 44px; border-radius: 2px; background: linear-gradient(90deg, #6c757d, #c9cfd4 50%, #5d656c); } /* rabeta */
+    .tr-prop { position: absolute; left: -6px; bottom: 0; width: 20px; height: 8px; border-radius: 50%; background: radial-gradient(ellipse, #2b3036, #0d0f11); z-index: 1; }
+    .tr-sterndrive .tr-leg::before { width: 12px; left: -2px; height: 14px; background: linear-gradient(180deg, #3c434a, #1a1e22); } /* rabeta: o motor fica dentro do casco */
+    .tr-surface .tr-leg { height: 50px; }
+    .tr-surface .tr-leg::before { width: 12px; left: -2px; height: 12px; background: linear-gradient(180deg, #3c434a, #1a1e22); }
+    .tr-surface .tr-leg::after { height: 30px; }
+    .tr-surface .tr-prop { width: 24px; left: -8px; height: 10px; }
+    /* barra: faixa de trim (verde) + faixa de tilt (âmbar), marcador na posição */
+    .tr-bar { position: relative; width: 12px; height: 84px; border-radius: 6px; background: #050607; box-shadow: inset 0 1px 3px #000; overflow: visible; }
+    .tr-z { position: absolute; left: 2px; right: 2px; border-radius: 4px; }
+    .tr-z.trim { background: rgba(61,220,132,0.55); } .tr-z.tilt { background: rgba(255,176,32,0.45); }
+    .tr-mark { position: absolute; left: -4px; width: 20px; height: 4px; margin-bottom: -2px; border-radius: 2px; background: #fff; box-shadow: 0 0 6px rgba(255,255,255,0.8); transition: bottom 0.08s linear; }
+    /* pino do bote: suporte com os furos; o pino ocupa o furo atual (T = tilt travado) */
+    .tr-pins { display: flex; flex-direction: column; gap: 5px; padding: 6px 5px; border-radius: 6px; background: linear-gradient(90deg, #8d969e, #d8dde1 50%, #8d969e); box-shadow: 0 2px 4px rgba(0,0,0,0.5); }
+    .tr-pins i { display: grid; place-items: center; width: 18px; height: 14px; border-radius: 7px; font-style: normal; font-size: 8px; font-weight: 900; color: #2a2f34; background: radial-gradient(circle, #1a1d20 35%, #5d656c 40%, transparent 70%); }
+    .tr-pins i.on { color: #1b1203; background: radial-gradient(circle at 40% 35%, #ffe08a, #ffb020 60%, #a86400); box-shadow: 0 0 6px rgba(255,176,32,0.7); }
+    /* botão basculante UP / DN (momentâneo) */
+    .tr-rocker { display: flex; flex-direction: column; width: 40px; border-radius: 10px; overflow: hidden; box-shadow: 0 0 0 3px #1b1f24, 0 0 0 4px rgba(255,255,255,0.15), 0 3px 6px rgba(0,0,0,0.6); }
+    .tr-rocker button { display: grid; place-items: center; height: 38px; padding: 0; border: none; font-size: 13px !important; font-weight: 900; color: #e9eef2 !important; background: linear-gradient(180deg, #3a4148, #1a1e22); }
+    .tr-rocker button + button { border-top: 1px solid #000; background: linear-gradient(180deg, #1a1e22, #3a4148); }
+    .tr-rocker button small { font-size: 7.5px; letter-spacing: 0.08em; color: var(--dim); }
+    .tr-rocker button.down { background: linear-gradient(180deg, #11141a, #2a3036); box-shadow: inset 0 2px 5px #000; color: var(--accent) !important; }
+    .tr-rocker button:hover small { color: var(--accent); }
     .tp-foot [data-note] { color: #ffc23a; font-size: 12px; }
     #loading-msg { font-size: 12px; letter-spacing: 0.15em; color: var(--dim); min-height: 1em; }
 

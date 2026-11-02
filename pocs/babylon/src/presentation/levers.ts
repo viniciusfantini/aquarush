@@ -15,6 +15,13 @@
 export type Gear = "F" | "N" | "R";
 export interface LeverCmd { gear: Gear; throttle: number; neutral?: boolean }
 export type LeverKind = "binnacle" | "twin" | "tiller" | "turbine";
+/**
+ * Trim no painel: "power" = botão basculante UP/DN (power trim/tilt da AR-6, das rabetas da AR-9 e da transmissão de
+ * superfície da AR-10) com a posição do pé desenhada e uma barra (faixa de trim + faixa de tilt); "pin" = bote: não
+ * há trim elétrico, só o PINO de regulagem (furos 1..N e T = tilt travado), mostrado no suporte do motor.
+ */
+export interface TrimOpts { mode: "power" | "pin"; label: string; sub: string; down: number; up: number; tilt: number; pins: number; drive: "outboard" | "sterndrive" | "surface" }
+export interface TrimState { deg: number; tilt: number; pin: number; blocked: boolean; relay: boolean }
 
 const ARC = 50; // graus de curso da manete de topo para cada lado
 
@@ -150,6 +157,56 @@ export class LeverControls {
     const up = () => { active = false; this.drag[i] = null; };
     target.addEventListener("pointerup", up); target.addEventListener("pointercancel", up);
     target.addEventListener("dblclick", (e) => { if (ok(e as PointerEvent)) { this.nBtn[i] = false; this.send(i, { gear: "N", throttle: 0 }); } });
+  }
+
+  private trimEl: HTMLElement | null = null;
+  private trimOpts: TrimOpts | null = null;
+
+  /** Monta (ou tira) o controle de trim deste barco. `onTrim(+1/−1/0)` = segurar UP/DN (vai para o InputManager). */
+  setTrim(opts: TrimOpts | null, onTrim: (dir: number) => void): void {
+    this.trimEl?.remove(); this.trimEl = null; this.trimOpts = opts;
+    if (!opts) return;
+    const el = document.createElement("div");
+    el.className = `tr tr-${opts.mode} tr-${opts.drive}`;
+    const total = opts.up + opts.tilt - opts.down;
+    const side = opts.mode === "pin"
+      ? `<div class="tr-pins">${Array.from({ length: opts.pins + 1 }, (_, k) => { const n = opts.pins + 1 - k; return `<i data-pin="${n}">${n > opts.pins ? "T" : n}</i>`; }).join("")}</div>`
+      : `<div class="tr-bar"><span class="tr-z trim" style="bottom:0;height:${((opts.up - opts.down) / total) * 100}%"></span><span class="tr-z tilt" style="bottom:${((opts.up - opts.down) / total) * 100}%;height:${(opts.tilt / total) * 100}%"></span><span class="tr-mark"></span></div>`;
+    el.innerHTML = `<div class="tr-row"><div class="tr-view"><span class="tr-water"></span><span class="tr-hull"></span><span class="tr-leg"><span class="tr-prop"></span></span></div>${side}
+        <div class="tr-rocker"><button data-tr="1">▲<small>${opts.mode === "pin" ? "SOBE" : "UP"}</small></button><button data-tr="-1">▼<small>${opts.mode === "pin" ? "DESCE" : "DN"}</small></button></div></div>
+      <em class="mt-rd">0°</em><b>${opts.label}</b><small>${opts.sub}</small>`;
+    // botão basculante momentâneo: segurar = trim subindo/descendo; soltar em qualquer lugar = para
+    let held = false;
+    el.addEventListener("pointerdown", (e) => {
+      const b = (e.target as HTMLElement).closest<HTMLElement>("button[data-tr]");
+      if (!b) return;
+      held = true; b.classList.add("down"); onTrim(Number(b.dataset.tr)); e.preventDefault();
+    });
+    const up = () => { if (!held) return; held = false; onTrim(0); for (const b of el.querySelectorAll("button.down")) b.classList.remove("down"); };
+    addEventListener("pointerup", up); addEventListener("pointercancel", up); addEventListener("blur", up);
+    this.el.appendChild(el); this.trimEl = el;
+  }
+
+  /** Posição do trim/tilt (telemetria): o pé desenhado gira com o ângulo; barra ou pino mostram onde está. */
+  updateTrim(s: TrimState | null): void {
+    const el = this.trimEl, o = this.trimOpts;
+    if (!el || !o || !s) return;
+    const ang = s.deg + s.tilt;
+    const leg = el.querySelector<HTMLElement>(".tr-leg")!, tr = `rotate(${ang.toFixed(1)}deg)`;
+    if (leg.style.transform !== tr) leg.style.transform = tr;
+    let txt: string;
+    if (o.mode === "pin") {
+      for (const p of el.querySelectorAll<HTMLElement>("[data-pin]")) p.classList.toggle("on", Number(p.dataset.pin) === s.pin);
+      txt = s.pin > o.pins ? "TILT · travado" : `pino ${s.pin} · ${s.deg >= 0 ? "+" : ""}${s.deg.toFixed(0)}°`;
+    } else {
+      const total = o.up + o.tilt - o.down;
+      const m = el.querySelector<HTMLElement>(".tr-mark")!, b = `${Math.max(0, Math.min(100, ((ang - o.down) / total) * 100)).toFixed(1)}%`;
+      if (m.style.bottom !== b) m.style.bottom = b;
+      txt = s.relay ? "SEM FORÇA (relé)" : s.blocked ? "TILT BLOQUEADO" : s.tilt > 0.5 ? `TILT ${s.tilt.toFixed(0)}°` : `${s.deg >= 0 ? "+" : ""}${s.deg.toFixed(1)}°`;
+    }
+    const rd = el.querySelector<HTMLElement>(".mt-rd")!;
+    if (rd.textContent !== txt) rd.textContent = txt;
+    rd.classList.toggle("warn", s.relay || s.blocked);
   }
 
   /** Mostra os comandos atuais (do InputManager); a manete que o piloto está segurando fica onde a mão está. */

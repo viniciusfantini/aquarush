@@ -42,11 +42,12 @@ import { TurbineExhaustFx } from "./presentation/exhaustFx.ts";
 import { GpuCart } from "./presentation/gpuCart.ts";
 import { TurbinePanel } from "./presentation/turbinePanel.ts";
 import { SystemsPanel } from "./presentation/systemsPanel.ts";
+import type { TrimOpts } from "./presentation/levers.ts";
 import { BoatCamera } from "./presentation/cameras.ts";
 import { Hud } from "./presentation/hud.ts";
 import { EngineAudio } from "./presentation/audio.ts";
 
-const BUILD = "poc-babylon 0.60.4";
+const BUILD = "poc-babylon 0.61.0";
 /** Escala visual da rotação da hélice (proporcional ao RPM, abaixo do limite estroboscópico). */
 const PROP_VISUAL_SCALE = 0.12;
 
@@ -320,7 +321,7 @@ const boot = async () => {
   window.addEventListener("pointerdown", startAudio);
 
   const GEAR_MSG = { F: "F — frente engatada (lenta)", N: "N — neutro (sem empuxo)", R: "R — ré engatada (lenta)" } as const;
-  input.onGearChange = (g) => hud.showToast(GEAR_MSG[g]);
+  input.onGearChange = (g) => sysToast(GEAR_MSG[g]);
 
   let occIdx = 0;
   const applyOccupants = (i: number, toast = true) => {
@@ -568,9 +569,11 @@ const boot = async () => {
     setCockpitHead(false);
     audio.cylinders = V.P.cylinders;
     tpanel.setOpen(false); spanel.setOpen(false);
+    if (V.P.turbine) tpanel.configureTrim(trimOptsFor(V.P));
     spanel.configure({ title: V.P.name, banks: !V.P.electricStart ? 0 : V.boat.systems2 ? 2 : 1,
       keys: !V.P.electricStart || V.P.turbine ? [] : V.boat.units.length > 1 ? ["IGNIÇÃO BB", "IGNIÇÃO BE"] : ["IGNIÇÃO"],
-      levers: isBote ? "tiller" : V.boat.units.length > 1 ? "twin" : "binnacle", display: isBote ? "grey" : V.boat.units.length > 1 ? "vfd" : "lcd", choke: !!V.P.carbureted, bilgePump: V.P.bilge.pumpLph > 0, lights: isBote ? "LANTERNA" : "LUZES" });
+      levers: isBote ? "tiller" : V.boat.units.length > 1 ? "twin" : "binnacle", display: isBote ? "grey" : V.boat.units.length > 1 ? "vfd" : "lcd",
+      trim: trimOptsFor(V.P), choke: !!V.P.carbureted, bilgePump: V.P.bilge.pumpLph > 0, lights: isBote ? "LANTERNA" : "LUZES" });
     lights = false; input.setLights(false);
     setNavLights(V.vis, false); V.dinghy?.setLantern(false);
     hud.setLights(false, isBote ? "LANTERNA" : "LUZES");
@@ -612,16 +615,16 @@ const boot = async () => {
     setFadec: (on) => {
       const tb = V.boat.units[0].turb; if (!tb) return;
       tb.setFadec(on);
-      hud.showToast(on ? "FADEC: a partida é automática (P ou PARTIDA no painel)" : "MANUAL: você aciona cada chave — ninguém protege a turbina (vigie a EGT)");
+      sysToast(on ? "FADEC: a partida é automática (P ou PARTIDA no painel)" : "MANUAL: você aciona cada chave — ninguém protege a turbina (vigie a EGT)");
     },
     setSwitch: (sw, on) => {
       const tb = V.boat.units[0].turb; if (!tb) return;
       if (sw === "extPwr") {
-        if (tb.fadec) { hud.showToast("No FADEC o EXT PWR é automático: fecha com a GPU estável e abre na marcha lenta"); return; }
+        if (tb.fadec) { sysToast("No FADEC o EXT PWR é automático: fecha com a GPU estável e abre na marcha lenta"); return; }
         // a chave muda de posição sempre; o efeito depende do cabo, da GPU estável e da MAIN
         const sy = V.boat.systems, powered = !!V.boat.telemetry.turbine?.powered;
         sy.extPwr = on;
-        if (on) hud.showToast(!sy.gpu ? (powered ? "EXT PWR em ON sem a GPU conectada — FALHA (alarme): desligue ou conecte a GPU (J, na doca)" : "EXT PWR em ON — sem GPU e sem barramento: nenhum efeito")
+        if (on) sysToast(!sy.gpu ? (powered ? "EXT PWR em ON sem a GPU conectada — FALHA (alarme): desligue ou conecte a GPU (J, na doca)" : "EXT PWR em ON — sem GPU e sem barramento: nenhum efeito")
           : !tb.master || V.boat.batterySel === "off" ? "EXT PWR em ON, mas sem MAIN: nenhum efeito (a GPU continua fora do barramento)"
           : !sy.gpuOnline ? "EXT PWR em ON: a GPU entra no barramento quando estabilizar" : "EXT PWR em ON: GPU no barramento");
         return;
@@ -629,7 +632,7 @@ const boot = async () => {
       tb.setSwitch(sw, on);
       if (sw === "master") {
         const live = V.boat.batterySel === "both" || (V.boat.batterySel === "bus" && (V.boat.systems.gpuOnline || V.boat.systems.genOn));
-        hud.showToast(!on ? "MAIN desligada: os sistemas eletrônicos saíram do barramento (sem GPU, sem gerador, sem baterias)"
+        sysToast(!on ? "MAIN desligada: os sistemas eletrônicos saíram do barramento (sem GPU, sem gerador, sem baterias)"
           : V.boat.batterySel === "off" ? "MAIN ligada, mas as baterias estão em OFF: barramento isolado"
           : live ? "MAIN ligada: sistemas eletrônicos energizados" : "MAIN ligada: aguardando fonte (baterias em BUS — conecte a GPU ou ponha em BOTH)");
       }
@@ -640,49 +643,67 @@ const boot = async () => {
     setFuelTank: (open) => setFuelValve(open),
     setBattery: (sel) => {
       V.boat.batterySel = sel;
-      hud.showToast(sel === "off" ? "Baterias em OFF: barramento isolado (nem as baterias nem a GPU chegam a ele)"
+      sysToast(sel === "off" ? "Baterias em OFF: barramento isolado (nem as baterias nem a GPU chegam a ele)"
         : sel === "bus" ? "Baterias em BUS: baterias fora — o barramento fica só com a GPU (EXT PWR) ou o gerador"
         : "Baterias em BOTH: as duas de 12 V em série = 24 V no barramento");
     },
     setLever: (cmd) => input.setPanelLever(0, cmd, 1),
+    setTrim: (d) => { input.touchTrim = d; },
     setBilge: (mode) => setBilgeMode(mode),
     close: () => tpanel.setOpen(false),
   });
   // ---------------- painel de sistemas (Y nos barcos a pistão) ----------------
   const setFuelValve = (open: boolean) => {
     V.boat.systems.fuelValveOpen = open;
-    hud.showToast(open ? "Registro do tanque ABERTO" : "Registro do tanque FECHADO — o motor roda até acabar o combustível da linha");
+    sysToast(open ? "Registro do tanque ABERTO" : "Registro do tanque FECHADO — o motor roda até acabar o combustível da linha");
   };
   const setBilgeMode = (mode: "off" | "auto" | "on") => {
     V.boat.bilgeMode = mode;
-    hud.showToast(mode === "auto" ? "Bomba de porão em AUTO (boia)" : mode === "on" ? "Bomba de porão LIGADA (manual)" : "Bomba de porão DESLIGADA — a água no porão não sai");
+    sysToast(mode === "auto" ? "Bomba de porão em AUTO (boia)" : mode === "on" ? "Bomba de porão LIGADA (manual)" : "Bomba de porão DESLIGADA — a água no porão não sai");
   };
   const spanel = new SystemsPanel({
     setBattery: (sel) => {
       V.boat.batterySel = sel;
       const txt: Record<string, string> = { off: "Chave de baterias em OFF", ind: V.boat.systems2 ? "Baterias em IND.: cada motor no seu banco" : "Bateria LIGADA",
         bb: "Baterias em BB: o banco de bombordo alimenta os dois motores e a casa", be: "Baterias em BE: o banco de boreste alimenta os dois motores e a casa", both: "Baterias em AMBAS: bancos em paralelo" };
-      hud.showToast(txt[sel]);
+      sysToast(txt[sel]);
     },
     setFuelValve,
-    setChoke: (on) => { V.boat.choke = on; hud.showToast(on ? "Afogador PUXADO (partida a frio)" : "Afogador EMPURRADO"); },
+    setChoke: (on) => { V.boat.choke = on; sysToast(on ? "Afogador PUXADO (partida a frio)" : "Afogador EMPURRADO"); },
     setBilge: setBilgeMode,
     toggleLights: () => input.pushAction("lights"),
     setKey: (i, pos) => {
       const b = V.boat, before = b.units[i]?.key;
       const r = b.setKey(i, pos);
       const name = b.units.length > 1 ? (i === 0 ? " de bombordo" : " de boreste") : "";
-      if (r === "needNeutral") hud.showToast("Coloque em N para dar partida");
-      else if (r === "noPilot") hud.showToast("Ninguém no comando — o piloto está na água");
-      else if (r === "broken") hud.showToast("Motor avariado: não liga — R leva à oficina do píer");
-      else if (pos === "off" && before !== "off") hud.showToast(`Chave${name} em OFF: ignição desligada`);
-      else if (pos === "on" && before === "off") hud.showToast(b.units[i].testT > 0 ? `Chave${name} em ON — autoteste… segure START para dar partida` : `Chave${name} em ON — sem tensão: nem o autoteste apita`);
+      if (r === "needNeutral") sysToast("Coloque em N para dar partida");
+      else if (r === "noPilot") sysToast("Ninguém no comando — o piloto está na água");
+      else if (r === "broken") sysToast("Motor avariado: não liga — R leva à oficina do píer");
+      else if (pos === "off" && before !== "off") sysToast(`Chave${name} em OFF: ignição desligada`);
+      else if (pos === "on" && before === "off") sysToast(b.units[i].testT > 0 ? `Chave${name} em ON — autoteste… segure START para dar partida` : `Chave${name} em ON — sem tensão: nem o autoteste apita`);
     },
     setLever: (i, cmd) => input.setPanelLever(i, cmd, V.boat.units.length),
+    setTrim: (d) => { input.touchTrim = d; },
     pullStart: () => { if (V.boat.engine !== "running") input.pushAction("ignition"); },
     stopEngine: () => { if (V.boat.engine === "running") input.pushAction("ignition"); },
     close: () => spanel.setOpen(false),
   });
+  /** Controle de trim do painel do Y para o tipo de embarcação (power trim do popa / das rabetas / da transmissão de
+   *  superfície, ou o pino do bote). */
+  const trimOptsFor = (P: typeof V.P): TrimOpts => {
+    const DEGR = 180 / Math.PI;
+    if (P.trimMode === "manual") return { mode: "pin", label: "PINO DO TRIM", sub: "solte o acelerador · ▲▼ mudam o pino", down: P.trimPins[0] * DEGR, up: P.trimPins[P.trimPins.length - 1] * DEGR, tilt: P.tiltMax * DEGR, pins: P.trimPins.length, drive: "outboard" };
+    const drive = P.turbine ? "surface" : P.engines && P.engines.length > 1 ? "sterndrive" : "outboard";
+    return { mode: "power", label: drive === "surface" ? "TRIM DA TRANSMISSÃO" : drive === "sterndrive" ? "TRIM DAS RABETAS" : "TRIM / TILT",
+      sub: drive === "outboard" ? "segure ▲▼ · no fim do curso, tilt" : drive === "sterndrive" ? "as duas rabetas juntas" : "imersão da hélice de superfície",
+      down: P.trimDown * DEGR, up: P.trimUp * DEGR, tilt: P.tiltMax * DEGR, pins: 0, drive };
+  };
+  /** Aviso de sistemas/motor: com o painel do Y aberto vai para o display dele; fechado, é o aviso normal do HUD. */
+  const sysToast = (msg: string, force = false): void => {
+    if (tpanel.isOpen) tpanel.flash(msg);
+    else if (spanel.isOpen) spanel.flash(msg);
+    else hud.showToast(msg, force);
+  };
 
   // ---------------- menu: escolha do barco com prévia no lago ----------------
   const menu = document.getElementById("menu")!;
@@ -792,16 +813,16 @@ const boot = async () => {
     else if (a === "jump" && boat.params.turbine) {
       // AR-10: sem jump start — a partida externa é a GPU da doca (28 V), só com o barco atracado na vaga do píer
       const sys = boat.systems;
-      if (!sys.gpu && !docked()) { hud.showToast("A GPU fica na doca: atraque na vaga do píer (amarrado) para conectar o cabo"); return; }
+      if (!sys.gpu && !docked()) { sysToast("A GPU fica na doca: atraque na vaga do píer (amarrado) para conectar o cabo"); return; }
       sys.gpu = !sys.gpu;
-      hud.showToast(sys.gpu ? `Cabo da GPU conectado: o diesel da GPU está partindo — a luz pisca até ele estabilizar (depois o EXT PWR põe os ${GPU_V} V no barramento)`
+      sysToast(sys.gpu ? `Cabo da GPU conectado: o diesel da GPU está partindo — a luz pisca até ele estabilizar (depois o EXT PWR põe os ${GPU_V} V no barramento)`
         : "Cabo da GPU retirado e recolhido no carretel — o diesel roda mais alguns segundos sem carga e desliga");
     }
     else if (a === "jump") {
       const sys = boat.systems;
-      if (!sys.p.hasBattery) { hud.showToast("O bote não tem bateria — a partida é na corda (P)"); return; }
+      if (!sys.p.hasBattery) { sysToast("O bote não tem bateria — a partida é na corda (P)"); return; }
       sys.jumper = !sys.jumper;
-      hud.showToast(!sys.jumper ? `Jump start desconectado (${sys.jumpAh.toFixed(1)} Ah)`
+      sysToast(!sys.jumper ? `Jump start desconectado (${sys.jumpAh.toFixed(1)} Ah)`
         : sys.jumpCharge <= 0.005 ? "Jump start conectado, mas está descarregado (0 Ah) — ele recarrega com o motor em cruzeiro"
         : `Jump start conectado: ${sys.jumpAh.toFixed(1)} de ${JUMP_AH} Ah, até ${JUMP_MAX_A} A (~${sys.jumpStartsLeft} partidas) — alimenta partida, âncora, trim e luzes; ao pegar o motor ele é desconectado`);
     }
@@ -815,19 +836,19 @@ const boot = async () => {
     else if (a === "ignition") {
       if (boat.capsized) { hud.showToast("Barco virado — R para recomeçar"); return; }
       const r = boat.toggleIgnition();
-      if (r === "noPilot") { hud.showToast("Ninguém no comando — o piloto está na água"); return; }
-      if (r === "broken") { hud.showToast("Motor avariado: não liga — R leva à oficina do píer"); return; }
+      if (r === "noPilot") { sysToast("Ninguém no comando — o piloto está na água"); return; }
+      if (r === "broken") { sysToast("Motor avariado: não liga — R leva à oficina do píer"); return; }
       if (r === "pulling") audio.ropePull();
-      if (r === "manual") { hud.showToast("Partida MANUAL: use as chaves do painel de partida (Y) — ou volte ao FADEC nele"); tpanel.setOpen(true); return; }
+      if (r === "manual") { sysToast("Partida MANUAL: use as chaves do painel de partida (Y) — ou volte ao FADEC nele"); tpanel.setOpen(true); return; }
       if (boat.params.turbine) {
         const tb = boat.telemetry.turbine;
         const tm: Record<string, string> = { stopped: tb && tb.phase === "running" ? "Combustível cortado" : "Partida abortada", starting: "Partida da turbina: arranque girando o gerador de gás…",
           busy: `Turbina ainda girando (N1 ${tb ? tb.n1.toFixed(0) : 0} %) — espere passar de 8 % para nova partida`, needNeutral: "Coloque em N para dar partida", lowBattery: "Bateria descarregada: o arranque não gira — atraque na doca e conecte a GPU (J)",
           noPower: "Sem energia no barramento: MAIN ligada e baterias em BOTH (ou BUS com a GPU da doca, J) — painel Y" };
-        if (tm[r]) { hud.showToast(tm[r]); return; }
+        if (tm[r]) { sysToast(tm[r]); return; }
       }
       const msg: Record<string, string> = { stopped: "Motor desligado", pulling: "Puxando a corda…", starting: "Chave ligada — autoteste…", busy: "Dando partida…", needNeutral: "Coloque em N para dar partida", noFuel: "Sem combustível — R para voltar ao píer e abastecer", lowBattery: "Bateria descarregada: nem o relé de partida arma — J conecta o jump start", hot: "Motor quente demais — espere esfriar" };
-      hud.showToast(msg[r]);
+      sysToast(msg[r]);
     }
     else if (a === "pause") { paused = !paused; hud.showToast(paused ? "Pausado" : "Continuando"); }
     else if (a === "waterNext") applyWater(waterPreset + 1);
@@ -1022,7 +1043,7 @@ const boot = async () => {
         ctxBar.innerHTML = K.map(([k, label, act]) => `<button class="ctx${act === "unhitch" || act === "moor" || act === "car" || (act === "jump" && !T.jumper && T.batterySoc < 0.08) || (act === "couple" && !V.rig.coupled) ? " hot" : ""}"${act ? ` data-a="${act}"` : " disabled"}>${k.split(" ").map((x) => `<kbd>${x}</kbd>`).join("")} ${label}</button>`).join("");
       }
     }
-    if (T.damageCount !== lastDamage) { if (mode === "game") hud.showToast(T.damageEvent + (T.engineDamage >= 0.95 ? " — MOTOR QUEBRADO" : "")); lastDamage = T.damageCount; }
+    if (T.damageCount !== lastDamage) { if (mode === "game") sysToast(T.damageEvent + (T.engineDamage >= 0.95 ? " — MOTOR QUEBRADO" : "")); lastDamage = T.damageCount; }
     for (const e of boat.units[0].turb?.drainEvents() ?? []) {
       const tb = T.turbine;
       if (!tb) continue;
@@ -1047,9 +1068,9 @@ const boot = async () => {
         oilHot: `ÓLEO QUENTE: ${tb.oilC.toFixed(0)} °C — a turbina NÃO corta sozinha. Sem água no trocador (tomada fora d'água?) ela esquenta: reduza ou corte`,
         oilDamage: `ÓLEO ACIMA DE ${V.P.turbine!.oilRedC} °C: os mancais estão se desgastando — corte a turbina (P / CORTE) antes que ela trave`,
       };
-      if (mode === "game" && tmsg[e]) hud.showToast(tmsg[e]!);
+      if (mode === "game" && tmsg[e]) sysToast(tmsg[e]!);
     }
-    if (T.startFail && T.startFail !== lastStartFail) hud.showToast(T.startFail === "fuel" ? "O motor gira mas não pega: sem combustível — abasteça no posto" : T.startFail === "pull" ? "Não pegou — puxe de novo (P)" : T.startFail === "dead" ? "Só estalou: bateria sem força para girar o arranque" : "Não pegou: o arranque girou fraco (bateria baixa)");
+    if (T.startFail && T.startFail !== lastStartFail) sysToast(T.startFail === "fuel" ? "O motor gira mas não pega: sem combustível — abasteça no posto" : T.startFail === "pull" ? "Não pegou — puxe de novo (P)" : T.startFail === "dead" ? "Só estalou: bateria sem força para girar o arranque" : "Não pegou: o arranque girou fraco (bateria baixa)");
     lastStartFail = T.startFail;
     // âncora: avisos nas mudanças de estado
     if (T.anchorState !== lastAnchorState && mode === "game") {
@@ -1060,10 +1081,10 @@ const boot = async () => {
       else if (st === "recolhida" && lastAnchorState === "subindo") hud.showToast("Âncora recolhida na proa");
       lastAnchorState = st;
     }
-    if (T.bilgeAlarm && !lastBilgeAlarm && mode === "game") hud.showToast(T.bilgePump ? `Bomba de porão ligada: entrando ${T.bilgeInflowLps.toFixed(1)} L/s — ${T.bilgeInflowLps > T.bilgeFlowLps ? "a bomba não vence, volte ao píer!" : "a bomba dá conta"}` : `Água no porão: ${T.bilgeL.toFixed(0)} L`);
+    if (T.bilgeAlarm && !lastBilgeAlarm && mode === "game") sysToast(T.bilgePump ? `Bomba de porão ligada: entrando ${T.bilgeInflowLps.toFixed(1)} L/s — ${T.bilgeInflowLps > T.bilgeFlowLps ? "a bomba não vence, volte ao píer!" : "a bomba dá conta"}` : `Água no porão: ${T.bilgeL.toFixed(0)} L`);
     lastBilgeAlarm = T.bilgeAlarm;
     // AR-10 manual: EXT PWR em ON sem a GPU conectada com o barco energizado — falha (alarme + EXT PWR vermelho)
-    if (T.extPwrFault && !lastExtFault && mode === "game") hud.showToast("FALHA EXT PWR: chave em ON sem a GPU conectada — desligue o EXT PWR ou conecte a GPU (J, na doca)", true);
+    if (T.extPwrFault && !lastExtFault && mode === "game") sysToast("FALHA EXT PWR: chave em ON sem a GPU conectada — desligue o EXT PWR ou conecte a GPU (J, na doca)", true);
     lastExtFault = T.extPwrFault;
     if (T.swamped && !lastSwamped && mode === "game" && !T.sunk) hud.showToast(`Barco ALAGADO: ${T.bilgeL.toFixed(0)} L dentro e a borda na linha d'água — inavegável; se entrar mais água ele afunda`);
     lastSwamped = T.swamped;
@@ -1071,14 +1092,14 @@ const boot = async () => {
     // afundou: silêncio total e sem alertas na tela (combustível, bateria… já não importam); R volta tudo
     if (T.sunk !== lastSunk) { audio.silenceAll(T.sunk); hud.setQuiet(T.sunk); }
     lastSunk = T.sunk;
-    if (boat.systems.jumperTrips !== lastJumperTrips) { if (mode === "game") hud.showToast(`Proteção do jump start desarmou: mais de ${JUMP_MAX_A} A (ex.: partida + molinete juntos) — J para religar`); lastJumperTrips = boat.systems.jumperTrips; }
-    if (boat.systems.gpu && !docked()) { boat.systems.gpu = false; if (mode === "game") hud.showToast("GPU desconectada: o cabo foi solto ao sair da doca"); }
+    if (boat.systems.jumperTrips !== lastJumperTrips) { if (mode === "game") sysToast(`Proteção do jump start desarmou: mais de ${JUMP_MAX_A} A (ex.: partida + molinete juntos) — J para religar`); lastJumperTrips = boat.systems.jumperTrips; }
+    if (boat.systems.gpu && !docked()) { boat.systems.gpu = false; if (mode === "game") sysToast("GPU desconectada: o cabo foi solto ao sair da doca"); }
     if (T.gpuState !== lastGpuState) {
-      if (T.gpuState === "online" && mode === "game") hud.showToast(boat.units[0].turb?.fadec ? `GPU estável (1500 rpm) — FADEC fechou o EXT PWR: ${GPU_V} V no barramento. Pode dar a partida`
+      if (T.gpuState === "online" && mode === "game") sysToast(boat.units[0].turb?.fadec ? `GPU estável (1500 rpm) — FADEC fechou o EXT PWR: ${GPU_V} V no barramento. Pode dar a partida`
         : `GPU estável (1500 rpm) — feche o EXT PWR no painel (Y) para pôr os ${GPU_V} V no barramento`);
       lastGpuState = T.gpuState;
     }
-    if (boat.systems.gpuAutoOff !== lastGpuOff) { if (mode === "game") hud.showToast("Turbina em marcha lenta — FADEC abriu o EXT PWR: a GPU saiu do barramento (o gerador assume). J recolhe o cabo"); lastGpuOff = boat.systems.gpuAutoOff; }
+    if (boat.systems.gpuAutoOff !== lastGpuOff) { if (mode === "game") sysToast("Turbina em marcha lenta — FADEC abriu o EXT PWR: a GPU saiu do barramento (o gerador assume). J recolhe o cabo"); lastGpuOff = boat.systems.gpuAutoOff; }
     {
       // cabo da GPU até a tomada do costado do lado do píer (AR-10)
       let socket: Vector3 | null = null;
@@ -1099,17 +1120,18 @@ const boot = async () => {
       gpuCart.updateDiesel(isTurb ? T.gpuState : "off", T.gpuT, T.gpuKw, paused ? 0 : dtReal);
       tpanel.update(T);
       { const ec = vin.engineCmd, cm = ec && ec.length ? ec : [{ gear: vin.gear, throttle: vin.throttle, neutral: !!vin.neutralThrottle }];
-        tpanel.updateLevers(cm); spanel.updateLevers(cm.length >= boat.units.length ? cm : [cm[0], cm[0]]); }
+        const trimSt = { deg: T.trimDeg, tilt: T.tiltDeg, pin: T.trimPin, blocked: T.tiltBlocked, relay: T.trimRelay };
+        tpanel.updateLevers(cm, trimSt); spanel.updateLevers(cm.length >= boat.units.length ? cm : [cm[0], cm[0]], trimSt); }
       spanel.update(T, lights);
     }
-    if (boat.systems.jumperAutoOff !== lastJumperOff) { if (mode === "game") hud.showToast(`O motor pegou — jump start desconectado (carga ${Math.round(T.jumpCharge * 100)} %, recarrega em cruzeiro)`); lastJumperOff = boat.systems.jumperAutoOff; }
-    if (T.trimRelay && !trimRelayWarned && mode === "game") { hud.showToast("Trim sem força: bateria zerada — só o relé estala (J conecta o jump start)"); trimRelayWarned = true; }
+    if (boat.systems.jumperAutoOff !== lastJumperOff) { if (mode === "game") sysToast(`O motor pegou — jump start desconectado (carga ${Math.round(T.jumpCharge * 100)} %, recarrega em cruzeiro)`); lastJumperOff = boat.systems.jumperAutoOff; }
+    if (T.trimRelay && !trimRelayWarned && mode === "game") { sysToast("Trim sem força: bateria zerada — só o relé estala (J conecta o jump start)"); trimRelayWarned = true; }
     if (!T.trimRelay && input.state.trim === 0) trimRelayWarned = false;
-    if (T.neutralRev && !neutralRevWarned && mode === "game") hud.showToast("Acelerando em neutro: o giro sobe sem engatar (sem limite em N — cuidado com o corte de giro)");
+    if (T.neutralRev && !neutralRevWarned && mode === "game") sysToast("Acelerando em neutro: o giro sobe sem engatar (sem limite em N — cuidado com o corte de giro)");
     neutralRevWarned = T.neutralRev;
-    if (T.lowFuel && !lowFuelWarned && T.engine === "running" && mode === "game") { hud.showToast(`Combustível na reserva: ${T.fuelL.toFixed(1)} L`); lowFuelWarned = true; }
+    if (T.lowFuel && !lowFuelWarned && T.engine === "running" && mode === "game") { sysToast(`Combustível na reserva: ${T.fuelL.toFixed(1)} L`); lowFuelWarned = true; }
     if (!T.lowFuel) lowFuelWarned = false;
-    if (T.stall && T.stall !== lastStall && T.stall !== "capsize" && T.stall !== "broken") hud.showToast(T.stall === "fuel" ? (T.fuelValveOpen ? "O motor morreu: acabou o combustível" : "O motor morreu: registro do tanque FECHADO (Y abre)") : T.stall === "flooded" ? "O motor AFOGOU: afogador puxado com o motor quente — empurre o afogador (Y) e puxe a corda de novo" : "O motor desligou: superaquecimento");
+    if (T.stall && T.stall !== lastStall && T.stall !== "capsize" && T.stall !== "broken") sysToast(T.stall === "fuel" ? (T.fuelValveOpen ? "O motor morreu: acabou o combustível" : "O motor morreu: registro do tanque FECHADO (Y abre)") : T.stall === "flooded" ? "O motor AFOGOU: afogador puxado com o motor quente — empurre o afogador (Y) e puxe a corda de novo" : "O motor desligou: superaquecimento");
     lastStall = T.stall;
     if ((hoursSaveT += dtReal) > 10) { hoursSaveT = 0; try { localStorage.setItem(V.hoursKey, String(boat.systems.engineHours)); } catch { /* sem storage */ } }
     // hélice: velocidade visual PROPORCIONAL ao RPM real (escala fixa de 0,12). A rotação real (até ~48 voltas/s)
@@ -1169,10 +1191,10 @@ const boot = async () => {
     const ew = vis.engine.getWorldMatrix();
     fx.updateTelltale(vis.telltale.getAbsolutePosition().clone(), Vector3.TransformNormal(new Vector3(1, -0.15, -0.35), ew), T.rpm, new Vector3(boat.vel.x, boat.vel.y, boat.vel.z),
       T.engine === "running" && T.intakeSubmerged && V.kind !== "rapida" && V.kind !== "turbina"); // sem água na entrada do pé = sem esguicho; os V8 de centro (AR-9) não têm esguicho: a água sai com o escape
-    if (T.tiltBlocked && !tiltWarned) { hud.showToast(isBote ? "Solte o acelerador para mudar a posição do motor" : "Tilt bloqueado: o empuxo da hélice segura o motor — reduza a rotação"); tiltWarned = true; }
-    if (isBote && T.trimPin !== lastPin) { if (lastPin > 0) hud.showToast(T.trimPin > P.trimPins.length ? "Motor levantado (tilt) e travado" : `Motor no pino ${T.trimPin} de ${P.trimPins.length} (${(P.trimPins[T.trimPin - 1] * 180 / Math.PI).toFixed(0)}°)`); lastPin = T.trimPin; }
+    if (T.tiltBlocked && !tiltWarned) { sysToast(isBote ? "Solte o acelerador para mudar a posição do motor" : "Tilt bloqueado: o empuxo da hélice segura o motor — reduza a rotação"); tiltWarned = true; }
+    if (isBote && T.trimPin !== lastPin) { if (lastPin > 0) sysToast(T.trimPin > P.trimPins.length ? "Motor levantado (tilt) e travado" : `Motor no pino ${T.trimPin} de ${P.trimPins.length} (${(P.trimPins[T.trimPin - 1] * 180 / Math.PI).toFixed(0)}°)`); lastPin = T.trimPin; }
     if (!T.tiltBlocked) tiltWarned = false;
-    if (T.engine === "running" && !T.intakeSubmerged && T.tiltDeg > 5 && !intakeWarned && !T.capsized) { hud.showToast("Motor recolhido: sem água de refrigeração!"); intakeWarned = true; }
+    if (T.engine === "running" && !T.intakeSubmerged && T.tiltDeg > 5 && !intakeWarned && !T.capsized) { sysToast("Motor recolhido: sem água de refrigeração!"); intakeWarned = true; }
     if (T.intakeSubmerged) intakeWarned = false;
 
     fx.updateDrips(dtReal, V.skeg.getAbsolutePosition().clone(), T.propImmersion);

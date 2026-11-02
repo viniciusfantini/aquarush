@@ -42,7 +42,7 @@ src/
     systemsPanel.ts         painel de sistemas (Y) dos barcos a pistão: baterias, registro, afogador, bomba de porão, luzes
     dragPanel.ts            janelas arrastáveis pela barra de título (posição salva)
     switches.ts             chaves de painel em CSS: alavanca, 3 posições, rotativo, chave de ignição, puxador, corda
-    levers.ts               manetes do painel Y: topo, dupla, cana (punho + câmbio), potência da turbina + marcha
+    levers.ts               manetes do painel Y (topo, dupla, cana, potência + marcha) e o trim (power trim ou pino)
     environment.ts          terreno, árvores, píer, marina, restaurante, piscina
     boatMesh.ts / dinghyMesh.ts / rapidaMesh.ts / turbineMesh.ts   as 4 embarcações procedurais (PBR): motores, rabetas,
                             transmissão de superfície, hélices, canopy e escape da turbina
@@ -95,6 +95,17 @@ A lancha é um **corpo rígido 6DOF** (massa seca de 1030 kg + gasolina, ocupant
 **Água compartilhada:** `GerstnerWater.shaderParams()` envia ao shader exatamente as ondas que a física consulta. `getHeight` inverte o deslocamento horizontal de Gerstner por iteração de ponto fixo. No teste, o desvio médio entre o casco e a superfície é de 3 cm.
 
 > Referência completa da lógica elétrica e dos motores: [`docs/SISTEMAS_ELETRICOS_E_MOTORES.md`](../../docs/SISTEMAS_ELETRICOS_E_MOTORES.md).
+
+## Avisos no display do painel e trim no Y (v0.61)
+
+- **Avisos de sistemas/motor no display do painel**: `sysToast` (main.ts) manda os avisos de chaves, partida, marcha, combustível, porão, trim/tilt, GPU, jump start, eventos da turbina, avarias e falhas para o display do pé do painel do Y quando ele está aberto (`SystemsPanel.flash` / `TurbinePanel.flash`, ~6 s; depois volta o aviso de estado). Com o painel fechado continuam no aviso do HUD. Avisos que não são de sistemas (amarras, carro, vento, lotação, pausa, barco virado/afundado) seguem no HUD.
+- **Trim no painel Y** (`LeverControls.setTrim` / `updateTrim`, junto das manetes), pelo tipo de embarcação:
+  - **AR-6** (popa): **TRIM / TILT** — botão basculante UP/DN momentâneo (= E/Q), vista de lado com o motor girando no pivô (trim + tilt) e barra com a faixa de trim (verde, −6° a +10°) e a de tilt (âmbar, até +60°); mostra "TILT BLOQUEADO" e "SEM FORÇA (relé)".
+  - **AR-9** (rabetas): **TRIM DAS RABETAS** — o mesmo botão, as duas rabetas juntas (o trim é comum aos dois pés).
+  - **AR-10**: **TRIM DA TRANSMISSÃO** — imersão da hélice de superfície (−5° a +8°, tilt curto de 12°).
+  - **Bote**: sem trim elétrico — o **PINO DO TRIM** no suporte do motor (furos 1–3 e T = tilt travado), com ▲▼ para mudar o pino (só com o acelerador solto, como antes no E/Q).
+- O botão de trim é mais um dispositivo de entrada (`InputManager.touchTrim`), como as manetes.
+- No navegador: AR-6 — aviso do registro no display (HUD sem aviso), UP segurado 1,5 s → +7,4°, 6 s → tilt 55° (pé fora d'água, marcador na faixa âmbar); bote — pino 2 → 3 e o aviso "Motor no pino 3 de 3" no display; AR-10 — DN → −2,0° e o aviso do modo manual no display de vidro.
 
 ## AR-10: EXT PWR sem MAIN e falha do EXT PWR (v0.60.3)
 
