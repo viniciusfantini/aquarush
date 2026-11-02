@@ -11,6 +11,8 @@ export class BoatCamera {
   private pos = new Vector3(0, 5, -15);
   private look = new Vector3();
   private orbitYaw = 0;
+  /** quanto (m, escalado pela distância) o ponto mirado desce para o barco subir no quadro — o HUD ocupa a parte de baixo */
+  frameDown = 2.3;
   private orbitPitch = 0;
   private dragging = false;
   private lastX = 0;
@@ -88,7 +90,8 @@ export class BoatCamera {
       if (this.ground) this.pos.y = Math.max(this.pos.y, this.ground(this.pos.x, this.pos.z) + 0.35);
       // abaixo da água: olha para o casco por baixo
       const under = this.orbitPitch < -0.25;
-      const lookT = boatPos.add(new Vector3(flat.x * 2.5 * this.distScale, (under ? -0.3 : 1.0) * (0.5 + 0.5 * this.distScale), flat.z * 2.5 * this.distScale));
+      // o ponto mirado fica ABAIXO do barco: ele aparece mais alto na tela, livre dos relógios do HUD (embaixo)
+      const lookT = boatPos.add(new Vector3(flat.x * 2.5 * this.distScale, (under ? -0.3 : 1.0 - this.frameDown) * (0.5 + 0.5 * this.distScale), flat.z * 2.5 * this.distScale));
       this.look = this.first ? lookT : Vector3.Lerp(this.look, lookT, 1 - Math.exp(-dt * 12));
       this.first = false;
       this.cam.position.copyFrom(this.pos);

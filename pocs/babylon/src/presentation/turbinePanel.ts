@@ -46,7 +46,7 @@ export class TurbinePanel {
     const el = document.createElement("div");
     el.id = "tpanel";
     el.innerHTML = `
-      <div class="tp-head"><b>PARTIDA DA TURBINA</b>
+      <div class="tp-head" title="arraste para mover"><b>⠿ PARTIDA DA TURBINA</b>
         <div class="tp-mode"><button data-mode="fadec">FADEC</button><button data-mode="manual">MANUAL</button></div>
         <button class="tp-x" aria-label="fechar">×</button></div>
       <div class="tp-gauges"></div>
@@ -79,6 +79,7 @@ export class TurbinePanel {
     });
     document.body.appendChild(el);
     this.el = el;
+    this.makeDraggable();
     // instrumentos analógicos com faixas (os mesmos limites da simulação: idle 62 %, partida 780 °C, operação 700 °C)
     const box = this.q<HTMLElement>(".tp-gauges");
     this.g = {
@@ -92,6 +93,38 @@ export class TurbinePanel {
       gpu: new RoundGauge(box, { title: "GPU A", min: 0, max: 600, labels: [0, 300, 600], minor: 50, bands: [{ from: 0, to: 500, c: "g" }, { from: 500, to: 600, c: "r" }] }),
     };
     this.setOpen(false);
+  }
+
+  /** Arrasta pela barra de título; a posição fica salva (por navegador) e sempre dentro da tela. */
+  private makeDraggable(): void {
+    const el = this.el, head = this.q<HTMLElement>(".tp-head");
+    const place = (x: number, y: number) => {
+      const w = el.offsetWidth || 560, h = el.offsetHeight || 300;
+      const nx = Math.min(Math.max(4, x), innerWidth - w - 4), ny = Math.min(Math.max(4, y), innerHeight - Math.min(h, 120));
+      el.style.left = `${nx}px`; el.style.top = `${ny}px`; el.style.right = "auto"; el.style.bottom = "auto";
+      return { x: nx, y: ny };
+    };
+    try {
+      const saved = JSON.parse(localStorage.getItem("aquarush.tpanelPos") ?? "null") as { x: number; y: number } | null;
+      if (saved) requestAnimationFrame(() => place(saved.x, saved.y));
+    } catch { /* sem storage */ }
+    let drag: { dx: number; dy: number } | null = null;
+    head.addEventListener("pointerdown", (e) => {
+      if ((e.target as HTMLElement).closest("button")) return; // os botões do cabeçalho continuam clicáveis
+      const r = el.getBoundingClientRect();
+      drag = { dx: e.clientX - r.left, dy: e.clientY - r.top };
+      head.setPointerCapture(e.pointerId); el.classList.add("dragging");
+      e.preventDefault();
+    });
+    head.addEventListener("pointermove", (e) => { if (drag) place(e.clientX - drag.dx, e.clientY - drag.dy); });
+    const end = () => {
+      if (!drag) return;
+      drag = null; el.classList.remove("dragging");
+      const r = el.getBoundingClientRect();
+      try { localStorage.setItem("aquarush.tpanelPos", JSON.stringify({ x: r.left, y: r.top })); } catch { /* sem storage */ }
+    };
+    head.addEventListener("pointerup", end); head.addEventListener("pointercancel", end);
+    addEventListener("resize", () => { const r = el.getBoundingClientRect(); if (el.style.left) place(r.left, r.top); });
   }
 
   get isOpen(): boolean { return this.open; }

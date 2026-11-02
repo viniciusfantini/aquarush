@@ -6,10 +6,66 @@
 // em planeio). Nó do pivô = trim/direção da transmissão (mesmos ângulos da física). Só lê a simulação.
 
 import { type Scene, Mesh, MeshBuilder, StandardMaterial, PBRMaterial, Color3, TransformNode, Vector3 } from "@babylonjs/core";
+import type { Kit, Mats } from "./fleet.ts";
 import { TURBINA } from "../sim/params.ts";
-import { buildPropeller, type BoatVisual } from "./boatMesh.ts";
+import { type BoatVisual } from "./boatMesh.ts";
 import { makeKit, makeMats, buildHull, loftRR, loftFn } from "./fleet.ts";
 import { smoothstep } from "../sim/math.ts";
+
+/**
+ * Hélice de SUPERFÍCIE (surface piercing) estilo "cleaver" (cutelo): 6 pás de inox polido com bordo de ataque afiado
+ * e curvo, bordo de fuga RETO (radial) e grosso — a pá é uma cunha, fina na entrada e larga na saída — com "cup" (a
+ * borda de fuga dobrada para a face de pressão) e um leve caimento para trás; cubo longo e cônico. Gira em torno de
+ * Z local (o nó devolvido); o disco de borrão aparece com a rotação.
+ */
+const buildSurfaceProp = (scene: Scene, K: Kit, M: Mats, parent: TransformNode, pos: Vector3, R: number, pitch: number) => {
+  const prop = new TransformNode("propeller", scene);
+  prop.parent = parent; prop.position.copyFrom(pos);
+  const BLADES = 6, NR = 14, NS = 9, RH = 0.085;
+  for (let b = 0; b < BLADES; b++) {
+    const th0 = (b / BLADES) * Math.PI * 2;
+    const rows: Vector3[][] = [];
+    for (let i = 0; i <= NR; i++) {
+      const u = i / NR, r = RH + (R - RH) * u;
+      // corda cresce para a ponta (cutelo); a ponta é cortada quase reta, com um arredondamento pequeno
+      const chord = (0.08 + 0.2 * Math.pow(u, 0.85)) * (u > 0.92 ? Math.sqrt(Math.max(0.05, 1 - ((u - 0.92) / 0.08) ** 2)) : 1);
+      const phi = Math.atan(pitch / (2 * Math.PI * r));                  // ângulo do passo nesse raio
+      const tMax = 0.018 * (1 - 0.55 * u) + 0.005;                       // espessura máxima (no bordo de fuga)
+      const rake = -0.05 * u;                                            // caimento para trás
+      const upper: Vector3[] = [], lower: Vector3[] = [];
+      for (let j = 0; j <= NS; j++) {
+        const s = j / NS;                                                // 0 = bordo de ataque, 1 = bordo de fuga
+        const a = (1 - s) * chord;                                       // o bordo de FUGA fica na linha radial th0
+        const th = th0 + (a * Math.cos(phi)) / r;
+        const z = -a * Math.sin(phi) + rake;
+        const t = tMax * Math.pow(s, 0.65);                              // cunha: afiada na entrada, grossa na saída
+        const cup = 0.008 * Math.pow(Math.max(0, (s - 0.8) / 0.2), 2);    // cup na borda de fuga (face de pressão)
+        const x = r * Math.cos(th), y = r * Math.sin(th);
+        upper.push(new Vector3(x, y, z + t * 0.5));
+        lower.push(new Vector3(x, y, z - t * 0.5 - cup));
+      }
+      rows.push([...upper, ...lower.reverse()]);
+    }
+    // ponta fechada (última seção colapsada no meio)
+    const last = rows[rows.length - 1];
+    const c = last.reduce((acc, p) => acc.addInPlace(p), new Vector3()).scaleInPlace(1 / last.length);
+    rows.push(last.map((p) => Vector3.Lerp(p, c, 0.85)));
+    const blade = MeshBuilder.CreateRibbon("spBlade", { pathArray: rows, closePath: true, sideOrientation: Mesh.DOUBLESIDE }, scene);
+    K.add(blade, M.steel, prop);
+  }
+  // cubo longo e cônico (a transmissão de superfície tem o eixo exposto) + porca cônica atrás
+  const hub = K.add(MeshBuilder.CreateCylinder("spHub", { height: 0.26, diameterTop: 0.13, diameterBottom: 0.18, tessellation: 24 }, scene), M.steel, prop);
+  hub.rotation.x = Math.PI / 2; hub.position.z = 0.02;
+  const nut = K.add(MeshBuilder.CreateCylinder("spNut", { height: 0.1, diameterTop: 0.02, diameterBottom: 0.13, tessellation: 24 }, scene), M.steel, prop);
+  nut.rotation.x = -Math.PI / 2; nut.position.z = -0.16;
+  // disco de borrão (a hélice girando rápido)
+  const propBlur = new PBRMaterial("spBlur", scene);
+  propBlur.albedoColor = new Color3(0.78, 0.8, 0.83); propBlur.metallic = 1; propBlur.roughness = 0.35; propBlur.alpha = 0; propBlur.backFaceCulling = false;
+  const disc = MeshBuilder.CreateDisc("propDisc", { radius: R, tessellation: 40 }, scene);
+  disc.material = propBlur; disc.parent = parent; disc.position.copyFrom(pos); disc.isPickable = false;
+  K.out.push(disc);
+  return { propeller: prop, propBlur };
+};
 
 export const buildTurbina = (scene: Scene): BoatVisual & { floor: number } => {
   const K = makeKit(scene);
@@ -138,9 +194,7 @@ export const buildTurbina = (scene: Scene): BoatVisual & { floor: number } => {
     // cilindros hidráulicos do trim e da direção (do espelho ao eixo)
     K.tube([new Vector3(s * 0.28, 0.18, 0), new Vector3(s * 0.12, dy * 0.5 + 0.08, dz * 0.55)], 0.035, M.hydraulic, piv, 8);
   }
-  const tmp: Mesh[] = [];
-  const { propeller, propBlur } = buildPropeller(scene, piv, new Vector3(0, dy, dz), P.propRadius, 0.9, M.steel as PBRMaterial, (m, mat, p) => K.add(m, mat, p ?? piv), tmp);
-  K.out.push(...tmp);
+  const { propeller, propBlur } = buildSurfaceProp(scene, K, M, piv, new Vector3(0, dy, dz), P.propRadius, 1.05);
 
   // tampa invisível do poço do piloto (só profundidade): a água não aparece dentro do barco
   const lidMat = new StandardMaterial("turLidMat", scene);

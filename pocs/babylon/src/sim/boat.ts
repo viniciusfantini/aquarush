@@ -85,7 +85,7 @@ export interface BoatTelemetry {
   jumper: boolean;       // booster de partida (jump start) ligado na bateria
   jumpCharge: number;    // carga do booster 0..1 (cheio ≈ 3 partidas)
   gpu: boolean;          // GPU da doca (fonte de solo de 28 V) conectada — só a lancha de turbina
-  gpuState: "off" | "starting" | "online"; // diesel da GPU partindo/estabilizando ou energia chaveada
+  gpuState: "off" | "starting" | "online" | "stopping"; // diesel da GPU partindo/estabilizando ou energia chaveada
   gpuT: number;          // s desde que a GPU foi pedida (curva do som do diesel)
   gpuKw: number;         // potência que a GPU está fornecendo (kW)
   busBattery: boolean;   // relé da bateria fechado (chave BAT)

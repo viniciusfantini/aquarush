@@ -855,6 +855,18 @@ for (const [label, thr] of [["baixa", 0.25], ["alta", 1]] as const) {
   run(g, water, 6, N, openWater, (t) => { if (g.systems.gpuState === "starting") vWhileStarting = Math.min(vWhileStarting, g.telemetry.batteryV); if (onlineAt < 0 && g.systems.gpuOnline) onlineAt = t; });
   check("turbina", "GPU: o diesel parte e estabiliza antes de chavear a energia (s)", onlineAt, 3.5, 5.5, "s", 1);
   check("turbina", "GPU partindo: ainda não alimenta (barramento na bateria fraca, V)", vWhileStarting, 18, 25.5, "V", 1);
+  // desconectar: primeiro sai o cabo (a energia some na hora); o diesel roda uns segundos e só depois desliga
+  {
+    const d = mk(); d.coldEngines(); d.systems.gpu = true;
+    run(d, water, 6, N);
+    d.systems.gpu = false;
+    run(d, water, 1, N);
+    const midState = d.systems.gpuState, midSupply = d.systems.extOnline;
+    let offAt = -1;
+    run(d, water, 8, N, openWater, (t) => { if (offAt < 0 && d.systems.gpuState === "off") offAt = t + 1; });
+    check("turbina", "GPU: tirando o cabo, o diesel ainda roda sem carga (stopping, sem energia)", midState === "stopping" && !midSupply ? 1 : 0, 1, 1, "", 0);
+    check("turbina", "GPU: o diesel desliga alguns segundos depois do cabo (s)", offAt, 2.5, 6, "s", 1);
+  }
   const socBefore = g.systems.batterySoc;
   g.toggleIgnition();
   const gEv: string[] = []; let gPeak = 0, gMinV = 99, gIdle = -1;

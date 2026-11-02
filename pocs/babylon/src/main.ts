@@ -45,7 +45,7 @@ import { BoatCamera } from "./presentation/cameras.ts";
 import { Hud } from "./presentation/hud.ts";
 import { EngineAudio } from "./presentation/audio.ts";
 
-const BUILD = "poc-babylon 0.54.0";
+const BUILD = "poc-babylon 0.55.0";
 /** Escala visual da rotação da hélice (proporcional ao RPM, abaixo do limite estroboscópico). */
 const PROP_VISUAL_SCALE = 0.12;
 
@@ -734,7 +734,7 @@ const boot = async () => {
       if (!sys.gpu && !docked()) { hud.showToast("A GPU fica na doca: atraque na vaga do píer (amarrado) para conectar o cabo"); return; }
       sys.gpu = !sys.gpu;
       hud.showToast(sys.gpu ? `Cabo da GPU conectado: o diesel da GPU está partindo — a luz pisca até ele estabilizar (depois o EXT PWR põe os ${GPU_V} V no barramento)`
-        : "GPU desconectada — cabo recolhido no carretel");
+        : "Cabo da GPU retirado e recolhido no carretel — o diesel roda mais alguns segundos sem carga e desliga");
     }
     else if (a === "jump") {
       const sys = boat.systems;

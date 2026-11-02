@@ -59,6 +59,8 @@ const JUMP_R = 0.012;
 export const GPU_V = 28;
 /** tempo para o diesel da GPU pegar e estabilizar a rotação antes de chavear a energia (s) */
 export const GPU_START_S = 4.5;
+/** depois de o cabo sair, o diesel da GPU roda sem carga por alguns segundos (esfriando) e então desliga (s) */
+export const GPU_STOP_S = 4;
 const GPU_V12 = 14.0, GPU_R = 0.0025;
 
 export interface EngineSystemsInput {
@@ -102,9 +104,11 @@ export class EngineSystems {
    * ~GPU_START_S) e só então a energia externa é chaveada no barramento ("online").
    */
   gpu = false;
-  gpuState: "off" | "starting" | "online" = "off";
+  gpuState: "off" | "starting" | "online" | "stopping" = "off";
   /** tempo desde que a GPU foi pedida (s) — o som do diesel segue esta curva */
   gpuT = 0;
+  /** tempo desde que o cabo saiu, com o diesel ainda rodando ("stopping") */
+  gpuStopT = 0;
   get gpuOnline(): boolean { return this.gpuState === "online"; }
   /**
    * Relé EXT PWR: liga a GPU ao barramento. São DOIS comandos: o cabo (`gpu`, tecla J, físico) e este relé. Com
@@ -194,8 +198,16 @@ export class EngineSystems {
     const running = s.engine === "running";
     this.stallReason = "";
     // GPU: o diesel parte, estabiliza e chaveia a energia externa
-    if (!this.gpu) { this.gpuState = "off"; this.gpuT = 0; this.extPwr = false; }
-    else {
+    if (!this.gpu) {
+      // cabo retirado: a energia sai na hora; o diesel ainda roda sem carga uns segundos e só então desliga
+      this.extPwr = false;
+      if (this.gpuState === "online" || this.gpuState === "starting") { this.gpuState = "stopping"; this.gpuStopT = 0; }
+      if (this.gpuState === "stopping") {
+        this.gpuStopT += dt; this.gpuT += dt;
+        if (this.gpuStopT >= GPU_STOP_S) { this.gpuState = "off"; this.gpuT = 0; }
+      } else this.gpuT = 0;
+    } else {
+      if (this.gpuState === "stopping") this.gpuState = "online"; // cabo de volta com o diesel ainda girando
       this.gpuT += dt;
       if (this.gpuState === "off") this.gpuState = "starting";
       if (this.gpuState === "starting" && this.gpuT >= GPU_START_S) this.gpuState = "online";

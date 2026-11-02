@@ -593,7 +593,7 @@ export class EngineAudio {
    * pega, a rotação passa do ponto e o governador a assenta em 1500 rpm (~4,5 s); ligada, fica estável. Desligada,
    * a rotação cai e o som some. `dist` = distância da câmera ao carrinho (m).
    */
-  updateGpu(state: "off" | "starting" | "online", t: number, dist: number, cockpit: boolean, kw = 0): void {
+  updateGpu(state: "off" | "starting" | "online" | "stopping", t: number, dist: number, cockpit: boolean, kw = 0): void {
     const ctx = this.ctx, v = this.dv;
     if (!ctx || !v) return;
     const now = ctx.currentTime, m = this.muted ? 0 : 1;
@@ -607,6 +607,7 @@ export class EngineAudio {
     this.dLoadS += (load - this.dLoadS) * 0.03;
     const step = Math.max(0, load - this.dLoadS);
     if (state === "online") target = 1500 + 8 * Math.sin(t * 1.7) - 220 * step - 25 * load;
+    else if (state === "stopping") target = 1500 + 5 * Math.sin(t * 1.7); // sem carga, esfriando antes de desligar
     this.dRpm += (target - this.dRpm) * (state === "off" ? 0.03 : 0.25);
     const rpm = Math.max(0, this.dRpm), run = Math.min(1, rpm / 600);
     const fire = (rpm / 60) * 2;                  // 4 cilindros, 4 tempos: 2 explosões por volta

@@ -121,7 +121,7 @@ export class GpuCart {
    * quando a carga sobe de repente (ex.: o starter da turbina engata), o governador abre o combustível e sai uma
    * baforada escura até estabilizar.
    */
-  updateDiesel(state: "off" | "starting" | "online", t: number, kw: number, dt: number): void {
+  updateDiesel(state: "off" | "starting" | "online" | "stopping", t: number, kw: number, dt: number): void {
     const load = Math.min(1.2, kw / 16.8); // GPU de 28 V × 600 A ≈ 16,8 kW
     this.loadS += (load - this.loadS) * (1 - Math.exp(-dt / 1.2));
     this.puff = Math.max(0, this.puff - dt / 1.6);
@@ -131,21 +131,22 @@ export class GpuCart {
     if (state === "starting" && t < 0.9) { rate = 18; dark = 0.35; }                          // girando no starter
     else if (state === "starting") { const u = (t - 0.9) / 3.6; rate = 130 - 105 * u; dark = 0.92 - 0.6 * u; } // pegou: preta → clareando
     else if (state === "online") { rate = Math.max(0, 25 - 4 * (t - 4.5)); dark = 0.3; }      // estabilizada: some
+    else if (state === "stopping") { rate = 3; dark = 0.2; }                                    // sem carga, esfriando
     if (state !== "off" && this.puff > 0.02) { rate += 110 * this.puff; dark = Math.max(dark, 0.5 + 0.35 * this.puff); }
     const g = 0.82 - 0.7 * Math.min(1, dark);
     this.smoke.color1 = new Color4(g, g, g, 0.55); this.smoke.color2 = new Color4(g * 0.9, g * 0.9, g * 0.9, 0.45); this.smoke.colorDead = new Color4(g, g, g, 0);
     this.smoke.emitter = this.stackTip.getAbsolutePosition().clone();
     this.smoke.emitRate = this.root.isEnabled() ? rate : 0;
     // tela
-    const label = state === "off" ? "STOP" : state === "online" ? "ON" : t < 0.9 ? "STARTING" : "STABILIZING";
-    const rpm = state === "off" ? 0 : state === "online" ? 1500 : t < 0.9 ? 180 : Math.round(1500 - 1300 * Math.exp(-(t - 0.9) / 0.35));
+    const label = state === "off" ? "STOP" : state === "online" ? "ON" : state === "stopping" ? "STOPPING" : t < 0.9 ? "STARTING" : "STABILIZING";
+    const rpm = state === "off" ? 0 : state === "online" || state === "stopping" ? 1500 : t < 0.9 ? 180 : Math.round(1500 - 1300 * Math.exp(-(t - 0.9) / 0.35));
     this.drawScreen(label, kw > 0.05 ? `-${kw.toFixed(1)} kW` : "0.0 kW", state === "off" ? "" : `${rpm} RPM · 28 V`);
   }
 
-  update(socket: Vector3 | null, state: "off" | "starting" | "online", edge?: Vector3): void {
+  update(socket: Vector3 | null, state: "off" | "starting" | "online" | "stopping", edge?: Vector3): void {
     // lâmpada: pisca âmbar enquanto o diesel parte e estabiliza; verde fixa com a energia chaveada
     const blink = Math.floor(performance.now() / 350) % 2 === 0;
-    this.lamp.emissiveColor = state === "online" ? new Color3(0.2, 1, 0.3) : state === "starting" && blink ? new Color3(1, 0.65, 0.05) : Color3.Black();
+    this.lamp.emissiveColor = state === "online" ? new Color3(0.2, 1, 0.3) : (state === "starting" || state === "stopping") && blink ? new Color3(1, 0.65, 0.05) : Color3.Black();
     if (!socket) { this.cable?.setEnabled(false); return; }
     const a = this.plug.getAbsolutePosition();
     const path: Vector3[] = [];
