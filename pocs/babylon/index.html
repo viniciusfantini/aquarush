@@ -265,6 +265,8 @@
     .tp-foot .msg-rd { flex: 1; width: auto; min-width: 0; margin: 0; }
     .tp-foot .msg-rd > span { color: inherit; font-size: inherit; }
     .msg-rd > span { display: inline-block; }
+    .msg-rd { contain: paint; max-width: 100%; } /* o texto longo rola DENTRO da caixa; nunca cria rolagem no painel */
+    #spanel, #ckpanel { overflow-x: hidden; }
     .msg-rd.scroll > span { animation: rdScroll var(--t, 4s) ease-in-out infinite alternate; }
     @keyframes rdScroll { 0%, 18% { transform: translateX(0); } 82%, 100% { transform: translateX(var(--d, 0)); } }
     /* LCD verde com luz de fundo (AR-6) */

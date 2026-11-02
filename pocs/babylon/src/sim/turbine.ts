@@ -44,7 +44,7 @@ export interface TurbineParams {
 export type TurbinePhase = "off" | "starter" | "lightoff" | "accel" | "running" | "spooldown";
 export type TurbineEvent = "starter" | "ignition" | "lightoff" | "starterOff" | "idle" | "hotStart" | "noLightOff" | "hungStart"
   | "shutdown" | "flameout" | "abort" | "overtemp" | "starterOverspeed" | "wetStart" | "earlyFuel" | "starterHot" | "starterLocked" | "seized"
-  | "oilHot" | "oilDamage" | "n2Over" | "n2Trip";
+  | "oilHot" | "oilDamage" | "n2Over";
 
 /** chaves do painel de partida (manual) */
 export type TurbineSwitch = "master" | "boostPump" | "ignition" | "starter" | "fuelValve" | "generator" | "governor";
@@ -72,9 +72,12 @@ export class Turbine {
   /**
    * GOV: governador da turbina livre (limita o N2 a ~101–104 % cortando combustível). Desligado (só no MANUAL; o FADEC
    * sempre governa), a manete comanda o combustível direto — sem carga (em N, ou com a hélice ventilando/fora d'água)
-   * o N2 dispara. A proteção INDEPENDENTE de sobrevelocidade (não desliga) corta a turbina a 113 % de N2.
+   * o N2 dispara: acima de 106 % a turbina livre se desgasta (cada vez mais rápido) até QUEBRAR — no manual não há
+   * corte automático por sobrevelocidade (pedido do usuário, v0.64.1).
    */
   governor = true;
+  /** o governador está LIMITANDO o combustível agora (luz "GOV" do painel) */
+  govActing = false;
   /** relé do GERADOR (starter-gerador): ligado com a turbina rodando e o starter desligado, alimenta o barramento */
   generator = true;
   /** o barramento tem tensão (passo anterior): sem ela nada elétrico funciona — luzes, velas, bomba e instrumentos */
@@ -239,6 +242,7 @@ export class Turbine {
     const P = this.p;
     const k = (tau: number) => 1 - Math.exp(-dt / tau);
     if (this.fadec) this.fadecStep(dt);
+    this.govActing = false;
     if (this.seizedOn) { this.starter = false; this.fuelValve = false; }
     // os periféricos (starter, velas, bomba) estão no BARRAMENTO: funcionam se houver fonte nele — bateria (BAT),
     // GPU (EXT PWR) ou o gerador da própria turbina; a chave BAT sozinha não decide (ver EngineSystems)
@@ -305,6 +309,7 @@ export class Turbine {
       // (a antecipação só age perto do limite: longe dele, os saltos do N2 com a hélice de superfície saindo da água não cortam potência)
       const lead = this.n2 > 97 ? 0.9 * Math.max(0, this.n2Rate) : 0;
       const gov = this.governor || this.fadec ? clamp((103.5 - this.n2 - lead) / 3, 0, 1) : 1;
+      this.govActing = gov < 0.97;
       const target = P.idleN1 + (P.maxN1 - P.idleN1) * clamp(inp.lever, 0, 1) * gov;
       let d = (target - this.n1) * k(P.spoolTau);
       d = clamp(d, -15 * dt, P.accelLimit * dt);   // a unidade de combustível limita acelerar/desacelerar
@@ -312,7 +317,7 @@ export class Turbine {
       gas = Math.pow(clamp((this.n1 - 55) / (100 - 55), 0, 1.06), 2) * (1 - 0.6 * Math.max(inp.damage ?? 0, this.wear));
       // corte rápido do governador: acima de ~104 % de N2 (hélice de superfície ventilando, saindo d'água) ele reduz o
       // combustível na hora — a potência cai com o combustível, antes de o N1 desacelerar. Sem GOV (manual), não há
-      if (this.governor || this.fadec) gas *= clamp((105.5 - this.n2) / 1.5, 0.05, 1);
+      if (this.governor || this.fadec) { const cut = clamp((105.5 - this.n2) / 1.5, 0.05, 1); gas *= cut; if (cut < 0.97) this.govActing = true; }
       // EGT sobe com a potência e um pouco mais acelerando (excesso de combustível no transitório)
       egtTarget = P.egtIdle + (P.egtMax - P.egtIdle) * Math.min(1, gas) + 70 * clamp(d / (P.accelLimit * dt), 0, 1) * (gas < 0.9 ? 1 : 0);
       egtTau = 1.6;
@@ -378,7 +383,9 @@ export class Turbine {
     // conta desgaste: uma sobrevelocidade pede inspeção)
     if (this.n2 > 106 && !this.n2OverOn) { this.n2OverOn = true; this.events.push("n2Over"); }
     if (this.n2 < 102) this.n2OverOn = false;
-    if (this.n2 > 113 && this.burning) { this.cutFuel(true); this.wear = Math.min(1, this.wear + 0.05); this.events.push("n2Trip"); }
+    // acima de 106 % a turbina livre se desgasta (∝ excesso: a 110 % ~25 s até quebrar, a 125 % ~5 s); sem corte
+    // automático — em ≥ 95 % de desgaste ela trava (avaria do motor), como na sobretemperatura
+    if (this.n2 > 106) this.wear = Math.min(1, this.wear + dt * (this.n2 - 106) / 100);
     this.torque = 100 * qLoad;
     this.power = qLoad * n2f;
     this.fuelLph = fuelFlow ? (this.running ? P.fuelIdleLph + (P.fuelMaxLph - P.fuelIdleLph) * Math.min(1.05, gas) : P.fuelIdleLph * 0.6) : 0;

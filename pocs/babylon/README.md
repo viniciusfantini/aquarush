@@ -98,6 +98,9 @@ A lancha é um **corpo rígido 6DOF** (massa seca de 1030 kg + gasolina, ocupant
 
 ## AR-10: chave GOV e sobrevelocidade do N2 (v0.64)
 
+**v0.64.1:** a proteção automática de sobrevelocidade saiu (pedido do usuário): com o GOV desligado, acima de 106 % de N2 o desgaste sobe ∝ excesso (`(N2 − 106)/100` por segundo) até a turbina travar — no teste, N2 a 125 %, 9 % de desgaste em 3 s e quebrou em 7,6 s. Com o GOV ligado, a toda com ondas, nenhum desgaste. Luz **GOV** (verde) no lugar da CHAMA: acende enquanto o governador limita o combustível (`Turbine.govActing`). Os displays de avisos não criam rolagem no painel (`contain: paint`; painéis com `overflow-x: hidden`).
+
+
 - **O que limitava a aceleração em N:** o governador da turbina livre. Em neutro a hélice quase não tem carga; pouco gás leva o N2 a 100 % e o governador corta o combustível a ~101–104 % — o N1 fica em ~71 % (EGT ~500 °C) mesmo com a manete toda.
 - **Chave GOV** (`Turbine.governor`, chave 8 da botoeira): ligada (padrão; no FADEC sempre governa) = como acima. Desligada (manual) = a manete comanda o combustível direto: em N o N1 sobe (80 % no teste), mas a turbina livre sem carga dispara: aviso **N2 SOBREV.** acima de 106 % e a **proteção independente de sobrevelocidade** (não desliga) corta o combustível a 113 % e soma 5 % de desgaste. Anunciador **GOV OFF** (âmbar).
 - **Governador revisto:** proporcional + antecipação pela aceleração do N2 (perto do limite) + **corte rápido de combustível** acima de ~104 % (a potência cai com o combustível antes de o N1 desacelerar). Motivo: com ondas, a hélice de superfície ventila e o N2 saltava até 113 % a toda — antes isso ficava escondido por um teto de 110 % no N2, que foi tirado (agora vai a 125 %).
@@ -378,7 +381,7 @@ Limitação: é uma síntese aproximada, não uma gravação. Validar o timbre d
 | 6. Ondas e correnteza | ondas fortes (×2,5): roll ≤ 30°, não emborca; deriva com correnteza de 1,6 m/s: 1,54 m/s |
 | Lago | flutua no spawn; a toda contra a margem, encalha e para sem atravessar o terreno |
 
-Resultado: **584/586 OK + 2 KNOWN** (v0.64.0). Na v0.10, o peso do piloto na posição real (boreste, acima do CG) aumentou o roll em curva com ondas fortes; o `bankCoef` foi para 1800 e o `rollDamping` para 15000, com 1 limitação conhecida (abaixo). Na v0.2 a hélice foi para 0,5 m atrás do espelho, como no modelo visual, e o esterço máximo em alta velocidade caiu de 13° para 11°.
+Resultado: **586/588 OK + 2 KNOWN** (v0.64.1). Na v0.10, o peso do piloto na posição real (boreste, acima do CG) aumentou o roll em curva com ondas fortes; o `bankCoef` foi para 1800 e o `rollDamping` para 15000, com 1 limitação conhecida (abaixo). Na v0.2 a hélice foi para 0,5 m atrás do espelho, como no modelo visual, e o esterço máximo em alta velocidade caiu de 13° para 11°.
 
 ### Navegador (Chrome, Windows 11, WebGL2, `q=med`, ~1370×896)
 

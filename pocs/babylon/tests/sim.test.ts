@@ -951,14 +951,16 @@ for (const [label, thr] of [["baixa", 0.25], ["alta", 1]] as const) {
     check("turbina", "GOV ligado, em N a pleno: o N1 fica baixo (%)", tg.n1, 65, 78, "%", 1);
     run(g, gw, 1, N);
     tg.setFadec(false); tg.setSwitch("governor", false);
-    const ev: string[] = []; let tripAt = -1, n1Max = 0;
-    run(g, gw, 8, { ...N, throttle: 0.6, neutralThrottle: true }, openWater, (t) => {
-      n1Max = Math.max(n1Max, tg.n1);
-      for (const e of tg.drainEvents()) { ev.push(e); if (e === "n2Trip" && tripAt < 0) tripAt = t; }
+    const ev: string[] = []; let seizeAt = -1, n1Max = 0, n2Max = 0, wear3 = 0;
+    run(g, gw, 40, { ...N, throttle: 0.6, neutralThrottle: true }, openWater, (t) => {
+      n1Max = Math.max(n1Max, tg.n1); n2Max = Math.max(n2Max, tg.n2);
+      if (t < 3) wear3 = tg.wear;
+      for (const e of tg.drainEvents()) { ev.push(e); if (e === "seized" && seizeAt < 0) seizeAt = t; }
     });
     check("turbina", "GOV desligado, em N: o N1 passa do que o governador deixava (%)", n1Max, 72, 102, "%", 1);
-    check("turbina", "GOV desligado, em N: N2 dispara e a proteção corta a 113 % (s)", ev.includes("n2Over") ? tripAt : -1, 0.1, 6, "s", 2);
-    check("turbina", "sobrevelocidade: turbina apagada e com desgaste", !tg.lit && tg.wear >= 0.05 ? 1 : 0, 1, 1, "", 0);
+    check("turbina", "GOV desligado, em N: o N2 dispara sem corte automático (máx., %)", ev.includes("n2Over") ? n2Max : -1, 113, 125, "%", 1);
+    check("turbina", "sobrevelocidade: o desgaste sobe (aos 3 s, %)", wear3 * 100, 1, 80, "%", 1);
+    check("turbina", "sobrevelocidade mantida: a turbina quebra (trava) (s)", seizeAt, 3, 40, "s", 1);
   }
   // ---- partida MANUAL pelo painel (chave por chave) ----
   const manual = () => { const x = mk(); x.coldEngines(); x.systems.batterySoc = 0.6; const tb = x.units[0].turb!; tb.setFadec(false); tb.cold(); return { x, tb }; };
@@ -1133,7 +1135,8 @@ for (const [label, thr] of [["baixa", 0.25], ["alta", 1]] as const) {
     const oEv: string[] = []; let oN2 = 0;
     run(o, water, 120, { ...emptyInput(), gear: "F", throttle: 1 }, openWater, () => { oEv.push(...o.units[0].turb!.drainEvents()); oN2 = Math.max(oN2, o.units[0].turb!.n2); });
     // (com ondas a hélice de superfície ventila e o N2 dá saltos: com o GOV ligado o corte rápido de combustível segura)
-    check("turbina", "a toda com ondas, GOV ligado: N2 máx. sem disparar a proteção (%)", oEv.includes("n2Trip") ? 999 : oN2, 99, 108, "%", 1);
+    check("turbina", "a toda com ondas, GOV ligado: N2 máx. (o governador segura) (%)", oN2, 99, 107, "%", 1);
+    check("turbina", "a toda com ondas, GOV ligado: sem desgaste por sobrevelocidade", o.units[0].turb!.wear < 0.01 ? 1 : 0, 1, 1, "", 0);
     check("turbina", "óleo a toda na água, 2 min (°C)", o.telemetry.turbine!.oilC, 80, 100, "°C", 0);
     check("turbina", "óleo a toda na água: sem alarme", o.telemetry.turbine!.oilHot ? 0 : 1, 1, 1, "", 0);
     const tb = new Turbine(TURBINA.turbine!); tb.idle();

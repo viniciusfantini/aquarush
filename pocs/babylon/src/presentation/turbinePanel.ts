@@ -7,7 +7,7 @@
 //    Ninguém protege: errar a ordem dá partida molhada, pendurada ou quente (e desgasta a turbina).
 // Instrumentos ANALÓGICOS com as faixas dos instrumentos de turbina (verde = normal, amarelo = cautela, vermelho =
 // limite) e a leitura digital dentro: N1, EGT, N2, torque, óleo, barramento e a corrente da GPU. Sem tensão no
-// barramento eles ficam apagados (ponteiro no zero). Luzes BAT / EXT PWR / GEN / STARTER / IGNIÇÃO / CHAMA / EGT ALTA.
+// barramento eles ficam apagados (ponteiro no zero). Luzes BAT / EXT PWR / GEN / STARTER / IGNIÇÃO / GOV (governador limitando) / EGT ALTA / ÓLEO / GOV OFF / N2.
 
 import type { BoatTelemetry } from "../sim/boat.ts";
 import type { TurbineSwitch } from "../sim/turbine.ts";
@@ -66,7 +66,7 @@ export class TurbinePanel {
         <button class="tp-ck" data-ck>CHECKLIST</button><button class="tp-x" aria-label="fechar">×</button></div>
       <div class="tp-grid">
       <div class="tp-gauges"></div>
-      <div class="tp-ann">${["BAT", "EXT PWR", "GEN", "STARTER", "IGNIÇÃO", "CHAMA", "EGT ALTA", "ÓLEO QUENTE", "GOV OFF", "N2 SOBREV."].map((k) => `<span data-a="${k}">${k}</span>`).join("")}</div>
+      <div class="tp-ann">${["BAT", "EXT PWR", "GEN", "STARTER", "IGNIÇÃO", "GOV", "EGT ALTA", "ÓLEO QUENTE", "GOV OFF", "N2 SOBREV."].map((k) => `<span data-a="${k}">${k}</span>`).join("")}</div>
         <div class="sw-plate tp-sw">${SCR}${SWITCHES.map((s, i) => s.id === "fuelValve"
           // a manete de condição do combustível é um seletor rotativo (como os registros), não uma chave elétrica
           ? rotary("fv", "COMBUSTÍVEL", "condição", [{ v: "cut", l: "CORTE" }, { v: "idle", l: "LENTA" }], { num: i + 1, cls: "fuel" })
@@ -159,7 +159,7 @@ export class TurbinePanel {
       // verde = GPU no barramento; âmbar piscando = GPU disponível/partindo mas fora do barramento (relé aberto ou sem
       // MAIN — a luz é alimentada pela própria GPU); vermelho piscando = EXT PWR em ON sem GPU conectada (falha)
       "EXT PWR": t.extPwr ? "g" : t.extPwrFault ? (blink ? "r" : "") : t.gpu && (t.gpuState === "starting" || t.gpuState === "online") && blink ? "a" : "",
-      STARTER: tb.starter ? "a" : "", "IGNIÇÃO": tb.ignition ? "a" : "", CHAMA: tb.lit ? "g" : "", "EGT ALTA": on && tb.egt > 720 ? "r" : "",
+      STARTER: tb.starter ? "a" : "", "IGNIÇÃO": tb.ignition ? "a" : "", GOV: on && tb.govActing ? "g" : "", "EGT ALTA": on && tb.egt > 720 ? "r" : "",
       "ÓLEO QUENTE": on && tb.oilRed ? (blink ? "r" : "") : on && tb.oilHot ? "r" : "",
       "GOV OFF": on && !tb.governor && !tb.fadec ? "a" : "", "N2 SOBREV.": on && tb.n2 > 106 ? (blink ? "r" : "") : "",
     };

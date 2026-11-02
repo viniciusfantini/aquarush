@@ -1,14 +1,14 @@
 # AQUA RUSH — Sistemas elétricos e de motores (referência para qualquer IA ou dev)
 
 Este documento descreve **toda a lógica** dos sistemas elétricos, de combustível, de arrefecimento, de partida e
-dos motores das 4 embarcações da POC 1 (Babylon.js, `pocs/babylon`), como estão no código na **v0.64.0**. Serve
+dos motores das 4 embarcações da POC 1 (Babylon.js, `pocs/babylon`), como estão no código na **v0.64.1**. Serve
 para continuar o trabalho em outra IA/ferramenta ou portar para Unity/Unreal sem precisar redescobrir as regras.
 
 > Fonte da verdade = o código. Se divergir, vale o código e este arquivo deve ser corrigido.
 > Arquivos: `src/sim/engineSystems.ts` (combustível, temperatura, bateria, alternador, booster, GPU, barramento),
 > `src/sim/turbine.ts` (turbina a gás + FADEC), `src/sim/boat.ts` (motores `EngineUnit`, partida, chaves,
 > roteamento de baterias, porão), `src/sim/anchor.ts` (molinete), `src/sim/params.ts` (parâmetros = contrato entre
-> as POCs). Testes: `tests/sim.test.ts` (`npm run test:sim`, hoje **584/586 + 2 KNOWN**).
+> as POCs). Testes: `tests/sim.test.ts` (`npm run test:sim`, hoje **586/588 + 2 KNOWN**).
 
 ---
 
@@ -246,8 +246,9 @@ mais o EXT PWR da GPU no `EngineSystems`.
   **corte rápido** da potência `gas × clamp((105,5 − N2)/1,5, 0,05, 1)` (hélice de superfície ventilando em ondas).
   Resultado: em N a pleno, N2 ~103 % e N1 ~71 %; a toda com ondas, N2 ≤ ~105,5 %.
 - **Chave GOV** (`governor`, só manual; o FADEC sempre governa): desligada, sem governador — em N o N2 dispara.
-  Aviso de sobrevelocidade > 106 % (anunciador **N2 SOBREV.**); a **proteção independente** corta o combustível a
-  **113 %** e soma 5 % de desgaste (`n2Trip`). Anunciador **GOV OFF** (âmbar).
+  Aviso de sobrevelocidade > 106 % (anunciador **N2 SOBREV.**). **Sem corte automático** (v0.64.1): acima de 106 %
+  o desgaste sobe `(N2 − 106)/100` por segundo até a turbina travar (≥ 95 %, avaria). Anunciador **GOV OFF** (âmbar);
+  luz **GOV** (verde, no lugar da antiga CHAMA, também no HUD) = o governador está limitando (`govActing`).
 
 ### 8.3 FADEC (padrão) — camada que aciona as mesmas chaves (`fadecStep`)
 1. `start()`: bomba ON, starter ON (não liga a BAT: ela é do piloto; sem BAT e sem GPU → `"noPower"`).
