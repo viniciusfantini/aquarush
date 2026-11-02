@@ -195,7 +195,7 @@ export class Hud {
       const an = document.createElement("div");
       an.id = "g-annun";
       an.style.cssText = "display:flex;gap:4px;justify-content:center;margin-top:4px;font:600 9.5px/1 system-ui,sans-serif;letter-spacing:.04em";
-      an.innerHTML = ["ARRANQUE", "IGNIÇÃO", "CHAMA", "EGT"].map((k) => `<span data-k="${k}" style="padding:3px 5px;border-radius:4px;border:1px solid rgba(255,255,255,.18);color:rgba(255,255,255,.35);background:rgba(0,0,0,.25)">${k}</span>`).join("");
+      an.innerHTML = ["GPU", "ARRANQUE", "IGNIÇÃO", "CHAMA", "EGT"].map((k) => `<span data-k="${k}" style="padding:3px 5px;border-radius:4px;border:1px solid rgba(255,255,255,.18);color:rgba(255,255,255,.35);background:rgba(0,0,0,.25)">${k}</span>`).join("");
       small.parentElement?.insertBefore(an, this.fuelAut);
       this.annun = an;
     }
@@ -230,7 +230,9 @@ export class Hud {
       this.n2G?.set(tb.n2, `${tb.n2.toFixed(0)}`, `${Math.round(t.propRpm)} rpm`, tb.n2 > 104);
       this.oilG?.set(tb.oilPsi, `${tb.oilPsi.toFixed(0)}`, `${t.coolantC.toFixed(0)}°C`, (tb.phase === "running" && tb.oilPsi < 25) || t.overheatWarn);
       if (this.annun) {
-        const on: Record<string, [boolean, string]> = { ARRANQUE: [tb.starter, "#ffb020"], "IGNIÇÃO": [tb.ignition, "#ffb020"], CHAMA: [tb.lit, "#3ddc84"], EGT: [tb.egtWarn || (tb.phase === "accel" && tb.egt > 720), "#ff4040"] };
+        // GPU: pisca (âmbar) enquanto o diesel dela parte e estabiliza; verde e acesa com a energia externa chaveada
+        const blink = Math.floor(performance.now() / 350) % 2 === 0;
+        const on: Record<string, [boolean, string]> = { GPU: [t.gpuState === "online" || (t.gpuState === "starting" && blink), t.gpuState === "online" ? "#3ddc84" : "#ffb020"], ARRANQUE: [tb.starter, "#ffb020"], "IGNIÇÃO": [tb.ignition, "#ffb020"], CHAMA: [tb.lit, "#3ddc84"], EGT: [tb.egtWarn || (tb.phase === "accel" && tb.egt > 720), "#ff4040"] };
         for (const el of Array.from(this.annun.children) as HTMLElement[]) {
           const [lit, c] = on[el.dataset.k ?? ""] ?? [false, ""];
           el.style.color = lit ? "#111" : "rgba(255,255,255,.35)"; el.style.background = lit ? c : "rgba(0,0,0,.25)"; el.style.borderColor = lit ? c : "rgba(255,255,255,.18)";

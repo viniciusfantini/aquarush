@@ -129,6 +129,9 @@ export class EngineAudio {
   private worklet2: AudioWorkletNode | null = null;
   private worklet2Gain!: GainNode;
   private tv: TurbineVoice | null = null;
+  /** diesel da GPU (gerador da doca): pulsos de combustão, batida de diesel, zunido do gerador e o starter */
+  private dv: { pulse: OscillatorNode; pulseLP: BiquadFilterNode; pulseG: GainNode; knockAM: GainNode; knockLfo: OscillatorNode; knockG: GainNode; whine: OscillatorNode; whineG: GainNode; crank: OscillatorNode; crankG: GainNode } | null = null;
+  private dRpm = 0;
   private igniterT = 0;
   private igniterSide = 1;
   private workletGain!: GainNode;
@@ -403,6 +406,27 @@ export class EngineAudio {
       this.tv = { shaft, shaftG, comp, compG, blade, bladeG, ptur, pturG, vib, combLP, combG, rumbleG, hissBP, hissG, starter, starterG };
     }
 
+    // ---- diesel da GPU (4 cilindros, 4 tempos, governado em 1500 rpm para 50 Hz no gerador) ----
+    {
+      const pulse = ctx.createOscillator(); pulse.type = "sawtooth"; pulse.frequency.value = 50; pulse.start();
+      const pulseLP = ctx.createBiquadFilter(); pulseLP.type = "lowpass"; pulseLP.frequency.value = 300; pulseLP.Q.value = 2;
+      const pulseG = ctx.createGain(); pulseG.gain.value = 0;
+      pulse.connect(pulseLP).connect(pulseG).connect(this.master);
+      // batida característica do diesel: ruído agudo modulado em amplitude pelas explosões
+      const knockHP = ctx.createBiquadFilter(); knockHP.type = "bandpass"; knockHP.frequency.value = 2200; knockHP.Q.value = 0.8;
+      const knockAM = ctx.createGain(); knockAM.gain.value = 0;
+      const knockLfo = ctx.createOscillator(); knockLfo.type = "square"; knockLfo.frequency.value = 50; knockLfo.start();
+      const lfoG = ctx.createGain(); lfoG.gain.value = 0.5; knockLfo.connect(lfoG).connect(knockAM.gain);
+      const knockG = ctx.createGain(); knockG.gain.value = 0;
+      noiseSrc().connect(knockHP).connect(knockAM).connect(knockG).connect(this.master);
+      const whine = ctx.createOscillator(); whine.type = "sine"; whine.frequency.value = 400; whine.start();
+      const whineG = ctx.createGain(); whineG.gain.value = 0; whine.connect(whineG).connect(this.master);
+      const crank = ctx.createOscillator(); crank.type = "sawtooth"; crank.frequency.value = 95; crank.start();
+      const crankBP = ctx.createBiquadFilter(); crankBP.type = "bandpass"; crankBP.frequency.value = 700; crankBP.Q.value = 1.3;
+      const crankG = ctx.createGain(); crankG.gain.value = 0; crank.connect(crankBP).connect(crankG).connect(this.master);
+      this.dv = { pulse, pulseLP, pulseG, knockAM, knockLfo, knockG, whine, whineG, crank, crankG };
+    }
+
     // ---- motor por síntese física (explosões → tubos de escape → cubo da hélice) ----
     this.workletGain = ctx.createGain(); this.workletGain.gain.value = 0;
     const cowl = ctx.createBiquadFilter(); cowl.type = "peaking"; cowl.frequency.value = 700; cowl.Q.value = 1.1; cowl.gain.value = 3;
@@ -543,6 +567,33 @@ export class EngineAudio {
     set(v.starterG, dist * (T.starter ? 0.05 : 0), 0.04);
     // velas de ignição: "tic… tic…" (~4 por segundo, alternando os dois lados)
     if (T.ignition && t > this.igniterT) { this.igniterT = t + 0.24; this.igniterSnap(dist * cab); }
+  }
+
+  /**
+   * Diesel da GPU. `state` e `t` (s desde que foi pedida) vêm da simulação: ~0,9 s de starter ("rrr-rrr"),
+   * pega, a rotação passa do ponto e o governador a assenta em 1500 rpm (~4,5 s); ligada, fica estável. Desligada,
+   * a rotação cai e o som some. `dist` = distância da câmera ao carrinho (m).
+   */
+  updateGpu(state: "off" | "starting" | "online", t: number, dist: number, cockpit: boolean): void {
+    const ctx = this.ctx, v = this.dv;
+    if (!ctx || !v) return;
+    const now = ctx.currentTime, m = this.muted ? 0 : 1;
+    const near = (1 / (1 + dist / 7)) * (cockpit ? 0.45 : 1); // longe = mais baixo; dentro do habitáculo, abafado
+    let target = 0, crank = 0;
+    if (state === "starting" && t < 0.9) { target = 170 + 40 * Math.sin(t * 40); crank = 1; }
+    else if (state === "starting") { const u = t - 0.9; target = 1500 - 1300 * Math.exp(-u / 0.35) + 260 * Math.exp(-u / 1.0) * Math.sin(u * 5); }
+    else if (state === "online") target = 1500 + 8 * Math.sin(t * 1.7);
+    this.dRpm += (target - this.dRpm) * (state === "off" ? 0.03 : 0.25);
+    const rpm = Math.max(0, this.dRpm), run = Math.min(1, rpm / 600);
+    const fire = (rpm / 60) * 2;                  // 4 cilindros, 4 tempos: 2 explosões por volta
+    v.pulse.frequency.setTargetAtTime(Math.max(2, fire), now, 0.03);
+    v.knockLfo.frequency.setTargetAtTime(Math.max(2, fire), now, 0.03);
+    v.pulseLP.frequency.setTargetAtTime(160 + 0.18 * rpm, now, 0.05);
+    v.pulseG.gain.setTargetAtTime(m * near * 0.16 * run, now, 0.06);
+    v.knockG.gain.setTargetAtTime(m * near * 0.05 * run * (cockpit ? 0.4 : 1), now, 0.06);
+    v.whine.frequency.setTargetAtTime(Math.max(20, (rpm / 1500) * 400), now, 0.05);
+    v.whineG.gain.setTargetAtTime(m * near * 0.012 * run, now, 0.1);
+    v.crankG.gain.setTargetAtTime(m * near * 0.07 * crank, now, 0.03);
   }
 
   /** Estalo de uma vela de ignição da turbina (descarga de alta energia). */

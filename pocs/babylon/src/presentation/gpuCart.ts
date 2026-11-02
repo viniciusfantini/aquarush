@@ -1,5 +1,5 @@
-// GPU (ground power unit) da doca: carrinho de fonte de solo de 28 V DC, como os de pátio de aeroporto/heliponto,
-// parado no píer ao lado da vaga. Com a GPU conectada, um cabo grosso vai do carrinho até a tomada externa da
+// GPU (ground power unit) da doca: carrinho gerador a diesel de 28 V DC, como os de pátio de aeroporto/heliponto,
+// parado no píer ao lado da vaga (só aparece com a lancha de turbina, junto com o assistente de colete amarelo). Com a GPU conectada, um cabo grosso vai do carrinho até a tomada externa da
 // lancha de turbina (desenhado com barriga). Só visual: quem decide se está conectada é a simulação (`systems.gpu`).
 
 import { type Scene, Mesh, MeshBuilder, StandardMaterial, DynamicTexture, Color3, TransformNode, Vector3 } from "@babylonjs/core";
@@ -65,8 +65,10 @@ export class GpuCart {
    * Cabo até a tomada do barco (mundo) quando conectada; null = cabo recolhido no carretel. `edge` = ponto na borda do
    * píer por onde o cabo passa (ele desce do carrinho, corre no convés até a borda e cai em barriga até o costado).
    */
-  update(socket: Vector3 | null, on: boolean, edge?: Vector3): void {
-    this.lamp.emissiveColor = on ? new Color3(0.2, 1, 0.3) : Color3.Black();
+  update(socket: Vector3 | null, state: "off" | "starting" | "online", edge?: Vector3): void {
+    // lâmpada: pisca âmbar enquanto o diesel parte e estabiliza; verde fixa com a energia chaveada
+    const blink = Math.floor(performance.now() / 350) % 2 === 0;
+    this.lamp.emissiveColor = state === "online" ? new Color3(0.2, 1, 0.3) : state === "starting" && blink ? new Color3(1, 0.65, 0.05) : Color3.Black();
     if (!socket) { this.cable?.setEnabled(false); return; }
     const a = this.plug.getAbsolutePosition();
     const path: Vector3[] = [];

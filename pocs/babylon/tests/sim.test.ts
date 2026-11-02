@@ -849,6 +849,11 @@ for (const [label, thr] of [["baixa", 0.25], ["alta", 1]] as const) {
   // GPU da doca (28 V): com a bateria a 15 % (que sozinha dá partida pendurada) a turbina pega, mais fria, e a GPU
   // é desconectada sozinha quando chega à marcha lenta; enquanto isso a bateria carrega
   const g = mk(); g.coldEngines(); g.systems.batterySoc = 0.15; g.systems.gpu = true;
+  // a GPU é um gerador a diesel: parte, estabiliza e só então chaveia a energia externa
+  let onlineAt = -1, vWhileStarting = 99;
+  run(g, water, 6, N, openWater, (t) => { if (g.systems.gpuState === "starting") vWhileStarting = Math.min(vWhileStarting, g.telemetry.batteryV); if (onlineAt < 0 && g.systems.gpuOnline) onlineAt = t; });
+  check("turbina", "GPU: o diesel parte e estabiliza antes de chavear a energia (s)", onlineAt, 3.5, 5.5, "s", 1);
+  check("turbina", "GPU partindo: ainda não alimenta (barramento na bateria fraca, V)", vWhileStarting, 18, 25.5, "V", 1);
   const socBefore = g.systems.batterySoc;
   g.toggleIgnition();
   const gEv: string[] = []; let gPeak = 0, gMinV = 99, gIdle = -1;
@@ -869,6 +874,52 @@ for (const [label, thr] of [["baixa", 0.25], ["alta", 1]] as const) {
   dry.toggleIgnition();
   const dEv: string[] = [];
   run(dry, water, 30, N, openWater, () => dEv.push(...dry.units[0].turb!.drainEvents()));
+  // ---- partida MANUAL pelo painel (chave por chave) ----
+  const manual = () => { const x = mk(); x.coldEngines(); x.systems.batterySoc = 0.6; const tb = x.units[0].turb!; tb.setFadec(false); tb.cold(); return { x, tb }; };
+  {
+    const { x, tb } = manual();
+    check("turbina", "manual: o P não dá partida (pede o painel)", x.toggleIgnition() === "manual" ? 1 : 0, 1, 1, "", 0);
+    tb.setSwitch("starter", true);
+    run(x, water, 3, N);
+    check("turbina", "manual: com a BATERIA desligada o starter não gira (N1, %)", tb.n1, 0, 0.5, "%", 1);
+    // sequência certa: bateria, bomba, starter; a ~12 % ignição e combustível; a 45 % starter e ignição desligados
+    tb.setSwitch("master", true); tb.setSwitch("boostPump", true);
+    let peak = 0, idleAt = -1, stage = 0;
+    run(x, water, 40, N, openWater, (t) => {
+      peak = Math.max(peak, tb.egt);
+      if (stage === 0 && tb.n1 >= 12) { tb.setSwitch("ignition", true); tb.setSwitch("fuelValve", true); stage = 1; }
+      if (stage === 1 && tb.n1 >= 45) { tb.setSwitch("starter", false); tb.setSwitch("ignition", false); stage = 2; }
+      if (idleAt < 0 && tb.running) idleAt = t;
+    });
+    check("turbina", "manual, sequência certa: chega à marcha lenta (s)", idleAt, 10, 35, "s", 1);
+    check("turbina", "manual, sequência certa: pico de EGT (°C)", peak, 550, 760, "°C", 0);
+  }
+  {
+    // partida MOLHADA: combustível aberto com o starter girando, mas sem ignição por 8 s; depois a ignição
+    const { x, tb } = manual();
+    for (const s of ["master", "boostPump", "starter", "fuelValve"] as const) tb.setSwitch(s, true);
+    run(x, water, 8, N);
+    const pooled = tb.pooledL;
+    tb.setSwitch("ignition", true);
+    const ev: string[] = []; let peak = 0;
+    run(x, water, 6, N, openWater, () => { peak = Math.max(peak, tb.egt); ev.push(...tb.drainEvents()); });
+    check("turbina", "manual, partida molhada: combustível acumulado na câmara (L)", pooled, 0.02, 0.3, "L", 3);
+    check("turbina", "manual, partida molhada: acende com labareda (pico de EGT, °C)", peak, 800, 1300, "°C", 0);
+    check("turbina", "manual: sobretemperatura sem proteção desgasta a turbina", ev.includes("overtemp") && tb.wear > 0 ? 1 : 0, 1, 1, "", 0);
+  }
+  {
+    // starter solto cedo (a 25 %, abaixo do autossustentável): a turbina não se sustenta, desacelera e esquenta
+    const { x, tb } = manual();
+    for (const s of ["master", "boostPump", "starter"] as const) tb.setSwitch(s, true);
+    let stage = 0, maxN1After = 0, peak = 0;
+    run(x, water, 30, N, openWater, () => {
+      if (stage === 0 && tb.n1 >= 12) { tb.setSwitch("ignition", true); tb.setSwitch("fuelValve", true); stage = 1; }
+      if (stage === 1 && tb.lit && tb.n1 >= 25) { tb.setSwitch("starter", false); stage = 2; }
+      if (stage === 2) { maxN1After = Math.max(maxN1After, tb.n1); peak = Math.max(peak, tb.egt); }
+    });
+    check("turbina", "manual, starter solto a 25 %: não chega à marcha lenta (rollback)", !tb.running && maxN1After < 40 ? 1 : 0, 1, 1, "", 0);
+    check("turbina", "manual, rollback: a EGT sobe (°C)", peak, 700, 1200, "°C", 0);
+  }
   check("turbina", "sem combustível: não acende (aborta)", dEv.includes("noLightOff") && !dEv.includes("lightoff") ? 1 : 0, 1, 1, "", 0);
   // a toda: velocidade, rotação e a hélice de superfície trabalhando com ~metade do disco fora d'água
   const f = mk(); let t100 = -1, immSum = 0, immN = 0;

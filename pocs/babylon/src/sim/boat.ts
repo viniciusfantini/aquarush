@@ -85,6 +85,8 @@ export interface BoatTelemetry {
   jumper: boolean;       // booster de partida (jump start) ligado na bateria
   jumpCharge: number;    // carga do booster 0..1 (cheio ≈ 3 partidas)
   gpu: boolean;          // GPU da doca (fonte de solo de 28 V) conectada — só a lancha de turbina
+  gpuState: "off" | "starting" | "online"; // diesel da GPU partindo/estabilizando ou energia chaveada
+  gpuT: number;          // s desde que a GPU foi pedida (curva do som do diesel)
   batteryA: number;      // amperímetro: + carregando, − descarregando (A)
   bilgeL: number;        // água no porão (L)
   bilgeInflowLps: number; // entrada de água (L/s): furo no casco + água por cima da borda
@@ -118,7 +120,9 @@ export interface BoatTelemetry {
   engines: EngineState[];
   propRpms: number[];
   /** turbina (lancha de turbina): N1/N2 %, EGT °C, torque %, óleo psi, fase da partida */
-  turbine: { n1: number; n2: number; egt: number; torque: number; oilPsi: number; fuelLph: number; phase: TurbinePhase; starter: boolean; ignition: boolean; lit: boolean; egtWarn: boolean; hotStarts: number } | null;
+  turbine: { n1: number; n2: number; egt: number; torque: number; oilPsi: number; fuelLph: number; phase: TurbinePhase; starter: boolean; ignition: boolean; lit: boolean; egtWarn: boolean; hotStarts: number;
+    /** modo e chaves do painel de partida; combustível acumulado sem queimar (L); desgaste por sobretemperatura */
+    fadec: boolean; master: boolean; boostPump: boolean; fuelValve: boolean; pooledL: number; wear: number } | null;
   /** por motor/banco (AR-9: cada V8 tem arrefecimento e banco de bateria próprios) */
   coolants: number[];
   batteryVs: number[];
@@ -341,7 +345,7 @@ export class Speedboat {
       gear: "N", pitchDeg: 0, rollDeg: 0, wetFraction: 0, planing: false, thrustN: 0, ventilation: 1, cavitation: 0, propImmersion: 1, revLimiter: false, propSlip: 0, propRpm: 0, engine: "running", fuelL: 0, fuelFrac: 1, coolantC: 45, batteryV: 12.6, engineHours: 0, overheatWarn: false, protectMode: false, lowFuel: false, chargeWarn: false, stall: "", trimMotorA: 0, trimRelay: false, jumper: false, jumpCharge: 1, batteryA: 0, bilgeL: 0, bilgeInflowLps: 0, bilgePump: false, bilgeFlowLps: 0, bilgeAlarm: false, bilgeJetPos: v3(), bilgeJetVel: v3(), freeboard: 1, swamped: false, sunk: false, airPocketL: 0,
       anchorOut: 0, anchorState: "recolhida", anchorDepth: 0, anchorScope: 0, anchorTension: 0, anchorRelay: false, windlassA: 0, apparentWind: 0, neutralRev: false, fuelLph: 0, buzzer: false, starterRpm: 0, startFail: "", batterySoc: 0.92, trimPin: 0, pullStart: !params.electricStart,
       distanceM: 0, collisions: 0, draftHull: 0, draftMotor: 0, capsized: false, swimmers: 0, hullDamage: 0, engineDamage: 0, damageEvent: "", damageCount: 0, lastImpact: 0, depth: 0, submergedPoints: params.buoyancyPoints.map(() => false),
-      rpms: [params.idleRpm], gears: ["N"], throttles: [0], thrusts: [0], engines: ["running"], propRpms: [0], coolants: [45], batteryVs: [12.6], batterySocs: [0.92], batteryAs: [0], turbine: null, nominalV: 12, gpu: false,
+      rpms: [params.idleRpm], gears: ["N"], throttles: [0], thrusts: [0], engines: ["running"], propRpms: [0], coolants: [45], batteryVs: [12.6], batterySocs: [0.92], batteryAs: [0], turbine: null, nominalV: 12, gpu: false, gpuState: "off", gpuT: 0,
     };
   }
 
@@ -1279,13 +1283,15 @@ export class Speedboat {
    * Ignição (tecla P): desliga o motor ou dá partida. Por segurança (como nos motores reais),
    * a partida só funciona em NEUTRO. Retorna o que aconteceu.
    */
-  toggleIgnition(): "stopped" | "starting" | "pulling" | "needNeutral" | "busy" | "noFuel" | "lowBattery" | "hot" | "noPilot" | "broken" {
+  toggleIgnition(): "stopped" | "starting" | "pulling" | "needNeutral" | "busy" | "noFuel" | "lowBattery" | "hot" | "noPilot" | "broken" | "manual" {
     if (!this.occupants.some((o) => o.seat === "helm")) return "noPilot";
     if (this.engine !== "running" && this.engineDamage >= 0.95) return "broken";
     if (this.engine === "running") { this.engine = "off"; return "stopped"; }
     const tb = this.units[0].turb;
     if (tb) {
-      // turbina: botão de partida (arranque → ignição + combustível → acende → marcha lenta); de novo aborta
+      // turbina: botão de partida do FADEC (arranque → ignição + combustível → acende → marcha lenta); de novo aborta.
+      // No modo manual o P não faz nada: a partida é pelas chaves do painel (Y)
+      if (!tb.fadec) return tb.running ? (tb.shutdown(), "stopped") : "manual";
       if (tb.starting) { tb.abort(); return "stopped"; }
       if (tb.n1 > 8) return "busy"; // ainda girando (spool-down): espere parar
       if (this.gear !== "N") return "needNeutral";
@@ -1357,11 +1363,12 @@ export class Speedboat {
     t.nominalV = 12 * k;
     t.coolants = B.map((b) => b.coolantC); t.batteryVs = B.map((b) => b.batteryV * k); t.batterySocs = B.map((b) => b.batterySoc); t.batteryAs = B.map((b) => b.batteryA / k);
     t.coolantC = Math.max(...t.coolants); t.batteryV = sys.batteryV * k; t.batterySoc = sys.batterySoc; t.batteryA = sys.batteryA / k;
-    t.engineHours = sys.engineHours; t.gpu = sys.gpu;
+    t.engineHours = sys.engineHours; t.gpu = sys.gpu; t.gpuState = sys.gpuState; t.gpuT = sys.gpuT;
     t.overheatWarn = B.some((b) => b.overheatWarn); t.protectMode = B.some((b) => b.protect); t.chargeWarn = B.some((b) => b.chargeWarn);
     const tb = this.units[0].turb;
     t.turbine = tb ? { n1: tb.n1, n2: tb.n2, egt: tb.egt, torque: tb.torque, oilPsi: tb.oilPsi, fuelLph: tb.fuelLph, phase: tb.phase,
-      starter: tb.starter, ignition: tb.ignition, lit: tb.lit, egtWarn: tb.egtWarn, hotStarts: tb.hotStarts } : null;
+      starter: tb.starter, ignition: tb.ignition, lit: tb.lit, egtWarn: tb.egtWarn, hotStarts: tb.hotStarts,
+      fadec: tb.fadec, master: tb.master, boostPump: tb.boostPump, fuelValve: tb.fuelValve, pooledL: tb.pooledL, wear: tb.wear } : null;
   }
 
   /** Estado agregado dos motores para os sistemas (bateria, alternadores, arranques, combustível, temperatura). */
