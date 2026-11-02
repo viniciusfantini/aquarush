@@ -350,14 +350,20 @@
     .tr-rocker button { height: 32px; }
     /* AR-10: largura intermediária — mostradores e anunciadores numa linha; chaves + START/STOP numa botoeira só */
     #tpanel { width: min(690px, calc(100vw - 24px)); padding: 10px 12px 12px; }
-    #tpanel .tp-gauges .gauge.small { width: 82px; height: 82px; }
+    #tpanel .tp-gauges .gauge.small { width: 88px; height: 88px; }
     #tpanel .tp-sw { justify-content: center; flex-wrap: nowrap; gap: 4px 2px; }
     #tpanel .tp-auto { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; margin-left: 8px; padding-left: 12px; border-left: 1px solid rgba(255,255,255,0.12); }
     #tpanel .rot .dial { height: 84px; }
     /* grade horizontal (v0.62.3): [mostradores | anunciadores] / [botoeira de partida | manetes] / [sistemas + GPU | manetes] / [avisos] */
     /* v0.62.4: equilíbrio — [mostradores | anunciadores] / [botoeira de partida] / [sistemas | manetes] / [avisos] */
-    #tpanel { width: min(700px, calc(100vw - 24px)); overflow-x: hidden; }
-    #tpanel .tp-gauges .gauge.small { width: 82px; height: 82px; }
+    #tpanel { width: min(750px, calc(100vw - 24px)); overflow-x: hidden; }
+    /* botão TESTE das luzes e alarmes (pequeno, redondo, ao lado do GOV) */
+    .tp-test { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; margin-left: 2px; }
+    .tp-test b { font-size: 9.5px; letter-spacing: 0.08em; color: #e9eef2; font-weight: 800; }
+    .tb-test { width: 30px; height: 30px; border-radius: 50%; border: none; padding: 0; font-size: 7px !important; font-weight: 900; letter-spacing: 0.04em; color: #1b1203 !important;
+      background: radial-gradient(circle at 40% 35%, #fff3c4, #ffc23a 55%, #a87400); box-shadow: 0 0 0 3px #1b1f24, 0 0 0 4px rgba(255,255,255,0.15), 0 2px 4px rgba(0,0,0,0.6); }
+    .tb-test.down { transform: translateY(1px) scale(0.94); filter: brightness(1.2); }
+    #tpanel .tp-gauges .gauge.small { width: 88px; height: 88px; }
     #tpanel .tp-sysp .rot { width: 108px; } #tpanel .tp-sysp .rot .dial { width: 104px; }
     .tp-grid { display: flex; flex-wrap: wrap; gap: 6px 8px; align-items: stretch; }
     .tp-grid > .tp-gauges { flex: 1 1 100%; margin: 0; align-self: center; }
@@ -599,8 +605,8 @@
     <div class="menu-top"><div class="brand">AQUA RUSH</div><div class="pick-t">Escolha a embarcação — a prévia está no lago</div></div>
     <div class="menu-bottom">
       <div class="pick-row">
-        <button class="pick-b" data-kind="lancha"><b>Lancha AR-6</b><span>6 m · 150 hp · até 4 pessoas · tanque 120 L (começa com 5 L)</span><span>volante, manete, power trim elétrico, partida na chave, luzes de navegação</span></button>
         <button class="pick-b" data-kind="bote"><b>Bote de apoio AR-3</b><span>3,1 m · 15 hp · até 3 pessoas · tanque 10 L (começa com 5 L)</span><span>cana do leme no motor, partida na corda, trim manual (3 furos + tilt), lanterna de mão</span></button>
+        <button class="pick-b" data-kind="lancha"><b>Lancha AR-6</b><span>6 m · 150 hp · até 4 pessoas · tanque 120 L (começa com 5 L)</span><span>volante, manete, power trim elétrico, partida na chave, luzes de navegação</span></button>
         <button class="pick-b" data-kind="rapida"><b>Lancha rápida AR-9</b><span>8,6 m · 2 × V8 300 hp · 2 pessoas · tanque 380 L (começa com 20 L)</span><span>dois motores de centro com rabeta, um conta-giros por motor, empuxo diferencial (Z/X) para girar no lugar</span></button>
         <button class="pick-b" data-kind="turbina"><b>Lancha de turbina AR-10</b><span>10 m · turbina a gás de 1100 shp · piloto único no habitáculo fechado · 900 L (começa com 120 L)</span><span>hélice de superfície, partida de turbina (arranque → ignição → acende), N1, N2, EGT, torque e óleo no painel, 24 V e GPU na doca</span></button>
       </div>

@@ -47,7 +47,7 @@ import { BoatCamera } from "./presentation/cameras.ts";
 import { Hud } from "./presentation/hud.ts";
 import { EngineAudio } from "./presentation/audio.ts";
 
-const BUILD = "poc-babylon 0.64.4";
+const BUILD = "poc-babylon 0.65.0";
 /** Escala visual da rotação da hélice (proporcional ao RPM, abaixo do limite estroboscópico). */
 const PROP_VISUAL_SCALE = 0.12;
 
@@ -1237,7 +1237,7 @@ const boot = async () => {
     audio.update({
       rpm: T.rpm, throttle: T.throttle, speed: Math.hypot(boat.vel.x, boat.vel.z), boil: Math.max(T.cavitation, 1 - T.ventilation),
       inGear: T.gear !== "N", propInWater: T.propImmersion > 0.5, revLimiter: T.revLimiter, cockpit: cam.mode === "cockpit", engine: T.engine, trimMotorA: T.trimMotorA, trimRelay: T.trimRelay, bilgeAlarm: mode === "game" && T.bilgeAlarm && !T.capsized && !T.sunk, bilgeFlowLps: T.bilgeFlowLps, bilgePumpOn: T.bilgePump && !T.sunk, bilgeWaterL: T.bilgeL, windlassA: T.windlassA, apparentWind: T.apparentWind, anchorRelay: T.anchorRelay, buzzer: T.buzzer, starterRpm: T.starterRpm, pullStart: T.pullStart,
-      oilAlarm: mode === "game" && (!!T.turbine?.oilHot || T.extPwrFault) && !T.sunk, // "master caution": óleo quente ou falha do EXT PWR
+      oilAlarm: mode === "game" && (!!T.turbine?.oilHot || T.extPwrFault || (tpanel.isOpen && tpanel.lampTestOn)) && !T.sunk, // + TESTE do painel // "master caution": óleo quente ou falha do EXT PWR
       // AR-9: o 2º V8 tem voz própria (rotação/carga/estado dele)
       ...(boat.units.length > 1 ? { rpm: T.rpms[0], throttle: T.throttles[0], rpm2: T.rpms[1], throttle2: T.throttles[1], engine2: T.engines[1], engine: T.engines[0] } : {}),
       // turbina: N1/N2, EGT (chama), arranque e velas de ignição — síntese própria (apito do compressor, rugido da combustão)

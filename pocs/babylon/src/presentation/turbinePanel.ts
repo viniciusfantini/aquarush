@@ -67,11 +67,12 @@ export class TurbinePanel {
         <button class="tp-ck" data-ck>CHECKLIST</button><button class="tp-x" aria-label="fechar">×</button></div>
       <div class="tp-grid">
       <div class="tp-gauges"></div>
-      <div class="tp-ann">${["BAT", "EXT PWR", "GEN", "STARTER", "IGNIÇÃO", "GOV", "EGT ALTA", "ÓLEO QUENTE", "CHAMA", "N2 SOBREV."].map((k) => `<span data-a="${k}">${k}</span>`).join("")}</div>
+      <div class="tp-ann">${["BAT", "STARTER", "IGNIÇÃO", "GERADOR", "GOV", "EXT PWR", "ÓLEO QUENTE", "EGT ALTA", "CHAMA", "N2 SOBREV."].map((k) => `<span data-a="${k}">${k}</span>`).join("")}</div>
         <div class="sw-plate tp-sw">${SCR}${SWITCHES.map((s, i) => s.id === "fuelValve"
           // a manete de condição do combustível é um seletor rotativo (como os registros), não uma chave elétrica
           ? rotary("fv", "COMBUSTÍVEL", "condição", [{ v: "cut", l: "CORTE" }, { v: "idle", l: "LENTA" }], { num: i + 1, cls: "fuel" })
           : toggle({ attr: "s", val: s.id, label: s.label, sub: s.sub, on: s.on, off: s.off, variant: s.variant, num: i + 1 })).join("")}
+          <div class="tp-test" title="segure: testa todas as luzes e o alarme (precisa de energia no barramento)"><button class="tb-test" data-test>TEST</button><b>TESTE</b></div>
         </div>
         <div class="sw-plate tp-sysp">${SCR}
           ${cell(rotary("bsel", "BATERIAS", "2 × 12 V em série", [{ v: "off", l: "OFF" }, { v: "bus", l: "BUS" }, { v: "both", l: "BOTH" }]), "bat")}
@@ -103,6 +104,11 @@ export class TurbinePanel {
     this.el = el;
     makeDraggable(el, this.q<HTMLElement>(".tp-head"), "aquarush.tpanelPos");
     this.ck = new ChecklistPanel();
+    // TESTE das luzes e alarmes: vale enquanto o botão estiver apertado
+    const tbtn = el.querySelector<HTMLElement>("[data-test]")!;
+    tbtn.addEventListener("pointerdown", (e) => { this.lampTest = true; tbtn.classList.add("down"); e.preventDefault(); });
+    const tUp = () => { this.lampTest = false; tbtn.classList.remove("down"); };
+    addEventListener("pointerup", tUp); addEventListener("pointercancel", tUp); addEventListener("blur", tUp);
     this.levers = new LeverControls("turbine", (_i, c) => this.act.setLever(c));
     this.levers.setHorn("buzina", (on) => this.act.horn(on));
     this.q<HTMLElement>(".tp-lev").appendChild(this.levers.el);
@@ -120,6 +126,10 @@ export class TurbinePanel {
     };
     this.setOpen(false);
   }
+
+  /** botão TESTE segurado / teste ativo (com energia no barramento): luzes acesas e alarme (o main lê `lampTestOn`) */
+  private lampTest = false;
+  lampTestOn = false;
 
   /** Posição das manetes (o comando atual, do InputManager). */
   updateLevers(cmds: LeverCmd[], trim: TrimState | null = null): void { this.cmdGear = cmds[0]?.gear ?? "N"; if (this.open) { this.levers.update(cmds); this.levers.updateTrim(trim); } }
@@ -161,7 +171,7 @@ export class TurbinePanel {
       // gerador (ou a GPU) assume e ela passa a carregar
       BAT: t.busBattery && t.batteryA < -1 ? "a" : "", // GEN = gerador FORA do barramento ("cockpit escuro"): acesa antes da partida e se ele cair (falha, chave GEN, turbina
       // parando); apaga quando o gerador entra
-      GEN: on && !t.busGen ? "a" : "",
+      GERADOR: on && !t.busGen ? "a" : "",
       // verde = GPU no barramento; âmbar piscando = GPU disponível/partindo mas fora do barramento (relé aberto ou sem
       // MAIN — a luz é alimentada pela própria GPU); vermelho piscando = EXT PWR em ON sem GPU conectada (falha)
       "EXT PWR": t.extPwr ? "g" : t.extPwrFault ? (blink ? "r" : "") : t.gpu && (t.gpuState === "starting" || t.gpuState === "online") && blink ? "a" : "",
@@ -170,11 +180,17 @@ export class TurbinePanel {
       "ÓLEO QUENTE": on && tb.oilRed ? (blink ? "r" : "") : on && tb.oilHot ? "r" : "",
       CHAMA: fire ? "r" : "", "N2 SOBREV.": on && tb.n2 > 106 ? (blink ? "r" : "") : "",
     };
-    for (const s of this.el.querySelectorAll<HTMLElement>("[data-a]")) s.className = ann[s.dataset.a ?? ""] ?? "";
+    // TESTE (segurado, com energia): todas as luzes acendem na sua cor e o alarme toca
+    this.lampTestOn = this.lampTest && on;
+    if (this.lampTestOn) {
+      const TEST: Record<string, string> = { BAT: "a", STARTER: "a", "IGNIÇÃO": "a", GERADOR: "a", GOV: "g", "EXT PWR": "g", "ÓLEO QUENTE": "r", "EGT ALTA": "r", CHAMA: "r", "N2 SOBREV.": "r" };
+      Object.assign(ann, TEST);
+    }
+    for (const s of this.el.querySelectorAll<HTMLElement>(".tp-ann [data-a]")) s.className = ann[s.dataset.a ?? ""] ?? ""; // (só as luzes: os rotativos usam data-a para o ângulo)
     const sw: Record<PanelSwitch, boolean> = { master: tb.master, extPwr: t.extPwrClosed, boostPump: tb.boostPump, starter: tb.starterSw, ignition: tb.ignitionSw, fuelValve: tb.fuelValve, generator: tb.generator, governor: tb.governor || tb.fadec };
     // posição das chaves (do piloto, mesmo sem energia no barramento); o LED só acende com a função energizada
     const lit: Record<PanelSwitch, boolean> = { master: tb.master && on, extPwr: t.extPwr, boostPump: tb.boostPump && on, starter: tb.starter, ignition: tb.ignition, fuelValve: false, generator: t.busGen, governor: (tb.governor || tb.fadec) && on };
-    for (const id of Object.keys(sw) as PanelSwitch[]) if (id !== "fuelValve") setToggle(this.el, "s", id, sw[id], lit[id]);
+    for (const id of Object.keys(sw) as PanelSwitch[]) if (id !== "fuelValve") setToggle(this.el, "s", id, sw[id], lit[id] || this.lampTestOn);
     setRotary(this.el, "fv", tb.fuelValve ? "idle" : "cut");
     setRotary(this.el, "tank", t.fuelValveOpen ? "open" : "closed");
     setRotary(this.el, "bsel", t.batterySel === "off" ? "off" : t.batterySel === "bus" ? "bus" : "both");

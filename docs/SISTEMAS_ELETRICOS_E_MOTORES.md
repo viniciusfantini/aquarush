@@ -1,7 +1,7 @@
 # AQUA RUSH — Sistemas elétricos e de motores (referência para qualquer IA ou dev)
 
 Este documento descreve **toda a lógica** dos sistemas elétricos, de combustível, de arrefecimento, de partida e
-dos motores das 4 embarcações da POC 1 (Babylon.js, `pocs/babylon`), como estão no código na **v0.64.4**. Serve
+dos motores das 4 embarcações da POC 1 (Babylon.js, `pocs/babylon`), como estão no código na **v0.65.0**. Serve
 para continuar o trabalho em outra IA/ferramenta ou portar para Unity/Unreal sem precisar redescobrir as regras.
 
 > Fonte da verdade = o código. Se divergir, vale o código e este arquivo deve ser corrigido.
@@ -250,6 +250,9 @@ mais o EXT PWR da GPU no `EngineSystems`.
   o desgaste sobe `(N2 − 106)/100` por segundo até a turbina travar (≥ 95 %, avaria). Luz **GOV** única (v0.64.4, também no
   HUD): âmbar acesa = chave GOV desligada; apagada = ligada; verde piscando = o governador está limitando (`govActing`).
   Luz **CHAMA** = fogo saindo do escape (`TurbineExhaustFx.fireRate` > 5, o mesmo cálculo que desenha o fogo).
+  Ordem das luzes (v0.65): BAT, STARTER, IGNIÇÃO, GERADOR, GOV / EXT PWR, ÓLEO QUENTE, EGT ALTA, CHAMA, N2 SOBREV.
+  Botão **TESTE** (ao lado do GOV, segurado): com energia no barramento acende todas as luzes e LEDs e toca o alarme
+  de cautela (`TurbinePanel.lampTestOn` → `oilAlarm` no main).
 
 ### 8.3 FADEC (padrão) — camada que aciona as mesmas chaves (`fadecStep`)
 1. `start()`: bomba ON, starter ON (não liga a BAT: ela é do piloto; sem BAT e sem GPU → `"noPower"`).
