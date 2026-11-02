@@ -920,6 +920,65 @@ for (const [label, thr] of [["baixa", 0.25], ["alta", 1]] as const) {
     check("turbina", "manual, starter solto a 25 %: não chega à marcha lenta (rollback)", !tb.running && maxN1After < 40 ? 1 : 0, 1, 1, "", 0);
     check("turbina", "manual, rollback: a EGT sobe (°C)", peak, 700, 1200, "°C", 0);
   }
+  // ---- barramento: BAT, EXT PWR (GPU) e GEN; defeitos de sequência ----
+  {
+    // BAT desligada mas a GPU no barramento: os periféricos funcionam (o starter gira)
+    const { x, tb } = manual();
+    x.systems.gpu = true;
+    run(x, water, 6, N);                                   // diesel da GPU estabiliza
+    tb.setSwitch("boostPump", true); tb.setSwitch("starter", true);
+    run(x, water, 6, N);
+    check("turbina", "BAT desligada + GPU (EXT PWR): o starter gira pelo barramento (N1, %)", tb.n1, 12, 30, "%", 1);
+    check("turbina", "BAT desligada + GPU: barramento na tensão da GPU (V)", x.telemetry.batteryV, 26, 29, "V", 1);
+  }
+  {
+    // marcha lenta no manual: sem a chave GEN a bateria não carrega; ligando, carrega. Depois BAT desligada:
+    // o gerador segura o barramento sozinho e a bateria fica fora (nem carrega nem descarrega)
+    const { x, tb } = manual();
+    for (const sw of ["master", "boostPump", "starter"] as const) tb.setSwitch(sw, true);
+    let st = 0;
+    run(x, water, 35, N, openWater, () => {
+      if (st === 0 && tb.n1 >= 12) { tb.setSwitch("ignition", true); tb.setSwitch("fuelValve", true); st = 1; }
+      if (st === 1 && tb.n1 >= 45) { tb.setSwitch("starter", false); tb.setSwitch("ignition", false); st = 2; }
+    });
+    check("turbina", "manual, marcha lenta com GEN desligado: a bateria não carrega (A)", x.telemetry.batteryA, -5, 0.5, "A", 1);
+    tb.setSwitch("generator", true); run(x, water, 3, N);
+    check("turbina", "GEN ligado: o gerador carrega a bateria (A)", x.telemetry.batteryA, 5, 60, "A", 0);
+    const soc0 = x.systems.batterySoc;
+    tb.setSwitch("master", false); run(x, water, 10, N);
+    check("turbina", "BAT desligada com a turbina rodando: o gerador segura o barramento (V)", x.telemetry.batteryV, 26, 29.5, "V", 1);
+    check("turbina", "BAT desligada: a bateria fica fora (corrente, A)", x.telemetry.batteryA, 0, 0, "A", 1);
+    check("turbina", "BAT desligada: carga da bateria inalterada (pontos de %)", Math.abs(x.systems.batterySoc - soc0) * 100, 0, 0.01, "%", 3);
+    check("turbina", "BAT desligada: a turbina continua rodando", tb.running ? 1 : 0, 1, 1, "", 0);
+  }
+  {
+    // combustível + ignição CEDO (N1 a 6 %): acende com pouco ar → partida quente
+    const { x, tb } = manual();
+    for (const sw of ["master", "boostPump", "starter"] as const) tb.setSwitch(sw, true);
+    const ev: string[] = []; let peak = 0, st = 0;
+    run(x, water, 15, N, openWater, () => {
+      if (st === 0 && tb.n1 >= 6) { tb.setSwitch("ignition", true); tb.setSwitch("fuelValve", true); st = 1; }
+      peak = Math.max(peak, tb.egt); ev.push(...tb.drainEvents());
+    });
+    check("turbina", "manual, combustível cedo (N1 6 %): avisa e esquenta (pico de EGT, °C)", ev.includes("earlyFuel") || ev.includes("wetStart") ? peak : 0, 790, 1300, "°C", 0);
+  }
+  {
+    // starter ligado sem parar (a seco, sem combustível): o térmico desarma em ~40 s e trava o starter
+    const { x, tb } = manual();
+    for (const sw of ["master", "starter"] as const) tb.setSwitch(sw, true);
+    const ev: string[] = [];
+    run(x, water, 45, N, openWater, () => ev.push(...tb.drainEvents()));
+    check("turbina", "manual: starter > 40 s seguidos superaquece e trava", ev.includes("starterHot") && !tb.starter && tb.starterLockT > 0 ? 1 : 0, 1, 1, "", 0);
+    check("turbina", "starter travado: não religa enquanto quente", tb.setSwitch("starter", true) ? 0 : 1, 1, 1, "", 0);
+  }
+  {
+    // desgaste total por sobretemperatura: a turbina trava (avaria do motor) e a oficina conserta
+    const { x, tb } = manual();
+    tb.wear = 0.96; run(x, water, 1, N);
+    const seized = tb.seizedOn && x.engineDamage >= 0.95;
+    x.repair();
+    check("turbina", "desgaste ≥ 95 %: turbina trava (avaria) e o reparo zera", seized && tb.wear === 0 && !tb.seizedOn && x.engineDamage === 0 ? 1 : 0, 1, 1, "", 0);
+  }
   check("turbina", "sem combustível: não acende (aborta)", dEv.includes("noLightOff") && !dEv.includes("lightoff") ? 1 : 0, 1, 1, "", 0);
   // a toda: velocidade, rotação e a hélice de superfície trabalhando com ~metade do disco fora d'água
   const f = mk(); let t100 = -1, immSum = 0, immN = 0;

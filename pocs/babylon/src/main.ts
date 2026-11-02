@@ -45,7 +45,7 @@ import { BoatCamera } from "./presentation/cameras.ts";
 import { Hud } from "./presentation/hud.ts";
 import { EngineAudio } from "./presentation/audio.ts";
 
-const BUILD = "poc-babylon 0.50.0";
+const BUILD = "poc-babylon 0.51.0";
 /** Escala visual da rotação da hélice (proporcional ao RPM, abaixo do limite estroboscópico). */
 const PROP_VISUAL_SCALE = 0.12;
 
@@ -965,6 +965,10 @@ const boot = async () => {
         overtemp: `SOBRETEMPERATURA: EGT ${tb.egt.toFixed(0)} °C (limite ${V.P.turbine!.egtStartLimit}) — corte o COMBUSTÍVEL! No manual nada protege: a turbina desgasta`,
         wetStart: "Partida MOLHADA: o combustível acumulado na câmara queimou de uma vez (labareda) — abra o combustível só com a ignição ligada e N1 em 12 %",
         starterOverspeed: "Starter desengatado: N1 acima de 50–60 % (proteção de sobrevelocidade)",
+        earlyFuel: `Combustível aberto CEDO (acendeu com N1 em ${tb.n1.toFixed(0)} %): pouco ar para o combustível — a EGT dispara (partida quente)`,
+        starterHot: "STARTER SUPERAQUECIDO: mais de 40 s ligado — o térmico desarmou; espere ~60 s para usar de novo",
+        starterLocked: "Starter ainda quente (térmico desarmado) — aguarde esfriar",
+        seized: "TURBINA DESTRUÍDA pela sobretemperatura: travou. R leva à oficina do píer (reparo)",
       };
       if (mode === "game" && tmsg[e]) hud.showToast(tmsg[e]!);
     }
@@ -1010,7 +1014,8 @@ const boot = async () => {
         gpuCrew.stand(gpuCrewSpot, T.gpuState !== "off" ? Math.PI : Math.PI / 2, simTime);
       }
       const cpos = scene.activeCamera?.globalPosition ?? Vector3.Zero();
-      audio.updateGpu(isTurb ? T.gpuState : "off", T.gpuT, Vector3.Distance(cpos, gpuCart.root.position), cam.mode === "cockpit");
+      audio.updateGpu(isTurb ? T.gpuState : "off", T.gpuT, Vector3.Distance(cpos, gpuCart.root.position), cam.mode === "cockpit", T.gpuKw);
+      gpuCart.updateDiesel(isTurb ? T.gpuState : "off", T.gpuT, T.gpuKw, paused ? 0 : dtReal);
       tpanel.update(T);
     }
     if (boat.systems.jumperAutoOff !== lastJumperOff) { if (mode === "game") hud.showToast(`O motor pegou — jump start desconectado (carga ${Math.round(T.jumpCharge * 100)} %, recarrega em cruzeiro)`); lastJumperOff = boat.systems.jumperAutoOff; }
@@ -1134,7 +1139,7 @@ const boot = async () => {
   // exposto para testes manuais/automatizados no console
   (window as unknown as Record<string, unknown>).__aqua = {
     get kind() { return V.kind; }, get boat() { return V.boat; }, get boatVis() { return V.vis; }, get mode() { return mode; },
-    vessels, water, waterVis, fx, audio, world, scene, engine, cam, input, loadMs, startGame, showMenu,
+    vessels, water, waterVis, fx, audio, world, scene, engine, cam, input, loadMs, startGame, showMenu, gpuCart,
     checkConvention: () => {
       const f = V.boat.forward;
       const bf = V.vis.root.forward;

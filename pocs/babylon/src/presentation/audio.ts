@@ -132,6 +132,7 @@ export class EngineAudio {
   /** diesel da GPU (gerador da doca): pulsos de combustão, batida de diesel, zunido do gerador e o starter */
   private dv: { pulse: OscillatorNode; pulseLP: BiquadFilterNode; pulseG: GainNode; knockAM: GainNode; knockLfo: OscillatorNode; knockG: GainNode; whine: OscillatorNode; whineG: GainNode; crank: OscillatorNode; crankG: GainNode } | null = null;
   private dRpm = 0;
+  private dLoadS = 0;
   private igniterT = 0;
   private igniterSide = 1;
   private workletGain!: GainNode;
@@ -574,7 +575,7 @@ export class EngineAudio {
    * pega, a rotação passa do ponto e o governador a assenta em 1500 rpm (~4,5 s); ligada, fica estável. Desligada,
    * a rotação cai e o som some. `dist` = distância da câmera ao carrinho (m).
    */
-  updateGpu(state: "off" | "starting" | "online", t: number, dist: number, cockpit: boolean): void {
+  updateGpu(state: "off" | "starting" | "online", t: number, dist: number, cockpit: boolean, kw = 0): void {
     const ctx = this.ctx, v = this.dv;
     if (!ctx || !v) return;
     const now = ctx.currentTime, m = this.muted ? 0 : 1;
@@ -582,15 +583,20 @@ export class EngineAudio {
     let target = 0, crank = 0;
     if (state === "starting" && t < 0.9) { target = 170 + 40 * Math.sin(t * 40); crank = 1; }
     else if (state === "starting") { const u = t - 0.9; target = 1500 - 1300 * Math.exp(-u / 0.35) + 260 * Math.exp(-u / 1.0) * Math.sin(u * 5); }
-    else if (state === "online") target = 1500 + 8 * Math.sin(t * 1.7);
+    // exigida: a carga sobe de repente, a rotação cai um pouco ("afunda") e o governador a traz de volta;
+    // o motor "encorpa" (mais batida, escape mais grave e aberto) enquanto fornece potência
+    const load = Math.min(1.2, kw / 16.8);
+    this.dLoadS += (load - this.dLoadS) * 0.03;
+    const step = Math.max(0, load - this.dLoadS);
+    if (state === "online") target = 1500 + 8 * Math.sin(t * 1.7) - 220 * step - 25 * load;
     this.dRpm += (target - this.dRpm) * (state === "off" ? 0.03 : 0.25);
     const rpm = Math.max(0, this.dRpm), run = Math.min(1, rpm / 600);
     const fire = (rpm / 60) * 2;                  // 4 cilindros, 4 tempos: 2 explosões por volta
     v.pulse.frequency.setTargetAtTime(Math.max(2, fire), now, 0.03);
     v.knockLfo.frequency.setTargetAtTime(Math.max(2, fire), now, 0.03);
-    v.pulseLP.frequency.setTargetAtTime(160 + 0.18 * rpm, now, 0.05);
-    v.pulseG.gain.setTargetAtTime(m * near * 0.16 * run, now, 0.06);
-    v.knockG.gain.setTargetAtTime(m * near * 0.05 * run * (cockpit ? 0.4 : 1), now, 0.06);
+    v.pulseLP.frequency.setTargetAtTime(160 + 0.18 * rpm + 500 * this.dLoadS + 900 * step, now, 0.05);
+    v.pulseG.gain.setTargetAtTime(m * near * 0.16 * run * (1 + 0.8 * this.dLoadS + 1.5 * step), now, 0.06);
+    v.knockG.gain.setTargetAtTime(m * near * 0.05 * run * (cockpit ? 0.4 : 1) * (1 + 1.2 * this.dLoadS + 2 * step), now, 0.06);
     v.whine.frequency.setTargetAtTime(Math.max(20, (rpm / 1500) * 400), now, 0.05);
     v.whineG.gain.setTargetAtTime(m * near * 0.012 * run, now, 0.1);
     v.crankG.gain.setTargetAtTime(m * near * 0.07 * crank, now, 0.03);

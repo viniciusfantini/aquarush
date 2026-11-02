@@ -106,6 +106,21 @@ export class EngineSystems {
   /** tempo desde que a GPU foi pedida (s) — o som do diesel segue esta curva */
   gpuT = 0;
   get gpuOnline(): boolean { return this.gpuState === "online"; }
+  /**
+   * BARRAMENTO (24 V na turbina) com três fontes, cada uma no seu relé: a BATERIA (`batteryOn`, chave BAT), a GPU
+   * (EXT PWR, quando "online") e o GERADOR do motor (`genOn`, chave GEN; o starter-gerador da turbina). Os
+   * periféricos (starter, velas, bomba, luzes, trim, bomba de porão) estão todos nesse barramento: com a BAT
+   * desligada eles só funcionam se a GPU ou o gerador (motor girando) estiverem alimentando. `batteryV` é a tensão
+   * do BARRAMENTO (com a bateria ligada, é a dela).
+   */
+  batteryOn = true;
+  genOn = true;
+  /** potência que a GPU está fornecendo (kW reais) */
+  gpuKw = 0;
+  /** corrente do alternador/gerador no último passo (A, equivalente 12 V) */
+  get alternatorA(): number { return this.altA; }
+  /** o gerador está alimentando o barramento (passo anterior) */
+  private genLive = false;
   /** desconexões automáticas da GPU (a turbina chegou à marcha lenta) — o HUD avisa */
   gpuAutoOff = 0;
   /** corrente fornecida pela GPU no último passo (A, equivalente 12 V) */
@@ -140,6 +155,7 @@ export class EngineSystems {
   private get source(): { v: number; r: number } {
     const v = this.restV, r = this.internalR + 0.003;
     if (this.gpuOnline) return { v: GPU_V12, r: GPU_R }; // fonte de solo: segura o barramento
+    if (!this.batteryOn) return { v: this.genLive ? 13.8 : 0, r: 0.004 }; // bateria fora: só o gerador (se girando)
     if (!this.jumper) return { v, r };
     // booster: 12,9 V cheio, cai devagar com a descarga e despenca nas últimas reservas
     const c = this.jumpCharge;
@@ -151,7 +167,7 @@ export class EngineSystems {
   /** Partidas que ainda cabem no booster (aprox.: ~1 s de arranque cada, na escala de tempo do jogo). */
   get jumpStartsLeft(): number { return Math.floor(this.jumpAh / ((this.p.starterA * 1.0 * this.p.batteryTimeScale) / 3600)); }
   /** Tensão nos bornes puxando `amps` (o alternador, girando, cobre parte da corrente). */
-  supplyV(amps: number): number { const s = this.source; return s.v - Math.max(0, amps - this.altA) * s.r; }
+  supplyV(amps: number): number { const s = this.source; return Math.max(0, s.v - Math.max(0, amps - this.altA) * s.r); }
   /** A bomba do power trim tem força para girar? (abaixo de ~9 V sob carga só o relé estala) */
   get trimPumpOk(): boolean { return !this.p.hasBattery || this.supplyV(40) >= 9; }
 
@@ -205,7 +221,8 @@ export class EngineSystems {
     if (!P.hasBattery) { this.batteryV = 0; this.batterySoc = 0; }
     else {
     // o alternador carrega desde a marcha lenta (~9 A a 750 rpm) e chega ao máximo por volta de 3000 rpm
-    const charging = running && s.rpm > 550;
+    // (sem o relé do gerador — chave GEN — ou sem alternador funcionando, nada carrega)
+    const charging = running && s.rpm > 550 && this.genOn && (s.alternators ?? 1) > 0;
     let drain = (s.lightsOn ? 2.5 : 0.3) + (s.trimMotorA ?? 0) + (s.auxA ?? 0); // A (instrumentos + luzes + trim + molinete/bomba de porão)
     if (s.engine === "cranking") drain += P.starterA * (s.starterLoad ?? 1); // motor de arranque
     // corrente que a bateria aceita cai perto da carga cheia (o regulador limita): o alternador fornece só o necessário
@@ -229,9 +246,23 @@ export class EngineSystems {
     // em cruzeiro (alternador folgado) ele recarrega na tomada 12 V do barco a ~10 A (≈ 6 min de 0 a 100 %)
     // (só em cruzeiro, com folga de alternador: o carregador do booster puxa ~10 A da tomada 12 V)
     if (running && s.rpm >= 2000 && altCap - drain >= 10) this.jumpCharge = Math.min(1, this.jumpCharge + (10 * dt * P.batteryTimeScale) / 3600 / JUMP_AH);
+    this.genLive = altCap > 0;
+    if (!this.batteryOn) {
+      // BATERIA fora do barramento: ela não carrega nem descarrega; o barramento fica com a GPU ou o gerador
+      this.altA = Math.min(altCap, drain);
+      this.jumpA = 0;
+      this.gpuA = this.gpuOnline ? Math.max(0, drain - this.altA) : 0;
+      this.batteryA = 0;
+      const reg = 13.6 + 0.6 * smoothstep(750, 3000, s.rpm);
+      const vBus = this.gpuOnline ? GPU_V12 - this.gpuA * GPU_R
+        : altCap > 0 ? (altCap >= drain ? reg : Math.max(0, reg - (drain - altCap) * 0.05)) : 0;
+      this.batteryV += (vBus - this.batteryV) * (1 - Math.exp(-dt / 0.1));
+      this.gpuKw = (this.gpuA * GPU_V12) / 1000;
+    } else {
     const battNet = this.gpuOnline ? Math.min(40, 3 + 60 * (1 - this.batterySoc)) : this.jumpA > 0 ? alt : alt - drain;
     this.batteryA = battNet;
     this.batterySoc = clamp(this.batterySoc + (battNet * dt * P.batteryTimeScale) / 3600 / this.p.batteryAh, 0, 1);
+    this.gpuKw = (this.gpuA * GPU_V12) / 1000;
     const src = this.source;
     const rest = src.v;
     // queda de tensão = (resistência interna, que cresce com a descarga, + fiação) × corrente líquida
@@ -242,6 +273,7 @@ export class EngineSystems {
     if (charging && net >= 0) vTarget = reg;
     else if (charging) vTarget = Math.max(rest - (-net) * R, reg + net * 0.03); // alternador não dá conta
     this.batteryV += (vTarget - this.batteryV) * (1 - Math.exp(-dt / (s.engine === "cranking" ? 0.06 : 0.25)));
+    }
     }
 
     // ---- horímetro ----

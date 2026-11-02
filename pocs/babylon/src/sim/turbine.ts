@@ -41,14 +41,14 @@ export interface TurbineParams {
 
 export type TurbinePhase = "off" | "starter" | "lightoff" | "accel" | "running" | "spooldown";
 export type TurbineEvent = "starter" | "ignition" | "lightoff" | "starterOff" | "idle" | "hotStart" | "noLightOff" | "hungStart"
-  | "shutdown" | "flameout" | "abort" | "overtemp" | "starterOverspeed" | "wetStart";
+  | "shutdown" | "flameout" | "abort" | "overtemp" | "starterOverspeed" | "wetStart" | "earlyFuel" | "starterHot" | "starterLocked" | "seized";
 
 /** chaves do painel de partida (manual) */
-export type TurbineSwitch = "master" | "boostPump" | "ignition" | "starter" | "fuelValve";
+export type TurbineSwitch = "master" | "boostPump" | "ignition" | "starter" | "fuelValve" | "generator";
 
 export interface TurbineInput {
   lever: number;      // manete de potência 0..1 (acima da marcha lenta)
-  volts: number;      // tensão no barramento (equivalente 12 V)
+  volts: number;      // tensão no BARRAMENTO (equivalente 12 V): bateria, GPU ou gerador — 0 = barramento sem fonte
   fuel: boolean;      // há combustível no tanque
   load: number;       // carga da hélice (1 = absorve 100 % do torque a 100 % N2; ~0,03 em neutro)
   damage?: number;    // avaria do motor 0..1 (perde potência)
@@ -63,6 +63,10 @@ export class Turbine {
   fadec = true;
   // ---- chaves (no FADEC a automação as aciona) ----
   master = true; boostPump = true; ignition = false; starter = false; fuelValve = true;
+  /** relé do GERADOR (starter-gerador): ligado com a turbina rodando e o starter desligado, alimenta o barramento */
+  generator = true;
+  /** starter superaquecido: travado até esfriar (s) — limite de uso contínuo */
+  starterLockT = 0;
   // ---- estado ----
   lit = true;                 // chama acesa
   running = true;             // chegou à marcha lenta (fica até a chama apagar)
@@ -84,6 +88,12 @@ export class Turbine {
   private seq: "none" | "start" = "none"; // sequência do FADEC em andamento
   private seqT = 0;
   private overtempOn = false;
+  private starterOnT = 0;   // s de starter ligado sem parar
+  private n1Light = 12;     // N1 no acendimento (abaixo de ~12 % = pouco ar para o combustível → mais quente)
+  private earlyL = 0;       // combustível que entrou com N1 abaixo da rotação de ignição (pouco ar) — L
+  private earlyLight = 0;   // o "cedo" no momento do acendimento (fixa o pico desta partida)
+  /** turbina destruída pela sobretemperatura (travou): só a oficina conserta */
+  seizedOn = false;     // N1 no acendimento (abaixo de ~12 % = pouco ar para o combustível → mais quente)
   /** calor do combustível acumulado queimando de uma vez (°C a mais na EGT, decai em ~2,5 s) */
   private burst = 0;
   private events: TurbineEvent[] = [];
@@ -111,7 +121,8 @@ export class Turbine {
   cold(): void {
     this.n1 = 0; this.n2 = 0; this.egt = this.p.egtAmbient; this.oilPsi = 0;
     this.torque = 0; this.power = 0; this.fuelLph = 0; this.starterLoad = 0; this.pooledL = 0;
-    this.lit = this.running = false; this.starter = this.ignition = this.fuelValve = false;
+    this.lit = this.running = false; this.starter = this.ignition = this.fuelValve = this.generator = false;
+    this.starterOnT = 0; this.starterLockT = 0; this.earlyL = 0; this.earlyLight = 0; this.n1Light = 12;
     this.master = this.boostPump = this.fadec;
     this.seq = "none"; this.lightT = 0; this.sinceLight = 99; this.quietCut = false; this.overtempOn = false; this.burst = 0;
     this.events = [];
@@ -119,15 +130,19 @@ export class Turbine {
   /** Em marcha lenta (estado inicial dos testes, como os motores a pistão começam ligados). */
   idle(): void {
     this.n1 = this.p.idleN1; this.n2 = 45; this.egt = this.p.egtIdle; this.oilPsi = this.oilAt(this.p.idleN1);
-    this.master = this.boostPump = this.fuelValve = true; this.starter = this.ignition = false;
+    this.master = this.boostPump = this.fuelValve = this.generator = true; this.starter = this.ignition = false;
     this.lit = this.running = true; this.seq = "none"; this.pooledL = 0;
   }
+
+  /** Oficina: zera o desgaste e destrava a turbina. */
+  repair(): void { this.wear = 0; this.seizedOn = false; this.starterLockT = 0; this.starterOnT = 0; }
 
   // ---------------- FADEC ----------------
   /** Botão de partida do FADEC: só parada (N1 < 8 %). No manual, use as chaves. */
   start(): boolean {
     if (!this.fadec || this.starting || this.running || this.n1 > 8) return false;
-    this.master = true; this.boostPump = true; this.ignition = false; this.fuelValve = false; this.starter = true;
+    if (this.starterLockT > 0) { this.events.push("starterLocked"); return false; }
+    this.master = true; this.boostPump = true; this.ignition = false; this.fuelValve = false; this.starter = true; this.generator = false;
     this.seq = "start"; this.seqT = 0;
     this.events.push("starter");
     return true;
@@ -153,6 +168,7 @@ export class Turbine {
   setSwitch(s: TurbineSwitch, on: boolean): boolean {
     if (this.fadec) return this[s];
     if (s === "starter" && on && this.n1 > 50) { this.events.push("starterOverspeed"); return false; } // embreagem do starter não engata
+    if (s === "starter" && on && this.starterLockT > 0) { this.events.push("starterLocked"); return false; } // ainda quente
     if (s === "fuelValve" && !on && this.lit) this.quietCut = true;
     this[s] = on;
     if (s === "starter" && on) this.events.push("starter");
@@ -162,7 +178,7 @@ export class Turbine {
   /** Troca FADEC ↔ manual. Ao entrar no FADEC com a turbina parada as chaves voltam ao padrão dele. */
   setFadec(on: boolean): void {
     this.fadec = on; this.seq = "none";
-    if (on && !this.lit && !this.starter) { this.master = true; this.boostPump = true; this.ignition = false; this.fuelValve = false; }
+    if (on && !this.lit && !this.starter) { this.master = true; this.boostPump = true; this.ignition = false; this.fuelValve = false; this.generator = false; }
   }
 
   private oilAt(n1: number): number { return this.p.oilPsiMax * Math.pow(clamp((n1 - 4) / 70, 0, 1), 0.7); }
@@ -182,7 +198,7 @@ export class Turbine {
     } else {
       if (this.starter && this.n1 >= P.starterCutN1) { this.starter = false; this.ignition = false; this.events.push("starterOff"); }
       if (this.egt > P.egtStartLimit) { this.hotStarts++; this.abort("hotStart"); }
-      if (this.running) this.seq = "none";
+      if (this.running) { this.seq = "none"; this.generator = true; } // marcha lenta: o gerador entra no barramento
     }
   }
 
@@ -190,7 +206,11 @@ export class Turbine {
     const P = this.p;
     const k = (tau: number) => 1 - Math.exp(-dt / tau);
     if (this.fadec) this.fadecStep(dt);
-    const powered = this.master && inp.volts > 6;
+    if (this.seizedOn) { this.starter = false; this.fuelValve = false; }
+    // os periféricos (starter, velas, bomba) estão no BARRAMENTO: funcionam se houver fonte nele — bateria (BAT),
+    // GPU (EXT PWR) ou o gerador da própria turbina; a chave BAT sozinha não decide (ver EngineSystems)
+    const powered = inp.volts > 6;
+    this.starterLockT = Math.max(0, this.starterLockT - dt);
     const sf = this.starter && powered ? this.starterForce(inp.volts) : 0;
     const ignOn = this.ignition && powered;
     const pumpOn = this.boostPump && powered;
@@ -198,6 +218,9 @@ export class Turbine {
     const fuelFlow = this.fuelValve && inp.fuel && (pumpOn || this.n1 > 45);
     // starter: a embreagem solta acima de ~60 % (proteção de sobrevelocidade)
     if (this.starter && this.n1 > 60) { this.starter = false; this.events.push(this.fadec ? "starterOff" : "starterOverspeed"); }
+    // limite de uso do starter (~40 s contínuos): superaquece, o térmico desarma e ele fica travado ~60 s
+    this.starterOnT = this.starter && powered ? this.starterOnT + dt : Math.max(0, this.starterOnT - dt * 0.5);
+    if (this.starter && this.starterOnT > 40) { this.starter = false; this.starterLockT = 60; this.starterOnT = 0; this.events.push("starterHot"); }
     this.starterLoad = this.starter && powered ? clamp(1 - 0.5 * this.n1 / P.starterCutN1, 0.3, 1) : 0;
 
     // ---- acender / apagar ----
@@ -206,17 +229,21 @@ export class Turbine {
       if (fuelFlow && ignOn && this.n1 >= LIGHT_MIN_N1) {
         this.lightT += dt;
         if (this.lightT > 1.1) {
-          this.lit = true; this.running = false; this.sinceLight = 0; this.sfLight = sf; this.lightT = 0;
+          this.lit = true; this.running = false; this.sinceLight = 0; this.sfLight = sf; this.lightT = 0; this.n1Light = this.n1; this.earlyLight = this.earlyL;
           kick = this.pooledL; this.pooledL = 0;
           this.events.push("lightoff");
           if (kick > 0.05) this.events.push("wetStart");
+          else if (this.earlyL > 0.008 || this.n1 < this.p.lightOffN1 - 1) this.events.push("earlyFuel"); // combustível cedo: pouco ar
         }
       } else this.lightT = 0;
+      // combustível entrando com N1 abaixo da rotação de ignição: pouco ar para ele (partida quente ao acender)
+      if (fuelFlow && this.n1 < P.lightOffN1) this.earlyL += (P.fuelIdleLph * 0.6 / 3600) * dt;
       // combustível entrando sem queimar acumula na câmara (partida molhada)
       if (fuelFlow && !(ignOn && this.n1 >= LIGHT_MIN_N1)) this.pooledL += (P.fuelIdleLph * 0.6 / 3600) * dt;
     }
     // drenos + ar do compressor tiram o combustível acumulado
     this.pooledL = Math.max(0, this.pooledL - dt * (0.0004 + 0.00008 * this.n1));
+    if (!this.fuelValve && !this.lit) this.earlyL = 0; // válvula fechada: a próxima tentativa começa limpa
     if (this.lit && (!fuelFlow || this.n1 < 6)) {
       this.lit = false; this.running = false;
       if (!this.quietCut) this.events.push("flameout");
@@ -246,12 +273,13 @@ export class Turbine {
       else if (this.n1 >= SELF_SUSTAIN_N1) this.n1 += (P.idleN1 + 6 - this.n1) * k(6 / 0.75);
       else { this.n1 += (0 - this.n1) * k(14); rollback = 1 - this.n1 / SELF_SUSTAIN_N1; }
       // pico de EGT: mais combustível que ar no começo; acelerar devagar (arranque fraco ou ausente) = mais quente
-      const peak = 680 + 480 * Math.pow(1 - Math.min(1, this.sfLight), 1.3);
+      // acender com N1 baixo (combustível aberto cedo, antes de ~12 %): pouco ar para o combustível → partida quente
+      const peak = 680 + 480 * Math.pow(1 - Math.min(1, this.sfLight), 1.3) + 45 * Math.max(0, P.lightOffN1 - this.n1Light) + 4000 * this.earlyLight;
       const bump = this.n1 < 22 ? smoothstep(P.lightOffN1, 22, this.n1) : 1 - smoothstep(32, P.idleN1, this.n1);
       egtTarget = lerp(P.egtAmbient, P.egtIdle, smoothstep(0, 2.5, this.sinceLight)) + (peak - P.egtIdle) * bump + 380 * rollback;
       egtTau = 0.9;
       if (this.n1 >= P.idleN1 - 0.5) { this.running = true; this.events.push("idle"); }
-    } else if (sf > 0) {
+    } else if (sf > 0 && !this.seizedOn) {
       this.n1 += (P.starterN1Max * sf - this.n1) * k(5);  // starter girando a seco
     } else {
       this.n1 += (0 - this.n1) * k(P.spoolDownTau);       // desacelerando (spool-down)
@@ -266,6 +294,8 @@ export class Turbine {
     const over = this.egt > P.egtStartLimit;
     if (over && !this.fadec) this.wear = Math.min(1, this.wear + dt * (this.egt - P.egtStartLimit) / 600);
     if (over && !this.overtempOn && !this.fadec) this.events.push("overtemp");
+    if (this.wear >= 0.95 && !this.seizedOn) { this.seizedOn = true; this.events.push("seized"); this.cutFuel(); this.starter = false; } // turbina destruída
+    if (this.seizedOn) this.n1 = Math.max(0, this.n1 - 25 * dt);
     this.overtempOn = over;
 
     // turbina livre (N2): o fluxo de gás dá torque, maior com N2 baixo (torque de "estol" ~2× o nominal); a

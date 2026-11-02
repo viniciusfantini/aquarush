@@ -55,7 +55,7 @@
     #splash-play:hover, #splash-play:focus-visible { filter: brightness(1.1); outline: none; }
     .sp-ver { font-size: 11px; color: rgba(244,248,251,0.4); letter-spacing: 0.08em; }
     /* ---------------- painel de partida da turbina (Y) ---------------- */
-    #tpanel { position: fixed; left: 50%; top: 56px; transform: translateX(-50%); z-index: 3; width: min(560px, calc(100vw - 24px)); max-height: calc(100vh - 80px); overflow-y: auto;
+    #tpanel { position: fixed; right: 14px; bottom: 236px; z-index: 3; width: min(560px, calc(100vw - 24px)); max-height: calc(100vh - 290px); overflow-y: auto;
       display: none; padding: 12px 14px 14px; border-radius: 14px; background: rgba(8, 18, 26, 0.9); border: 1px solid rgba(255,255,255,0.18); box-shadow: 0 10px 40px rgba(0,0,0,0.5);
       backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); font-size: 13px; color: var(--fg); pointer-events: auto; user-select: none; }
     #tpanel.open { display: block; }
@@ -81,7 +81,7 @@
     .tp-big.warn { background: #ff5a4e; color: #1b0503 !important; }
     .tp-manual { display: none; }
     #tpanel.manual .tp-manual { display: block; } #tpanel.manual .tp-fadec { display: none; }
-    .tp-sw { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
+    .tp-sw { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; }
     .tp-sw button { position: relative; display: grid; gap: 3px; justify-items: center; padding: 10px 4px 8px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.2); background: rgba(255,255,255,0.05); }
     .tp-sw button i { position: absolute; top: 4px; left: 6px; font-style: normal; font-size: 10px; color: var(--dim); }
     .tp-sw button b { font-size: 11px; letter-spacing: 0.04em; }

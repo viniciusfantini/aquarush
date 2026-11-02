@@ -25,6 +25,7 @@ const SWITCHES: { id: TurbineSwitch; label: string; sub: string }[] = [
   { id: "starter", label: "STARTER", sub: "gira o gerador de gás" },
   { id: "ignition", label: "IGNIÇÃO", sub: "velas (tic-tic)" },
   { id: "fuelValve", label: "COMBUSTÍVEL", sub: "CORTE ↔ MARCHA LENTA" },
+  { id: "generator", label: "GERADOR", sub: "starter-gerador → barramento" },
 ];
 
 export class TurbinePanel {
@@ -44,7 +45,7 @@ export class TurbinePanel {
       <div class="tp-read">
         ${["N1 %", "EGT °C", "N2 %", "ÓLEO psi", "BARRAM. V", "NA CÂMARA L"].map((t, i) => `<div><span>${t}</span><b data-r="${i}">—</b></div>`).join("")}
       </div>
-      <div class="tp-ann">${["EXT PWR", "STARTER", "IGNIÇÃO", "CHAMA", "EGT ALTA"].map((k) => `<span data-a="${k}">${k}</span>`).join("")}</div>
+      <div class="tp-ann">${["BAT", "EXT PWR", "GEN", "STARTER", "IGNIÇÃO", "CHAMA", "EGT ALTA"].map((k) => `<span data-a="${k}">${k}</span>`).join("")}</div>
       <div class="tp-fadec">
         <button class="tp-big" data-f="start">PARTIDA</button><button class="tp-big warn" data-f="cut">CORTE / ABORTAR</button>
         <p>O FADEC faz a sequência: starter → ignição e combustível a 12 % N1 → acende → starter e ignição desligam a 45 % → marcha lenta 62 %. Aborta sozinho partida pendurada, sem acendimento e quente (EGT &gt; 780 °C).</p>
@@ -52,12 +53,12 @@ export class TurbinePanel {
       <div class="tp-manual">
         <div class="tp-sw">${SWITCHES.map((s, i) => `<button data-s="${s.id}"><i>${i + 1}</i><b>${s.label}</b><span>${s.sub}</span><em>OFF</em></button>`).join("")}</div>
         <ol>
-          <li>BATERIA e BOMBA ligadas (com a GPU: espere o EXT PWR acender)</li>
+          <li>BATERIA e BOMBA ligadas — o barramento precisa de uma fonte: bateria (BAT), GPU (EXT PWR) ou o gerador</li>
           <li>STARTER: o N1 sobe</li>
           <li>com o N1 em <b>12 %</b>: IGNIÇÃO e COMBUSTÍVEL (abrir antes = partida molhada)</li>
           <li>acende: a EGT sobe — vigie o limite de <b>780 °C</b> (corte o combustível se passar)</li>
           <li>com o N1 em <b>45 %</b>: desligue STARTER e IGNIÇÃO (antes = ela não se sustenta)</li>
-          <li>marcha lenta: N1 62 %, EGT ~480 °C, óleo ~70 psi</li>
+          <li>marcha lenta: N1 62 %, EGT ~480 °C, óleo ~70 psi — ligue o <b>GERADOR</b> (senão a bateria não carrega)</li>
         </ol>
       </div>
       <div class="tp-foot"><button data-g="gpu">GPU (J)</button><span data-wear></span></div>`;
@@ -87,17 +88,20 @@ export class TurbinePanel {
     const r = [tb.n1.toFixed(1), tb.egt.toFixed(0), tb.n2.toFixed(0), tb.oilPsi.toFixed(0), t.batteryV.toFixed(1), tb.pooledL.toFixed(2)];
     this.el.querySelectorAll<HTMLElement>("[data-r]").forEach((e, i) => { e.textContent = r[i]; e.classList.toggle("hot", (i === 1 && tb.egt > 720) || (i === 5 && tb.pooledL > 0.03)); });
     const ann: Record<string, string> = {
+      BAT: t.busBattery ? "g" : "", GEN: t.busGen ? "g" : tb.generator && tb.phase === "running" ? "a" : "",
       "EXT PWR": t.gpuState === "online" ? "g" : t.gpuState === "starting" && blink ? "a" : "",
       STARTER: tb.starter ? "a" : "", "IGNIÇÃO": tb.ignition ? "a" : "", CHAMA: tb.lit ? "g" : "", "EGT ALTA": tb.egt > 720 ? "r" : "",
     };
     for (const s of this.el.querySelectorAll<HTMLElement>("[data-a]")) s.className = ann[s.dataset.a ?? ""] ?? "";
-    const sw: Record<TurbineSwitch, boolean> = { master: tb.master, boostPump: tb.boostPump, starter: tb.starter, ignition: tb.ignition, fuelValve: tb.fuelValve };
+    const sw: Record<TurbineSwitch, boolean> = { master: tb.master, boostPump: tb.boostPump, starter: tb.starter, ignition: tb.ignition, fuelValve: tb.fuelValve, generator: tb.generator };
     for (const b of this.el.querySelectorAll<HTMLButtonElement>("[data-s]")) {
       const on = sw[b.dataset.s as TurbineSwitch];
       b.classList.toggle("on", on);
       b.querySelector("em")!.textContent = b.dataset.s === "fuelValve" ? (on ? "LENTA" : "CORTE") : on ? "ON" : "OFF";
     }
     this.q<HTMLButtonElement>("[data-g]").textContent = t.gpu ? (t.gpuState === "online" ? "GPU ON — desconectar (J)" : "GPU partindo… (J)") : "conectar GPU (J, só na doca)";
-    this.q<HTMLElement>("[data-wear]").textContent = tb.wear > 0.005 ? `desgaste da turbina ${(tb.wear * 100).toFixed(0)} %` : "";
+    this.q<HTMLElement>("[data-wear]").textContent = tb.seized ? "TURBINA DESTRUÍDA (sobretemperatura) — R leva à oficina"
+      : tb.starterLock > 0 ? `starter superaquecido: aguarde ${tb.starterLock.toFixed(0)} s`
+      : tb.wear > 0.005 ? `desgaste da turbina ${(tb.wear * 100).toFixed(0)} %` : "";
   }
 }

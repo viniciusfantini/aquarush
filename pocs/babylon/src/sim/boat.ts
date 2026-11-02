@@ -87,6 +87,9 @@ export interface BoatTelemetry {
   gpu: boolean;          // GPU da doca (fonte de solo de 28 V) conectada — só a lancha de turbina
   gpuState: "off" | "starting" | "online"; // diesel da GPU partindo/estabilizando ou energia chaveada
   gpuT: number;          // s desde que a GPU foi pedida (curva do som do diesel)
+  gpuKw: number;         // potência que a GPU está fornecendo (kW)
+  busBattery: boolean;   // relé da bateria fechado (chave BAT)
+  busGen: boolean;       // o gerador está alimentando o barramento
   batteryA: number;      // amperímetro: + carregando, − descarregando (A)
   bilgeL: number;        // água no porão (L)
   bilgeInflowLps: number; // entrada de água (L/s): furo no casco + água por cima da borda
@@ -122,7 +125,8 @@ export interface BoatTelemetry {
   /** turbina (lancha de turbina): N1/N2 %, EGT °C, torque %, óleo psi, fase da partida */
   turbine: { n1: number; n2: number; egt: number; torque: number; oilPsi: number; fuelLph: number; phase: TurbinePhase; starter: boolean; ignition: boolean; lit: boolean; egtWarn: boolean; hotStarts: number;
     /** modo e chaves do painel de partida; combustível acumulado sem queimar (L); desgaste por sobretemperatura */
-    fadec: boolean; master: boolean; boostPump: boolean; fuelValve: boolean; pooledL: number; wear: number } | null;
+    fadec: boolean; master: boolean; boostPump: boolean; fuelValve: boolean; pooledL: number; wear: number;
+    generator: boolean; starterLock: number; seized: boolean } | null;
   /** por motor/banco (AR-9: cada V8 tem arrefecimento e banco de bateria próprios) */
   coolants: number[];
   batteryVs: number[];
@@ -345,7 +349,7 @@ export class Speedboat {
       gear: "N", pitchDeg: 0, rollDeg: 0, wetFraction: 0, planing: false, thrustN: 0, ventilation: 1, cavitation: 0, propImmersion: 1, revLimiter: false, propSlip: 0, propRpm: 0, engine: "running", fuelL: 0, fuelFrac: 1, coolantC: 45, batteryV: 12.6, engineHours: 0, overheatWarn: false, protectMode: false, lowFuel: false, chargeWarn: false, stall: "", trimMotorA: 0, trimRelay: false, jumper: false, jumpCharge: 1, batteryA: 0, bilgeL: 0, bilgeInflowLps: 0, bilgePump: false, bilgeFlowLps: 0, bilgeAlarm: false, bilgeJetPos: v3(), bilgeJetVel: v3(), freeboard: 1, swamped: false, sunk: false, airPocketL: 0,
       anchorOut: 0, anchorState: "recolhida", anchorDepth: 0, anchorScope: 0, anchorTension: 0, anchorRelay: false, windlassA: 0, apparentWind: 0, neutralRev: false, fuelLph: 0, buzzer: false, starterRpm: 0, startFail: "", batterySoc: 0.92, trimPin: 0, pullStart: !params.electricStart,
       distanceM: 0, collisions: 0, draftHull: 0, draftMotor: 0, capsized: false, swimmers: 0, hullDamage: 0, engineDamage: 0, damageEvent: "", damageCount: 0, lastImpact: 0, depth: 0, submergedPoints: params.buoyancyPoints.map(() => false),
-      rpms: [params.idleRpm], gears: ["N"], throttles: [0], thrusts: [0], engines: ["running"], propRpms: [0], coolants: [45], batteryVs: [12.6], batterySocs: [0.92], batteryAs: [0], turbine: null, nominalV: 12, gpu: false, gpuState: "off", gpuT: 0,
+      rpms: [params.idleRpm], gears: ["N"], throttles: [0], thrusts: [0], engines: ["running"], propRpms: [0], coolants: [45], batteryVs: [12.6], batterySocs: [0.92], batteryAs: [0], turbine: null, nominalV: 12, gpu: false, gpuState: "off", gpuT: 0, gpuKw: 0, busBattery: true, busGen: false,
     };
   }
 
@@ -1102,7 +1106,7 @@ export class Speedboat {
   }
 
   /** Oficina: zera as avarias (usado no reset do píer/rampa). */
-  repair(): void { this.hullDamage = 0; this.engineDamage = 0; this.hullEpisode = 0; this.engineHitting = false; }
+  repair(): void { this.hullDamage = 0; this.engineDamage = 0; this.hullEpisode = 0; this.engineHitting = false; for (const x of this.units) x.turb?.repair(); }
 
   /**
    * Barco preso na carretinha (pose imposta pelo reboque): o MOTOR continua funcionando — partida/desliga,
@@ -1363,12 +1367,14 @@ export class Speedboat {
     t.nominalV = 12 * k;
     t.coolants = B.map((b) => b.coolantC); t.batteryVs = B.map((b) => b.batteryV * k); t.batterySocs = B.map((b) => b.batterySoc); t.batteryAs = B.map((b) => b.batteryA / k);
     t.coolantC = Math.max(...t.coolants); t.batteryV = sys.batteryV * k; t.batterySoc = sys.batterySoc; t.batteryA = sys.batteryA / k;
-    t.engineHours = sys.engineHours; t.gpu = sys.gpu; t.gpuState = sys.gpuState; t.gpuT = sys.gpuT;
+    t.engineHours = sys.engineHours; t.gpu = sys.gpu; t.gpuState = sys.gpuState; t.gpuT = sys.gpuT; t.gpuKw = sys.gpuKw;
+    t.busBattery = sys.batteryOn; t.busGen = sys.genOn && sys.alternatorA > 0;
     t.overheatWarn = B.some((b) => b.overheatWarn); t.protectMode = B.some((b) => b.protect); t.chargeWarn = B.some((b) => b.chargeWarn);
     const tb = this.units[0].turb;
     t.turbine = tb ? { n1: tb.n1, n2: tb.n2, egt: tb.egt, torque: tb.torque, oilPsi: tb.oilPsi, fuelLph: tb.fuelLph, phase: tb.phase,
       starter: tb.starter, ignition: tb.ignition, lit: tb.lit, egtWarn: tb.egtWarn, hotStarts: tb.hotStarts,
-      fadec: tb.fadec, master: tb.master, boostPump: tb.boostPump, fuelValve: tb.fuelValve, pooledL: tb.pooledL, wear: tb.wear } : null;
+      fadec: tb.fadec, master: tb.master, boostPump: tb.boostPump, fuelValve: tb.fuelValve, pooledL: tb.pooledL, wear: tb.wear,
+      generator: tb.generator, starterLock: tb.starterLockT, seized: tb.seizedOn } : null;
   }
 
   /** Estado agregado dos motores para os sistemas (bateria, alternadores, arranques, combustível, temperatura). */
@@ -1399,10 +1405,14 @@ export class Speedboat {
     if (tb) {
       // turbina: o eixo de saída gira com a turbina livre (N2); o estado do "motor" segue a fase da turbina
       if (this.u.engine === "off" && tb.burning) tb.cutFuel(); // parada por fora (sem combustível, virou, afundou)
+      // chaves do painel → relés do barramento: BAT e GEN (o starter-gerador só gera com o starter desligado)
+      this.usys.batteryOn = tb.master;
+      this.usys.genOn = tb.generator && !tb.starter;
       tb.update(dt, { lever: this.throttleActual, volts: this.usys.batteryV, fuel: this.usys.fuelL > 0.005 && !this.usys.starving,
         load: this.gear === "N" || tb.n1 < 1 ? 0.12 : this.u.propLoad, damage: this.engineDamage });
       this.u.engine = tb.engineState;
       this.revLimiting = false;
+      if (tb.wear > this.engineDamage) this.engineDamage = tb.wear; // sobretemperatura = avaria do motor
       return (tb.n2 / 100) * tb.p.n2Rpm;
     }
     const thr = this.throttleActual;
