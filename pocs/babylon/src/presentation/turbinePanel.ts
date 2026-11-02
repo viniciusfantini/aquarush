@@ -72,7 +72,7 @@ export class TurbinePanel {
           // a manete de condição do combustível é um seletor rotativo (como os registros), não uma chave elétrica
           ? rotary("fv", "COMBUSTÍVEL", "condição", [{ v: "cut", l: "CORTE" }, { v: "idle", l: "LENTA" }], { num: i + 1, cls: "fuel" })
           : toggle({ attr: "s", val: s.id, label: s.label, sub: s.sub, on: s.on, off: s.off, variant: s.variant, num: i + 1 })).join("")}
-          <div class="tp-test" title="segure: testa todas as luzes e o alarme (precisa de energia no barramento)"><button class="tb-test" data-test>TEST</button><b>TESTE</b></div>
+          <div class="tp-test" title="segure: testa todas as luzes e o alarme (precisa de energia no barramento)"><button class="tb-test" data-test>T</button><b>TESTE</b></div>
         </div>
         <div class="sw-plate tp-sysp">${SCR}
           ${cell(rotary("bsel", "BATERIAS", "2 × 12 V em série", [{ v: "off", l: "OFF" }, { v: "bus", l: "BUS" }, { v: "both", l: "BOTH" }]), "bat")}

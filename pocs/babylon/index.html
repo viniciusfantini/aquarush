@@ -356,13 +356,14 @@
     #tpanel .rot .dial { height: 84px; }
     /* grade horizontal (v0.62.3): [mostradores | anunciadores] / [botoeira de partida | manetes] / [sistemas + GPU | manetes] / [avisos] */
     /* v0.62.4: equilíbrio — [mostradores | anunciadores] / [botoeira de partida] / [sistemas | manetes] / [avisos] */
-    #tpanel { width: min(750px, calc(100vw - 24px)); overflow-x: hidden; }
-    /* botão TESTE das luzes e alarmes (pequeno, redondo, ao lado do GOV) */
-    .tp-test { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; margin-left: 2px; }
-    .tp-test b { font-size: 9.5px; letter-spacing: 0.08em; color: #e9eef2; font-weight: 800; }
-    .tb-test { width: 30px; height: 30px; border-radius: 50%; border: none; padding: 0; font-size: 7px !important; font-weight: 900; letter-spacing: 0.04em; color: #1b1203 !important;
-      background: radial-gradient(circle at 40% 35%, #fff3c4, #ffc23a 55%, #a87400); box-shadow: 0 0 0 3px #1b1f24, 0 0 0 4px rgba(255,255,255,0.15), 0 2px 4px rgba(0,0,0,0.6); }
-    .tb-test.down { transform: translateY(1px) scale(0.94); filter: brightness(1.2); }
+    #tpanel { width: min(744px, calc(100vw - 24px)); overflow-x: hidden; } /* 8 relógios de 88 px numa linha */
+    /* botão TESTE das luzes e alarmes: bem pequeno, encostado no canto direito da botoeira (não alarga o painel) */
+    #tpanel .tp-sw { padding-right: 30px; }
+    .tp-test { position: absolute; right: 7px; top: 50%; transform: translateY(-50%); display: flex; flex-direction: column; align-items: center; gap: 3px; }
+    .tp-test b { font-size: 6.5px; letter-spacing: 0.06em; color: #e9eef2; font-weight: 800; }
+    .tb-test { width: 18px; height: 18px; border-radius: 50%; border: none; padding: 0; font-size: 5px !important; font-weight: 900; color: #1b1203 !important;
+      background: radial-gradient(circle at 40% 35%, #fff3c4, #ffc23a 55%, #a87400); box-shadow: 0 0 0 2px #1b1f24, 0 0 0 3px rgba(255,255,255,0.15), 0 1px 3px rgba(0,0,0,0.6); }
+    .tb-test.down { transform: translateY(1px) scale(0.92); filter: brightness(1.2); }
     #tpanel .tp-gauges .gauge.small { width: 88px; height: 88px; }
     #tpanel .tp-sysp .rot { width: 108px; } #tpanel .tp-sysp .rot .dial { width: 104px; }
     .tp-grid { display: flex; flex-wrap: wrap; gap: 6px 8px; align-items: stretch; }
