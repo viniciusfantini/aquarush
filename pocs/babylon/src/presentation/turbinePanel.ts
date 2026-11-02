@@ -12,6 +12,7 @@
 import type { BoatTelemetry } from "../sim/boat.ts";
 import type { TurbineSwitch } from "../sim/turbine.ts";
 import { RoundGauge } from "./hud.ts";
+import { makeDraggable } from "./dragPanel.ts";
 
 export type PanelSwitch = TurbineSwitch | "extPwr";
 
@@ -21,6 +22,8 @@ export interface TurbinePanelActions {
   fadecStart(): void;   // = tecla P no FADEC
   fadecCut(): void;     // corte / abortar
   gpu(): void;          // = tecla J (cabo da GPU: conectar/desconectar)
+  setFuelTank(open: boolean): void;              // registro do tanque (sistemas do barco)
+  setBilge(mode: "off" | "auto" | "on"): void;   // bomba de porão
   close(): void;
 }
 
@@ -66,6 +69,9 @@ export class TurbinePanel {
           <li>marcha lenta (N1 62 %, EGT ~480 °C, óleo ~70 psi): ligue o <b>GERADOR</b> e abra o <b>EXT PWR</b></li>
         </ol>
       </div>
+      <div class="tp-sys"><span>SISTEMAS</span>
+        <b>REGISTRO DO TANQUE</b><div class="sp-seg"><button data-tank="closed">FECHADO</button><button data-tank="open">ABERTO</button></div>
+        <b>BOMBA DE PORÃO</b><div class="sp-seg"><button data-bilge="off">OFF</button><button data-bilge="auto">AUTO</button><button data-bilge="on">ON</button></div></div>
       <div class="tp-foot"><button data-g="gpu">GPU (J)</button><span data-note></span><span data-wear></span></div>`;
     el.addEventListener("click", (e) => {
       const b = (e.target as HTMLElement).closest<HTMLButtonElement>("button");
@@ -75,11 +81,13 @@ export class TurbinePanel {
       else if (b.dataset.f === "start") this.act.fadecStart();
       else if (b.dataset.f === "cut") this.act.fadecCut();
       else if (b.dataset.g) this.act.gpu();
+      else if (b.dataset.tank) this.act.setFuelTank(b.dataset.tank === "open");
+      else if (b.dataset.bilge) this.act.setBilge(b.dataset.bilge as "off" | "auto" | "on");
       else if (b.dataset.s) this.act.setSwitch(b.dataset.s as PanelSwitch, !b.classList.contains("on"));
     });
     document.body.appendChild(el);
     this.el = el;
-    this.makeDraggable();
+    makeDraggable(el, this.q<HTMLElement>(".tp-head"), "aquarush.tpanelPos");
     // instrumentos analógicos com faixas (os mesmos limites da simulação: idle 62 %, partida 780 °C, operação 700 °C)
     const box = this.q<HTMLElement>(".tp-gauges");
     this.g = {
@@ -93,38 +101,6 @@ export class TurbinePanel {
       gpu: new RoundGauge(box, { title: "GPU A", min: 0, max: 600, labels: [0, 300, 600], minor: 50, bands: [{ from: 0, to: 500, c: "g" }, { from: 500, to: 600, c: "r" }] }),
     };
     this.setOpen(false);
-  }
-
-  /** Arrasta pela barra de título; a posição fica salva (por navegador) e sempre dentro da tela. */
-  private makeDraggable(): void {
-    const el = this.el, head = this.q<HTMLElement>(".tp-head");
-    const place = (x: number, y: number) => {
-      const w = el.offsetWidth || 560, h = el.offsetHeight || 300;
-      const nx = Math.min(Math.max(4, x), innerWidth - w - 4), ny = Math.min(Math.max(4, y), innerHeight - Math.min(h, 120));
-      el.style.left = `${nx}px`; el.style.top = `${ny}px`; el.style.right = "auto"; el.style.bottom = "auto";
-      return { x: nx, y: ny };
-    };
-    try {
-      const saved = JSON.parse(localStorage.getItem("aquarush.tpanelPos") ?? "null") as { x: number; y: number } | null;
-      if (saved) requestAnimationFrame(() => place(saved.x, saved.y));
-    } catch { /* sem storage */ }
-    let drag: { dx: number; dy: number } | null = null;
-    head.addEventListener("pointerdown", (e) => {
-      if ((e.target as HTMLElement).closest("button")) return; // os botões do cabeçalho continuam clicáveis
-      const r = el.getBoundingClientRect();
-      drag = { dx: e.clientX - r.left, dy: e.clientY - r.top };
-      head.setPointerCapture(e.pointerId); el.classList.add("dragging");
-      e.preventDefault();
-    });
-    head.addEventListener("pointermove", (e) => { if (drag) place(e.clientX - drag.dx, e.clientY - drag.dy); });
-    const end = () => {
-      if (!drag) return;
-      drag = null; el.classList.remove("dragging");
-      const r = el.getBoundingClientRect();
-      try { localStorage.setItem("aquarush.tpanelPos", JSON.stringify({ x: r.left, y: r.top })); } catch { /* sem storage */ }
-    };
-    head.addEventListener("pointerup", end); head.addEventListener("pointercancel", end);
-    addEventListener("resize", () => { const r = el.getBoundingClientRect(); if (el.style.left) place(r.left, r.top); });
   }
 
   get isOpen(): boolean { return this.open; }
@@ -160,6 +136,8 @@ export class TurbinePanel {
       b.classList.toggle("on", pos);
       b.querySelector("em")!.textContent = id === "fuelValve" ? (pos ? "LENTA" : "CORTE") : pos ? "ON" : "OFF";
     }
+    for (const b of this.el.querySelectorAll<HTMLButtonElement>("[data-tank]")) b.classList.toggle("on", (b.dataset.tank === "open") === t.fuelValveOpen);
+    for (const b of this.el.querySelectorAll<HTMLButtonElement>("[data-bilge]")) b.classList.toggle("on", b.dataset.bilge === t.bilgeMode);
     this.q<HTMLButtonElement>("[data-g]").textContent = t.gpu ? (t.gpuState === "online" ? "cabo da GPU: recolher (J)" : "GPU partindo… (J)") : "conectar o cabo da GPU (J, só na doca)";
     this.q<HTMLElement>("[data-note]").textContent = tb.pooledL > 0.01 ? `combustível na câmara: ${tb.pooledL.toFixed(2)} L` : "";
     this.q<HTMLElement>("[data-wear]").textContent = tb.seized ? "TURBINA DESTRUÍDA (sobretemperatura) — R leva à oficina"

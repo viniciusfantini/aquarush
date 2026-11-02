@@ -73,7 +73,7 @@ export interface BoatTelemetry {
   protectMode: boolean;  // superaquecido: rotação limitada
   lowFuel: boolean;
   chargeWarn: boolean;
-  stall: "" | "fuel" | "overheat" | "capsize" | "broken" | "sunk"; // último motivo de o motor ter morrido sozinho
+  stall: "" | "fuel" | "overheat" | "capsize" | "broken" | "sunk" | "flooded"; // último motivo de o motor ter morrido sozinho (flooded = afogado pelo afogador)
   buzzer: boolean;       // alarme do motor apitando (autoteste da chave)
   starterRpm: number;    // rotação do motor de arranque (0 = só o "clique" do solenoide)
   startFail: "" | "weak" | "dead" | "pull" | "fuel"; // última partida que não pegou (bateria fraca / sem força / corda / sem combustível)
@@ -94,6 +94,8 @@ export interface BoatTelemetry {
   extPwrClosed: boolean; // relé EXT PWR fechado (mesmo com a GPU ainda partindo)
   gpuA: number;          // corrente que a GPU entrega ao barramento (A reais) — o amperímetro do HUD é só o da bateria
   coolingLps: number;    // água de resfriamento do óleo saindo pelo espelho (turbina; bomba mecânica ∝ N1) — L/s
+  /** painel de sistemas: registro do combustível, linha (0..1), bomba de porão, chave de baterias, afogador */
+  fuelValveOpen: boolean; fuelLineFrac: number; bilgeMode: "auto" | "on" | "off"; batterySel: "off" | "ind" | "bb" | "be" | "both"; choke: boolean;
   batteryA: number;      // amperímetro: + carregando, − descarregando (A)
   bilgeL: number;        // água no porão (L)
   bilgeInflowLps: number; // entrada de água (L/s): furo no casco + água por cima da borda
@@ -263,6 +265,17 @@ export class Speedboat {
   /** água no porão (L) — pesa no barco (carga em params.bilge.pos) */
   bilgeL = 0;
   private bilgeAuto = false;
+  /** chave da bomba de porão: AUTO (boia), ON (manual, mesmo seca) ou OFF */
+  bilgeMode: "auto" | "on" | "off" = "auto";
+  /**
+   * Chave geral de baterias. Um banco: "off" ou "ind" (ligada). Dois bancos (AR-9): "ind" (cada motor no seu banco,
+   * a casa no de bombordo — o normal), "bb" ou "be" (um banco alimenta os dois motores e a casa; o outro fica
+   * isolado), "both" (os dois em paralelo) e "off".
+   */
+  batterySel: "off" | "ind" | "bb" | "be" | "both" = "ind";
+  /** afogador (motor carburado) puxado */
+  choke = false;
+  private chokeRichT = 0;
   private bilgePumpA = 0;
   /** entrada pelo furo (L/s, negativo = escoando) e por cima da borda (L/s) no último passo */
   bilgeHole = 0; bilgeOver = 0; bilgeScoop = 0;
@@ -288,6 +301,12 @@ export class Speedboat {
   get banks(): EngineSystems[] { return this.systems2 ? [this.systems, this.systems2] : [this.systems]; }
   /** sistemas do motor da unidade corrente (dentro de `eachUnit`) */
   private get usys(): EngineSystems { return this.u.index > 0 && this.systems2 ? this.systems2 : this.systems; }
+  /** banco que ALIMENTA eletricamente o motor corrente (a chave de baterias pode pôr os dois num banco só) */
+  private get uelec(): EngineSystems { return this.bankFor(this.u.index); }
+  private bankFor(i: number): EngineSystems {
+    if (!this.systems2) return this.systems;
+    return this.batterySel === "bb" ? this.systems : this.batterySel === "be" ? this.systems2 : i > 0 ? this.systems2 : this.systems;
+  }
   /** trim manual (bote): furo atual do pino, ângulo atual (anima até o furo) e tilt pedido */
   trimPin = 1;
   private manualAngle = 0;
@@ -361,7 +380,7 @@ export class Speedboat {
       gear: "N", pitchDeg: 0, rollDeg: 0, wetFraction: 0, planing: false, thrustN: 0, ventilation: 1, cavitation: 0, propImmersion: 1, revLimiter: false, propSlip: 0, propRpm: 0, engine: "running", fuelL: 0, fuelFrac: 1, coolantC: 45, batteryV: 12.6, engineHours: 0, overheatWarn: false, protectMode: false, lowFuel: false, chargeWarn: false, stall: "", trimMotorA: 0, trimRelay: false, jumper: false, jumpCharge: 1, batteryA: 0, bilgeL: 0, bilgeInflowLps: 0, bilgePump: false, bilgeFlowLps: 0, bilgeAlarm: false, bilgeJetPos: v3(), bilgeJetVel: v3(), freeboard: 1, swamped: false, sunk: false, airPocketL: 0,
       anchorOut: 0, anchorState: "recolhida", anchorDepth: 0, anchorScope: 0, anchorTension: 0, anchorRelay: false, windlassA: 0, apparentWind: 0, neutralRev: false, fuelLph: 0, buzzer: false, starterRpm: 0, startFail: "", batterySoc: 0.92, trimPin: 0, pullStart: !params.electricStart,
       distanceM: 0, collisions: 0, draftHull: 0, draftMotor: 0, capsized: false, swimmers: 0, hullDamage: 0, engineDamage: 0, damageEvent: "", damageCount: 0, lastImpact: 0, depth: 0, submergedPoints: params.buoyancyPoints.map(() => false),
-      rpms: [params.idleRpm], gears: ["N"], throttles: [0], thrusts: [0], engines: ["running"], propRpms: [0], coolants: [45], batteryVs: [12.6], batterySocs: [0.92], batteryAs: [0], turbine: null, nominalV: 12, gpu: false, gpuState: "off", gpuT: 0, gpuKw: 0, busBattery: true, busGen: false, extPwr: false, extPwrClosed: false, gpuA: 0, coolingLps: 0,
+      rpms: [params.idleRpm], gears: ["N"], throttles: [0], thrusts: [0], engines: ["running"], propRpms: [0], coolants: [45], batteryVs: [12.6], batterySocs: [0.92], batteryAs: [0], turbine: null, nominalV: 12, gpu: false, gpuState: "off", gpuT: 0, gpuKw: 0, busBattery: true, busGen: false, extPwr: false, extPwrClosed: false, gpuA: 0, coolingLps: 0, fuelValveOpen: true, fuelLineFrac: 1, bilgeMode: "auto", batterySel: "ind", choke: false,
     };
   }
 
@@ -882,7 +901,7 @@ export class Speedboat {
       if (this.bilgeL > 6) this.bilgeAuto = true;
       else if (this.bilgeL < 0.5) this.bilgeAuto = false;
     }
-    const wantPump = B.pumpLph > 0 && (this.bilgeAuto || input.bilgePump) && !this.capsized && !this.sunk;
+    const wantPump = B.pumpLph > 0 && (this.bilgeMode === "on" || (this.bilgeMode === "auto" && (this.bilgeAuto || input.bilgePump))) && !this.capsized && !this.sunk;
     const powered = wantPump && this.systems.supplyV(B.pumpA) >= 9;
     let flowLps = 0;
     const ow = this.toWorld(B.outlet);
@@ -1329,7 +1348,10 @@ export class Speedboat {
     if (!this.params.electricStart) {
       // partida na corda: uma puxada (~0,5 s). Motor quente pega quase sempre; frio pode precisar de 2–3
       this.engine = "cranking"; this.crankTimer = 0;
-      this.pullCatch = this.systems.fuelL > 0.005 && Math.random() < (this.systems.coolantC > 45 ? 0.85 : 0.5);
+      // carburado: frio pega mal sem o afogador (e bem com ele); quente, o afogador puxado deixa a mistura rica
+      const cold = this.systems.coolantC < 40;
+      const pCatch = this.params.carbureted ? (cold ? (this.choke ? 0.8 : 0.15) : (this.choke ? 0.3 : 0.85)) : (this.systems.coolantC > 45 ? 0.85 : 0.5);
+      this.pullCatch = this.systems.fuelFeed && Math.random() < pCatch;
       return "pulling";
     }
     // chave em ON: autoteste com o apito característico; o arranque gira quando ele termina
@@ -1353,24 +1375,42 @@ export class Speedboat {
     const t = this.telemetry;
     if (!this.systems2) {
       const sys = this.systems;
+      if (!this.units[0].turb) sys.batteryOn = this.batterySel !== "off";
       sys.update(dt, { ...this.systemsEngineState(), ...(h.load !== undefined ? { load: h.load } : {}), fuelLph: t.fuelLph, intakeSubmerged: h.intakeSubmerged, lightsOn: h.lightsOn, trimMotorA: h.trimMotorA, auxA: h.auxA });
       if (this.units[0].turb) sys.coolantC = this.units[0].turb.oilC; // turbina: a "temperatura do motor" é a do óleo
       if (sys.stallReason && this.engine === "running") { this.engine = "off"; t.stall = sys.stallReason; }
       return;
     }
+    // chave de baterias: "ind" = cada motor no seu banco (casa no 1); "bb"/"be" = um banco alimenta os dois motores e a
+    // casa (o outro fica isolado, mas a temperatura e o combustível de cada motor continuam no seu banco); "both" =
+    // paralelo (as cargas se igualam); "off" = nenhum banco no barramento (só os alternadores, se girando)
+    const sel = this.batterySel;
+    const elec = sel === "bb" ? 0 : sel === "be" ? 1 : -1; // banco que alimenta tudo (−1 = cada um o seu)
+    const starterOf = (x: EngineUnit) => (x.engine === "cranking" && !this.waitsToCrank(x) ? 1 : 0);
+    this.systems2!.fuelValveOpen = this.systems.fuelValveOpen; // registro do tanque comum
     this.banks.forEach((sys, i) => {
-      const x = this.units[i], house = i === 0;
-      if (!house) sys.fuelL = this.systems.fuelL; // tanque comum
+      const x = this.units[i], house = elec >= 0 ? i === elec : i === 0;
+      sys.batteryOn = sel !== "off" && (elec < 0 || i === elec);
+      if (i > 0) sys.fuelL = this.systems.fuelL; // tanque comum
+      const all = elec >= 0 && i === elec, iso = elec >= 0 && i !== elec;
       sys.update(dt, {
         engine: x.engine, rpm: x.engine === "running" ? x.rpm : 0, load: h.load ?? x.throttleActual,
-        starterLoad: x.engine === "cranking" && !this.waitsToCrank(x) ? 1 : 0, alternators: 1,
+        // o banco que alimenta tudo leva os dois arranques e os dois alternadores; o isolado, nenhum
+        starterLoad: all ? this.units.reduce((acc, u) => acc + starterOf(u), 0) : iso ? 0 : starterOf(x),
+        alternators: all ? this.units.filter((u) => u.engine === "running").length : iso ? 0 : 1,
         fuelLph: x.fuelLph, intakeSubmerged: h.load === undefined ? x.intakeSubmerged : h.intakeSubmerged, // rebocado (load 0): a entrada comum
         lightsOn: house && h.lightsOn, trimMotorA: house ? h.trimMotorA : 0, auxA: house ? h.auxA : 0,
       });
-      if (!house) this.systems.fuelL = sys.fuelL;
+      if (i > 0) this.systems.fuelL = sys.fuelL;
       if (x.turb) sys.coolantC = x.turb.oilC; // turbina: a "temperatura do motor" é a do óleo
       if (sys.stallReason && x.engine === "running") { x.engine = "off"; t.stall = sys.stallReason; }
     });
+    if (sel === "both") {
+      // em paralelo os dois bancos ficam na mesma tensão e a carga se iguala (ponderada pela capacidade)
+      const [a, b] = this.banks, ca = a.p.batteryAh, cb = b.p.batteryAh;
+      const soc = (a.batterySoc * ca + b.batterySoc * cb) / (ca + cb), v = (a.batteryV + b.batteryV) / 2;
+      a.batterySoc = b.batterySoc = soc; a.batteryV = b.batteryV = v;
+    }
   }
 
   /** Telemetria dos sistemas: por banco e o resumo (alarme se QUALQUER motor esquentar / banco descarregar). */
@@ -1380,8 +1420,9 @@ export class Speedboat {
     // (o modelo elétrico é "equivalente 12 V"; num sistema de 24 V a tensão real é ×2 e a corrente ÷2)
     const k = (sys.p.nominalV ?? 12) / 12;
     t.nominalV = 12 * k;
-    t.coolants = B.map((b) => b.coolantC); t.batteryVs = B.map((b) => b.batteryV * k); t.batterySocs = B.map((b) => b.batterySoc); t.batteryAs = B.map((b) => b.batteryA / k);
+    t.coolants = B.map((b) => b.coolantC); t.batteryVs = B.map((b) => (b.batteryOn || !this.systems2 ? b.batteryV : b.restV) * k); /* dois bancos: o isolado mostra a tensão da PRÓPRIA bateria (nos bornes) */ t.batterySocs = B.map((b) => b.batterySoc); t.batteryAs = B.map((b) => b.batteryA / k);
     t.coolantC = Math.max(...t.coolants); t.batteryV = sys.batteryV * k; t.batterySoc = sys.batterySoc; t.batteryA = sys.batteryA / k;
+    t.fuelValveOpen = sys.fuelValveOpen; t.fuelLineFrac = Math.min(...B.map((b) => b.lineFrac)); t.bilgeMode = this.bilgeMode; t.batterySel = this.batterySel; t.choke = this.choke;
     t.engineHours = sys.engineHours; t.gpu = sys.gpu; t.gpuState = sys.gpuState; t.gpuT = sys.gpuT; t.gpuKw = sys.gpuKw;
     t.busBattery = sys.batteryOn; t.busGen = sys.genOn && sys.alternatorA > 0; t.extPwr = sys.extOnline; t.extPwrClosed = sys.extPwr;
     t.gpuA = sys.gpuA / ((sys.p.nominalV ?? 12) / 12);
@@ -1430,7 +1471,7 @@ export class Speedboat {
       this.usys.autoExt = tb.fadec; // FADEC fecha/abre o EXT PWR sozinho; no manual é a chave do painel
       // água do trocador de calor do óleo: bomba mecânica (∝ N1), só com a tomada d'água submersa
       const coolingFrac = P.cooling ? (this.u.intakeSubmerged ? clamp(tb.n1 / 100, 0, 1.05) : 0) : 1;
-      tb.update(dt, { lever: this.throttleActual, volts: this.usys.batteryV, fuel: this.usys.fuelL > 0.005 && !this.usys.starving,
+      tb.update(dt, { lever: this.throttleActual, volts: this.uelec.batteryV, fuel: this.usys.fuelFeed && !this.usys.starving,
         load: this.gear === "N" || tb.n1 < 1 ? 0.12 : this.u.propLoad, damage: this.engineDamage, coolingFrac });
       this.u.engine = tb.engineState;
       this.revLimiting = false;
@@ -1450,6 +1491,11 @@ export class Speedboat {
     if (this.usys.protect) target = Math.min(target, this.usys.p.protectRpm);
     if (this.gear === "N") target = Math.min(target, NEUTRAL_REV_LIMIT); // central limita o giro em neutro
     if (this.usys.starving) target = Math.min(target, P.idleRpm * 0.8);
+    // afogador: frio, acelera a lenta; quente, a mistura fica rica — gira baixo, "engasga" e afoga em ~15 s
+    if (P.carbureted && this.choke && this.engine === "running") {
+      if (this.systems.coolantC > 45) { target *= 0.72; this.chokeRichT += dt; } else { target += 250; this.chokeRichT = 0; }
+      if (this.chokeRichT > 15) { this.engine = "off"; this.telemetry.stall = "flooded"; this.chokeRichT = 0; }
+    } else this.chokeRichT = 0;
     this.revLimiting = this.engine === "running" && target > P.revLimitRpm;
     if (this.revLimiting) {
       this.limiterPhase += dt * 9;
@@ -1465,7 +1511,7 @@ export class Speedboat {
       this.crankTimer += dt;
       this.rpm += ((this.crankTimer < 0.45 ? 450 : 0) - this.rpm) * (1 - Math.exp(-dt / 0.08));
       if (this.crankTimer > 0.4 && this.pullCatch) { this.engine = "running"; this.rpm = 1400; }
-      else if (this.crankTimer > 0.9) { this.engine = "off"; this.telemetry.startFail = this.usys.fuelL > 0.005 ? "pull" : "fuel"; }
+      else if (this.crankTimer > 0.9) { this.engine = "off"; this.telemetry.startFail = this.usys.fuelFeed ? "pull" : "fuel"; }
       return this.rpm;
     }
     if (this.engine === "cranking" && this.waitsToCrank(this.u)) {
@@ -1478,15 +1524,15 @@ export class Speedboat {
       // Motor de arranque: a rotação depende da tensão nos bornes (que cai com a carga da bateria).
       // Bateria boa ≈ 250 rpm e pega em ~1 s; fraca gira devagar ("rrr… rrr…") e pode não pegar;
       // abaixo de ~7,5 V só o solenoide estala. O motor só pega com rotação de compressão suficiente.
-      const v = this.usys.batteryV;
+      const v = this.uelec.batteryV;
       const starterTarget = 260 * clamp((v - 7.5) / 3.1, 0, 1.05);
       this.rpm += (starterTarget - this.rpm) * (1 - Math.exp(-dt / 0.12));
       this.crankTimer += dt;
       this.crankRevs += (this.rpm / 60) * dt * clamp((this.rpm - 60) / 100, 0, 1);
-      if (this.crankRevs >= this.crankNeed && this.usys.fuelL > 0.005) { this.engine = "running"; this.rpm = 1150; }
+      if (this.crankRevs >= this.crankNeed && this.usys.fuelFeed) { this.engine = "running"; this.rpm = 1150; }
       else if (this.crankTimer > 4) { // o piloto solta a chave: não pegou
         this.engine = "off";
-        this.telemetry.startFail = this.usys.fuelL <= 0.005 && this.rpm >= 40 ? "fuel" : this.rpm < 40 ? "dead" : "weak";
+        this.telemetry.startFail = !this.usys.fuelFeed && this.rpm >= 40 ? "fuel" : this.rpm < 40 ? "dead" : "weak";
       }
       return this.rpm;
     }

@@ -22,6 +22,9 @@ export interface EngineSystemsParams {
   altIdleFrac: number;
   /** false = motor de partida manual sem bateria (bote): sem tensão, sem alternador */
   hasBattery: boolean;
+  /** combustível que fica na linha/filtro/cuba depois do registro do tanque (L): com o registro fechado o motor
+   *  ainda roda até gastar isso. Ausente = 0,08 L */
+  lineL?: number;
   /**
    * Tensão nominal do sistema (12 ou 24 V). O modelo elétrico trabalha SEMPRE em "equivalente 12 V" (tensões,
    * limites, correntes e Ah referidos a um bloco de 12 V); num sistema de 24 V (duas baterias de 12 V em série,
@@ -127,6 +130,13 @@ export class EngineSystems {
    */
   batteryOn = true;
   genOn = true;
+  /** registro (válvula) do tanque de combustível: fechado, o motor só tem o que sobrou na linha */
+  fuelValveOpen = true;
+  /** combustível na linha depois do registro (L) */
+  lineL: number;
+  /** chega combustível ao motor (tanque com registro aberto, ou ainda há na linha) */
+  get fuelFeed(): boolean { return this.fuelValveOpen ? this.fuelL > 0.005 : this.lineL > 0.0005; }
+  get lineFrac(): number { return this.lineL / (this.p.lineL ?? 0.08); }
   /** potência que a GPU está fornecendo (kW reais) */
   gpuKw = 0;
   /** corrente do alternador/gerador no último passo (A, equivalente 12 V) */
@@ -146,6 +156,7 @@ export class EngineSystems {
   constructor(p: EngineSystemsParams = ENGINE_SYSTEMS, opts: { fuelFrac?: number; coolantC?: number; hours?: number } = {}) {
     this.p = p;
     this.fuelL = p.tankLiters * (opts.fuelFrac ?? 1);
+    this.lineL = p.lineL ?? 0.08;
     this.coolantC = opts.coolantC ?? 45;
     this.engineHours = opts.hours ?? 0;
   }
@@ -216,10 +227,19 @@ export class EngineSystems {
     }
 
     // ---- combustível ----
+    const cap = P.lineL ?? 0.08;
     if (running) {
-      this.fuelL = Math.max(0, this.fuelL - (s.fuelLph / 3600) * dt);
-      if (this.fuelL <= 0) this.stallReason = "fuel";
+      if (this.fuelValveOpen) {
+        this.fuelL = Math.max(0, this.fuelL - (s.fuelLph / 3600) * dt);
+        if (this.fuelL <= 0) this.stallReason = "fuel";
+      } else {
+        // registro fechado: o motor gasta o que ficou na linha e morre
+        this.lineL = Math.max(0, this.lineL - (s.fuelLph / 3600) * dt);
+        if (this.lineL <= 0) this.stallReason = "fuel";
+      }
     }
+    // registro aberto (e tanque com combustível): a linha enche de novo
+    if (this.fuelValveOpen && this.fuelL > 0.005 && this.lineL < cap) { const d = Math.min(cap - this.lineL, 0.05 * dt, this.fuelL); this.lineL += d; this.fuelL -= d; }
 
     // ---- arrefecimento (água do lago bombeada pelo pé do motor; termostato) ----
     let target: number, tau: number;
@@ -304,7 +324,9 @@ export class EngineSystems {
 
     // falhas de alimentação perto do fim do tanque (o motor "engasga")
     // engasga no finzinho do tanque (≈0,1 % do tanque: 0,1 L na lancha, 0,015 L no tanque portátil do bote)
-    this.sputter = running && this.fuelL < clamp(P.tankLiters * 0.001, 0.015, 0.1) ? this.sputter + dt : 0;
+    // ou no fim da linha com o registro fechado
+    const low = this.fuelValveOpen ? this.fuelL < clamp(P.tankLiters * 0.001, 0.015, 0.1) : this.lineL < cap * 0.2;
+    this.sputter = running && low ? this.sputter + dt : 0;
   }
 
   /** Engasgo por falta de combustível (0..1) — usado para cortar a combustão em pulsos. */

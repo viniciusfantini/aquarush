@@ -1069,6 +1069,79 @@ for (const [label, thr] of [["baixa", 0.25], ["alta", 1]] as const) {
   check("turbina", "virou: a turbina apaga (spool-down)", c.units[0].turb!.burning ? 0 : 1, 1, 1, "", 0);
 }
 
+// ---------- Painel de sistemas (Y): registro de combustível, bomba de porão, afogador, chave de baterias ----------
+{
+  const water = mkWater(0);
+  const N = { ...emptyInput(), gear: "N" as const };
+  // registro do tanque fechado: o motor gasta o que ficou na linha e morre; aberto de novo, pega
+  {
+    const b = new Speedboat(SPEEDBOAT, v3(0, 0.25, 0)); b.systems.fuelL = 50;
+    b.systems.fuelValveOpen = false;
+    let diedAt = -1;
+    run(b, water, 180, N, openWater, (t) => { if (diedAt < 0 && b.engine === "off") diedAt = t; });
+    check("sistemas", "registro fechado: o motor roda com o combustível da linha e morre (s)", diedAt, 40, 170, "s", 0);
+    check("sistemas", "registro fechado: motivo = combustível", b.telemetry.stall === "fuel" ? 1 : 0, 1, 1, "", 0);
+    b.systems.fuelValveOpen = true;
+    run(b, water, 3, N);
+    b.toggleIgnition();
+    let ok = -1;
+    run(b, water, 8, N, openWater, (t) => { if (ok < 0 && b.engine === "running") ok = t; });
+    check("sistemas", "registro aberto de novo: a linha enche e o motor pega (s)", ok, 0.5, 6, "s", 1);
+  }
+  // bomba de porão: OFF não bombeia mesmo com água; ON bombeia mesmo seca (corrente)
+  {
+    const b = new Speedboat(SPEEDBOAT, v3(0, 0.25, 0)); b.systems.fuelL = 50;
+    b.bilgeL = 80; b.bilgeMode = "off";
+    run(b, water, 20, N);
+    check("sistemas", "bomba de porão em OFF: não tira água (L)", b.bilgeL, 75, 90, "L", 0);
+    b.bilgeMode = "auto"; run(b, water, 80, N); // ~1,15 L/s: 80 L em ~70 s
+    check("sistemas", "bomba em AUTO: a boia liga e esvazia (L)", b.bilgeL, 0, 10, "L", 0);
+    b.bilgeL = 0; b.bilgeMode = "on"; run(b, water, 3, N);
+    check("sistemas", "bomba em ON: liga mesmo seca (corrente da bomba, A)", b.telemetry.bilgePump ? 1 : 0, 1, 1, "", 0);
+  }
+  // afogador (bote carburado): frio pega mal sem ele e bem com ele; quente com ele puxado, afoga
+  {
+    const tries = (choke: boolean, coolant: number) => {
+      let caught = 0;
+      for (let k = 0; k < 40; k++) {
+        const b = new Speedboat(DINGHY, v3(0, 0.25, 0)); b.systems.fuelL = 5; b.coldEngines(); b.systems.coolantC = coolant; b.choke = choke;
+        b.occupants = [{ seat: "helm", mass: PERSON_KG }];
+        b.toggleIgnition(); run(b, water, 1.2, N);
+        if (b.engine === "running") caught++;
+      }
+      return caught / 40;
+    };
+    const coldNo = tries(false, 22), coldYes = tries(true, 22);
+    check("sistemas", "bote frio SEM afogador: chance de pegar por puxada", coldNo, 0, 0.35, "", 2);
+    check("sistemas", "bote frio COM afogador: chance de pegar por puxada", coldYes, 0.6, 1, "", 2);
+    const b = new Speedboat(DINGHY, v3(0, 0.25, 0)); b.systems.fuelL = 5; b.occupants = [{ seat: "helm", mass: PERSON_KG }];
+    b.systems.coolantC = 60; b.choke = true;
+    let flooded = -1;
+    run(b, water, 25, N, openWater, (t) => { if (flooded < 0 && b.telemetry.stall === "flooded") flooded = t; });
+    check("sistemas", "bote quente com o afogador puxado: afoga e morre (s)", flooded, 10, 20, "s", 1);
+  }
+  // chave de baterias da AR-9: banco BE zerado
+  {
+    const start = (sel: "off" | "ind" | "bb" | "be" | "both") => {
+      const x = new Speedboat(RAPIDA, v3(0, 0.3, 0)); x.systems.fuelL = 100; x.occupants = [{ seat: "helm", mass: PERSON_KG }];
+      x.banks[0].batterySoc = 0.8; x.banks[1].batterySoc = 0;
+      x.batterySel = sel;
+      for (const u of x.units) { u.engine = "off"; u.rpm = 0; }
+      run(x, water, 0.5, N);
+      x.toggleIgnition(); run(x, water, 14, N);
+      return { n: x.units.filter((u) => u.engine === "running").length, x };
+    };
+    check("sistemas", "AR-9, banco BE zerado, chave IND.: pega só o motor de bombordo", start("ind").n, 1, 1, "", 0);
+    check("sistemas", "chave em BB: o banco bom dá a partida nos dois", start("bb").n, 2, 2, "", 0);
+    check("sistemas", "chave em BE (o zerado): nenhum pega", start("be").n, 0, 0, "", 0);
+    const both = start("both");
+    check("sistemas", "chave em AMBAS: os bancos em paralelo ficam com a mesma carga", Math.abs(both.x.banks[0].batterySoc - both.x.banks[1].batterySoc), 0, 0.001, "", 3);
+    check("sistemas", "chave em AMBAS: com a carga dividida os dois pegam", both.n, 2, 2, "", 0);
+    const off = start("off");
+    check("sistemas", "chave em OFF: nada pega", off.n, 0, 0, "", 0);
+  }
+}
+
 // ---------- Vento: 5 níveis, deriva, banda, âncora ----------
 {
   const water = mkWater(0);

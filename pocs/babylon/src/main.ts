@@ -41,11 +41,12 @@ import { WaterInteraction } from "./presentation/waterInteraction.ts";
 import { TurbineExhaustFx } from "./presentation/exhaustFx.ts";
 import { GpuCart } from "./presentation/gpuCart.ts";
 import { TurbinePanel } from "./presentation/turbinePanel.ts";
+import { SystemsPanel } from "./presentation/systemsPanel.ts";
 import { BoatCamera } from "./presentation/cameras.ts";
 import { Hud } from "./presentation/hud.ts";
 import { EngineAudio } from "./presentation/audio.ts";
 
-const BUILD = "poc-babylon 0.55.1";
+const BUILD = "poc-babylon 0.56.0";
 /** Escala visual da rotação da hélice (proporcional ao RPM, abaixo do limite estroboscópico). */
 const PROP_VISUAL_SCALE = 0.12;
 
@@ -553,9 +554,9 @@ const boot = async () => {
       ? "<kbd>E</kbd><kbd>Q</kbd> trim manual (pinos 1–3, depois tilt)"
       : "<kbd>E</kbd><kbd>Q</kbd> trim + / −";
     document.getElementById("help-occ")!.innerHTML = turbine ? "piloto único (habitáculo fechado)" : "<kbd>O</kbd> embarque (só na vaga do píer)";
-    document.getElementById("help-ign")!.innerHTML = isBote ? "<kbd>P</kbd> corda (partida em N) · <kbd>N</kbd>+<kbd>W</kbd> acelera em neutro"
+    document.getElementById("help-ign")!.innerHTML = isBote ? "<kbd>P</kbd> corda (em N) · <kbd>Y</kbd> sistemas (afogador)"
       : turbine ? "<kbd>P</kbd> partida FADEC / corte · <kbd>Y</kbd> painel de partida (manual) · <kbd>J</kbd> GPU (na doca)"
-      : "<kbd>P</kbd> liga/desliga (em N) · <kbd>N</kbd>+<kbd>W</kbd> neutro · <kbd>J</kbd> jump start";
+      : "<kbd>P</kbd> liga/desliga (em N) · <kbd>N</kbd>+<kbd>W</kbd> neutro · <kbd>J</kbd> jump start · <kbd>Y</kbd> sistemas";
     document.getElementById("help-lights")!.innerHTML = isBote ? "<kbd>L</kbd> lanterna" : "<kbd>L</kbd> luzes";
     document.getElementById("help-reset")!.textContent = `píer (${START_FUEL[kind]} L)`;
     document.getElementById("h-charge")!.style.display = isBote ? "none" : "";
@@ -566,7 +567,8 @@ const boot = async () => {
     if (cam.mode === "cockpit") { cam.toggle(); hud.setCamera(cam.mode); }
     setCockpitHead(false);
     audio.cylinders = V.P.cylinders;
-    tpanel.setOpen(false);
+    tpanel.setOpen(false); spanel.setOpen(false);
+    spanel.configure({ title: V.P.name, banks: !V.P.electricStart ? 0 : V.boat.systems2 ? 2 : 1, choke: !!V.P.carbureted, bilgePump: V.P.bilge.pumpLph > 0, lights: isBote ? "LANTERNA" : "LUZES" });
     lights = false; input.setLights(false);
     setNavLights(V.vis, false); V.dinghy?.setLantern(false);
     hud.setLights(false, isBote ? "LANTERNA" : "LUZES");
@@ -589,6 +591,8 @@ const boot = async () => {
     b.systems.gpu = false; lastGpuOff = b.systems.gpuAutoOff;
     for (const bk of b.banks) if (bk.p.hasBattery) bk.batterySoc = START_BATTERY; // bateria(s) a 60 %
     b.engine = "off"; // começa desligado: dê a partida (P)
+    b.batterySel = "ind"; b.bilgeMode = "auto"; b.choke = false; b.systems.fuelValveOpen = true;
+    if (b.params.carbureted) b.systems.coolantC = 24; // bote carburado: motor frio, pede o afogador
     b.coldEngines(); // (turbina parada e fria, N1 = 0)
     b.systems.fuelL = START_FUEL[V.kind];
     for (const bk of b.banks) bk.coolantC = Math.min(bk.coolantC, 60);
@@ -620,7 +624,31 @@ const boot = async () => {
     fadecStart: () => { const tb = V.boat.units[0].turb; if (tb && !tb.running && !tb.starting) input.pushAction("ignition"); },
     fadecCut: () => { const tb = V.boat.units[0].turb; if (tb && (tb.running || tb.starting)) input.pushAction("ignition"); },
     gpu: () => input.pushAction("jump"),
+    setFuelTank: (open) => setFuelValve(open),
+    setBilge: (mode) => setBilgeMode(mode),
     close: () => tpanel.setOpen(false),
+  });
+  // ---------------- painel de sistemas (Y nos barcos a pistão) ----------------
+  const setFuelValve = (open: boolean) => {
+    V.boat.systems.fuelValveOpen = open;
+    hud.showToast(open ? "Registro do tanque ABERTO" : "Registro do tanque FECHADO — o motor roda até acabar o combustível da linha");
+  };
+  const setBilgeMode = (mode: "off" | "auto" | "on") => {
+    V.boat.bilgeMode = mode;
+    hud.showToast(mode === "auto" ? "Bomba de porão em AUTO (boia)" : mode === "on" ? "Bomba de porão LIGADA (manual)" : "Bomba de porão DESLIGADA — a água no porão não sai");
+  };
+  const spanel = new SystemsPanel({
+    setBattery: (sel) => {
+      V.boat.batterySel = sel;
+      const txt: Record<string, string> = { off: "Chave de baterias em OFF", ind: V.boat.systems2 ? "Baterias em IND.: cada motor no seu banco" : "Bateria LIGADA",
+        bb: "Baterias em BB: o banco de bombordo alimenta os dois motores e a casa", be: "Baterias em BE: o banco de boreste alimenta os dois motores e a casa", both: "Baterias em AMBAS: bancos em paralelo" };
+      hud.showToast(txt[sel]);
+    },
+    setFuelValve,
+    setChoke: (on) => { V.boat.choke = on; hud.showToast(on ? "Afogador PUXADO (partida a frio)" : "Afogador EMPURRADO"); },
+    setBilge: setBilgeMode,
+    toggleLights: () => input.pushAction("lights"),
+    close: () => spanel.setOpen(false),
   });
 
   // ---------------- menu: escolha do barco com prévia no lago ----------------
@@ -745,8 +773,9 @@ const boot = async () => {
         : `Jump start conectado: ${sys.jumpAh.toFixed(1)} de ${JUMP_AH} Ah, até ${JUMP_MAX_A} A (~${sys.jumpStartsLeft} partidas) — alimenta partida, âncora, trim e luzes; ao pegar o motor ele é desconectado`);
     }
     else if (a === "turbinePanel") {
-      if (!boat.params.turbine) { hud.showToast("Painel de partida de turbina: só na lancha de turbina AR-10"); return; }
-      tpanel.setOpen(!tpanel.isOpen);
+      // AR-10: painel de partida da turbina (com os sistemas); os outros barcos: painel de sistemas
+      if (boat.params.turbine) tpanel.setOpen(!tpanel.isOpen);
+      else spanel.setOpen(!spanel.isOpen);
     }
     else if (a === "debug") hud.toggleDebug();
     else if (a === "help") hud.toggleHelp();
@@ -947,7 +976,7 @@ const boot = async () => {
       else if (T.anchorOut > 0) K.push(["+", "pagar cabo", null], ["−", "recolher âncora", null], ["P", T.engine === "running" ? "desligar motor" : V.kind === "bote" ? "corda" : "ligar motor", "ignition"], ["C", "câmera", "camera"]);
       else K.push(["T", `vento: ${wind.def.key}`, "wind"], ["P", V.kind === "bote" ? "corda (partida)" : "liga/desliga", "ignition"], ["+ −", "âncora", null], ["C", "câmera", "camera"], ["H", "ajuda", "help"]);
       // bateria zerada (lancha): botão para conectar o booster de partida
-      if (mode === "game" && boat.params.turbine && !T.capsized && !driving && !carOnly) K.unshift(["Y", tpanel.isOpen ? "fechar painel" : "painel de partida", "turbinePanel"]);
+      if (mode === "game" && !T.capsized && !driving && !carOnly) K.unshift(["Y", boat.params.turbine ? (tpanel.isOpen ? "fechar painel" : "painel de partida") : spanel.isOpen ? "fechar sistemas" : "sistemas", "turbinePanel"]);
       if (mode === "game" && boat.params.turbine && !T.capsized && !driving && !carOnly && (T.gpu || (docked() && T.engine !== "running")))
         K.unshift(["J", T.gpu ? "desconectar GPU" : "conectar GPU (doca)", "jump"]);
       else if (mode === "game" && !boat.params.turbine && boat.systems.p.hasBattery && !T.capsized && !driving && !carOnly && (T.jumper || T.engine !== "running" || T.batterySoc < 0.3))
@@ -1032,6 +1061,7 @@ const boot = async () => {
       audio.updateGpu(isTurb ? T.gpuState : "off", T.gpuT, Vector3.Distance(cpos, gpuCart.root.position), cam.mode === "cockpit", T.gpuKw);
       gpuCart.updateDiesel(isTurb ? T.gpuState : "off", T.gpuT, T.gpuKw, paused ? 0 : dtReal);
       tpanel.update(T);
+      spanel.update(T, lights);
     }
     if (boat.systems.jumperAutoOff !== lastJumperOff) { if (mode === "game") hud.showToast(`O motor pegou — jump start desconectado (carga ${Math.round(T.jumpCharge * 100)} %, recarrega em cruzeiro)`); lastJumperOff = boat.systems.jumperAutoOff; }
     if (T.trimRelay && !trimRelayWarned && mode === "game") { hud.showToast("Trim sem força: bateria zerada — só o relé estala (J conecta o jump start)"); trimRelayWarned = true; }
@@ -1040,7 +1070,7 @@ const boot = async () => {
     neutralRevWarned = T.neutralRev;
     if (T.lowFuel && !lowFuelWarned && T.engine === "running" && mode === "game") { hud.showToast(`Combustível na reserva: ${T.fuelL.toFixed(1)} L`); lowFuelWarned = true; }
     if (!T.lowFuel) lowFuelWarned = false;
-    if (T.stall && T.stall !== lastStall && T.stall !== "capsize" && T.stall !== "broken") hud.showToast(T.stall === "fuel" ? "O motor morreu: acabou o combustível" : "O motor desligou: superaquecimento");
+    if (T.stall && T.stall !== lastStall && T.stall !== "capsize" && T.stall !== "broken") hud.showToast(T.stall === "fuel" ? (T.fuelValveOpen ? "O motor morreu: acabou o combustível" : "O motor morreu: registro do tanque FECHADO (Y abre)") : T.stall === "flooded" ? "O motor AFOGOU: afogador puxado com o motor quente — empurre o afogador (Y) e puxe a corda de novo" : "O motor desligou: superaquecimento");
     lastStall = T.stall;
     if ((hoursSaveT += dtReal) > 10) { hoursSaveT = 0; try { localStorage.setItem(V.hoursKey, String(boat.systems.engineHours)); } catch { /* sem storage */ } }
     // hélice: velocidade visual PROPORCIONAL ao RPM real (escala fixa de 0,12). A rotação real (até ~48 voltas/s)

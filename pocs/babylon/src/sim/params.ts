@@ -147,6 +147,8 @@ export interface SpeedboatParams {
   surfacePiercing?: boolean;
   /** força lateral da hélice ("prop walk") como fração do empuxo (hélice de superfície: forte) */
   propWalk?: number;
+  /** motor CARBURADO (afogador): frio pega mal sem afogador; quente com o afogador puxado afoga */
+  carbureted?: boolean;
   /** habitáculo fechado (célula de segurança): virando, o piloto fica preso no cinto, dentro da cabine */
   enclosedCockpit?: boolean;
   /**
@@ -296,6 +298,8 @@ export const DINGHY: SpeedboatParams = {
   trimMode: "manual",
   trimPins: [-4 * DEG, 0, 4 * DEG],
   electricStart: false,
+  carbureted: true,          // 15 hp de cana carburado: afogador para a partida a frio
+  systems: { lineL: 0.04 },  // mangueira do tanque portátil + cuba do carburador
   tankLiters: 10,  // tanque portátil (máx. 10 L)
   fuelIdleLph: 0.6,
   fuelMaxLph: 5.5,
@@ -487,7 +491,7 @@ export const RAPIDA: SpeedboatParams = {
   keelLift: 3600,
   yawDamping: 60000,
   // dois V8: DOIS bancos, um por motor (bateria de 100 Ah, grupo 31, cada), arranque de ~200 A
-  systems: { batteryAh: 100, starterA: 200 },
+  systems: { batteryAh: 100, starterA: 200, lineL: 0.2 },
   yawDampingLowSpeed: 0.05,  // parado gira solto: giro no lugar com empuxo diferencial
   heaveDamping: 4000,
   waveDragPeakRatio: 0.15,
@@ -578,7 +582,7 @@ export const TURBINA: SpeedboatParams = {
   // "equivalente 12 V" (ver EngineSystemsParams.nominalV): 150 Ah ≙ 75 Ah a 24 V; arranque 350 A ≙ ~175 A a 24 V;
   // gerador 120 A ≙ 60 A a 28 V. Óleo resfriado pela água do lago (trocador de calor): o "TEMP" é a do óleo
   // (a temperatura vem do modelo de óleo da turbina; turbina não tem corte automático por temperatura: protect/shutdown fora)
-  systems: { nominalV: 24, batteryAh: 150, starterA: 350, altMaxA: 120, altIdleFrac: 0.8, thermostatC: 75, warnC: 110, protectC: 999, shutdownC: 999 },
+  systems: { nominalV: 24, batteryAh: 150, starterA: 350, altMaxA: 120, altIdleFrac: 0.8, thermostatC: 75, warnC: 110, protectC: 999, shutdownC: 999, lineL: 0.3 },
   maxThrust: 40000,
   reverseThrustFactor: 0.35,
   propPitchSpeed: 60,

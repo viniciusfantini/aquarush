@@ -55,12 +55,26 @@
     #splash-play:hover, #splash-play:focus-visible { filter: brightness(1.1); outline: none; }
     .sp-ver { font-size: 11px; color: rgba(244,248,251,0.4); letter-spacing: 0.08em; }
     /* ---------------- painel de partida da turbina (Y) ---------------- */
-    #tpanel { position: fixed; right: 14px; top: 64px; z-index: 3; width: min(560px, calc(100vw - 24px)); max-height: calc(100vh - 80px); overflow-y: auto;
+    #tpanel, #spanel { position: fixed; right: 14px; top: 64px; z-index: 3; width: min(700px, calc(100vw - 24px)); max-height: calc(100vh - 80px); overflow-y: auto;
       display: none; padding: 12px 14px 14px; border-radius: 14px; background: rgba(8, 18, 26, 0.9); border: 1px solid rgba(255,255,255,0.18); box-shadow: 0 10px 40px rgba(0,0,0,0.5);
       backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); font-size: 13px; color: var(--fg); pointer-events: auto; user-select: none; }
-    #tpanel.open { display: block; }
-    body.menu-mode #tpanel { display: none; }
-    #tpanel button { font: inherit; color: inherit; cursor: pointer; }
+    #tpanel.open, #spanel.open { display: block; }
+    body.menu-mode #tpanel, body.menu-mode #spanel { display: none; }
+    #tpanel button, #spanel button { font: inherit; color: inherit; cursor: pointer; }
+    #spanel { width: min(520px, calc(100vw - 24px)); }
+    /* linhas do painel de sistemas: rótulo · botões segmentados · leitura */
+    .sp-row { display: grid; grid-template-columns: 150px auto 1fr; align-items: center; gap: 10px; padding: 7px 0; border-top: 1px solid rgba(255,255,255,0.08); }
+    .sp-lbl b { display: block; font-size: 12px; letter-spacing: 0.06em; } .sp-lbl span { font-size: 10.5px; color: var(--dim); }
+    .sp-seg { display: inline-flex; border: 1px solid rgba(255,255,255,0.25); border-radius: 8px; overflow: hidden; }
+    .sp-seg button { padding: 6px 10px; border: none; background: rgba(255,255,255,0.04); font-weight: 700; font-size: 11.5px; letter-spacing: 0.04em; color: var(--dim) !important; }
+    .sp-seg button + button { border-left: 1px solid rgba(255,255,255,0.18); }
+    .sp-seg button.on { background: var(--accent); color: #04222a !important; }
+    .sp-info { font-size: 11.5px; color: var(--dim); text-align: right; font-variant-numeric: tabular-nums; }
+    .sp-note { margin: 8px 0 0; font-size: 12px; color: #ffc23a; min-height: 0; }
+    .sp-note:empty { display: none; }
+    .tp-sys { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; margin-top: 10px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.1); font-size: 11px; }
+    .tp-sys > span { color: var(--accent); font-weight: 700; letter-spacing: 0.12em; }
+    .tp-sys > b { color: var(--dim); font-weight: 600; margin-left: 6px; }
     .tp-head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; cursor: grab; touch-action: none; }
     #tpanel.dragging .tp-head { cursor: grabbing; } #tpanel.dragging { opacity: 0.92; }
     .tp-head b { letter-spacing: 0.14em; font-size: 13px; flex: 1; }
@@ -69,7 +83,7 @@
     .tp-mode button.sel { background: var(--accent); color: #04222a; }
     .tp-x { width: 28px; height: 28px; border-radius: 50%; border: 1px solid rgba(255,255,255,0.25); background: transparent; font-size: 18px; line-height: 1; }
     .tp-gauges { display: grid; grid-template-columns: repeat(8, 1fr); gap: 2px; margin-bottom: 8px; justify-items: center; }
-    .tp-gauges .gauge.small { width: 64px; height: 64px; }
+    .tp-gauges .gauge.small { width: 80px; height: 80px; }
     .tp-read div { display: grid; gap: 2px; text-align: center; padding: 6px 2px; border-radius: 8px; background: rgba(255,255,255,0.06); }
     .tp-read span { font-size: 9.5px; color: var(--dim); letter-spacing: 0.06em; }
     .tp-read b { font-size: 16px; font-variant-numeric: tabular-nums; }
@@ -293,7 +307,7 @@
       <div id="h-debug" class="panel"></div>
     </div>
     <div id="h-help" class="panel">
-      <div class="t">CONTROLES <span>H fecha</span></div>
+      <div class="t">CONTROLES <span><kbd>H</kbd> fecha</span></div>
       <div><kbd>W</kbd><kbd>S</kbd> manete: toque F/N/R, segure acelera</div>
       <div><kbd>A</kbd><kbd>D</kbd> direção</div>
       <div id="help-trim"><kbd>E</kbd><kbd>Q</kbd> trim + / −</div>
