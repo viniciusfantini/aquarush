@@ -927,6 +927,18 @@ for (const [label, thr] of [["baixa", 0.25], ["alta", 1]] as const) {
     check("turbina", "FADEC em BUS com a GPU: parte só pela GPU (marcha lenta, s)", gr === "starting" ? gIdle : -1, 8, 30, "s", 1);
     check("turbina", "BUS: as baterias ficam fora (corrente, A)", g.telemetry.batteryA, 0, 0, "A", 1);
   }
+  // caixa reversora hidráulica: com a turbina parada a marcha não engata; rodando, engata; cortou, volta para N
+  {
+    const hw = mkWater(0.35); // água própria: não avança o relógio das ondas dos critérios seguintes
+    const h = mk(); h.coldEngines(); h.systems.batterySoc = 0.8;
+    run(h, hw, 3, { ...emptyInput(), gear: "F" });
+    check("turbina", "câmbio hidráulico: turbina parada, manete em F — a marcha não engata", h.telemetry.gear === "N" ? 1 : 0, 1, 1, "", 0);
+    run(h, hw, 1, N); h.toggleIgnition(); run(h, hw, 40, N);
+    run(h, hw, 3, { ...emptyInput(), gear: "F" });
+    check("turbina", "câmbio hidráulico: turbina em marcha lenta — engata F", h.telemetry.gear === "F" ? 1 : 0, 1, 1, "", 0);
+    h.engine = "off"; run(h, hw, 15, { ...emptyInput(), gear: "F" });
+    check("turbina", "câmbio hidráulico: turbina cortada — sem pressão, volta para N", h.telemetry.gear === "N" ? 1 : 0, 1, 1, "", 0);
+  }
   // ---- partida MANUAL pelo painel (chave por chave) ----
   const manual = () => { const x = mk(); x.coldEngines(); x.systems.batterySoc = 0.6; const tb = x.units[0].turb!; tb.setFadec(false); tb.cold(); return { x, tb }; };
   {
@@ -1235,6 +1247,12 @@ for (const [label, thr] of [["baixa", 0.25], ["alta", 1]] as const) {
     const quiet = !q.telemetry.buzzer;
     q.batterySel = "ind"; run(q, water, 0.3, N);
     check("sistemas", "chave em ON sem bateria: silêncio; ligou a chave geral: autoteste apita", quiet && q.telemetry.buzzer ? 1 : 0, 1, 1, "", 0);
+    // acelerar em neutro (punho da cana / botão N da manete): o motor sobe o giro sem engatar, limitado pela central
+    const nb = new Speedboat(DINGHY, v3(0, 0.25, 0)); nb.systems.fuelL = 5; nb.occupants = [{ seat: "helm", mass: PERSON_KG }]; nb.systems.coolantC = 60;
+    run(nb, water, 2, N); const idleR = nb.telemetry.rpm;
+    run(nb, water, 4, { ...N, throttle: 0.6, neutralThrottle: true });
+    check("sistemas", "bote: punho girado em N acelera em neutro (rpm acima da lenta)", nb.telemetry.rpm - idleR, 800, 3000, "rpm", 0);
+    check("sistemas", "bote: acelerando em N a marcha continua em N", nb.telemetry.gear === "N" ? 1 : 0, 1, 1, "", 0);
     // AR-9: só a chave de bombordo → só o motor BB
     const x = new Speedboat(RAPIDA, v3(0, 0.3, 0)); x.systems.fuelL = 100; x.occupants = [{ seat: "helm", mass: PERSON_KG }];
     x.coldEngines(); for (const s2 of x.banks) { s2.batterySoc = 0.8; s2.coolantC = 60; } run(x, water, 0.5, N);

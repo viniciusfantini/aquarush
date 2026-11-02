@@ -11,7 +11,7 @@
 import type { BoatTelemetry } from "../sim/boat.ts";
 import { makeDraggable } from "./dragPanel.ts";
 import { LeverControls, type LeverCmd, type LeverKind } from "./levers.ts";
-import { toggle, tri, rotary, pull, ignKey, rope, setToggle, setTri, setRotary, setPull, setKey, setRope, bindKeySpring } from "./switches.ts";
+import { toggle, tri, rotary, pull, ignKey, rope, lantern, setToggle, setTri, setRotary, setPull, setKey, setRope, setRd, bindKeySpring } from "./switches.ts";
 
 export type BatterySel = "off" | "ind" | "bb" | "be" | "both";
 export type BilgeMode = "off" | "auto" | "on";
@@ -38,6 +38,7 @@ export interface SystemsPanelCaps {
   bilgePump: boolean;
   lights: string;       // "LUZES" / "LANTERNA"
   levers: LeverKind;    // tipo de manete do barco
+  display: "lcd" | "vfd" | "grey"; // estilo dos displays de informação (LCD verde, VFD âmbar, LCD cinza)
 }
 
 const plate = (inner: string, cls = "") => `<div class="sw-plate ${cls}"><span class="screw s1"></span><span class="screw s2"></span><span class="screw s3"></span><span class="screw s4"></span>${inner}</div>`;
@@ -48,7 +49,7 @@ export class SystemsPanel {
   private readonly act: SystemsPanelActions;
   private readonly title: HTMLElement;
   private readonly body: HTMLElement;
-  private caps: SystemsPanelCaps = { title: "", banks: 1, keys: [], choke: false, bilgePump: true, lights: "LUZES", levers: "binnacle" };
+  private caps: SystemsPanelCaps = { title: "", banks: 1, keys: [], choke: false, bilgePump: true, lights: "LUZES", levers: "binnacle", display: "lcd" };
   private levers: LeverControls | null = null;
 
   constructor(act: SystemsPanelActions) {
@@ -82,7 +83,8 @@ export class SystemsPanel {
   /** Monta o painel de chaves do barco ativo. */
   configure(caps: SystemsPanelCaps): void {
     this.caps = caps;
-    const cell = (ctl: string, info: string) => `<div class="sw-cell">${ctl}<div class="rd" data-info="${info}"></div></div>`;
+    const cell = (ctl: string, info: string) => `<div class="sw-cell">${ctl}<div class="rd" data-info="${info}"><span></span></div></div>`;
+    this.el.dataset.disp = caps.display;
     // partida: chave(s) de ignição ou a corda
     const start = caps.keys.length
       ? caps.keys.map((l, i) => cell(ignKey(i, l, "OFF · ON · START"), `key${i}`)).join("")
@@ -93,7 +95,8 @@ export class SystemsPanel {
     cells.push(cell(rotary("fuel", "COMBUSTÍVEL", "registro do tanque", [{ v: "closed", l: "FECHADO" }, { v: "open", l: "ABERTO" }], { cls: "fuel" }), "fuel"));
     if (caps.choke) cells.push(cell(pull("choke", "1", "AFOGADOR", "partida a frio"), "choke"));
     if (caps.bilgePump) cells.push(cell(tri("bilge", "BOMBA PORÃO", "boia ou manual", { v: "on", l: "ON" }, { v: "off", l: "OFF" }, { v: "auto", l: "AUTO" }), "bilge"));
-    cells.push(cell(toggle({ attr: "lights", val: "1", label: caps.lights, sub: caps.banks ? "navegação" : "a pilha" }), "lights"));
+    // bote: lanterna de mão a pilha (manual) — não é chave de painel
+    cells.push(cell(caps.banks ? toggle({ attr: "lights", val: "1", label: caps.lights, sub: "navegação" }) : lantern("lights", caps.lights, "de mão, a pilha"), "lights"));
     this.title.textContent = `⠿ SISTEMAS — ${caps.title}`;
     this.body.innerHTML = `
       <div class="sp-top"><div><div class="sp-sec">PARTIDA</div>${plate(start, "sp-start")}</div>
@@ -120,6 +123,7 @@ export class SystemsPanel {
     setPull(el, "choke", t.choke);
     setTri(el, "bilge", t.bilgeMode, powered && t.bilgeMode !== "off", t.bilgePump);
     setToggle(el, "lights", "1", lightsOn, lightsOn && (c.banks === 0 || powered));
+    for (const l of el.querySelectorAll<HTMLElement>(".lan")) l.classList.toggle("on", lightsOn);
     // chaves de ignição: a luz acende com a ignição energizada pelo banco daquele motor
     const sel = t.batterySel;
     c.keys.forEach((_, i) => {
@@ -128,12 +132,7 @@ export class SystemsPanel {
       setKey(el, i, key, key !== "off" && bankV > 9);
     });
     if (!c.keys.length) setRope(el, t.engine === "running" ? "running" : t.engine === "cranking" ? "cranking" : "off");
-    const info = (k: string, s: string, warn = false) => {
-      const e = el.querySelector<HTMLElement>(`[data-info="${k}"]`);
-      if (!e) return;
-      if (e.textContent !== s) e.textContent = s;
-      e.classList.toggle("warn", warn);
-    };
+    const info = (k: string, s: string, warn = false) => setRd(el.querySelector<HTMLElement>(`[data-info="${k}"]`), s, warn);
     c.keys.forEach((_, i) => {
       const eng = t.engines[i], rpm = t.rpms[i] ?? t.rpm;
       info(`key${i}`, eng === "running" ? `ligado · ${Math.round(rpm)} rpm` : eng === "cranking" ? `arranque · ${Math.round(rpm)} rpm` : t.keys[i] === "on" ? "ignição ligada" : "desligado", t.startFail !== "" && eng === "off" && t.keys[i] === "on");

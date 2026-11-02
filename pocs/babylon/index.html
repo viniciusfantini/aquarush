@@ -257,6 +257,46 @@
     .pl-t { position: absolute; left: -26px; top: 4px; width: 52px; height: 16px; border-radius: 6px; background: linear-gradient(180deg, #f2f4f6, #9aa3ab 55%, #5a6168);
       box-shadow: 0 3px 5px rgba(0,0,0,0.6); }
     .pl-t::after { content: ""; position: absolute; left: 50%; top: 4px; width: 30px; height: 4px; margin-left: -15px; border-radius: 2px; background: rgba(0,0,0,0.35); }
+    /* ---------------- displays de informação (setRd): caixa fixa, texto rola; estilo por embarcação ---------------- */
+    .sw-cell .rd, .tp-sys-rd .rd, .lev .rd { position: relative; display: block; width: 128px; height: 17px; padding: 0 6px; overflow: hidden; white-space: nowrap; border-radius: 3px; box-sizing: border-box;
+      font-family: "Consolas", "Lucida Console", "Courier New", monospace; font-size: 11px; line-height: 17px; letter-spacing: 0.03em; text-align: left; font-variant-numeric: tabular-nums; }
+    .lev .rd { width: 110px; text-align: center; }
+    .tp-sys-rd .rd { width: 220px; }
+    .rd > span { display: inline-block; }
+    .rd.scroll > span { animation: rdScroll var(--t, 4s) ease-in-out infinite alternate; }
+    @keyframes rdScroll { 0%, 18% { transform: translateX(0); } 82%, 100% { transform: translateX(var(--d, 0)); } }
+    /* LCD verde com luz de fundo (AR-6) */
+    [data-disp=lcd] .rd { background: linear-gradient(180deg, #a9c27a, #8fae5c); color: #1c2a0e; box-shadow: inset 0 1px 3px rgba(0,0,0,0.55), 0 0 0 1px #2a3320, 0 0 0 2px rgba(255,255,255,0.06); text-shadow: 1px 1px 0 rgba(0,0,0,0.12); }
+    [data-disp=lcd] .rd.warn { color: #6a1a08; }
+    /* VFD âmbar (AR-9): fundo preto-esverdeado e caracteres brilhando */
+    [data-disp=vfd] .rd { background: #0b0f0d; color: #ffb547; box-shadow: inset 0 1px 4px #000, 0 0 0 1px #2b2b22; text-shadow: 0 0 4px rgba(255,170,60,0.8), 0 0 1px #ffdf9a; }
+    [data-disp=vfd] .rd.warn { color: #ff6a3a; text-shadow: 0 0 5px rgba(255,90,40,0.9); }
+    /* LCD cinza refletivo sem luz (bote: relógio/indicador simples) */
+    [data-disp=grey] .rd { background: linear-gradient(180deg, #c7c9b4, #b3b69f); color: #23251c; box-shadow: inset 0 1px 3px rgba(0,0,0,0.5), 0 0 0 1px #3a3b31; }
+    [data-disp=grey] .rd.warn { color: #7a1c0a; }
+    /* vidro de cockpit (AR-10): ciano sobre azul-escuro */
+    [data-disp=glass] .rd { background: linear-gradient(180deg, #06121c, #0a1b29); color: #5cf2d0; box-shadow: inset 0 1px 4px #000, 0 0 0 1px #1d3546; text-shadow: 0 0 4px rgba(92,242,208,0.6); }
+    [data-disp=glass] .rd.warn { color: #ffc23a; text-shadow: 0 0 4px rgba(255,194,58,0.7); }
+    .tl-shift small.warn { color: #ffc23a; }
+    /* botão de neutro no meio do quadrante (manete de topo) */
+    .mt-nbtn { position: absolute; left: 50%; top: -2px; width: 26px; height: 20px; margin-left: -13px; padding: 0; border-radius: 6px; border: 1px solid rgba(255,255,255,0.3) !important;
+      background: linear-gradient(180deg, #2c3238, #121518); font-size: 11px !important; font-weight: 900; color: rgba(255,255,255,0.75) !important; z-index: 3; }
+    .mt-nbtn:hover { border-color: var(--accent) !important; }
+    .mt-nbtn.on { background: radial-gradient(circle at 40% 35%, #ffe08a, #ffb020 55%, #a86400); color: #1b1203 !important; box-shadow: 0 0 10px rgba(255,176,32,0.7); }
+    .mt-nbtn.deny { animation: nbDeny 0.4s; }
+    @keyframes nbDeny { 25% { transform: translateX(-3px); } 75% { transform: translateX(3px); } }
+    /* lanterna de mão (bote) */
+    .lan { position: relative; display: flex; flex-direction: column; align-items: center; gap: 3px; width: 92px; padding: 2px; border: none; background: none; }
+    .lan b { font-size: 10.5px; letter-spacing: 0.07em; color: #e9eef2; font-weight: 800; text-shadow: 0 1px 0 rgba(0,0,0,0.8); margin-top: 2px; }
+    .lan small { font-size: 9px; color: var(--dim); }
+    .lan-head { position: relative; z-index: 1; display: grid; place-items: center; width: 40px; height: 40px; margin-top: 4px; border-radius: 50% 50% 10px 10px; background: linear-gradient(180deg, #2b3036, #0d0f11); box-shadow: 0 3px 5px rgba(0,0,0,0.6); }
+    .lan-lens { width: 26px; height: 26px; border-radius: 50%; background: radial-gradient(circle at 40% 35%, #8b9196, #3a3f44 60%, #1c1f22); box-shadow: inset 0 0 0 2px #b8bec3; transition: background 0.15s, box-shadow 0.15s; }
+    .lan-body { position: relative; width: 26px; height: 30px; margin-top: -3px; border-radius: 4px 4px 8px 8px; background: linear-gradient(90deg, #c98a00, #ffc533 45%, #d99a00); box-shadow: 0 3px 5px rgba(0,0,0,0.6); }
+    .lan-btn { position: absolute; left: 50%; top: 9px; width: 10px; height: 10px; margin-left: -5px; border-radius: 50%; background: radial-gradient(circle at 40% 35%, #555, #111); }
+    .lan-beam { position: absolute; left: 50%; top: -18px; width: 80px; height: 40px; margin-left: -40px; border-radius: 50%; background: radial-gradient(ellipse at 50% 100%, rgba(255,236,160,0.55), transparent 70%); opacity: 0; transition: opacity 0.15s; pointer-events: none; }
+    .lan.on .lan-lens { background: radial-gradient(circle at 45% 40%, #ffffff, #fff1b0 40%, #ffcf4a 75%); box-shadow: inset 0 0 0 2px #e8edf0, 0 0 14px 4px rgba(255,220,120,0.75); }
+    .lan.on .lan-beam { opacity: 1; }
+    .lan:hover .lan-head { box-shadow: 0 3px 5px rgba(0,0,0,0.6), 0 0 0 2px rgba(41,211,194,0.5); }
     .tp-foot [data-note] { color: #ffc23a; font-size: 12px; }
     #loading-msg { font-size: 12px; letter-spacing: 0.15em; color: var(--dim); min-height: 1em; }
 

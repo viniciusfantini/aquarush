@@ -14,7 +14,7 @@ import type { TurbineSwitch } from "../sim/turbine.ts";
 import { RoundGauge } from "./hud.ts";
 import { makeDraggable } from "./dragPanel.ts";
 import { LeverControls, type LeverCmd } from "./levers.ts";
-import { toggle, tri, rotary, setToggle, setTri, setRotary, isOn } from "./switches.ts";
+import { toggle, tri, rotary, setToggle, setTri, setRotary, setRd, isOn } from "./switches.ts";
 
 export type PanelSwitch = TurbineSwitch | "extPwr";
 
@@ -52,7 +52,7 @@ export class TurbinePanel {
   constructor(act: TurbinePanelActions) {
     this.act = act;
     const el = document.createElement("div");
-    el.id = "tpanel";
+    el.id = "tpanel"; el.dataset.disp = "glass";
     el.innerHTML = `
       <div class="tp-head" title="arraste para mover"><b>⠿ PARTIDA DA TURBINA</b>
         <div class="tp-mode"><button data-mode="fadec">FADEC</button><button data-mode="manual">MANUAL</button></div>
@@ -83,7 +83,7 @@ export class TurbinePanel {
           ${toggle({ attr: "bat", val: "1", label: "BAT", sub: "mestre do barramento", cls: "only-fadec" })}
           ${rotary("tank", "TANQUE", "registro", [{ v: "closed", l: "FECHADO" }, { v: "open", l: "ABERTO" }], { cls: "fuel" })}
           ${tri("bilge", "BOMBA PORÃO", "boia ou manual", { v: "on", l: "ON" }, { v: "off", l: "OFF" }, { v: "auto", l: "AUTO" })}
-          <div class="tp-sys-rd"><span data-rd="bat"></span><span data-rd="tank"></span><span data-rd="bilge"></span></div>
+          <div class="tp-sys-rd"><div class="rd" data-rd="bat"><span></span></div><div class="rd" data-rd="tank"><span></span></div><div class="rd" data-rd="bilge"><span></span></div></div>
         </div></div>
       <div class="tp-sys"><span class="tp-sys-t">MANETES</span><div class="sw-plate tp-lev"></div></div>
       <div class="tp-foot"><button data-g="gpu">GPU (J)</button><span data-note></span><span data-wear></span></div>`;
@@ -160,7 +160,11 @@ export class TurbinePanel {
     setRotary(this.el, "tank", t.fuelValveOpen ? "open" : "closed");
     setRotary(this.el, "bsel", t.batterySel === "off" ? "off" : t.batterySel === "bus" ? "bus" : "both");
     setTri(this.el, "bilge", t.bilgeMode, on && t.bilgeMode !== "off", t.bilgePump);
-    const rd = (k: string, txt: string) => { const e = this.el.querySelector<HTMLElement>(`[data-rd="${k}"]`); if (e && e.textContent !== txt) e.textContent = txt; };
+    const rd = (k: string, txt: string) => setRd(this.el.querySelector<HTMLElement>(`[data-rd="${k}"]`), txt);
+    // câmbio hidráulico: sem a turbina rodando a alavanca mexe, mas a marcha não engata
+    const sm = this.el.querySelector<HTMLElement>(".lev .tl-shift small");
+    const smTxt = t.engine === "running" ? (t.gear === "N" ? "hidráulica: pronta para engatar" : `engatada: ${t.gear}`) : "SEM PRESSÃO: turbina parada, não engata";
+    if (sm && sm.textContent !== smTxt) { sm.textContent = smTxt; sm.classList.toggle("warn", t.engine !== "running"); }
     rd("bat", `baterias ${Math.round(t.batterySoc * 100)} % · ${t.busBattery ? "no barramento (24 V)" : t.batterySel === "bus" ? "fora (BUS: GPU/gerador)" : "fora"}`);
     rd("tank", t.fuelValveOpen ? `tanque ${t.fuelL.toFixed(0)} L` : `linha ${Math.round(t.fuelLineFrac * 100)} %`);
     rd("bilge", `porão ${t.bilgeL.toFixed(0)} L · bomba ${t.bilgePump ? "girando" : "parada"}`);

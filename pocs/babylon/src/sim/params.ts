@@ -151,6 +151,9 @@ export interface SpeedboatParams {
   carbureted?: boolean;
   /** habitáculo fechado (célula de segurança): virando, o piloto fica preso no cinto, dentro da cabine */
   enclosedCockpit?: boolean;
+  /** caixa reversora HIDRÁULICA (embreagens a óleo, bomba acionada pelo motor): só engata com o motor rodando e
+   *  volta para neutro sem pressão. Ausente = câmbio mecânico (motor de popa / rabeta: engata até parado) */
+  hydraulicShift?: boolean;
   /**
    * Água de resfriamento (turbina): bomba de água do mar MECÂNICA (caixa de acessórios do gerador de gás, vazão ∝ N1)
    * puxa pela tomada da transmissão, passa pelos trocadores de calor do óleo da turbina e da caixa de redução e sai
@@ -579,6 +582,7 @@ export const TURBINA: SpeedboatParams = {
   // ~3 L/s (180 L/min) a 100 % N1 pelos trocadores de óleo; saída de 1 1/4" no espelho, bombordo, acima d'água
   cooling: { outlet: v3(-0.72, 0.12, -5.0), dir: v3(-0.12, -0.22, -0.968), outletAreaM2: 7.9e-4, lpsAt100: 3.0 },
   enclosedCockpit: true,
+  hydraulicShift: true,        // caixa reversora com embreagens hidráulicas: sem a turbina rodando não há pressão
   // sistema de 24 V (como nas turbinas: duas baterias de 12 V/75 Ah em série + starter-gerador de 28 V). Valores em
   // "equivalente 12 V" (ver EngineSystemsParams.nominalV): 150 Ah ≙ 75 Ah a 24 V; arranque 350 A ≙ ~175 A a 24 V;
   // gerador 120 A ≙ 60 A a 28 V. Óleo resfriado pela água do lago (trocador de calor): o "TEMP" é a do óleo

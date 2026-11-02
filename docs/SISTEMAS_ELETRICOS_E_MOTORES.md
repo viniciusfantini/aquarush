@@ -1,14 +1,14 @@
 # AQUA RUSH — Sistemas elétricos e de motores (referência para qualquer IA ou dev)
 
 Este documento descreve **toda a lógica** dos sistemas elétricos, de combustível, de arrefecimento, de partida e
-dos motores das 4 embarcações da POC 1 (Babylon.js, `pocs/babylon`), como estão no código na **v0.59.0**. Serve
+dos motores das 4 embarcações da POC 1 (Babylon.js, `pocs/babylon`), como estão no código na **v0.60.0**. Serve
 para continuar o trabalho em outra IA/ferramenta ou portar para Unity/Unreal sem precisar redescobrir as regras.
 
 > Fonte da verdade = o código. Se divergir, vale o código e este arquivo deve ser corrigido.
 > Arquivos: `src/sim/engineSystems.ts` (combustível, temperatura, bateria, alternador, booster, GPU, barramento),
 > `src/sim/turbine.ts` (turbina a gás + FADEC), `src/sim/boat.ts` (motores `EngineUnit`, partida, chaves,
 > roteamento de baterias, porão), `src/sim/anchor.ts` (molinete), `src/sim/params.ts` (parâmetros = contrato entre
-> as POCs). Testes: `tests/sim.test.ts` (`npm run test:sim`, hoje **561/563 + 2 KNOWN**).
+> as POCs). Testes: `tests/sim.test.ts` (`npm run test:sim`, hoje **566/568 + 2 KNOWN**).
 
 ---
 
@@ -200,8 +200,12 @@ o getter `engine` agrega (algum ligado = "running") e os setters valem para todo
   mistura fica rica (rotação × 0,72) e o motor **afoga em ~15 s** (`stall = "flooded"`).
 - No painel: manete da corda (= P) e botão STOP.
 
-### 7.5 Neutro, limitador e proteção
-- Acelerar em N (N + W): limitado a 3000 rpm (`NEUTRAL_REV_LIMIT`). Limitador de giro em pulsos acima de `revLimitRpm`.
+### 7.5 Neutro, limitador, câmbio e proteção
+- Acelerar em N (`VehicleInput.neutralThrottle`): teclado N + W, ou pelo painel — botão **N** da manete de topo
+  (AR-6/AR-9: só arma em N, desarma ao voltar a N), punho da cana em N (bote), potência em N (AR-10). Limitado a
+  3000 rpm (`NEUTRAL_REV_LIMIT`). Com dois motores cada manete acelera o seu (o `engineCmd` leva o acelerador).
+- **Câmbio hidráulico** (`params.hydraulicShift`, só a AR-10): sem o motor rodando não há pressão nas embreagens — a
+  marcha não engata e, se estava engatada, volta para N. Câmbio mecânico (popa, rabeta): engata até parado. Limitador de giro em pulsos acima de `revLimitRpm`.
 - Passagem obrigatória por N ao trocar de marcha (`shiftTime`); lenta engrenada dá um empuxo mínimo.
 
 ---
@@ -277,7 +281,9 @@ girando → `"busy"`.
 - `switches.ts`: `toggle` (LED = `lit`, posição = `on`), `tri` (`armed` âmbar / `run` verde), `rotary`, `ignKey`
   + `bindKeySpring` (START com mola), `pull`, `rope`.
 - `dragPanel.ts`: janelas arrastáveis (posição em `localStorage`; o painel inteiro fica dentro da tela).
-- `levers.ts` (`LeverControls`, v0.59): manetes por tipo — `binnacle` (AR-6: manete única de topo, p ∈ [−1, 1], N em
+- Displays de informação (`setRd`): caixa fixa, texto rola se não couber; tema por barco (`data-disp`): `lcd`
+  (AR-6), `vfd` (AR-9), `grey` (bote), `glass` (AR-10). Bote: lanterna de mão (`lantern`), não chave.
+- `levers.ts` (`LeverControls`, v0.59–0.60; `LeverCmd.neutral` = acelerar em neutro): manetes por tipo — `binnacle` (AR-6: manete única de topo, p ∈ [−1, 1], N em
   |p| < 0,12, lenta engrenada até 0,2, acelerador = (|p| − 0,2)/0,8), `twin` (AR-9: duas, independentes), `tiller`
   (bote: punho giratório + câmbio F-N-R), `turbine` (AR-10: potência em T + marcha). O painel é um **dispositivo de
   entrada**: `InputManager.setPanelLever(i, cmd, motores)` → `touchLever` (um motor) ou `panelLevers` → `engineCmd`

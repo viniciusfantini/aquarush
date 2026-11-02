@@ -1031,9 +1031,12 @@ export class Speedboat {
           this.shiftTimer = desired === "N" ? 0 : P.shiftTime;
         }
       }
+      // caixa hidráulica: sem o motor rodando não há pressão nas embreagens — não engata e solta o que estava engatado
+      const pressure = !P.hydraulicShift || this.engine === "running";
+      if (!pressure && this.gear !== "N") { this.gear = "N"; this.shiftTimer = P.shiftTime; }
       if (this.gear === "N" && this.wantGear !== "N") {
         this.shiftTimer -= dt;
-        if (this.shiftTimer <= 0 && this.throttleActual < 0.12) this.gear = this.wantGear;
+        if (this.shiftTimer <= 0 && this.throttleActual < 0.12 && pressure) this.gear = this.wantGear;
       }
       // aceleração em neutro (botão da manete segurado com a marcha em N): o motor sobe o giro sem
       // engatar — para aquecer ou testar. Só em N; a rotação fica limitada pela central (NEUTRAL_REV_LIMIT).

@@ -46,7 +46,7 @@ import { BoatCamera } from "./presentation/cameras.ts";
 import { Hud } from "./presentation/hud.ts";
 import { EngineAudio } from "./presentation/audio.ts";
 
-const BUILD = "poc-babylon 0.59.0";
+const BUILD = "poc-babylon 0.60.0";
 /** Escala visual da rotação da hélice (proporcional ao RPM, abaixo do limite estroboscópico). */
 const PROP_VISUAL_SCALE = 0.12;
 
@@ -570,7 +570,7 @@ const boot = async () => {
     tpanel.setOpen(false); spanel.setOpen(false);
     spanel.configure({ title: V.P.name, banks: !V.P.electricStart ? 0 : V.boat.systems2 ? 2 : 1,
       keys: !V.P.electricStart || V.P.turbine ? [] : V.boat.units.length > 1 ? ["IGNIÇÃO BB", "IGNIÇÃO BE"] : ["IGNIÇÃO"],
-      levers: isBote ? "tiller" : V.boat.units.length > 1 ? "twin" : "binnacle", choke: !!V.P.carbureted, bilgePump: V.P.bilge.pumpLph > 0, lights: isBote ? "LANTERNA" : "LUZES" });
+      levers: isBote ? "tiller" : V.boat.units.length > 1 ? "twin" : "binnacle", display: isBote ? "grey" : V.boat.units.length > 1 ? "vfd" : "lcd", choke: !!V.P.carbureted, bilgePump: V.P.bilge.pumpLph > 0, lights: isBote ? "LANTERNA" : "LUZES" });
     lights = false; input.setLights(false);
     setNavLights(V.vis, false); V.dinghy?.setLantern(false);
     hud.setLights(false, isBote ? "LANTERNA" : "LUZES");
@@ -1086,7 +1086,7 @@ const boot = async () => {
       audio.updateGpu(isTurb ? T.gpuState : "off", T.gpuT, Vector3.Distance(cpos, gpuCart.root.position), cam.mode === "cockpit", T.gpuKw);
       gpuCart.updateDiesel(isTurb ? T.gpuState : "off", T.gpuT, T.gpuKw, paused ? 0 : dtReal);
       tpanel.update(T);
-      { const ec = vin.engineCmd, cm = ec && ec.length ? ec : [{ gear: vin.gear, throttle: vin.throttle }];
+      { const ec = vin.engineCmd, cm = ec && ec.length ? ec : [{ gear: vin.gear, throttle: vin.throttle, neutral: !!vin.neutralThrottle }];
         tpanel.updateLevers(cm); spanel.updateLevers(cm.length >= boat.units.length ? cm : [cm[0], cm[0]]); }
       spanel.update(T, lights);
     }

@@ -134,3 +134,27 @@ export const bindKeySpring = (root: HTMLElement, set: (idx: number, pos: "off" |
   const release = () => { if (held >= 0) { set(held, "on"); held = -1; } };
   addEventListener("pointerup", release); addEventListener("pointercancel", release); addEventListener("blur", release);
 };
+
+/**
+ * Display de informação (estilo de display antigo, o tema vem do painel: LCD verde, VFD âmbar, LCD cinza, vidro).
+ * A caixa tem tamanho FIXO; se o texto não couber ele rola de um lado para o outro, como num display de painel.
+ */
+export const setRd = (el: HTMLElement | null, text: string, warn = false): void => {
+  if (!el) return;
+  let sp = el.querySelector<HTMLElement>(":scope > span");
+  if (!sp) { sp = document.createElement("span"); el.textContent = ""; el.appendChild(sp); }
+  cls(el, "warn", warn);
+  if (sp.textContent === text) return;
+  sp.textContent = text;
+  const over = sp.scrollWidth - el.clientWidth + 8;
+  if (over > 2) {
+    el.style.setProperty("--d", `${-over}px`);
+    el.style.setProperty("--t", `${Math.max(2.5, over / 16).toFixed(1)}s`);
+    cls(el, "scroll", true);
+  } else cls(el, "scroll", false);
+};
+
+/** Lanterna de mão (bote: manual, a pilha — não é uma chave do painel). */
+export const lantern = (attr: string, label: string, sub: string): string =>
+  `<button class="lan" data-${attr}="1" aria-label="${label}"><span class="lan-beam"></span><span class="lan-head"><span class="lan-lens"></span></span><span class="lan-body"><span class="lan-btn"></span></span>
+    <b>${label}</b><small>${sub}</small></button>`;

@@ -38,14 +38,14 @@ export class InputManager {
   touchTrim = 0;
   touchAnchor = 0;
   /** alavanca touch (quando ativa, define marcha e acelerador diretamente) */
-  touchLever: { gear: GearCommand; throttle: number } | null = null;
+  touchLever: { gear: GearCommand; throttle: number; neutral?: boolean } | null = null;
   /** manetes do painel do Y com dois motores (AR-9): uma por motor; null = segue a manete principal */
-  panelLevers: ({ gear: GearCommand; throttle: number } | null)[] = [];
+  panelLevers: ({ gear: GearCommand; throttle: number; neutral?: boolean } | null)[] = [];
   /**
    * Manete do painel do Y: com um motor vira a alavanca principal (como a touch); com dois, cada uma comanda o seu
    * motor (`engineCmd`). Teclado/gamepad retomam o comando no próximo toque.
    */
-  setPanelLever(i: number, cmd: { gear: GearCommand; throttle: number }, engines: number): void {
+  setPanelLever(i: number, cmd: { gear: GearCommand; throttle: number; neutral?: boolean }, engines: number): void {
     if (engines < 2) { this.touchLever = { ...cmd }; return; }
     const cur = this.touchLever ?? { gear: this.gear, throttle: this.state.throttle };
     while (this.panelLevers.length < engines) this.panelLevers.push(null);
@@ -145,7 +145,8 @@ export class InputManager {
     s.steering = clamp(this.kbSteer + gpSteer + this.touchSteer, -1, 1);
     s.trim = clamp(kbTrim + gpTrim + this.touchTrim, -1, 1);
     s.navigationLights = this.lights;
-    s.neutralThrottle = nHeld && this.gear === "N";
+    // acelerar em neutro: N + W no teclado, ou a manete do painel em N com o botão de neutro / punho da cana
+    s.neutralThrottle = (nHeld && this.gear === "N") || (!!this.touchLever?.neutral && this.gear === "N");
     // âncora de proa: "+" paga cabo, "−" recolhe (segurar) — teclado principal ou numérico, ou botões touch
     s.anchor = clamp((this.k("Equal", "NumpadAdd") ? 1 : 0) - (this.k("Minus", "NumpadSubtract") ? 1 : 0) + this.touchAnchor, -1, 1);
     // dois motores (AR-9): Z/X segurado = empuxo diferencial, um motor em ré e o outro à frente (motor 0 = bombordo).
@@ -158,6 +159,7 @@ export class InputManager {
     if (spin === 0 && this.panelLevers.length) {
       s.engineCmd = this.panelLevers.map((c) => c ?? { gear: s.gear, throttle: s.throttle });
       s.gear = s.engineCmd[0].gear; s.throttle = s.engineCmd[0].throttle; s.reverse = s.gear === "R";
+      if (this.panelLevers.some((c) => c?.neutral)) s.neutralThrottle = true;
     }
     return s;
   }
