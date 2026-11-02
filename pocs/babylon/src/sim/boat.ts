@@ -90,6 +90,9 @@ export interface BoatTelemetry {
   gpuKw: number;         // potência que a GPU está fornecendo (kW)
   busBattery: boolean;   // relé da bateria fechado (chave BAT)
   busGen: boolean;       // o gerador está alimentando o barramento
+  extPwr: boolean;       // GPU no barramento (cabo + diesel estável + relé EXT PWR fechado)
+  extPwrClosed: boolean; // relé EXT PWR fechado (mesmo com a GPU ainda partindo)
+  gpuA: number;          // corrente que a GPU entrega ao barramento (A reais) — o amperímetro do HUD é só o da bateria
   batteryA: number;      // amperímetro: + carregando, − descarregando (A)
   bilgeL: number;        // água no porão (L)
   bilgeInflowLps: number; // entrada de água (L/s): furo no casco + água por cima da borda
@@ -126,7 +129,11 @@ export interface BoatTelemetry {
   turbine: { n1: number; n2: number; egt: number; torque: number; oilPsi: number; fuelLph: number; phase: TurbinePhase; starter: boolean; ignition: boolean; lit: boolean; egtWarn: boolean; hotStarts: number;
     /** modo e chaves do painel de partida; combustível acumulado sem queimar (L); desgaste por sobretemperatura */
     fadec: boolean; master: boolean; boostPump: boolean; fuelValve: boolean; pooledL: number; wear: number;
-    generator: boolean; starterLock: number; seized: boolean } | null;
+    generator: boolean; starterLock: number; seized: boolean;
+    /** barramento energizado: sem ele os instrumentos, luzes e velas ficam apagados */
+    powered: boolean;
+    /** posição das chaves (o starter/ignição acima são "funcionando": chave E energia) */
+    starterSw: boolean; ignitionSw: boolean } | null;
   /** por motor/banco (AR-9: cada V8 tem arrefecimento e banco de bateria próprios) */
   coolants: number[];
   batteryVs: number[];
@@ -198,6 +205,8 @@ export class Speedboat {
     };
     if (this.inUnit) apply(this.u); else for (const x of this.units) apply(x);
   }
+  /** Corrente dos periféricos da turbina (bomba, velas, solenoide, FADEC) no barramento — entra no amperímetro. */
+  private turbinePeripheralA(): number { return this.units.reduce((a, x) => a + (x.turb?.peripheralA ?? 0), 0); }
   /** Turbinas paradas e frias (reposicionar no píer); os motores a pistão só desligam. */
   coldEngines(): void { for (const x of this.units) { x.engine = "off"; x.rpm = 0; x.turb?.cold(); } }
   get gear(): Gear { return this.u.gear; }
@@ -349,7 +358,7 @@ export class Speedboat {
       gear: "N", pitchDeg: 0, rollDeg: 0, wetFraction: 0, planing: false, thrustN: 0, ventilation: 1, cavitation: 0, propImmersion: 1, revLimiter: false, propSlip: 0, propRpm: 0, engine: "running", fuelL: 0, fuelFrac: 1, coolantC: 45, batteryV: 12.6, engineHours: 0, overheatWarn: false, protectMode: false, lowFuel: false, chargeWarn: false, stall: "", trimMotorA: 0, trimRelay: false, jumper: false, jumpCharge: 1, batteryA: 0, bilgeL: 0, bilgeInflowLps: 0, bilgePump: false, bilgeFlowLps: 0, bilgeAlarm: false, bilgeJetPos: v3(), bilgeJetVel: v3(), freeboard: 1, swamped: false, sunk: false, airPocketL: 0,
       anchorOut: 0, anchorState: "recolhida", anchorDepth: 0, anchorScope: 0, anchorTension: 0, anchorRelay: false, windlassA: 0, apparentWind: 0, neutralRev: false, fuelLph: 0, buzzer: false, starterRpm: 0, startFail: "", batterySoc: 0.92, trimPin: 0, pullStart: !params.electricStart,
       distanceM: 0, collisions: 0, draftHull: 0, draftMotor: 0, capsized: false, swimmers: 0, hullDamage: 0, engineDamage: 0, damageEvent: "", damageCount: 0, lastImpact: 0, depth: 0, submergedPoints: params.buoyancyPoints.map(() => false),
-      rpms: [params.idleRpm], gears: ["N"], throttles: [0], thrusts: [0], engines: ["running"], propRpms: [0], coolants: [45], batteryVs: [12.6], batterySocs: [0.92], batteryAs: [0], turbine: null, nominalV: 12, gpu: false, gpuState: "off", gpuT: 0, gpuKw: 0, busBattery: true, busGen: false,
+      rpms: [params.idleRpm], gears: ["N"], throttles: [0], thrusts: [0], engines: ["running"], propRpms: [0], coolants: [45], batteryVs: [12.6], batterySocs: [0.92], batteryAs: [0], turbine: null, nominalV: 12, gpu: false, gpuState: "off", gpuT: 0, gpuKw: 0, busBattery: true, busGen: false, extPwr: false, extPwrClosed: false, gpuA: 0,
     };
   }
 
@@ -695,7 +704,7 @@ export class Speedboat {
     t.thrusts = this.units.map((x) => x.lastThrust); t.engines = this.units.map((x) => x.engine); t.propRpms = this.units.map((x) => x.propRpmState);
     // sistemas do motor: combustível, temperatura, bateria, horímetro
     const sys = this.systems;
-    this.runSystems(dt, { lightsOn: input.navigationLights, trimMotorA: this.trimMotorA, auxA: this.anchor.motorA + this.bilgePumpA, intakeSubmerged });
+    this.runSystems(dt, { lightsOn: input.navigationLights, trimMotorA: this.trimMotorA, auxA: this.anchor.motorA + this.bilgePumpA + this.turbinePeripheralA(), intakeSubmerged });
     this.updateBilge(dt, water, input);
     this.updateSlosh(dt);
     t.anchorOut = this.anchor.out; t.anchorState = this.anchor.state; t.anchorDepth = this.anchor.depth; t.anchorScope = this.anchor.scope;
@@ -1136,7 +1145,7 @@ export class Speedboat {
     t.rpms = this.units.map((x) => x.rpm); t.engines = this.units.map((x) => x.engine); t.propRpms = this.units.map((x) => x.propRpmState);
     t.fuelLph = this.units.filter((x) => x.engine === "running").length * P.fuelIdleLph;
     for (const x of this.units) x.fuelLph = x.turb ? x.turb.fuelLph : x.engine === "running" ? P.fuelIdleLph : 0;
-    this.runSystems(dt, { lightsOn: false, trimMotorA: this.trimMotorA, auxA: 0, intakeSubmerged, load: 0 });
+    this.runSystems(dt, { lightsOn: false, trimMotorA: this.trimMotorA, auxA: this.turbinePeripheralA(), intakeSubmerged, load: 0 });
     const sys = this.systems;
     t.trim = this.trim; t.trimDeg = trimAngle * 57.2958; t.tiltDeg = this.tilt * 57.2958;
     t.tiltBlocked = this.tiltBlocked || this.manualBlockT > 0;
@@ -1368,11 +1377,12 @@ export class Speedboat {
     t.coolants = B.map((b) => b.coolantC); t.batteryVs = B.map((b) => b.batteryV * k); t.batterySocs = B.map((b) => b.batterySoc); t.batteryAs = B.map((b) => b.batteryA / k);
     t.coolantC = Math.max(...t.coolants); t.batteryV = sys.batteryV * k; t.batterySoc = sys.batterySoc; t.batteryA = sys.batteryA / k;
     t.engineHours = sys.engineHours; t.gpu = sys.gpu; t.gpuState = sys.gpuState; t.gpuT = sys.gpuT; t.gpuKw = sys.gpuKw;
-    t.busBattery = sys.batteryOn; t.busGen = sys.genOn && sys.alternatorA > 0;
+    t.busBattery = sys.batteryOn; t.busGen = sys.genOn && sys.alternatorA > 0; t.extPwr = sys.extOnline; t.extPwrClosed = sys.extPwr;
+    t.gpuA = sys.gpuA / ((sys.p.nominalV ?? 12) / 12);
     t.overheatWarn = B.some((b) => b.overheatWarn); t.protectMode = B.some((b) => b.protect); t.chargeWarn = B.some((b) => b.chargeWarn);
     const tb = this.units[0].turb;
     t.turbine = tb ? { n1: tb.n1, n2: tb.n2, egt: tb.egt, torque: tb.torque, oilPsi: tb.oilPsi, fuelLph: tb.fuelLph, phase: tb.phase,
-      starter: tb.starter, ignition: tb.ignition, lit: tb.lit, egtWarn: tb.egtWarn, hotStarts: tb.hotStarts,
+      starter: tb.starter && tb.powered, ignition: tb.ignition && tb.powered, lit: tb.lit, egtWarn: tb.egtWarn, hotStarts: tb.hotStarts, powered: tb.powered, starterSw: tb.starter, ignitionSw: tb.ignition,
       fadec: tb.fadec, master: tb.master, boostPump: tb.boostPump, fuelValve: tb.fuelValve, pooledL: tb.pooledL, wear: tb.wear,
       generator: tb.generator, starterLock: tb.starterLockT, seized: tb.seizedOn } : null;
   }
@@ -1408,6 +1418,7 @@ export class Speedboat {
       // chaves do painel → relés do barramento: BAT e GEN (o starter-gerador só gera com o starter desligado)
       this.usys.batteryOn = tb.master;
       this.usys.genOn = tb.generator && !tb.starter;
+      this.usys.autoExt = tb.fadec; // FADEC fecha/abre o EXT PWR sozinho; no manual é a chave do painel
       tb.update(dt, { lever: this.throttleActual, volts: this.usys.batteryV, fuel: this.usys.fuelL > 0.005 && !this.usys.starving,
         load: this.gear === "N" || tb.n1 < 1 ? 0.12 : this.u.propLoad, damage: this.engineDamage });
       this.u.engine = tb.engineState;

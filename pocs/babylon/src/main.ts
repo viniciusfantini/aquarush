@@ -45,7 +45,7 @@ import { BoatCamera } from "./presentation/cameras.ts";
 import { Hud } from "./presentation/hud.ts";
 import { EngineAudio } from "./presentation/audio.ts";
 
-const BUILD = "poc-babylon 0.51.0";
+const BUILD = "poc-babylon 0.52.0";
 /** Escala visual da rotação da hélice (proporcional ao RPM, abaixo do limite estroboscópico). */
 const PROP_VISUAL_SCALE = 0.12;
 
@@ -605,7 +605,16 @@ const boot = async () => {
       tb.setFadec(on);
       hud.showToast(on ? "FADEC: a partida é automática (P ou PARTIDA no painel)" : "MANUAL: você aciona cada chave — ninguém protege a turbina (vigie a EGT)");
     },
-    setSwitch: (sw, on) => { V.boat.units[0].turb?.setSwitch(sw, on); },
+    setSwitch: (sw, on) => {
+      const tb = V.boat.units[0].turb; if (!tb) return;
+      if (sw === "extPwr") {
+        if (tb.fadec) { hud.showToast("No FADEC o EXT PWR é automático: fecha com a GPU estável e abre na marcha lenta"); return; }
+        if (on && !V.boat.systems.gpuOnline) hud.showToast(V.boat.systems.gpu ? "EXT PWR fechado: a GPU entra no barramento quando estabilizar" : "EXT PWR: o cabo da GPU não está conectado (J, na doca)");
+        V.boat.systems.extPwr = on && V.boat.systems.gpu;
+        return;
+      }
+      tb.setSwitch(sw, on);
+    },
     fadecStart: () => { const tb = V.boat.units[0].turb; if (tb && !tb.running && !tb.starting) input.pushAction("ignition"); },
     fadecCut: () => { const tb = V.boat.units[0].turb; if (tb && (tb.running || tb.starting)) input.pushAction("ignition"); },
     gpu: () => input.pushAction("jump"),
@@ -722,7 +731,7 @@ const boot = async () => {
       const sys = boat.systems;
       if (!sys.gpu && !docked()) { hud.showToast("A GPU fica na doca: atraque na vaga do píer (amarrado) para conectar o cabo"); return; }
       sys.gpu = !sys.gpu;
-      hud.showToast(sys.gpu ? `Cabo da GPU conectado: o diesel da GPU está partindo — a luz pisca até ele estabilizar e chavear os ${GPU_V} V`
+      hud.showToast(sys.gpu ? `Cabo da GPU conectado: o diesel da GPU está partindo — a luz pisca até ele estabilizar (depois o EXT PWR põe os ${GPU_V} V no barramento)`
         : "GPU desconectada — cabo recolhido no carretel");
     }
     else if (a === "jump") {
@@ -994,10 +1003,11 @@ const boot = async () => {
     if (boat.systems.jumperTrips !== lastJumperTrips) { if (mode === "game") hud.showToast(`Proteção do jump start desarmou: mais de ${JUMP_MAX_A} A (ex.: partida + molinete juntos) — J para religar`); lastJumperTrips = boat.systems.jumperTrips; }
     if (boat.systems.gpu && !docked()) { boat.systems.gpu = false; if (mode === "game") hud.showToast("GPU desconectada: o cabo foi solto ao sair da doca"); }
     if (T.gpuState !== lastGpuState) {
-      if (T.gpuState === "online" && mode === "game") hud.showToast(`GPU estável (1500 rpm) — energia externa chaveada: ${GPU_V} V no barramento. Pode dar a partida`);
+      if (T.gpuState === "online" && mode === "game") hud.showToast(boat.units[0].turb?.fadec ? `GPU estável (1500 rpm) — FADEC fechou o EXT PWR: ${GPU_V} V no barramento. Pode dar a partida`
+        : `GPU estável (1500 rpm) — feche o EXT PWR no painel (Y) para pôr os ${GPU_V} V no barramento`);
       lastGpuState = T.gpuState;
     }
-    if (boat.systems.gpuAutoOff !== lastGpuOff) { if (mode === "game") hud.showToast("Turbina em marcha lenta — GPU desconectada (o starter-gerador assume a carga)"); lastGpuOff = boat.systems.gpuAutoOff; }
+    if (boat.systems.gpuAutoOff !== lastGpuOff) { if (mode === "game") hud.showToast("Turbina em marcha lenta — FADEC abriu o EXT PWR: a GPU saiu do barramento (o gerador assume). J recolhe o cabo"); lastGpuOff = boat.systems.gpuAutoOff; }
     {
       // cabo da GPU até a tomada do costado do lado do píer (AR-10)
       let socket: Vector3 | null = null;

@@ -107,6 +107,14 @@ export class EngineSystems {
   gpuT = 0;
   get gpuOnline(): boolean { return this.gpuState === "online"; }
   /**
+   * Relé EXT PWR: liga a GPU ao barramento. São DOIS comandos: o cabo (`gpu`, tecla J, físico) e este relé. Com
+   * `autoExt` (FADEC) ele fecha sozinho com a GPU estável e a turbina parada/partindo e abre na marcha lenta; no
+   * manual é a chave EXT PWR do painel. A GPU só alimenta com o cabo, o diesel estável e o relé fechado.
+   */
+  extPwr = false;
+  autoExt = true;
+  get extOnline(): boolean { return this.gpuOnline && this.extPwr; }
+  /**
    * BARRAMENTO (24 V na turbina) com três fontes, cada uma no seu relé: a BATERIA (`batteryOn`, chave BAT), a GPU
    * (EXT PWR, quando "online") e o GERADOR do motor (`genOn`, chave GEN; o starter-gerador da turbina). Os
    * periféricos (starter, velas, bomba, luzes, trim, bomba de porão) estão todos nesse barramento: com a BAT
@@ -154,7 +162,7 @@ export class EngineSystems {
   /** Fonte vista pelos consumidores: bateria sozinha ou em paralelo com o booster (12,9 V, 6 mΩ). */
   private get source(): { v: number; r: number } {
     const v = this.restV, r = this.internalR + 0.003;
-    if (this.gpuOnline) return { v: GPU_V12, r: GPU_R }; // fonte de solo: segura o barramento
+    if (this.extOnline) return { v: GPU_V12, r: GPU_R }; // fonte de solo no barramento (EXT PWR fechado)
     if (!this.batteryOn) return { v: this.genLive ? 13.8 : 0, r: 0.004 }; // bateria fora: só o gerador (se girando)
     if (!this.jumper) return { v, r };
     // booster: 12,9 V cheio, cai devagar com a descarga e despenca nas últimas reservas
@@ -186,11 +194,13 @@ export class EngineSystems {
     const running = s.engine === "running";
     this.stallReason = "";
     // GPU: o diesel parte, estabiliza e chaveia a energia externa
-    if (!this.gpu) { this.gpuState = "off"; this.gpuT = 0; }
+    if (!this.gpu) { this.gpuState = "off"; this.gpuT = 0; this.extPwr = false; }
     else {
       this.gpuT += dt;
       if (this.gpuState === "off") this.gpuState = "starting";
       if (this.gpuState === "starting" && this.gpuT >= GPU_START_S) this.gpuState = "online";
+      // FADEC: fecha o EXT PWR com a GPU estável enquanto a turbina não está rodando
+      if (this.autoExt && this.gpuOnline && !running) this.extPwr = true;
     }
 
     // ---- combustível ----
@@ -233,13 +243,14 @@ export class EngineSystems {
     // o motor pegou com o booster ligado: ele é desconectado sozinho (como a pessoa faria)
     if (running && this.prevEngine === "cranking" && this.jumper) { this.jumper = false; this.jumperAutoOff++; }
     // idem a GPU: com a turbina em marcha lenta o cabo é retirado (o starter-gerador assume)
-    if (running && this.prevEngine === "cranking" && this.gpuOnline) { this.gpu = false; this.gpuState = "off"; this.gpuAutoOff++; }
+    // FADEC: com a turbina em marcha lenta abre o EXT PWR (a GPU sai do barramento; o cabo continua até o J)
+    if (running && this.prevEngine === "cranking" && this.extOnline && this.autoExt) { this.extPwr = false; this.gpuAutoOff++; }
     this.prevEngine = s.engine;
     // booster ligado (e com carga): ele fornece as cargas do barco; a bateria fica só com o alternador
-    const boosting = this.jumper && this.jumpCharge > 0 && !this.gpuOnline;
+    const boosting = this.jumper && this.jumpCharge > 0 && !this.extOnline;
     this.jumpA = boosting ? Math.max(0, drain - alt) : 0;
     // GPU: fornece tudo o que falta e carrega a bateria pelo que ela aceita (até ~40 A equivalentes)
-    this.gpuA = this.gpuOnline ? Math.max(0, drain - alt) + Math.min(40, 3 + 60 * (1 - this.batterySoc)) : 0;
+    this.gpuA = this.extOnline ? Math.max(0, drain - alt) + Math.min(40, 3 + 60 * (1 - this.batterySoc)) : 0;
     if (this.jumpA > JUMP_MAX_A) { this.jumper = false; this.jumperTrips++; this.jumpA = 0; } // proteção de sobrecorrente
     // descarga em Ah (mesma escala de tempo de jogo da bateria)
     if (this.jumpA > 0) this.jumpCharge = Math.max(0, this.jumpCharge - (this.jumpA * dt * P.batteryTimeScale) / 3600 / JUMP_AH);
@@ -251,15 +262,15 @@ export class EngineSystems {
       // BATERIA fora do barramento: ela não carrega nem descarrega; o barramento fica com a GPU ou o gerador
       this.altA = Math.min(altCap, drain);
       this.jumpA = 0;
-      this.gpuA = this.gpuOnline ? Math.max(0, drain - this.altA) : 0;
+      this.gpuA = this.extOnline ? Math.max(0, drain - this.altA) : 0;
       this.batteryA = 0;
       const reg = 13.6 + 0.6 * smoothstep(750, 3000, s.rpm);
-      const vBus = this.gpuOnline ? GPU_V12 - this.gpuA * GPU_R
+      const vBus = this.extOnline ? GPU_V12 - this.gpuA * GPU_R
         : altCap > 0 ? (altCap >= drain ? reg : Math.max(0, reg - (drain - altCap) * 0.05)) : 0;
       this.batteryV += (vBus - this.batteryV) * (1 - Math.exp(-dt / 0.1));
       this.gpuKw = (this.gpuA * GPU_V12) / 1000;
     } else {
-    const battNet = this.gpuOnline ? Math.min(40, 3 + 60 * (1 - this.batterySoc)) : this.jumpA > 0 ? alt : alt - drain;
+    const battNet = this.extOnline ? Math.min(40, 3 + 60 * (1 - this.batterySoc)) : this.jumpA > 0 ? alt : alt - drain;
     this.batteryA = battNet;
     this.batterySoc = clamp(this.batterySoc + (battNet * dt * P.batteryTimeScale) / 3600 / this.p.batteryAh, 0, 1);
     this.gpuKw = (this.gpuA * GPU_V12) / 1000;

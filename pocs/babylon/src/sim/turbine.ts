@@ -65,6 +65,10 @@ export class Turbine {
   master = true; boostPump = true; ignition = false; starter = false; fuelValve = true;
   /** relé do GERADOR (starter-gerador): ligado com a turbina rodando e o starter desligado, alimenta o barramento */
   generator = true;
+  /** o barramento tem tensão (passo anterior): sem ela nada elétrico funciona — luzes, velas, bomba e instrumentos */
+  powered = true;
+  /** corrente dos periféricos no barramento (A, equivalente 12 V): bomba, velas, solenoide de combustível, FADEC/instrumentos */
+  peripheralA = 0;
   /** starter superaquecido: travado até esfriar (s) — limite de uso contínuo */
   starterLockT = 0;
   // ---- estado ----
@@ -210,6 +214,7 @@ export class Turbine {
     // os periféricos (starter, velas, bomba) estão no BARRAMENTO: funcionam se houver fonte nele — bateria (BAT),
     // GPU (EXT PWR) ou o gerador da própria turbina; a chave BAT sozinha não decide (ver EngineSystems)
     const powered = inp.volts > 6;
+    this.powered = powered;
     this.starterLockT = Math.max(0, this.starterLockT - dt);
     const sf = this.starter && powered ? this.starterForce(inp.volts) : 0;
     const ignOn = this.ignition && powered;
@@ -222,6 +227,9 @@ export class Turbine {
     this.starterOnT = this.starter && powered ? this.starterOnT + dt : Math.max(0, this.starterOnT - dt * 0.5);
     if (this.starter && this.starterOnT > 40) { this.starter = false; this.starterLockT = 60; this.starterOnT = 0; this.events.push("starterHot"); }
     this.starterLoad = this.starter && powered ? clamp(1 - 0.5 * this.n1 / P.starterCutN1, 0.3, 1) : 0;
+    // periféricos (equivalente 12 V; a 24 V a corrente real é a metade): bomba ~8 A, velas ~3 A, solenoide ~0,8 A,
+    // FADEC/instrumentos ~1,5 A
+    this.peripheralA = powered ? (pumpOn ? 16 : 0) + (ignOn ? 6 : 0) + (this.fuelValve ? 1.6 : 0) + 3 : 0;
 
     // ---- acender / apagar ----
     let kick = 0;

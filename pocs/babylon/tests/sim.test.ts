@@ -838,14 +838,15 @@ for (const [label, thr] of [["baixa", 0.25], ["alta", 1]] as const) {
   let stopT = -1;
   run(b, water, 60, N, openWater, (t) => { if (stopT < 0 && b.units[0].turb!.n1 < 8) stopT = t + 3; });
   check("turbina", "spool-down: N1 abaixo de 8 % depois do corte (s)", stopT, 15, 45, "s", 0);
-  // bateria fraca: arranque lento → mais combustível que ar → PARTIDA QUENTE (a 40 %); fraca demais → PENDURADA (a 15 %)
+  // bateria fraca: arranque lento → mais combustível que ar → PARTIDA QUENTE (a 43 %); fraca demais → PENDURADA (a 15 %)
+  // (v0.52: com a bomba, as velas e o FADEC puxando do barramento, a faixa de partida quente é 42–45 %; a 40 % ela pendura)
   const startWith = (soc: number) => {
     const x = mk(); x.coldEngines(); x.systems.batterySoc = soc; x.toggleIgnition();
     const ev: string[] = []; let peak = 0;
     run(x, water, 40, N, openWater, () => { const tb = x.units[0].turb!; peak = Math.max(peak, tb.egt); ev.push(...tb.drainEvents()); });
     return { ev, peak };
   };
-  const hot = startWith(0.4), hung = startWith(0.15);
+  const hot = startWith(0.43), hung = startWith(0.15);
   // GPU da doca (28 V): com a bateria a 15 % (que sozinha dá partida pendurada) a turbina pega, mais fria, e a GPU
   // é desconectada sozinha quando chega à marcha lenta; enquanto isso a bateria carrega
   const g = mk(); g.coldEngines(); g.systems.batterySoc = 0.15; g.systems.gpu = true;
@@ -864,9 +865,10 @@ for (const [label, thr] of [["baixa", 0.25], ["alta", 1]] as const) {
   check("turbina", "GPU, bateria a 15 %: a turbina pega (marcha lenta, s)", gIdle, 10, 30, "s", 1);
   check("turbina", "GPU: partida mais fria (pico de EGT, °C)", gPeak, 500, 680, "°C", 0);
   check("turbina", "GPU: barramento firme no arranque (mínima, V)", gMinV, 24, 29, "V", 1);
-  check("turbina", "GPU: desconectada sozinha na marcha lenta", !g.systems.gpu && g.systems.gpuAutoOff === 1 ? 1 : 0, 1, 1, "", 0);
+  check("turbina", "GPU: o FADEC abre o EXT PWR na marcha lenta (o cabo continua conectado)", !g.systems.extPwr && g.systems.gpu && g.systems.gpuAutoOff === 1 ? 1 : 0, 1, 1, "", 0);
+  check("turbina", "GPU fora do barramento: ON, 0 kW", g.systems.gpuOnline && g.systems.gpuKw < 0.05 ? 1 : 0, 1, 1, "", 0);
   check("turbina", "GPU: a bateria carregou durante a partida (pontos de %)", (g.systems.batterySoc - socBefore) * 100, 0.5, 30, "%", 1);
-  check("turbina", "bateria a 40 %: partida QUENTE (EGT passa de 780 °C e o combustível corta)", hot.ev.includes("hotStart") && !hot.ev.includes("idle") ? 1 : 0, 1, 1, "", 0);
+  check("turbina", "bateria a 43 %: partida QUENTE (EGT passa de 780 °C e o combustível corta)", hot.ev.includes("hotStart") && !hot.ev.includes("idle") ? 1 : 0, 1, 1, "", 0);
   check("turbina", "partida quente: o corte segura a EGT (pico, °C)", hot.peak, 780, 830, "°C", 0);
   check("turbina", "bateria a 15 %: partida PENDURADA (o arranque não chega a 12 % N1, não acende)", hung.ev.includes("hungStart") && !hung.ev.includes("lightoff") ? 1 : 0, 1, 1, "", 0);
   // sem combustível: gira, abre a ignição mas não acende
@@ -927,6 +929,10 @@ for (const [label, thr] of [["baixa", 0.25], ["alta", 1]] as const) {
     x.systems.gpu = true;
     run(x, water, 6, N);                                   // diesel da GPU estabiliza
     tb.setSwitch("boostPump", true); tb.setSwitch("starter", true);
+    run(x, water, 3, N);
+    // no manual o EXT PWR é uma chave: com ela aberta a GPU não entra no barramento
+    check("turbina", "manual: GPU estável mas EXT PWR aberto — barramento sem fonte (V)", x.telemetry.batteryV, 0, 1, "V", 1);
+    x.systems.extPwr = true;
     run(x, water, 6, N);
     check("turbina", "BAT desligada + GPU (EXT PWR): o starter gira pelo barramento (N1, %)", tb.n1, 12, 30, "%", 1);
     check("turbina", "BAT desligada + GPU: barramento na tensão da GPU (V)", x.telemetry.batteryV, 26, 29, "V", 1);
@@ -941,7 +947,8 @@ for (const [label, thr] of [["baixa", 0.25], ["alta", 1]] as const) {
       if (st === 0 && tb.n1 >= 12) { tb.setSwitch("ignition", true); tb.setSwitch("fuelValve", true); st = 1; }
       if (st === 1 && tb.n1 >= 45) { tb.setSwitch("starter", false); tb.setSwitch("ignition", false); st = 2; }
     });
-    check("turbina", "manual, marcha lenta com GEN desligado: a bateria não carrega (A)", x.telemetry.batteryA, -5, 0.5, "A", 1);
+    // (a bomba, o solenoide e o FADEC/instrumentos continuam puxando da bateria: ~−10 A a 24 V)
+    check("turbina", "manual, marcha lenta com GEN desligado: a bateria não carrega, só alimenta os periféricos (A)", x.telemetry.batteryA, -15, 0.5, "A", 1);
     tb.setSwitch("generator", true); run(x, water, 3, N);
     check("turbina", "GEN ligado: o gerador carrega a bateria (A)", x.telemetry.batteryA, 5, 60, "A", 0);
     const soc0 = x.systems.batterySoc;
@@ -950,6 +957,16 @@ for (const [label, thr] of [["baixa", 0.25], ["alta", 1]] as const) {
     check("turbina", "BAT desligada: a bateria fica fora (corrente, A)", x.telemetry.batteryA, 0, 0, "A", 1);
     check("turbina", "BAT desligada: carga da bateria inalterada (pontos de %)", Math.abs(x.systems.batterySoc - soc0) * 100, 0, 0.01, "%", 3);
     check("turbina", "BAT desligada: a turbina continua rodando", tb.running ? 1 : 0, 1, 1, "", 0);
+  }
+  {
+    // periféricos no amperímetro: só a bateria no barramento, bomba e ignição ligadas (sem starter)
+    const { x, tb } = manual();
+    for (const sw of ["master", "boostPump", "ignition"] as const) tb.setSwitch(sw, true);
+    run(x, water, 2, N);
+    check("turbina", "periféricos (bomba + velas + FADEC) puxam da bateria (A, 24 V)", x.telemetry.batteryA, -16, -8, "A", 1);
+    // sem barramento (BAT desligada, sem GPU): a chave da ignição não acende nada
+    tb.setSwitch("master", false); run(x, water, 1, N);
+    check("turbina", "sem barramento: ignição ligada mas sem faísca (luz apagada, instrumentos sem energia)", !x.telemetry.turbine!.ignition && !x.telemetry.turbine!.powered ? 1 : 0, 1, 1, "", 0);
   }
   {
     // combustível + ignição CEDO (N1 a 6 %): acende com pouco ar → partida quente

@@ -6,19 +6,21 @@ import type { BoatTelemetry } from "../sim/boat.ts";
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const SVG = "http://www.w3.org/2000/svg";
 
-interface GaugeOpts {
+export interface GaugeOpts {
   title: string;
   min: number;
   max: number;
   labels: number[];          // valores com número
   minor?: number;            // passo das marcas menores
   redFrom?: number; redTo?: number;
+  /** faixas coloridas do mostrador (como nos instrumentos de turbina): g = operação normal, y = cautela, r = limite */
+  bands?: { from: number; to: number; c: "g" | "y" | "r" }[];
   labelFmt?: (v: number) => string;
   big?: boolean;
 }
 
 /** Relógio redondo (SVG): arco de 270°, ponteiro animado e 2 linhas digitais no centro. */
-class RoundGauge {
+export class RoundGauge {
   readonly el: SVGSVGElement;
   private needle: SVGGElement;
   private l1: SVGTextElement;
@@ -45,6 +47,11 @@ class RoundGauge {
     const pt = (a: number, r: number) => [50 + r * Math.sin((a * Math.PI) / 180), 50 - r * Math.cos((a * Math.PI) / 180)];
     mk("circle", { cx: 50, cy: 50, r: 48, class: "g-face" });
     mk("circle", { cx: 50, cy: 50, r: 48, class: "g-rim" });
+    for (const b of o.bands ?? []) {
+      const a0 = ang(b.from), a1 = ang(b.to);
+      const [x0, y0] = pt(a0, 42), [x1, y1] = pt(a1, 42);
+      mk("path", { d: `M ${x0} ${y0} A 42 42 0 ${a1 - a0 > 180 ? 1 : 0} 1 ${x1} ${y1}`, class: b.c === "g" ? "g-green" : b.c === "y" ? "g-yellow" : "g-red" });
+    }
     if (o.redFrom !== undefined) {
       const a0 = ang(o.redFrom), a1 = ang(o.redTo ?? o.max);
       const [x0, y0] = pt(a0, 42), [x1, y1] = pt(a1, 42);
@@ -175,8 +182,8 @@ export class Hud {
     this.annun?.remove(); this.annun = null;
     if (opts.turbine) {
       // turbina: N1 (gerador de gás, %) e EGT (gases de escape, °C) grandes; vermelho no limite de partida/operação
-      this.rpmG = new RoundGauge(big, { title: "N1 %", min: 0, max: 110, labels: [0, 20, 40, 60, 80, 100], minor: 5, redFrom: 102, big: true });
-      this.egtG = new RoundGauge(big, { title: "EGT °C", min: 0, max: 900, labels: [0, 300, 600, 900], minor: 50, redFrom: 700, big: true });
+      this.rpmG = new RoundGauge(big, { title: "N1 %", min: 0, max: 110, labels: [0, 20, 40, 60, 80, 100], minor: 5, big: true, bands: [{ from: 60, to: 101, c: "g" }, { from: 102, to: 110, c: "r" }] });
+      this.egtG = new RoundGauge(big, { title: "EGT °C", min: 0, max: 900, labels: [0, 300, 600, 900], minor: 50, big: true, bands: [{ from: 300, to: 700, c: "g" }, { from: 700, to: 780, c: "y" }, { from: 780, to: 900, c: "r" }] });
       this.rpmG2 = null;
     } else if (opts.twin) {
       // V8 de centro: faixa até 6000 rpm, vermelho a partir de 5000 (um relógio por motor, bombordo e boreste)
@@ -188,9 +195,9 @@ export class Hud {
       this.rpmG2 = null;
     }
     if (opts.turbine) {
-      this.tqG = new RoundGauge(small, { title: "TORQUE %", min: 0, max: 120, labels: [0, 60, 120], minor: 10, redFrom: 105 });
-      this.n2G = new RoundGauge(small, { title: "N2 %", min: 0, max: 120, labels: [0, 60, 120], minor: 10, redFrom: 104 });
-      this.oilG = new RoundGauge(small, { title: "ÓLEO psi", min: 0, max: 100, labels: [0, 50, 100], minor: 10, redFrom: 0, redTo: 25 });
+      this.tqG = new RoundGauge(small, { title: "TORQUE %", min: 0, max: 120, labels: [0, 60, 120], minor: 10, bands: [{ from: 0, to: 100, c: "g" }, { from: 100, to: 105, c: "y" }, { from: 105, to: 120, c: "r" }] });
+      this.n2G = new RoundGauge(small, { title: "N2 %", min: 0, max: 120, labels: [0, 60, 120], minor: 10, bands: [{ from: 40, to: 103, c: "g" }, { from: 104, to: 120, c: "r" }] });
+      this.oilG = new RoundGauge(small, { title: "ÓLEO psi", min: 0, max: 100, labels: [0, 50, 100], minor: 10, bands: [{ from: 0, to: 25, c: "r" }, { from: 25, to: 45, c: "y" }, { from: 45, to: 85, c: "g" }, { from: 90, to: 100, c: "r" }] });
       // luzes da sequência de partida (como no painel de uma turbina)
       const an = document.createElement("div");
       an.id = "g-annun";
@@ -206,10 +213,12 @@ export class Hud {
     // voltímetro na escala do sistema (24 V na turbina: 16–32 V, vermelho abaixo de 23 V)
     const vk = opts.turbine ? 2 : 1;
     this.vk = vk;
-    const voltOpts = (t: string) => ({ title: t, min: 8 * vk, max: 16 * vk, labels: [8 * vk, 12 * vk, 16 * vk], minor: vk, redFrom: 8 * vk, redTo: 11.5 * vk });
+    const voltOpts = (t: string): GaugeOpts => opts.turbine
+      ? { title: t, min: 16, max: 32, labels: [16, 24, 32], minor: 2, bands: [{ from: 16, to: 22, c: "r" }, { from: 22, to: 24, c: "y" }, { from: 24, to: 29.5, c: "g" }, { from: 30, to: 32, c: "r" }] }
+      : { title: t, min: 8 * vk, max: 16 * vk, labels: [8 * vk, 12 * vk, 16 * vk], minor: vk, redFrom: 8 * vk, redTo: 11.5 * vk };
     this.tempG = opts.temp && !opts.turbine ? new RoundGauge(small, tempOpts(tw ? "TEMP BB" : "TEMP")) : null; // turbina: temp. do óleo vai no relógio de óleo
     this.tempG2 = opts.temp && tw ? new RoundGauge(small, tempOpts("TEMP BE")) : null;
-    this.voltG = opts.battery ? new RoundGauge(small, voltOpts(tw ? "BAT. BB" : "BATERIA")) : null;
+    this.voltG = opts.battery ? new RoundGauge(small, voltOpts(tw ? "BAT. BB" : opts.turbine ? "BARRAM. V" : "BATERIA")) : null;
     this.voltG2 = opts.battery && tw ? new RoundGauge(small, voltOpts("BAT. BE")) : null;
     // amperímetro: corrente na bateria (+ carga do alternador, − consumo: arranque, trim, molinete, bomba)
     this.ampG = opts.battery ? new RoundGauge(small, { title: tw ? "AMP. BB" : "AMPÈRES", min: -60, max: 30, labels: [-60, -30, 0, 30], minor: 10, redFrom: -60, redTo: -40 }) : null;
@@ -224,15 +233,18 @@ export class Hud {
     } else if (this.egtG && t.turbine) {
       const tb = t.turbine;
       const phase: Record<string, string> = { off: "parada", starter: "ARRANQUE", lightoff: "IGNIÇÃO", accel: "acelerando", running: `${t.engineHours.toFixed(1).padStart(6, "0")} h`, spooldown: "desacelerando" };
-      this.rpmG.set(tb.n1, tb.n1.toFixed(1), phase[tb.phase] ?? "", tb.n1 > 102);
-      this.egtG.set(tb.egt, `${tb.egt.toFixed(0)}`, tb.egtWarn ? "LIMITE" : tb.lit ? "chama" : "", tb.egtWarn || (tb.phase === "accel" && tb.egt > 720));
-      this.tqG?.set(tb.torque, `${tb.torque.toFixed(0)}`, "", tb.torque > 105);
-      this.n2G?.set(tb.n2, `${tb.n2.toFixed(0)}`, `${Math.round(t.propRpm)} rpm`, tb.n2 > 104);
-      this.oilG?.set(tb.oilPsi, `${tb.oilPsi.toFixed(0)}`, `${t.coolantC.toFixed(0)}°C`, (tb.phase === "running" && tb.oilPsi < 25) || t.overheatWarn);
+      // instrumentos elétricos: sem tensão no barramento ficam apagados (ponteiro no zero, sem leitura)
+      const on = tb.powered;
+      const set = (g: RoundGauge | null, v: number, a: string, b: string, w: boolean) => { if (!g) return; g.el.classList.toggle("off", !on); g.set(on ? v : 0, on ? a : "—", on ? b : "sem energia", on && w); };
+      set(this.rpmG, tb.n1, tb.n1.toFixed(1), phase[tb.phase] ?? "", tb.n1 > 102);
+      set(this.egtG, tb.egt, `${tb.egt.toFixed(0)}`, tb.egtWarn ? "LIMITE" : tb.lit ? "chama" : "", tb.egtWarn || (tb.phase === "accel" && tb.egt > 720));
+      set(this.tqG, tb.torque, `${tb.torque.toFixed(0)}`, "", tb.torque > 105);
+      set(this.n2G, tb.n2, `${tb.n2.toFixed(0)}`, `${Math.round(t.propRpm)} rpm`, tb.n2 > 104);
+      set(this.oilG, tb.oilPsi, `${tb.oilPsi.toFixed(0)}`, `${t.coolantC.toFixed(0)}°C`, (tb.phase === "running" && tb.oilPsi < 25) || t.overheatWarn);
       if (this.annun) {
         // GPU: pisca (âmbar) enquanto o diesel dela parte e estabiliza; verde e acesa com a energia externa chaveada
         const blink = Math.floor(performance.now() / 350) % 2 === 0;
-        const on: Record<string, [boolean, string]> = { GPU: [t.gpuState === "online" || (t.gpuState === "starting" && blink), t.gpuState === "online" ? "#3ddc84" : "#ffb020"], ARRANQUE: [tb.starter, "#ffb020"], "IGNIÇÃO": [tb.ignition, "#ffb020"], CHAMA: [tb.lit, "#3ddc84"], EGT: [tb.egtWarn || (tb.phase === "accel" && tb.egt > 720), "#ff4040"] };
+        const on: Record<string, [boolean, string]> = { GPU: [t.extPwr || (t.gpu && (t.gpuState === "starting" || !t.extPwrClosed) && blink), t.extPwr ? "#3ddc84" : "#ffb020"], ARRANQUE: [tb.starter, "#ffb020"], "IGNIÇÃO": [tb.ignition, "#ffb020"], CHAMA: [tb.lit, "#3ddc84"], EGT: [tb.egtWarn || (tb.phase === "accel" && tb.egt > 720), "#ff4040"] };
         for (const el of Array.from(this.annun.children) as HTMLElement[]) {
           const [lit, c] = on[el.dataset.k ?? ""] ?? [false, ""];
           el.style.color = lit ? "#111" : "rgba(255,255,255,.35)"; el.style.background = lit ? c : "rgba(0,0,0,.25)"; el.style.borderColor = lit ? c : "rgba(255,255,255,.18)";
