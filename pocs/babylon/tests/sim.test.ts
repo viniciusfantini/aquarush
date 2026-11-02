@@ -1343,6 +1343,32 @@ for (const [label, thr] of [["baixa", 0.25], ["alta", 1]] as const) {
   }
 }
 
+// ---------- Abandonar o barco (barra de espaço): pulam de colete e voltam a bordo ----------
+{
+  const water = mkWater(0);
+  const b = new Speedboat(SPEEDBOAT, v3(0, 0.25, 0)); b.systems.fuelL = 50;
+  b.occupants = [{ seat: "helm", mass: PERSON_KG }, { seat: "passenger", mass: PERSON_KG }];
+  run(b, water, 3, { ...emptyInput(), gear: "N" });
+  const r = b.abandonShip();
+  check("abandonar", "espaço: todos pulam (pessoas na água)", r === "jumped" ? b.swimmers.length : -1, 2, 2, "", 0);
+  check("abandonar", "o corta-circuito desliga o motor (piloto fora)", b.engine === "off" && b.telemetry.stall === "lanyard" ? 1 : 0, 1, 1, "", 0);
+  let maxOut = 0, backAt = -1;
+  run(b, water, 30, { ...emptyInput(), gear: "N" }, openWater, (t) => {
+    for (const s2 of b.swimmers) maxOut = Math.max(maxOut, Math.hypot(s2.pos.x - b.pos.x, s2.pos.z - b.pos.z));
+    if (backAt < 0 && b.swimmers.length === 0) backAt = t;
+  });
+  check("abandonar", "saltam para fora do casco (afastamento máximo, m)", maxOut, 1.3, 6, "m", 1);
+  check("abandonar", "voltam a bordo sozinhos com o barco de pé (s)", backAt, 2.5, 25, "s", 1);
+  check("abandonar", "a bordo de novo: os dois ocupantes nos seus lugares", b.occupants.length === 2 && b.occupants.some((o) => o.seat === "helm") ? 1 : 0, 1, 1, "", 0);
+  // AR-10 virada: o piloto fica preso no cinto (habitáculo fechado); o espaço o tira da cabine — e com o barco virado ninguém volta
+  const h = new Speedboat(TURBINA, v3(0, 0.3, 0)); h.systems.fuelL = 100; h.occupants = [{ seat: "helm", mass: PERSON_KG }];
+  run(h, water, 2, { ...emptyInput(), gear: "N" });
+  h.capsized = true;
+  const rh = h.abandonShip();
+  run(h, water, 25, { ...emptyInput(), gear: "N" });
+  check("abandonar", "AR-10 virada: o piloto sai da cabine e fica na água (não volta a um barco virado)", rh === "jumped" && h.swimmers.length === 1 && h.occupants.length === 0 ? 1 : 0, 1, 1, "", 0);
+}
+
 // ---------- Aceleração em neutro (botão da manete segurado em N) ----------
 {
   const water = mkWater(0);

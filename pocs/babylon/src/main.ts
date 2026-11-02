@@ -47,7 +47,7 @@ import { BoatCamera } from "./presentation/cameras.ts";
 import { Hud } from "./presentation/hud.ts";
 import { EngineAudio } from "./presentation/audio.ts";
 
-const BUILD = "poc-babylon 0.62.7";
+const BUILD = "poc-babylon 0.63.0";
 /** Escala visual da rotação da hélice (proporcional ao RPM, abaixo do limite estroboscópico). */
 const PROP_VISUAL_SCALE = 0.12;
 
@@ -373,7 +373,7 @@ const boot = async () => {
   const prevRot = new Quaternion(), curRot = new Quaternion();
   const snap = (dst: Vector3, q: Quaternion) => { const b = V.boat; dst.set(b.pos.x, b.pos.y, b.pos.z); q.set(b.rot.x, b.rot.y, b.rot.z, b.rot.w); };
   let fpsSmooth = 60, resT = 0;
-  let lastStartFail = "", lowFuelWarned = false, trimRelayWarned = false, neutralRevWarned = false, lastJumperOff = 0, lastJumperTrips = 0, lastGpuOff = 0, lastGpuState = "off", lastAnchorState = "recolhida", lastBilgeAlarm = false, lastExtFault = false, lastSwamped = false, lastSunk = false, windHudT = 0;
+  let lastStartFail = "", lowFuelWarned = false, trimRelayWarned = false, neutralRevWarned = false, lastJumperOff = 0, lastJumperTrips = 0, lastGpuOff = 0, lastGpuState = "off", lastAnchorState = "recolhida", lastBilgeAlarm = false, lastExtFault = false, lastReboarded = 0, lastSwamped = false, lastSunk = false, windHudT = 0;
   const qTilt = new Quaternion(), qSteer = new Quaternion();
   let lastGear = V.boat.telemetry.gear;
   let tiltWarned = false, intakeWarned = false, capsizeWarned = false;
@@ -850,6 +850,16 @@ const boot = async () => {
     }
     else if (a === "debug") hud.toggleDebug();
     else if (a === "help") hud.toggleHelp();
+    else if (a === "abandon") {
+      // ESPAÇO: todos pulam do barco (de colete); voltam a bordo quando chegarem perto, se ele não estiver virado
+      if (driving || carOnly) { hud.showToast("Você está no carro — K volta ao barco"); return; }
+      const wasRunning = boat.engine !== "off";
+      const r = boat.abandonShip();
+      if (r === "empty") { hud.showToast(boat.swimmers.length ? "Todos já estão na água — eles voltam a bordo quando chegarem perto do barco" : "Ninguém a bordo"); return; }
+      hud.showToast(boat.capsized ? (V.P.enclosedCockpit ? "O piloto soltou o cinto e saiu da cabine: está na água de colete, a salvo" : "Todos na água de colete")
+        : `Todos pularam na água (de colete)!${wasRunning ? " O corta-circuito desligou o motor." : ""} Eles voltam a bordo ao chegar perto do barco`, true);
+      return;
+    }
     else if (a === "ignition") {
       if (boat.capsized) { hud.showToast("Barco virado — R para recomeçar"); return; }
       { const tb0 = boat.units[0].turb; if (tb0 && !tb0.fadec && !tb0.running && !tb0.starting) tb0.setFadec(true); } // P = START (FADEC)
@@ -1104,6 +1114,10 @@ const boot = async () => {
     // AR-10 manual: EXT PWR em ON sem a GPU conectada com o barco energizado — falha (alarme + EXT PWR vermelho)
     if (T.extPwrFault && !lastExtFault && mode === "game") sysToast("FALHA EXT PWR: chave em ON sem a GPU conectada — desligue o EXT PWR ou conecte a GPU (J, na doca)", true);
     lastExtFault = T.extPwrFault;
+    if (boat.reboarded !== lastReboarded) {
+      if (mode === "game" && boat.reboarded > lastReboarded) hud.showToast(boat.swimmers.length ? `Voltou a bordo — ainda ${boat.swimmers.length} na água` : "Todos de volta a bordo");
+      lastReboarded = boat.reboarded;
+    }
     if (T.swamped && !lastSwamped && mode === "game" && !T.sunk) hud.showToast(`Barco ALAGADO: ${T.bilgeL.toFixed(0)} L dentro e a borda na linha d'água — inavegável; se entrar mais água ele afunda`);
     lastSwamped = T.swamped;
     if (T.sunk && !lastSunk && mode === "game") hud.showToast(`O barco AFUNDOU com ${T.bilgeL.toFixed(0)} L de água dentro — todos na água de colete. R para recomeçar`, true);
@@ -1149,7 +1163,7 @@ const boot = async () => {
     neutralRevWarned = T.neutralRev;
     if (T.lowFuel && !lowFuelWarned && T.engine === "running" && mode === "game") { sysToast(`Combustível na reserva: ${T.fuelL.toFixed(1)} L`); lowFuelWarned = true; }
     if (!T.lowFuel) lowFuelWarned = false;
-    if (T.stall && T.stall !== lastStall && T.stall !== "capsize" && T.stall !== "broken") sysToast(T.stall === "fuel" ? (T.fuelValveOpen ? "O motor morreu: acabou o combustível" : "O motor morreu: registro do tanque FECHADO (Y abre)") : T.stall === "flooded" ? "O motor AFOGOU: afogador puxado com o motor quente — empurre o afogador (Y) e puxe a corda de novo" : "O motor desligou: superaquecimento");
+    if (T.stall && T.stall !== lastStall && T.stall !== "capsize" && T.stall !== "broken" && T.stall !== "lanyard") sysToast(T.stall === "fuel" ? (T.fuelValveOpen ? "O motor morreu: acabou o combustível" : "O motor morreu: registro do tanque FECHADO (Y abre)") : T.stall === "flooded" ? "O motor AFOGOU: afogador puxado com o motor quente — empurre o afogador (Y) e puxe a corda de novo" : "O motor desligou: superaquecimento");
     lastStall = T.stall;
     if ((hoursSaveT += dtReal) > 10) { hoursSaveT = 0; try { localStorage.setItem(V.hoursKey, String(boat.systems.engineHours)); } catch { /* sem storage */ } }
     // hélice: velocidade visual PROPORCIONAL ao RPM real (escala fixa de 0,12). A rotação real (até ~48 voltas/s)

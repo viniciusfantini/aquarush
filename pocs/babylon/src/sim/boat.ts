@@ -72,7 +72,7 @@ export interface BoatTelemetry {
   protectMode: boolean;  // superaquecido: rotação limitada
   lowFuel: boolean;
   chargeWarn: boolean;
-  stall: "" | "fuel" | "overheat" | "capsize" | "broken" | "sunk" | "flooded"; // último motivo de o motor ter morrido sozinho (flooded = afogado pelo afogador)
+  stall: "" | "fuel" | "overheat" | "capsize" | "broken" | "sunk" | "flooded" | "lanyard"; // lanyard = corta-circuito (o piloto pulou) // último motivo de o motor ter morrido sozinho (flooded = afogado pelo afogador)
   buzzer: boolean;       // alarme do motor apitando (autoteste da chave)
   starterRpm: number;    // rotação do motor de arranque (0 = só o "clique" do solenoide)
   startFail: "" | "weak" | "dead" | "pull" | "fuel"; // última partida que não pegou (bateria fraca / sem força / corda / sem combustível)
@@ -163,6 +163,8 @@ export interface Swimmer {
   swim: number;
   /** tempo na água (s): primeiro se recupera do tombo, depois nada */
   t: number;
+  /** pulou do barco por vontade própria (espaço): volta a bordo quando chegar perto, se o barco não estiver virado */
+  jumped?: boolean;
 }
 
 export type IgnitionKey = "off" | "on" | "start";
@@ -1223,8 +1225,22 @@ export class Speedboat {
     this.updateSwimmers(dt, water, world);
   }
 
-  /** Ocupantes vão para a água (de colete), cada um pelo bordo do seu banco. */
-  private ejectOccupants(rollSide: number): void {
+  /**
+   * ABANDONAR o barco (barra de espaço): todos pulam na água de colete, cada um pelo bordo do seu banco. O cordão do
+   * corta-circuito está preso ao piloto: com ele fora, o motor desliga. No habitáculo fechado (AR-10) virado, é assim
+   * que o piloto sai da cabine e se salva. Quem pulou volta a bordo sozinho ao chegar perto do barco (se ele não
+   * estiver virado nem afundado e estiver quase parado).
+   */
+  abandonShip(): "jumped" | "empty" {
+    if (!this.occupants.length) return "empty";
+    const pilot = this.occupants.some((o) => o.seat === "helm");
+    this.ejectOccupants(this.right.y < 0 ? 1 : -1, true);
+    if (pilot && this.engine !== "off") { this.engine = "off"; this.telemetry.stall = "lanyard"; }
+    return "jumped";
+  }
+
+  /** Ocupantes vão para a água (de colete), cada um pelo bordo do seu banco (`jump` = pularam, com impulso). */
+  private ejectOccupants(rollSide: number, jump = false): void {
     const fwd = this.forward, right = this.right;
     for (const o of this.occupants) {
       const seat = this.params.seats[o.seat];
@@ -1232,13 +1248,16 @@ export class Speedboat {
       const side = Math.abs(seat.x) > 0.1 ? Math.sign(seat.x) : rollSide;
       const out = v3(right.x * side, 0, right.z * side);
       const ol = Math.hypot(out.x, out.z) || 1;
-      this.swimmers.push({ seat: o.seat, mass: o.mass, pos: p, vel: addScaled(this.pointVelocity(p), v3(out.x / ol, 0.5, out.z / ol), 1.6), yaw: Math.atan2(fwd.x, fwd.z),
-        slot: Math.atan2(side * 1, seat.z / (this.params.length / 2)), swim: 0, t: 0 });
+      // (no pulo a pessoa sobe na borda e se lança para fora: mais impulso e mais para cima)
+      const kick = jump ? v3(out.x / ol * 2.2, 2.4, out.z / ol * 2.2) : scale(v3(out.x / ol, 0.5, out.z / ol), 1.6);
+      this.swimmers.push({ seat: o.seat, mass: o.mass, pos: jump ? add(p, v3(0, 0.35, 0)) : p, vel: add(this.pointVelocity(p), kick), yaw: Math.atan2(fwd.x, fwd.z),
+        slot: Math.atan2(side * 1, seat.z / (this.params.length / 2)), swim: 0, t: 0, jumped: jump });
     }
     this.occupants = [];
   }
 
   private updateSwimmers(dt: number, water: IWaterSurface, world: PhysicsWorld): void {
+    const boarding: Swimmer[] = [];
     for (const s of this.swimmers) {
       const h = water.getHeight(s.pos.x, s.pos.z);
       const cur = water.getCurrent(s.pos.x, s.pos.z);
@@ -1308,8 +1327,18 @@ export class Speedboat {
       }
       const g = world.groundHeight(s.pos.x, s.pos.z) + 0.25; // raso: fica sentado no fundo
       if (s.pos.y < g) { s.pos = v3(s.pos.x, g, s.pos.z); s.vel = v3(s.vel.x * 0.9, Math.max(0, s.vel.y), s.vel.z * 0.9); }
+      // de volta a bordo: chegou ao seu lugar junto do casco, com o barco de pé, inteiro e quase parado
+      if (!this.capsized && !this.sunk && s.t > 2.5 && inWater && dT < 0.45 && Math.hypot(this.vel.x, this.vel.z) < 1.5
+        && !this.occupants.some((o) => o.seat === s.seat)) boarding.push(s);
+    }
+    for (const s of boarding) {
+      this.swimmers.splice(this.swimmers.indexOf(s), 1);
+      this.occupants.push({ seat: s.seat, mass: s.mass });
+      this.reboarded++;
     }
   }
+  /** pessoas que voltaram a bordo (contador; o main avisa) */
+  reboarded = 0;
 
   /**
    * Trim MANUAL (bote, sem power trim): cada toque em trim+ / trim- passa o motor para o próximo furo
