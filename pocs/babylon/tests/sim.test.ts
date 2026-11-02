@@ -939,6 +939,27 @@ for (const [label, thr] of [["baixa", 0.25], ["alta", 1]] as const) {
     h.engine = "off"; run(h, hw, 15, { ...emptyInput(), gear: "F" });
     check("turbina", "câmbio hidráulico: turbina cortada — sem pressão, volta para N", h.telemetry.gear === "N" ? 1 : 0, 1, 1, "", 0);
   }
+  // GOV: com o governador ligado, em N o N2 fica em ~101–104 % e o N1 baixo; desligado (manual), em N a turbina livre
+  // sem carga dispara e a proteção independente de sobrevelocidade corta a 113 %
+  {
+    const gw = mkWater(0.35);
+    const g = mk(); g.coldEngines(); g.systems.batterySoc = 0.8;
+    g.toggleIgnition(); run(g, gw, 40, N);
+    run(g, gw, 10, { ...N, throttle: 1, neutralThrottle: true });
+    const tg = g.units[0].turb!;
+    check("turbina", "GOV ligado, em N a pleno: o governador segura o N2 (%)", tg.n2, 99, 105, "%", 1);
+    check("turbina", "GOV ligado, em N a pleno: o N1 fica baixo (%)", tg.n1, 65, 78, "%", 1);
+    run(g, gw, 1, N);
+    tg.setFadec(false); tg.setSwitch("governor", false);
+    const ev: string[] = []; let tripAt = -1, n1Max = 0;
+    run(g, gw, 8, { ...N, throttle: 0.6, neutralThrottle: true }, openWater, (t) => {
+      n1Max = Math.max(n1Max, tg.n1);
+      for (const e of tg.drainEvents()) { ev.push(e); if (e === "n2Trip" && tripAt < 0) tripAt = t; }
+    });
+    check("turbina", "GOV desligado, em N: o N1 passa do que o governador deixava (%)", n1Max, 72, 102, "%", 1);
+    check("turbina", "GOV desligado, em N: N2 dispara e a proteção corta a 113 % (s)", ev.includes("n2Over") ? tripAt : -1, 0.1, 6, "s", 2);
+    check("turbina", "sobrevelocidade: turbina apagada e com desgaste", !tg.lit && tg.wear >= 0.05 ? 1 : 0, 1, 1, "", 0);
+  }
   // ---- partida MANUAL pelo painel (chave por chave) ----
   const manual = () => { const x = mk(); x.coldEngines(); x.systems.batterySoc = 0.6; const tb = x.units[0].turb!; tb.setFadec(false); tb.cold(); return { x, tb }; };
   {
@@ -1109,7 +1130,10 @@ for (const [label, thr] of [["baixa", 0.25], ["alta", 1]] as const) {
     // temperatura do óleo: com a água do trocador estabiliza; sem água esquenta, alarma e desgasta (sem corte automático)
     const o = mk(); run(o, water, 300, N);
     check("turbina", "óleo em marcha lenta na água, 5 min (°C)", o.telemetry.turbine!.oilC, 70, 90, "°C", 0);
-    run(o, water, 120, { ...emptyInput(), gear: "F", throttle: 1 });
+    const oEv: string[] = []; let oN2 = 0;
+    run(o, water, 120, { ...emptyInput(), gear: "F", throttle: 1 }, openWater, () => { oEv.push(...o.units[0].turb!.drainEvents()); oN2 = Math.max(oN2, o.units[0].turb!.n2); });
+    // (com ondas a hélice de superfície ventila e o N2 dá saltos: com o GOV ligado o corte rápido de combustível segura)
+    check("turbina", "a toda com ondas, GOV ligado: N2 máx. sem disparar a proteção (%)", oEv.includes("n2Trip") ? 999 : oN2, 99, 108, "%", 1);
     check("turbina", "óleo a toda na água, 2 min (°C)", o.telemetry.turbine!.oilC, 80, 100, "°C", 0);
     check("turbina", "óleo a toda na água: sem alarme", o.telemetry.turbine!.oilHot ? 0 : 1, 1, 1, "", 0);
     const tb = new Turbine(TURBINA.turbine!); tb.idle();

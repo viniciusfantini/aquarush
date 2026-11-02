@@ -96,6 +96,13 @@ A lancha é um **corpo rígido 6DOF** (massa seca de 1030 kg + gasolina, ocupant
 
 > Referência completa da lógica elétrica e dos motores: [`docs/SISTEMAS_ELETRICOS_E_MOTORES.md`](../../docs/SISTEMAS_ELETRICOS_E_MOTORES.md).
 
+## AR-10: chave GOV e sobrevelocidade do N2 (v0.64)
+
+- **O que limitava a aceleração em N:** o governador da turbina livre. Em neutro a hélice quase não tem carga; pouco gás leva o N2 a 100 % e o governador corta o combustível a ~101–104 % — o N1 fica em ~71 % (EGT ~500 °C) mesmo com a manete toda.
+- **Chave GOV** (`Turbine.governor`, chave 8 da botoeira): ligada (padrão; no FADEC sempre governa) = como acima. Desligada (manual) = a manete comanda o combustível direto: em N o N1 sobe (80 % no teste), mas a turbina livre sem carga dispara: aviso **N2 SOBREV.** acima de 106 % e a **proteção independente de sobrevelocidade** (não desliga) corta o combustível a 113 % e soma 5 % de desgaste. Anunciador **GOV OFF** (âmbar).
+- **Governador revisto:** proporcional + antecipação pela aceleração do N2 (perto do limite) + **corte rápido de combustível** acima de ~104 % (a potência cai com o combustível antes de o N1 desacelerar). Motivo: com ondas, a hélice de superfície ventila e o N2 saltava até 113 % a toda — antes isso ficava escondido por um teto de 110 % no N2, que foi tirado (agora vai a 125 %).
+- Testes: GOV ligado em N a pleno → N2 102,8 %, N1 71 %; GOV desligado em N → N1 80 %, corte a 113 % em 2,3 s, turbina apagada e desgaste; a toda com ondas e GOV ligado → N2 máx. 105,5 % sem cortar; óleo a toda 90 °C. No navegador: GOV OFF âmbar, N1 76 %, corte e "AVARIA MOTOR 5%".
+
 ## Abandonar o barco — barra de espaço (v0.63)
 
 **v0.63.5:** nado de colete até ~0,55 m/s (antes 0,35): voltam a bordo em 4,9 s de perto; pulando a 65 km/h, em 173 s.
@@ -371,7 +378,7 @@ Limitação: é uma síntese aproximada, não uma gravação. Validar o timbre d
 | 6. Ondas e correnteza | ondas fortes (×2,5): roll ≤ 30°, não emborca; deriva com correnteza de 1,6 m/s: 1,54 m/s |
 | Lago | flutua no spawn; a toda contra a margem, encalha e para sem atravessar o terreno |
 
-Resultado: **578/580 OK + 2 KNOWN** (v0.63.5). Na v0.10, o peso do piloto na posição real (boreste, acima do CG) aumentou o roll em curva com ondas fortes; o `bankCoef` foi para 1800 e o `rollDamping` para 15000, com 1 limitação conhecida (abaixo). Na v0.2 a hélice foi para 0,5 m atrás do espelho, como no modelo visual, e o esterço máximo em alta velocidade caiu de 13° para 11°.
+Resultado: **584/586 OK + 2 KNOWN** (v0.64.0). Na v0.10, o peso do piloto na posição real (boreste, acima do CG) aumentou o roll em curva com ondas fortes; o `bankCoef` foi para 1800 e o `rollDamping` para 15000, com 1 limitação conhecida (abaixo). Na v0.2 a hélice foi para 0,5 m atrás do espelho, como no modelo visual, e o esterço máximo em alta velocidade caiu de 13° para 11°.
 
 ### Navegador (Chrome, Windows 11, WebGL2, `q=med`, ~1370×896)
 

@@ -354,12 +354,12 @@
     #tpanel .rot .dial { height: 84px; }
     /* grade horizontal (v0.62.3): [mostradores | anunciadores] / [botoeira de partida | manetes] / [sistemas + GPU | manetes] / [avisos] */
     /* v0.62.4: equilíbrio — [mostradores | anunciadores] / [botoeira de partida] / [sistemas | manetes] / [avisos] */
-    #tpanel { width: min(700px, calc(100vw - 24px)); }
+    #tpanel { width: min(700px, calc(100vw - 24px)); overflow-x: hidden; }
     #tpanel .tp-gauges .gauge.small { width: 68px; height: 68px; }
     #tpanel .tp-sysp .rot { width: 108px; } #tpanel .tp-sysp .rot .dial { width: 104px; }
     .tp-grid { display: flex; flex-wrap: wrap; gap: 6px 8px; align-items: stretch; }
     .tp-grid > .tp-gauges { flex: 1 1 100%; margin: 0; align-self: center; }
-    .tp-grid > .tp-ann { flex: 1 1 100%; margin: 0; display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; align-content: center; }
+    .tp-grid > .tp-ann { flex: 1 1 100%; margin: 0; display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; align-content: center; }
     .tp-grid > .tp-sw { flex: 1 1 100%; justify-content: space-evenly; align-items: flex-start; }
     .tp-grid > .tp-sysp { flex: 1 1 auto; justify-content: space-evenly; align-items: flex-start; gap: 8px 10px; }
     /* START/STOP numa seção própria, ao lado de baterias / tanque / bomba */

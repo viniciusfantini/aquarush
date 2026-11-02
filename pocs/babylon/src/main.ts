@@ -47,7 +47,7 @@ import { BoatCamera } from "./presentation/cameras.ts";
 import { Hud } from "./presentation/hud.ts";
 import { EngineAudio } from "./presentation/audio.ts";
 
-const BUILD = "poc-babylon 0.63.5";
+const BUILD = "poc-babylon 0.64.0";
 /** Escala visual da rotação da hélice (proporcional ao RPM, abaixo do limite estroboscópico). */
 const PROP_VISUAL_SCALE = 0.12;
 
@@ -633,6 +633,7 @@ const boot = async () => {
         return;
       }
       tb.setSwitch(sw, on);
+      if (sw === "governor") sysToast(on ? "GOV ligado: o governador limita o N2 a ~104 %" : "GOV DESLIGADO: a manete comanda o combustível direto — sem carga (em N) o N2 dispara; a proteção corta a 113 %");
       if (sw === "master") {
         const live = V.boat.batterySel === "both" || (V.boat.batterySel === "bus" && (V.boat.systems.gpuOnline || V.boat.systems.genOn));
         sysToast(!on ? "MAIN desligada: os sistemas eletrônicos saíram do barramento (sem GPU, sem gerador, sem baterias)"
@@ -1090,6 +1091,8 @@ const boot = async () => {
         overtemp: `SOBRETEMPERATURA: EGT ${tb.egt.toFixed(0)} °C (limite ${V.P.turbine!.egtStartLimit}) — corte o COMBUSTÍVEL! No manual nada protege: a turbina desgasta`,
         wetStart: "Partida MOLHADA: o combustível acumulado na câmara queimou de uma vez (labareda) — abra o combustível só com a ignição ligada e N1 em 12 %",
         starterOverspeed: "Starter ainda ligado acima de 60 % N1 — desligue: no manual ninguém corta, e ele esquenta rápido",
+        n2Over: "N2 em SOBREVELOCIDADE (> 106 %): turbina livre sem carga — reduza a potência ou ligue o GOV",
+        n2Trip: "PROTEÇÃO DE SOBREVELOCIDADE: N2 passou de 113 % — combustível cortado (a sobrevelocidade conta desgaste)",
         earlyFuel: `Combustível aberto CEDO (acendeu com N1 em ${tb.n1.toFixed(0)} %): pouco ar para o combustível — a EGT dispara (partida quente)`,
         starterHot: "STARTER SUPERAQUECIDO: mais de 40 s ligado — o térmico desarmou; espere ~60 s para usar de novo",
         starterLocked: "Starter ainda quente (térmico desarmado) — aguarde esfriar",

@@ -1,14 +1,14 @@
 # AQUA RUSH — Sistemas elétricos e de motores (referência para qualquer IA ou dev)
 
 Este documento descreve **toda a lógica** dos sistemas elétricos, de combustível, de arrefecimento, de partida e
-dos motores das 4 embarcações da POC 1 (Babylon.js, `pocs/babylon`), como estão no código na **v0.63.5**. Serve
+dos motores das 4 embarcações da POC 1 (Babylon.js, `pocs/babylon`), como estão no código na **v0.64.0**. Serve
 para continuar o trabalho em outra IA/ferramenta ou portar para Unity/Unreal sem precisar redescobrir as regras.
 
 > Fonte da verdade = o código. Se divergir, vale o código e este arquivo deve ser corrigido.
 > Arquivos: `src/sim/engineSystems.ts` (combustível, temperatura, bateria, alternador, booster, GPU, barramento),
 > `src/sim/turbine.ts` (turbina a gás + FADEC), `src/sim/boat.ts` (motores `EngineUnit`, partida, chaves,
 > roteamento de baterias, porão), `src/sim/anchor.ts` (molinete), `src/sim/params.ts` (parâmetros = contrato entre
-> as POCs). Testes: `tests/sim.test.ts` (`npm run test:sim`, hoje **578/580 + 2 KNOWN**).
+> as POCs). Testes: `tests/sim.test.ts` (`npm run test:sim`, hoje **584/586 + 2 KNOWN**).
 
 ---
 
@@ -225,7 +225,7 @@ idle N1 62 %, max N1 101 %, starter sozinho até 24 % N1, ignição + combustív
 hélice 2500 rpm), 85–470 L/h, spool-down τ 9 s, óleo: alarme 110 °C, dano acima de 120 °C.
 
 ### 8.2 A física lê só as CHAVES
-Chaves: `master` (BAT), `boostPump`, `ignition`, `starter`, `fuelValve` (condição CORTE/LENTA), `generator` (GEN);
+Chaves: `master` (MAIN), `boostPump`, `ignition`, `starter`, `fuelValve` (condição CORTE/LENTA), `generator` (GEN), `governor` (GOV);
 mais o EXT PWR da GPU no `EngineSystems`.
 - **Tudo é periférico do barramento:** funciona se houver tensão (`volts > 6`) — bateria, GPU ou gerador.
   A posição da chave fica (telemetria `starterSw`/`ignitionSw`); o funcionamento é chave **e** energia
@@ -239,6 +239,15 @@ mais o EXT PWR da GPU no `EngineSystems`.
   `starterOverspeed` (aviso), aquece **4× mais rápido** e o térmico desarma. Uso contínuo > 40 s (equivalentes) →
   superaquece e trava 60 s (`starterLockT`). O gerador só gera com o starter desligado.
 - N2 (turbina livre): torque disponível ∝ gás·(2 − N2), carga da hélice ∝ carga·N2² (lei da hélice).
+
+### 8.2b Governador do N2 e chave GOV (v0.64)
+- Turbina livre sem carga (em N a hélice absorve ~12 %) dispara com pouco gás. O **governador** reduz o combustível:
+  alvo de N1 × `clamp((103,5 − N2 − antecipação)/3)`, antecipação = 0,9 × aceleração do N2 (%/s) acima de 97 %, e
+  **corte rápido** da potência `gas × clamp((105,5 − N2)/1,5, 0,05, 1)` (hélice de superfície ventilando em ondas).
+  Resultado: em N a pleno, N2 ~103 % e N1 ~71 %; a toda com ondas, N2 ≤ ~105,5 %.
+- **Chave GOV** (`governor`, só manual; o FADEC sempre governa): desligada, sem governador — em N o N2 dispara.
+  Aviso de sobrevelocidade > 106 % (anunciador **N2 SOBREV.**); a **proteção independente** corta o combustível a
+  **113 %** e soma 5 % de desgaste (`n2Trip`). Anunciador **GOV OFF** (âmbar).
 
 ### 8.3 FADEC (padrão) — camada que aciona as mesmas chaves (`fadecStep`)
 1. `start()`: bomba ON, starter ON (não liga a BAT: ela é do piloto; sem BAT e sem GPU → `"noPower"`).

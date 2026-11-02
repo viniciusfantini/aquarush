@@ -133,7 +133,7 @@ export interface BoatTelemetry {
   /** turbina (lancha de turbina): N1/N2 %, EGT °C, torque %, óleo psi, fase da partida */
   turbine: { n1: number; n2: number; egt: number; torque: number; oilPsi: number; fuelLph: number; phase: TurbinePhase; starter: boolean; ignition: boolean; lit: boolean; egtWarn: boolean; hotStarts: number;
     /** modo e chaves do painel de partida; combustível acumulado sem queimar (L); desgaste por sobretemperatura */
-    fadec: boolean; master: boolean; boostPump: boolean; fuelValve: boolean; pooledL: number; wear: number;
+    fadec: boolean; master: boolean; boostPump: boolean; fuelValve: boolean; pooledL: number; wear: number; governor: boolean;
     generator: boolean; starterLock: number; seized: boolean;
     /** temperatura do óleo (°C) e os alarmes: quente (luz + som) e acima do limite (mancais se desgastando) */
     oilC: number; oilHot: boolean; oilRed: boolean;
@@ -1544,7 +1544,7 @@ export class Speedboat {
     t.turbine = tb ? { n1: tb.n1, n2: tb.n2, egt: tb.egt, torque: tb.torque, oilPsi: tb.oilPsi, fuelLph: tb.fuelLph, phase: tb.phase,
       starter: tb.starter && tb.powered, ignition: tb.ignition && tb.powered, lit: tb.lit, egtWarn: tb.egtWarn, hotStarts: tb.hotStarts, powered: tb.powered, starterSw: tb.starter, ignitionSw: tb.ignition,
       fadec: tb.fadec, master: tb.master, boostPump: tb.boostPump, fuelValve: tb.fuelValve, pooledL: tb.pooledL, wear: tb.wear,
-      generator: tb.generator, starterLock: tb.starterLockT, seized: tb.seizedOn, oilC: tb.oilC, oilHot: tb.oilC > tb.p.oilWarnC, oilRed: tb.oilC > tb.p.oilRedC } : null;
+      generator: tb.generator, governor: tb.governor, starterLock: tb.starterLockT, seized: tb.seizedOn, oilC: tb.oilC, oilHot: tb.oilC > tb.p.oilWarnC, oilRed: tb.oilC > tb.p.oilRedC } : null;
   }
 
   /** Estado agregado dos motores para os sistemas (bateria, alternadores, arranques, combustível, temperatura). */

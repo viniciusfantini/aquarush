@@ -44,10 +44,10 @@ export interface TurbineParams {
 export type TurbinePhase = "off" | "starter" | "lightoff" | "accel" | "running" | "spooldown";
 export type TurbineEvent = "starter" | "ignition" | "lightoff" | "starterOff" | "idle" | "hotStart" | "noLightOff" | "hungStart"
   | "shutdown" | "flameout" | "abort" | "overtemp" | "starterOverspeed" | "wetStart" | "earlyFuel" | "starterHot" | "starterLocked" | "seized"
-  | "oilHot" | "oilDamage";
+  | "oilHot" | "oilDamage" | "n2Over" | "n2Trip";
 
 /** chaves do painel de partida (manual) */
-export type TurbineSwitch = "master" | "boostPump" | "ignition" | "starter" | "fuelValve" | "generator";
+export type TurbineSwitch = "master" | "boostPump" | "ignition" | "starter" | "fuelValve" | "generator" | "governor";
 
 export interface TurbineInput {
   lever: number;      // manete de potência 0..1 (acima da marcha lenta)
@@ -69,6 +69,12 @@ export class Turbine {
   fadec = true;
   // ---- chaves (no FADEC a automação as aciona) ----
   master = true; boostPump = true; ignition = false; starter = false; fuelValve = true;
+  /**
+   * GOV: governador da turbina livre (limita o N2 a ~101–104 % cortando combustível). Desligado (só no MANUAL; o FADEC
+   * sempre governa), a manete comanda o combustível direto — sem carga (em N, ou com a hélice ventilando/fora d'água)
+   * o N2 dispara. A proteção INDEPENDENTE de sobrevelocidade (não desliga) corta a turbina a 113 % de N2.
+   */
+  governor = true;
   /** relé do GERADOR (starter-gerador): ligado com a turbina rodando e o starter desligado, alimenta o barramento */
   generator = true;
   /** o barramento tem tensão (passo anterior): sem ela nada elétrico funciona — luzes, velas, bomba e instrumentos */
@@ -107,7 +113,11 @@ export class Turbine {
   /** tempo sem tensão no barramento (s): passa de 0,3 s, o solenoide de combustível fecha */
   private unpoweredT = 0;
   /** aviso "starter ligado acima de 60 % N1" já dado (manual) */
-  private starterHiWarn = false; // o próximo apagar foi um corte intencional (sem aviso de flameout)
+  private starterHiWarn = false;
+  /** aviso de sobrevelocidade do N2 já dado */
+  private n2OverOn = false;
+  /** aceleração do N2 (%/s, filtrada) — a antecipação do governador */
+  private n2Rate = 0; // o próximo apagar foi um corte intencional (sem aviso de flameout)
   private seq: "none" | "start" = "none"; // sequência do FADEC em andamento
   private seqT = 0;
   private overtempOn = false;
@@ -145,7 +155,7 @@ export class Turbine {
     this.n1 = 0; this.n2 = 0; this.egt = this.p.egtAmbient; this.oilPsi = 0; this.oilC = this.p.egtAmbient; this.oilHotOn = this.oilRedOn = false;
     this.torque = 0; this.power = 0; this.fuelLph = 0; this.starterLoad = 0; this.pooledL = 0;
     this.lit = this.running = false; this.starter = this.ignition = this.fuelValve = this.generator = false;
-    this.starterOnT = 0; this.starterLockT = 0; this.earlyL = 0; this.earlyLight = 0; this.n1Light = 12;
+    this.starterOnT = 0; this.starterLockT = 0; this.earlyL = 0; this.earlyLight = 0; this.n1Light = 12; this.governor = true; this.n2OverOn = false;
     this.master = this.boostPump = this.fadec;
     this.seq = "none"; this.lightT = 0; this.sinceLight = 99; this.quietCut = false; this.overtempOn = false; this.burst = 0;
     this.events = [];
@@ -290,12 +300,19 @@ export class Turbine {
     let gas = 0; // potência do gerador de gás (fração do nominal)
     if (this.lit && this.running) {
       // governador da turbina livre: N2 acima de ~101 % (sem carga, ex.: em neutro) reduz o combustível
-      const gov = clamp((104 - this.n2) / 3, 0, 1);
+      // governador do N2 (proporcional + antecipação pela aceleração do N2, como os reais: sem ela o N1, que tem inércia,
+      // deixa o N2 passar do limite). GOV OFF: sem governador
+      // (a antecipação só age perto do limite: longe dele, os saltos do N2 com a hélice de superfície saindo da água não cortam potência)
+      const lead = this.n2 > 97 ? 0.9 * Math.max(0, this.n2Rate) : 0;
+      const gov = this.governor || this.fadec ? clamp((103.5 - this.n2 - lead) / 3, 0, 1) : 1;
       const target = P.idleN1 + (P.maxN1 - P.idleN1) * clamp(inp.lever, 0, 1) * gov;
       let d = (target - this.n1) * k(P.spoolTau);
       d = clamp(d, -15 * dt, P.accelLimit * dt);   // a unidade de combustível limita acelerar/desacelerar
       this.n1 += d;
       gas = Math.pow(clamp((this.n1 - 55) / (100 - 55), 0, 1.06), 2) * (1 - 0.6 * Math.max(inp.damage ?? 0, this.wear));
+      // corte rápido do governador: acima de ~104 % de N2 (hélice de superfície ventilando, saindo d'água) ele reduz o
+      // combustível na hora — a potência cai com o combustível, antes de o N1 desacelerar. Sem GOV (manual), não há
+      if (this.governor || this.fadec) gas *= clamp((105.5 - this.n2) / 1.5, 0.05, 1);
       // EGT sobe com a potência e um pouco mais acelerando (excesso de combustível no transitório)
       egtTarget = P.egtIdle + (P.egtMax - P.egtIdle) * Math.min(1, gas) + 70 * clamp(d / (P.accelLimit * dt), 0, 1) * (gas < 0.9 ? 1 : 0);
       egtTau = 1.6;
@@ -354,7 +371,14 @@ export class Turbine {
     const n2f = this.n2 / 100;
     const qAvail = gasEff * (2 - Math.min(1.2, n2f));
     const qLoad = Math.max(0.02, inp.load) * n2f * n2f;
-    this.n2 = clamp(this.n2 + (qAvail - qLoad) * 90 * dt, 0, 110);
+    const n2Before = this.n2;
+    this.n2 = clamp(this.n2 + (qAvail - qLoad) * 90 * dt, 0, 125);
+    this.n2Rate += ((this.n2 - n2Before) / Math.max(dt, 1e-4) - this.n2Rate) * Math.min(1, dt / 0.15); // %/s, filtrada
+    // sobrevelocidade da turbina livre: aviso a 106 %; a proteção independente corta o combustível a 113 % (e o evento
+    // conta desgaste: uma sobrevelocidade pede inspeção)
+    if (this.n2 > 106 && !this.n2OverOn) { this.n2OverOn = true; this.events.push("n2Over"); }
+    if (this.n2 < 102) this.n2OverOn = false;
+    if (this.n2 > 113 && this.burning) { this.cutFuel(true); this.wear = Math.min(1, this.wear + 0.05); this.events.push("n2Trip"); }
     this.torque = 100 * qLoad;
     this.power = qLoad * n2f;
     this.fuelLph = fuelFlow ? (this.running ? P.fuelIdleLph + (P.fuelMaxLph - P.fuelIdleLph) * Math.min(1.05, gas) : P.fuelIdleLph * 0.6) : 0;

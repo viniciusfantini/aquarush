@@ -41,6 +41,7 @@ const SWITCHES: { id: PanelSwitch; label: string; sub: string; on?: string; off?
   { id: "ignition", label: "IGNIÇÃO", sub: "velas" },
   { id: "fuelValve", label: "COMBUSTÍVEL", sub: "condição", on: "LENTA", off: "CORTE", variant: "red" },
   { id: "generator", label: "GERADOR", sub: "→ barramento" },
+  { id: "governor", label: "GOV", sub: "governador N2" },
 ];
 
 export class TurbinePanel {
@@ -65,7 +66,7 @@ export class TurbinePanel {
         <button class="tp-ck" data-ck>CHECKLIST</button><button class="tp-x" aria-label="fechar">×</button></div>
       <div class="tp-grid">
       <div class="tp-gauges"></div>
-      <div class="tp-ann">${["BAT", "EXT PWR", "GEN", "STARTER", "IGNIÇÃO", "CHAMA", "EGT ALTA", "ÓLEO QUENTE"].map((k) => `<span data-a="${k}">${k}</span>`).join("")}</div>
+      <div class="tp-ann">${["BAT", "EXT PWR", "GEN", "STARTER", "IGNIÇÃO", "CHAMA", "EGT ALTA", "ÓLEO QUENTE", "GOV OFF", "N2 SOBREV."].map((k) => `<span data-a="${k}">${k}</span>`).join("")}</div>
         <div class="sw-plate tp-sw">${SCR}${SWITCHES.map((s, i) => s.id === "fuelValve"
           // a manete de condição do combustível é um seletor rotativo (como os registros), não uma chave elétrica
           ? rotary("fv", "COMBUSTÍVEL", "condição", [{ v: "cut", l: "CORTE" }, { v: "idle", l: "LENTA" }], { num: i + 1, cls: "fuel" })
@@ -160,11 +161,12 @@ export class TurbinePanel {
       "EXT PWR": t.extPwr ? "g" : t.extPwrFault ? (blink ? "r" : "") : t.gpu && (t.gpuState === "starting" || t.gpuState === "online") && blink ? "a" : "",
       STARTER: tb.starter ? "a" : "", "IGNIÇÃO": tb.ignition ? "a" : "", CHAMA: tb.lit ? "g" : "", "EGT ALTA": on && tb.egt > 720 ? "r" : "",
       "ÓLEO QUENTE": on && tb.oilRed ? (blink ? "r" : "") : on && tb.oilHot ? "r" : "",
+      "GOV OFF": on && !tb.governor && !tb.fadec ? "a" : "", "N2 SOBREV.": on && tb.n2 > 106 ? (blink ? "r" : "") : "",
     };
     for (const s of this.el.querySelectorAll<HTMLElement>("[data-a]")) s.className = ann[s.dataset.a ?? ""] ?? "";
-    const sw: Record<PanelSwitch, boolean> = { master: tb.master, extPwr: t.extPwrClosed, boostPump: tb.boostPump, starter: tb.starterSw, ignition: tb.ignitionSw, fuelValve: tb.fuelValve, generator: tb.generator };
+    const sw: Record<PanelSwitch, boolean> = { master: tb.master, extPwr: t.extPwrClosed, boostPump: tb.boostPump, starter: tb.starterSw, ignition: tb.ignitionSw, fuelValve: tb.fuelValve, generator: tb.generator, governor: tb.governor || tb.fadec };
     // posição das chaves (do piloto, mesmo sem energia no barramento); o LED só acende com a função energizada
-    const lit: Record<PanelSwitch, boolean> = { master: tb.master && on, extPwr: t.extPwr, boostPump: tb.boostPump && on, starter: tb.starter, ignition: tb.ignition, fuelValve: false, generator: t.busGen };
+    const lit: Record<PanelSwitch, boolean> = { master: tb.master && on, extPwr: t.extPwr, boostPump: tb.boostPump && on, starter: tb.starter, ignition: tb.ignition, fuelValve: false, generator: t.busGen, governor: (tb.governor || tb.fadec) && on };
     for (const id of Object.keys(sw) as PanelSwitch[]) if (id !== "fuelValve") setToggle(this.el, "s", id, sw[id], lit[id]);
     setRotary(this.el, "fv", tb.fuelValve ? "idle" : "cut");
     setRotary(this.el, "tank", t.fuelValveOpen ? "open" : "closed");
