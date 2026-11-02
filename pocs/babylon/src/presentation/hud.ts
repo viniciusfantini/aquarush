@@ -84,11 +84,12 @@ class RoundGauge {
   }
 }
 
-export interface HudOpts { speedMax: number; temp: boolean; battery: boolean; trimPins: number; gear?: "bar" | "dial" }
+export interface HudOpts { speedMax: number; temp: boolean; battery: boolean; trimPins: number; gear?: "bar" | "dial"; /** dois motores: um conta-giros por motor (BB / BE) */ twin?: boolean }
 
 export class Hud {
   private speedG!: RoundGauge;
   private rpmG!: RoundGauge;
+  private rpmG2: RoundGauge | null = null;
   private fuelG!: RoundGauge;
   private tempG: RoundGauge | null = null;
   private voltG: RoundGauge | null = null;
@@ -159,7 +160,15 @@ export class Hud {
     this.pins = opts.trimPins;
     const sm = opts.speedMax;
     this.speedG = new RoundGauge(big, { title: "km/h", min: 0, max: sm, labels: Array.from({ length: 6 }, (_, i) => (sm / 5) * i), minor: sm / 20, big: true });
-    this.rpmG = new RoundGauge(big, { title: "RPM x1000", min: 0, max: 7000, labels: [0, 1000, 2000, 3000, 4000, 5000, 6000, 7000], minor: 250, redFrom: 6000, big: true, labelFmt: (v) => String(v / 1000) });
+    if (opts.twin) {
+      // V8 de centro: faixa até 6000 rpm, vermelho a partir de 5000 (um relógio por motor, bombordo e boreste)
+      const rpmOpts = (t: string) => ({ title: t, min: 0, max: 6000, labels: [0, 1000, 2000, 3000, 4000, 5000, 6000], minor: 250, redFrom: 5000, big: true, labelFmt: (v: number) => String(v / 1000) });
+      this.rpmG = new RoundGauge(big, rpmOpts("RPM BB"));
+      this.rpmG2 = new RoundGauge(big, rpmOpts("RPM BE"));
+    } else {
+      this.rpmG = new RoundGauge(big, { title: "RPM x1000", min: 0, max: 7000, labels: [0, 1000, 2000, 3000, 4000, 5000, 6000, 7000], minor: 250, redFrom: 6000, big: true, labelFmt: (v) => String(v / 1000) });
+      this.rpmG2 = null;
+    }
     this.fuelG = new RoundGauge(small, { title: "COMBUST.", min: 0, max: 1, labels: [0, 0.5, 1], minor: 0.125, redFrom: 0, redTo: 0.12, labelFmt: (v) => (v === 0 ? "E" : v === 1 ? "F" : "½") });
     this.tempG = opts.temp ? new RoundGauge(small, { title: "TEMP", min: 40, max: 120, labels: [40, 80, 120], minor: 10, redFrom: 90 }) : null;
     this.voltG = opts.battery ? new RoundGauge(small, { title: "BATERIA", min: 8, max: 16, labels: [8, 12, 16], minor: 1, redFrom: 8, redTo: 11.5 }) : null;
@@ -169,7 +178,11 @@ export class Hud {
 
   update(t: BoatTelemetry, fps: number, extra: Record<string, string>): void {
     this.speedG.set(t.speedKmh, `${Math.round(t.speedKmh)}`, `marcha ${t.gear}`);
-    this.rpmG.set(t.rpm, `${Math.round(t.rpm / 10) * 10}`, `${t.engineHours.toFixed(1).padStart(6, "0")} h`, t.revLimiter);
+    if (this.rpmG2 && t.rpms && t.rpms.length > 1) {
+      const r0 = t.rpms[0], r1 = t.rpms[1], g = t.gears ?? [];
+      this.rpmG.set(r0, `${Math.round(r0 / 10) * 10}`, `${g[0] ?? t.gear} · ${t.engineHours.toFixed(1).padStart(6, "0")} h`, t.revLimiter);
+      this.rpmG2.set(r1, `${Math.round(r1 / 10) * 10}`, `${g[1] ?? t.gear}`, t.revLimiter);
+    } else this.rpmG.set(t.rpm, `${Math.round(t.rpm / 10) * 10}`, `${t.engineHours.toFixed(1).padStart(6, "0")} h`, t.revLimiter);
     const autonomy = t.fuelLph > 0.1 ? t.fuelL / t.fuelLph : 0;
     const autTxt = t.engine === "running" && autonomy > 0 ? ` · ${Math.floor(autonomy)}h${String(Math.floor((autonomy % 1) * 60)).padStart(2, "0")}` : "";
     this.fuelG.set(t.fuelFrac, `${t.fuelL.toFixed(1)} L`, `${t.fuelLph.toFixed(1)} L/h`, t.lowFuel);

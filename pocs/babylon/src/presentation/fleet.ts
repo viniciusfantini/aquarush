@@ -17,7 +17,7 @@ import { pbr, roundedRect, roundedBox, buildPropeller } from "./boatMesh.ts";
 import { buildCar, buildPickup } from "./ramp.ts";
 import { smoothstep } from "../sim/math.ts";
 
-type Mat = PBRMaterial | StandardMaterial;
+export type Mat = PBRMaterial | StandardMaterial;
 type P2 = [number, number];
 const V = (x: number, y: number, z: number) => new Vector3(x, y, z);
 const C = (r: number, g: number, b: number) => new Color3(r, g, b);
@@ -37,7 +37,7 @@ const key = (t: number, kf: P2[]): number => {
 };
 
 // ---------------------------------------------------------------- materiais
-const makeMats = (scene: Scene) => {
+export const makeMats = (scene: Scene) => {
   const glow = (name: string, c: Color3) => { const m = pbr(scene, name, c, 0, 0.4); m.emissiveColor = c; return m; };
   return {
     galv: pbr(scene, "fGalv", C(0.7, 0.72, 0.74), 0.85, 0.42),
@@ -72,10 +72,10 @@ const makeMats = (scene: Scene) => {
     lightWhite: glow("fLightW", C(0.95, 0.95, 0.9)),
   };
 };
-type Mats = ReturnType<typeof makeMats>;
+export type Mats = ReturnType<typeof makeMats>;
 
 // ---------------------------------------------------------------- kit de primitivas
-interface Kit {
+export interface Kit {
   scene: Scene;
   out: Mesh[];
   add: (m: Mesh, mat: Mat, parent: TransformNode) => Mesh;
@@ -88,7 +88,7 @@ interface Kit {
   ribbon: (paths: Vector3[][], mat: Mat, parent: TransformNode, closeArray?: boolean) => Mesh;
 }
 
-const makeKit = (scene: Scene): Kit => {
+export const makeKit = (scene: Scene): Kit => {
   const out: Mesh[] = [];
   const add = (m: Mesh, mat: Mat, parent: TransformNode) => { m.material = mat; m.parent = parent; out.push(m); return m; };
   const k: Kit = {
@@ -118,19 +118,19 @@ const makeKit = (scene: Scene): Kit => {
 };
 
 /** Loft de seções retangulares arredondadas (capôs, carenagens, cabines, assentos), com tampas. */
-interface RR { z: number; w: number; h: number; y: number; r: number; x?: number }
-const loftRR = (K: Kit, secs: RR[], mat: Mat, parent: TransformNode): Mesh => {
+export interface RR { z: number; w: number; h: number; y: number; r: number; x?: number }
+export const loftRR = (K: Kit, secs: RR[], mat: Mat, parent: TransformNode): Mesh => {
   const paths = secs.map((s) => roundedRect(Math.max(s.w, 0.004), Math.max(s.h, 0.004), s.r, 4).map((p) => V(p.x + (s.x ?? 0), p.y + s.y, s.z)));
   const a = secs[0], b = secs[secs.length - 1];
   paths.unshift(paths[0].map(() => V(a.x ?? 0, a.y, a.z)));
   paths.push(paths[paths.length - 1].map(() => V(b.x ?? 0, b.y, b.z)));
   return K.ribbon(paths, mat, parent);
 };
-const loftFn = (n: number, f: (t: number) => RR): RR[] => { const r: RR[] = []; for (let i = 0; i <= n; i++) r.push(f(i / n)); return r; };
+export const loftFn = (n: number, f: (t: number) => RR): RR[] => { const r: RR[] = []; for (let i = 0; i <= n; i++) r.push(f(i / n)); return r; };
 
 // ---------------------------------------------------------------- casco
-interface Band { top: (t: number) => number; mat: Mat }
-interface HullSpec {
+export interface Band { top: (t: number) => number; mat: Mat }
+export interface HullSpec {
   L: number; B: number; D: number;
   dead: number; deadBow?: number;     // tangente do V na popa / na proa
   bowRise?: number; sheerRise?: number; flare?: number; chine?: number; entry?: number; crown?: number; N?: number;
@@ -138,8 +138,8 @@ interface HullSpec {
   deck?: Mat; rub?: Mat; rubR?: number;
   well?: { depth: number; t0: number; t1: number; floor: Mat; gw?: number };
 }
-interface Sec { hs: number; s: number; k: number; c: number; hc: number; P: P2[] }
-interface Hull { L: number; z: (t: number) => number; tOf: (z: number) => number; sec: (t: number) => Sec; bottomY: (t: number, x: number) => number; sideX: (t: number, y: number) => number; deckY: (t: number) => number }
+export interface Sec { hs: number; s: number; k: number; c: number; hc: number; P: P2[] }
+export interface Hull { L: number; z: (t: number) => number; tOf: (z: number) => number; sec: (t: number) => Sec; bottomY: (t: number, x: number) => number; sideX: (t: number, y: number) => number; deckY: (t: number) => number }
 
 const hullSection = (S: HullSpec, t: number): Sec => {
   const entry = S.entry ?? 0.45;
@@ -197,7 +197,7 @@ const resample = (P: P2[], n: number): P2[] => {
   return r;
 };
 
-const buildHull = (K: Kit, parent: TransformNode, S: HullSpec): Hull => {
+export const buildHull = (K: Kit, parent: TransformNode, S: HullSpec): Hull => {
   const N = S.N ?? 64;
   const ts: number[] = [];
   for (let i = 0; i <= N; i++) ts.push(i / N);
@@ -352,7 +352,7 @@ const outboard = (K: Kit, M: Mats, parent: TransformNode, x: number, y: number, 
 };
 
 /** Guarda-mancebo: tubo superior + balaústres até `h` abaixo. */
-const rail = (K: Kit, M: Mats, parent: TransformNode, top: Vector3[], h: number, every = 3, r = 0.022) => {
+export const rail = (K: Kit, M: Mats, parent: TransformNode, top: Vector3[], h: number, every = 3, r = 0.022) => {
   K.tube(top, r, M.steel, parent, 8);
   top.forEach((p, i) => { if (i % every === 0 || i === top.length - 1) K.tube([p, V(p.x, p.y - h, p.z)], r * 0.8, M.steel, parent, 6); });
 };

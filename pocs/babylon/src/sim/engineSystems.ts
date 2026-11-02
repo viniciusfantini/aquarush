@@ -56,6 +56,7 @@ export interface EngineSystemsInput {
   starterLoad?: number;      // 0..1: arranque girando (1) ou travado/solenoide (0,2)
   trimMotorA?: number;       // bomba elétrica do power trim (A)
   auxA?: number;             // outras cargas (molinete da âncora, bomba de porão) (A)
+  alternators?: number;      // motores com alternador girando (2 na lancha rápida)
 }
 
 export class EngineSystems {
@@ -98,7 +99,7 @@ export class EngineSystems {
   get lowFuel(): boolean { return this.fuelFrac < 0.12; }
   get chargeWarn(): boolean { return this.p.hasBattery && this.batteryV < 12.2; }
   /** Resistência interna (Ω): sobe quando a bateria descarrega — a tensão despenca na partida. */
-  get internalR(): number { return 0.009 + 0.03 * (1 - this.batterySoc) ** 2; }
+  get internalR(): number { return (0.009 + 0.03 * (1 - this.batterySoc) ** 2) * (50 / this.p.batteryAh); } // baterias em paralelo: R cai
   /**
    * Tensão em repouso pelo estado de carga (chumbo-ácido 12 V): 12,7 V cheia, ~12,2 V a 50 %, ~11,9 V a 15 %;
    * abaixo disso despenca — zerada fica em ~10,2 V (célula esgotada).
@@ -171,7 +172,7 @@ export class EngineSystems {
     let drain = (s.lightsOn ? 2.5 : 0.3) + (s.trimMotorA ?? 0) + (s.auxA ?? 0); // A (instrumentos + luzes + trim + molinete/bomba de porão)
     if (s.engine === "cranking") drain += P.starterA * (s.starterLoad ?? 1); // motor de arranque
     // corrente que a bateria aceita cai perto da carga cheia (o regulador limita): o alternador fornece só o necessário
-    const altCap = charging ? P.altMaxA * (P.altIdleFrac + (1 - P.altIdleFrac) * smoothstep(750, 3000, s.rpm)) : 0;
+    const altCap = charging ? (s.alternators ?? 1) * P.altMaxA * (P.altIdleFrac + (1 - P.altIdleFrac) * smoothstep(750, 3000, s.rpm)) : 0;
     const accept = 3 + 60 * (1 - this.batterySoc); // A que a bateria aceita além das cargas
     const alt = Math.min(altCap, drain + accept); // A do alternador
     this.altA = alt;

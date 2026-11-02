@@ -26,20 +26,24 @@ class Delay {
 
 const FIRE4 = [0, 180, 360, 540];         // 4 cilindros: ordem 1-3-4-2 espaçada 180° no ciclo de 720°
 const FIRE2 = [0, 360];                   // bicilíndrico em linha (motor de 15 hp): explosões a cada 360°
-const FIRE_ERR = [0, 1.6, -1.1, 0.7];      // pequenos erros de ponto (graus) → não soa "perfeito"
-const CYL_GAIN = [1.0, 0.93, 1.06, 0.97];  // diferenças entre cilindros
+// V8 de virabrequim cruzado (motor de centro de 300 hp): uma explosão a cada 90°, mas cada bancada dispara em
+// intervalos IRREGULARES (ordem 1-8-4-3-6-5-7-2) — a pulsação desigual de cada lado do escape dá o "ronco" típico.
+const FIRE8 = [0, 90, 180, 270, 360, 450, 540, 630];
+const BANK8 = [0, 1, 1, 0, 1, 0, 0, 1];    // bancada de cada explosão (escape esquerdo/direito)
+const FIRE_ERR = [0, 1.6, -1.1, 0.7, -0.6, 1.2, -1.4, 0.4];      // pequenos erros de ponto (graus) → não soa "perfeito"
+const CYL_GAIN = [1.0, 0.93, 1.06, 0.97, 1.03, 0.95, 1.08, 0.94];  // diferenças entre cilindros
 
 class EngineProcessor extends AudioWorkletProcessor {
-  constructor() {
+  constructor(options) {
     super();
     this.sr = sampleRate;
     this.target = { rpm: 750, load: 0, combustion: 1, wet: 1, volume: 0, cylinders: 4 };
     this.cyl = 4;
     this.rpm = 750; this.load = 0; this.comb = 1; this.wet = 1; this.vol = 0;
     this.theta = 0;
-    this.seed = 1234567;
-    this.pulseT = [1e9, 1e9, 1e9, 1e9];
-    this.pulseA = [0, 0, 0, 0];
+    this.seed = (options && options.processorOptions && options.processorOptions.seed) || 1234567; // 2º motor: outra semente
+    this.pulseT = new Array(8).fill(1e9);
+    this.pulseA = new Array(8).fill(0);
     this.valveT = 1e9; this.valveA = 0;
     this.intakeA = 0;
     // escape: coletor curto + tubo/câmara longa (comprimentos em metros, som a ~500 m/s nos gases quentes)
@@ -66,12 +70,12 @@ class EngineProcessor extends AudioWorkletProcessor {
     const kS = 1 - Math.exp(-1 / (sr * 0.03));   // suavização dos parâmetros (~30 ms)
     if (T.cylinders !== this.cyl) {
       // motor menor: escape mais curto (ressonâncias mais agudas)
-      this.cyl = T.cylinders === 2 ? 2 : 4;
-      const k = this.cyl === 2 ? 0.55 : 1;
+      this.cyl = T.cylinders === 2 ? 2 : T.cylinders === 8 ? 8 : 4;
+      const k = this.cyl === 2 ? 0.55 : this.cyl === 8 ? 1.45 : 1; // V8: coletores e tubos longos (som mais grave)
       this.d1 = new Delay(Math.max(8, Math.round(sr * 2 * 0.45 * k / 520)));
       this.d2 = new Delay(Math.max(8, Math.round(sr * 2 * 1.15 * k / 480)));
     }
-    const FIRE = this.cyl === 2 ? FIRE2 : FIRE4;
+    const FIRE = this.cyl === 2 ? FIRE2 : this.cyl === 8 ? FIRE8 : FIRE4;
     for (let n = 0; n < out.length; n++) {
       this.rpm += (T.rpm - this.rpm) * kS;
       this.load += (T.load - this.load) * kS;
@@ -92,7 +96,9 @@ class EngineProcessor extends AudioWorkletProcessor {
           // explosão (ou só compressão, sem combustão: partida/desligando)
           const burn = this.comb * (0.32 + 0.68 * this.load) * (1 + 0.035 * this.gauss());
           const compress = 0.09 * Math.min(rpm / 300, 1);
-          this.pulseA[c] = (burn + compress) * CYL_GAIN[c];
+          // V8: a bancada do lado "cheio" do coletor soa mais forte (pulsos que se somam no X do escape)
+          const bank = this.cyl === 8 ? (BANK8[c] ? 1.12 : 0.88) : 1;
+          this.pulseA[c] = (burn + compress) * CYL_GAIN[c] * bank;
           this.pulseT[c] = 0;
           // válvulas: abertura logo depois (tique mecânico)
           this.valveT = -Math.round(sr * (0.25 / Math.max(rpm, 200)) * 60); this.valveA = 0.5 + 0.5 * this.rnd() * 0.3;
@@ -106,7 +112,7 @@ class EngineProcessor extends AudioWorkletProcessor {
       const att = sr * (0.0003 + 0.0016 * lowRev);
       const grit = 0.45 * (1 - 0.75 * lowRev); // componente de ruído do pulso (aspereza)
       let p = 0;
-      for (let c = 0; c < 4; c++) {
+      for (let c = 0; c < FIRE.length; c++) {
         const t = this.pulseT[c];
         if (t < tau * 8) {
           const env = Math.exp(-t / tau) * (1 - Math.exp(-t / att));

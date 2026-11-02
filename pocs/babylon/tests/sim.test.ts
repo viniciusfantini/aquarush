@@ -8,7 +8,7 @@ import { Speedboat, NEUTRAL_REV_LIMIT } from "../src/sim/boat.ts";
 import { JUMP_AH } from "../src/sim/engineSystems.ts";
 import { Wind, WIND_LEVELS } from "../src/sim/wind.ts";
 import { jetStreakLocal } from "../src/sim/bilgeJet.ts";
-import { SPEEDBOAT, DINGHY, PERSON_KG, type Occupant } from "../src/sim/params.ts";
+import { SPEEDBOAT, DINGHY, RAPIDA, PERSON_KG, type Occupant } from "../src/sim/params.ts";
 import { GerstnerWater, WAVE_PRESETS, type CurrentZone } from "../src/sim/water.ts";
 import type { PhysicsWorld } from "../src/sim/world.ts";
 import { buildWorld, RAMP, groundHeight, fromFrame, ROAD_SAMPLES, LOT, YARD, lotDistance, RIVER, RIVER_CURRENT, riverCenterX } from "../src/sim/world.ts";
@@ -722,6 +722,63 @@ for (const [label, thr] of [["baixa", 0.25], ["alta", 1]] as const) {
   check("virado", "casco 100 %: afunda mais rápido (s)", big.sunkAt, 2, holed.sunkAt, "s", 0);
   const rib = capsize(DINGHY, 1, 120);
   check("virado", "bote inflável virado e furado: os flutuadores seguram (não afunda)", rib.b.telemetry.sunk ? 0 : 1, 1, 1, "", 0);
+}
+
+// ---------- Lancha rápida AR-9: 2 V8 de 300 hp (empuxo diferencial) ----------
+{
+  const water = mkWater(0.35);
+  const mk = () => { const b = new Speedboat(RAPIDA, v3(0, 0.3, 0)); b.systems.fuelL = 300; b.occupants = [{ seat: "helm", mass: PERSON_KG }, { seat: "passenger", mass: PERSON_KG }]; run(b, water, 2, { ...emptyInput(), gear: "N" }); return b; };
+  check("rápida", "dois motores", RAPIDA.engines?.length ?? 1, 2, 2, "", 0);
+  const a = mk();
+  let t60 = -1;
+  run(a, water, 60, { ...emptyInput(), gear: "F", throttle: 1 }, openWater, (t) => { if (t60 < 0 && a.telemetry.speedKmh >= 60) t60 = t; });
+  check("rápida", "velocidade final a toda (km/h)", a.telemetry.speedKmh, 85, 115, "km/h", 1);
+  check("rápida", "0→60 km/h (s)", t60, 2.5, 7, "s", 1);
+  check("rápida", "os dois motores no mesmo giro a toda (diferença, rpm)", Math.abs(a.telemetry.rpms[0] - a.telemetry.rpms[1]), 0, 60, "rpm", 0);
+  check("rápida", "consumo a toda dos dois motores (L/h)", a.telemetry.fuelLph, 150, 260, "L/h", 0);
+  // giro no lugar: bombordo em ré, boreste em frente (mais acelerador no que dá ré, que empurra menos)
+  const s = mk();
+  const y0 = Math.atan2(s.forward.x, s.forward.z);
+  run(s, water, 10, { ...emptyInput(), engineCmd: [{ gear: "R", throttle: 0.45 }, { gear: "F", throttle: 0.18 }] });
+  const dYaw = (Math.atan2(s.forward.x, s.forward.z) - y0) * 57.3;
+  check("rápida", "empuxo diferencial (BB ré, BE frente) 10 s: gira para bombordo (°)", -dYaw, 40, 180, "°", 0);
+  check("rápida", "gira praticamente no lugar (deslocamento, m)", Math.hypot(s.pos.x, s.pos.z), 0, 6, "m", 1);
+  const s2 = mk();
+  run(s2, water, 10, { ...emptyInput(), engineCmd: [{ gear: "F", throttle: 0.18 }, { gear: "R", throttle: 0.45 }] });
+  check("rápida", "invertendo (BB frente, BE ré): gira para boreste (°)", (Math.atan2(s2.forward.x, s2.forward.z) - y0) * 57.3, 40, 180, "°", 0);
+  // um motor parado: anda com o outro e puxa para o lado do motor parado
+  const one = mk();
+  one.units[0].engine = "off";
+  run(one, water, 30, { ...emptyInput(), gear: "F", throttle: 0.6 });
+  check("rápida", "só o motor de boreste a 60 %: ainda anda (km/h)", one.telemetry.speedKmh, 25, 80, "km/h", 0);
+  check("rápida", "só o motor de boreste: a proa cai para bombordo (guinada, °/s)", -one.angVel.y * 57.3, 0.5, 20, "°/s", 1);
+  // partida: a chave liga os dois, um depois do outro
+  const ig = new Speedboat(RAPIDA, v3(0, 0.3, 0));
+  ig.systems.fuelL = 100;
+  run(ig, water, 1, { ...emptyInput(), gear: "N" });
+  ig.toggleIgnition(); run(ig, water, 1, { ...emptyInput(), gear: "N" });
+  check("rápida", "desligar: os dois motores param", ig.units.every((u) => u.engine === "off") ? 1 : 0, 1, 1, "", 0);
+  ig.toggleIgnition();
+  let both = -1, oneOn = -1;
+  run(ig, water, 8, { ...emptyInput(), gear: "N" }, openWater, (t) => {
+    const n = ig.units.filter((u) => u.engine === "running").length;
+    if (oneOn < 0 && n >= 1) oneOn = t; if (both < 0 && n === 2) both = t;
+  });
+  check("rápida", "partida: os dois pegam (s)", both, 1.5, 7, "s", 1);
+  check("rápida", "um motor de cada vez (o 2º pega depois do 1º, s)", both - oneOn, 0.5, 4, "s", 1);
+  // largada do jogo: motores desligados e bateria a 60 % — os dois V8 têm de pegar (um arranque por vez;
+  // os dois juntos derrubavam o banco a ~6 V e nenhum pegava)
+  const st = new Speedboat(RAPIDA, v3(0, 0.3, 0));
+  st.systems.fuelL = 20; st.systems.batterySoc = 0.6;
+  for (const u of st.units) { u.engine = "off"; u.rpm = 0; }
+  let minV = 99, both60 = -1;
+  st.toggleIgnition();
+  run(st, water, 10, { ...emptyInput(), gear: "N" }, openWater, (t) => {
+    minV = Math.min(minV, st.systems.batteryV);
+    if (both60 < 0 && st.units.every((u) => u.engine === "running")) both60 = t;
+  });
+  check("rápida", "bateria a 60 %: os dois pegam (s)", both60, 1.5, 8, "s", 1);
+  check("rápida", "bateria a 60 %: tensão mínima no arranque (V)", minV, 9, 12.5, "V", 1);
 }
 
 // ---------- Vento: 5 níveis, deriva, banda, âncora ----------

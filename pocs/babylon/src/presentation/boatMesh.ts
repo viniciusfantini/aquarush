@@ -20,6 +20,8 @@ export interface BoatVisual {
   /** Tampa invisível do cockpit (só profundidade): impede a água de aparecer dentro do barco. */
   cockpitLid: Mesh;
   meshes: Mesh[];
+  /** barco com mais de um motor: o pivô e a hélice de cada rabeta (o 1º é o mesmo de engine/propeller) */
+  drives?: { engine: TransformNode; propeller: TransformNode; propBlur: PBRMaterial }[];
 }
 
 // ---------------- forma do casco ----------------

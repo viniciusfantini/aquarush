@@ -134,6 +134,12 @@ export class InputManager {
     s.neutralThrottle = nHeld && this.gear === "N";
     // âncora de proa: "+" paga cabo, "−" recolhe (segurar) — teclado principal ou numérico, ou botões touch
     s.anchor = clamp((this.k("Equal", "NumpadAdd") ? 1 : 0) - (this.k("Minus", "NumpadSubtract") ? 1 : 0) + this.touchAnchor, -1, 1);
+    // dois motores (AR-9): Z/X segurado = empuxo diferencial, um motor em ré e o outro à frente (motor 0 = bombordo).
+    // Z gira a proa para bombordo (BB em ré, BE à frente); X para boreste. Soltar: os dois voltam à manete.
+    const spin = (this.k("KeyX") ? 1 : 0) - (this.k("KeyZ") ? 1 : 0);
+    s.engineCmd = spin === 0 ? undefined : spin < 0
+      ? [{ gear: "R", throttle: 0.45 }, { gear: "F", throttle: 0.18 }]
+      : [{ gear: "F", throttle: 0.18 }, { gear: "R", throttle: 0.45 }];
     return s;
   }
 

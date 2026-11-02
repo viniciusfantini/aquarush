@@ -4,6 +4,7 @@
 
 import { type Vec3, v3, DEG } from "./math.ts";
 import { floodTable } from "./hullShape.ts";
+import type { EngineSystemsParams } from "./engineSystems.ts";
 
 export type SeatId = "helm" | "passenger" | "rearLeft" | "rearRight";
 export interface Occupant { seat: SeatId; mass: number }
@@ -20,7 +21,7 @@ export interface BuoyancyPoint {
   incidence: number;
 }
 
-export type VesselKind = "lancha" | "bote";
+export type VesselKind = "lancha" | "bote" | "rapida";
 
 export interface SpeedboatParams {
   kind: VesselKind;
@@ -36,7 +37,7 @@ export interface SpeedboatParams {
   tankLiters: number;
   fuelIdleLph: number;     // consumo em marcha lenta (L/h)
   fuelMaxLph: number;      // consumo a toda (L/h)
-  cylinders: 2 | 4;        // som do motor
+  cylinders: number;        // som do motor
   maxPeople: number;
   length: number;          // m
   beam: number;            // m (boca)
@@ -128,6 +129,12 @@ export interface SpeedboatParams {
   bankCoef: number;        // N·m por m/s² de aceleração lateral — inclinação para dentro da curva (casco em V)
   rollDamping: number;     // N·m/(rad/s) — amortecimento hidrodinâmico de rolagem (casco molhado)
   airDragCdA: number;      // m² (frontal)
+  /** fração do amortecimento de guinada parado (sobe até 1 a ~8 m/s). Ausente = 1 (constante) */
+  yawDampingLowSpeed?: number;
+  /** ajustes do sistema elétrico/motor (ex.: banco de baterias maior, arranque mais forte) */
+  systems?: Partial<EngineSystemsParams>;
+  /** motores (rabetas) e o deslocamento lateral de cada um (local, m). Ausente = um motor no centro. */
+  engines?: { x: number }[];
   /** área vélica lateral (Cd·A, m²) e o centro de pressão do vento (local) */
   windage: { sideCdA: number; center: Vec3 };
 }
@@ -361,4 +368,117 @@ export const DINGHY: SpeedboatParams = {
   windage: { sideCdA: 1.9, center: v3(0, 0.45, 0.2) },
 };
 
-export const VESSELS: Record<VesselKind, SpeedboatParams> = { lancha: SPEEDBOAT, bote: DINGHY };
+// ---------------------------------------------------------------------------------------------
+// Lancha rápida AR-9 (8,6 m, 2 lugares) — DOIS V8 de centro de 300 hp com rabeta (sterndrive), cada um
+// com manete, rotação, partida e hélice próprios: o empuxo de cada rabeta age na sua posição (±0,55 m),
+// então dá para girar no lugar com um motor em frente e o outro em ré (empuxo diferencial).
+// Valores por motor: maxThrust, consumo, área da rabeta (flap) e leme. Escala geométrica da AR-6
+// (comprimento ×1,43, boca ×1,07, massa ×2,4). Origem = CG do barco seco. X boreste, Y cima, Z proa.
+// ---------------------------------------------------------------------------------------------
+const rl = 0.77; // meia-distância transversal dos pontos de flutuação
+
+export const RAPIDA: SpeedboatParams = {
+  kind: "rapida",
+  name: "Lancha rápida AR-9",
+  steering: "remote",
+  trimMode: "power",
+  trimPins: [],
+  electricStart: true,
+  tankLiters: 380,
+  fuelIdleLph: 4,
+  fuelMaxLph: 105,
+  cylinders: 8,
+  maxPeople: 2,
+  length: 8.6,
+  beam: 2.45,
+  mass: 2500,
+  fuelTankPos: v3(0, -0.32, -0.6),
+  fuelDensity: 0.74,
+  seats: {
+    helm: v3(0.42, 0.45, -0.9),        // piloto (boreste), banco tipo concha
+    passenger: v3(-0.42, 0.45, -0.9),  // navegador (bombordo)
+    rearLeft: v3(-0.42, 0.45, -1.6),   // (não usados: lancha de 2 lugares)
+    rearRight: v3(0.42, 0.45, -1.6),
+  },
+  inertia: v3(18400, 20400, 2500),
+  waterplaneArea: 15.3,
+  pointMaxDepth: 0.9,
+  wetDepth: 0.13,
+  buoyancyPoints: [
+    { p: v3(-rl, -0.4, 3.6), areaWeight: 0.6, liftWeight: 0.8, incidence: 6 * DEG },
+    { p: v3(rl, -0.4, 3.6), areaWeight: 0.6, liftWeight: 0.8, incidence: 6 * DEG },
+    { p: v3(-rl, -0.4, 0.57), areaWeight: 1.1, liftWeight: 1.0, incidence: 3 * DEG },
+    { p: v3(rl, -0.4, 0.57), areaWeight: 1.1, liftWeight: 1.0, incidence: 3 * DEG },
+    { p: v3(-rl, -0.4, -2.44), areaWeight: 1.4, liftWeight: 0.2, incidence: 1.5 * DEG },
+    { p: v3(rl, -0.4, -2.44), areaWeight: 1.4, liftWeight: 0.2, incidence: 1.5 * DEG },
+  ],
+  contactPoints: [
+    v3(0, 0.3, 4.5),
+    v3(0, -0.45, 3.15),
+    v3(0, -0.52, 0),
+    v3(0, -0.52, -3.7),
+    v3(-1.17, 0.4, 1.7), v3(1.17, 0.4, 1.7),
+    v3(-1.22, 0.4, -1.4), v3(1.22, 0.4, -1.4),
+    v3(-1.17, 0.4, -4.1), v3(1.17, 0.4, -4.1),
+    v3(-0.64, 0.4, 3.4), v3(0.64, 0.4, 3.4),
+  ],
+  bunkPoints: [-3.7, -2.0, 0, 2.0].flatMap((z) => [v3(0, -0.52, z), v3(-0.6, -0.4, z), v3(0.6, -0.4, z)]),
+  gunwaleY: 0.5,
+  // sterndrive: espelho inteiro (sem rebaixo de motor de popa); porão sob o piso + praça de máquinas
+  bilge: { pos: v3(0, -0.38, -2.6), maxL: 10000, pumpLph: 5700, pumpA: 5.5, outlet: v3(1.2, 0.22, -3.0), areaM2: 5.5, holeMaxM2: 0.005, bowRise: 0.25, transomY: 0.5, transomW: 0.4,
+    sumpL: 900, floorY: 0.06, floodCenter: v3(0, 0, -1.4), floodLen: 3.4, floodHalfW: 0.9, scupperM2: 2 * 1.14e-3, scupperFromStern: 0.6, shutoffHeadM: 2.7, outletAreaM2: 6.42e-4, capsizeAirFrac: 0.35, ventM2: 2e-5 },
+  anchor: { roller: v3(0, 0.72, 4.42), rodeMax: 50, rateOut: 0.8, rateIn: 0.5, motorA: 60, holdN: 6000 },
+
+  engines: [{ x: -0.55 }, { x: 0.55 }], // bombordo, boreste
+  enginePowerHp: 300,
+  maxThrust: 13500,            // por motor
+  reverseThrustFactor: 0.4,
+  propPitchSpeed: 38,
+  propPos: v3(0, -0.85, -4.85),
+  propRadius: 0.2,
+  revLimitRpm: 5300,
+  engineResponse: 0.4,
+  idleRpm: 650,
+  maxRpm: 5000,
+  shiftTime: 0.5,
+  idleThrustFraction: 0.035,
+
+  maxSteerLow: 30 * DEG,
+  maxSteerHigh: 8 * DEG,
+  steerRate: 2.0,
+  gearcaseRudder: 0.1,         // por rabeta
+
+  trimUp: 8 * DEG,
+  tiltMax: 50 * DEG,
+  tiltRate: 10 * DEG,
+  tiltMaxThrust: 2500,
+  tiltMaxSpeed: 4.2,
+  tiltMaxRpm: 2200,
+  drivePivot: v3(0, 0.22, -4.33),
+  intakePos: v3(0, -0.72, -4.62),
+  trimDown: -5 * DEG,
+  trimRate: 0.5,
+  driveLiftArea: 0.12,         // por rabeta
+
+  planingLiftCoef: 0.6,
+  maxAoa: 14 * DEG,
+  dragFrictionQuad: 20,
+  dragLinear: 80,
+  lateralQuad: 2200,
+  lateralLinear: 1800,
+  keelLift: 3600,
+  yawDamping: 60000,
+  // dois V8: banco de 2 baterias de 50 Ah em paralelo (metade da resistência interna) e arranque de ~200 A
+  systems: { batteryAh: 100, starterA: 200 },
+  yawDampingLowSpeed: 0.05,  // parado gira solto: giro no lugar com empuxo diferencial
+  heaveDamping: 4000,
+  waveDragPeakRatio: 0.15,
+  sternTrough: 0.32,
+  bowWave: 0.12,
+  bankCoef: 4300,
+  rollDamping: 36000,
+  airDragCdA: 2.0,
+  windage: { sideCdA: 6.0, center: v3(0, 0.75, 0.8) },
+};
+
+export const VESSELS: Record<VesselKind, SpeedboatParams> = { lancha: SPEEDBOAT, bote: DINGHY, rapida: RAPIDA };

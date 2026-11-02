@@ -75,6 +75,10 @@ export interface AudioState {
   windlassA?: number;     // molinete da âncora (A)
   apparentWind?: number;  // vento aparente (m/s): chiado do vento
   anchorRelay?: boolean;  // molinete sem força: só o relé
+  /** 2º motor (AR-9, dois V8): rotação, carga e estado próprios — uma segunda voz de síntese */
+  rpm2?: number;
+  throttle2?: number;
+  engine2?: "off" | "cranking" | "running";
 }
 
 export class EngineAudio {
@@ -107,6 +111,8 @@ export class EngineAudio {
   private noise!: AudioBuffer;
   // motor por síntese física (AudioWorklet); osciladores antigos ficam como reserva
   private worklet: AudioWorkletNode | null = null;
+  private worklet2: AudioWorkletNode | null = null;
+  private worklet2Gain!: GainNode;
   private workletGain!: GainNode;
   private starterGain!: GainNode;
   private starterLfo!: OscillatorNode;
@@ -358,10 +364,17 @@ export class EngineAudio {
     this.workletGain = ctx.createGain(); this.workletGain.gain.value = 0;
     const cowl = ctx.createBiquadFilter(); cowl.type = "peaking"; cowl.frequency.value = 700; cowl.Q.value = 1.1; cowl.gain.value = 3;
     this.workletGain.connect(cowl).connect(this.master);
+    // 2º motor (boreste): outra voz, levemente à direita no estéreo
+    this.worklet2Gain = ctx.createGain(); this.worklet2Gain.gain.value = 0;
+    const pan2 = ctx.createStereoPanner(); pan2.pan.value = 0.25;
+    this.worklet2Gain.connect(pan2).connect(cowl);
     ctx.audioWorklet.addModule(engineWorkletUrl).then(() => {
       const node = new AudioWorkletNode(ctx, "aqua-engine", { numberOfInputs: 0, outputChannelCount: [1] });
       node.connect(this.workletGain);
       this.worklet = node;
+      const node2 = new AudioWorkletNode(ctx, "aqua-engine", { numberOfInputs: 0, outputChannelCount: [1], processorOptions: { seed: 7654321 } });
+      node2.connect(this.worklet2Gain);
+      this.worklet2 = node2;
       console.info("[AquaRush] áudio do motor: síntese física (AudioWorklet)");
     }).catch((e) => console.warn("[AquaRush] AudioWorklet indisponível, usando síntese simples", e));
   }
@@ -383,7 +396,16 @@ export class EngineAudio {
       // limitador: a ignição corta em rajadas ("bap-bap-bap")
       const cut = st.revLimiter && Math.floor(t * 16) % 2 === 1;
       this.worklet.port.postMessage({ cylinders: this.cylinders, rpm: st.rpm, load: st.revLimiter ? 0.3 : load, combustion: running && !cut ? 1 : 0, wet: st.propInWater ? 1 : 0, volume: 1 });
-      this.workletGain.gain.setTargetAtTime(m * dist * 0.55, t, 0.05);
+      const twin = st.rpm2 !== undefined;
+      this.workletGain.gain.setTargetAtTime(m * dist * (twin ? 0.4 : 0.55), t, 0.05);
+      if (this.worklet2) {
+        if (twin) {
+          const run2 = st.engine2 === "running";
+          const load2 = Math.min(Math.max(st.throttle2 ?? load, 0), 1);
+          this.worklet2.port.postMessage({ cylinders: this.cylinders, rpm: st.rpm2, load: st.revLimiter ? 0.3 : load2, combustion: run2 && !cut ? 1 : 0, wet: st.propInWater ? 1 : 0, volume: 1 });
+        }
+        this.worklet2Gain.gain.setTargetAtTime(twin ? m * dist * 0.4 : 0, t, 0.05);
+      }
     }
     const legacy = useW || !running ? 0 : 1; // osciladores antigos só sem worklet
     // arranque: volume e tom acompanham a rotação (bateria fraca = "rrr… rrr…" lento e grave);

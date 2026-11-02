@@ -20,6 +20,8 @@ export interface VehicleInput {
   bilgePump: boolean;
   /** Guincho da âncora de proa: +1 paga cabo (lança), −1 recolhe, 0 parado. */
   anchor: number;
+  /** Manetes separadas (barco de dois motores: [bombordo, boreste]). Ausente = as duas seguem `gear`/`throttle`. */
+  engineCmd?: { gear: GearCommand; throttle: number }[];
   /** Luzes de navegação (estado). */
   navigationLights: boolean;
   /** Botão de aceleração em neutro segurado: com a marcha em N o acelerador sobe o giro sem engatar. */

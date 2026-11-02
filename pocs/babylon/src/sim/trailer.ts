@@ -28,13 +28,14 @@ export interface TrailerLayout {
 
 /** Monta a carretinha de cada barco (dimensões de carretinhas reais para cascos de 3 e 6 m). */
 export const buildTrailer = (P: SpeedboatParams): TrailerLayout => {
-  const lancha = P.kind === "lancha";
+  const lancha = P.kind !== "bote"; // lancha e rápida: carretinha grande (rodado duplo), puxada pela caminhonete
+  const rapida = P.kind === "rapida"; // 8,6 m: carretinha mais longa e berço mais alto (V profundo)
   const sFront = lancha ? -1.0 : -0.2;
-  const length = lancha ? 7.0 : 3.6;
+  const length = rapida ? 8.6 : lancha ? 7.0 : 3.6;
   const sRear = sFront + length;
-  const clear = lancha ? 0.38 : 0.22;
-  const vSlope = lancha ? 0.18 : 0.14; // ≈ V do fundo do casco (bunkPoints)
-  const halfW = lancha ? 0.95 : 0.7;
+  const clear = rapida ? 0.44 : lancha ? 0.38 : 0.22;
+  const vSlope = rapida ? 0.2 : lancha ? 0.18 : 0.14; // ≈ V do fundo do casco (bunkPoints)
+  const halfW = rapida ? 1.0 : lancha ? 0.95 : 0.7;
   const postX = P.beam / 2 + 0.12;
   const cx = RAMP.x;
   const parked: FramePose = { x: cx, y: rampY(sFront), z: RAMP.z0 + sFront, yaw: 0, pitch: Math.atan(RAMP.slope) };

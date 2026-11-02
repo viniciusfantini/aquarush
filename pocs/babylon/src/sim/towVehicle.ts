@@ -176,7 +176,7 @@ export class TowRig {
     this.az = h.z + (dz / d) * this.hitchToAxle;
     // a roda da carretinha gira com o deslocamento do eixo dela (sinal: para onde a carretinha anda)
     const tdir = (this.ax - oax) * -(dx / d) + (this.az - oaz) * -(dz / d);
-    this.trailerWheelSpin += tdir / (this.t.kind === "lancha" ? 0.33 : 0.23);
+    this.trailerWheelSpin += tdir / (this.t.kind !== "bote" ? 0.33 : 0.23);
     // canivete: o cabeçalho encosta no para-choque a ~80° — daí em diante a carretinha é arrastada junto
     const art = this.articulation, lim = MAX_ARTICULATION; // (só acoplada)
     if (Math.abs(art) > lim) {

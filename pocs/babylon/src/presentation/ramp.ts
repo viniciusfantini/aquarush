@@ -101,7 +101,7 @@ export const buildTrailerMesh = (scene: Scene, t: TrailerLayout): { root: Transf
   const rubber = pbr(scene, "roller_" + t.kind, new Color3(0.08, 0.08, 0.09), 0, 0.7);
   const redL = new StandardMaterial("trailerRed_" + t.kind, scene); redL.diffuseColor = new Color3(0.7, 0.05, 0.05); redL.emissiveColor = new Color3(0.25, 0, 0);
   const L = t.sRear - t.sFront;
-  const big = t.kind === "lancha";
+  const big = t.kind !== "bote";
   const wr = big ? 0.33 : 0.23;        // raio da roda
   const railY = big ? 0.42 : 0.3;      // altura dos longarinas
   const railX = big ? 0.5 : 0.36;
@@ -269,7 +269,7 @@ export const buildPickup = (scene: Scene, name: string, paint: Color3): VehicleV
 export interface VehicleVis { root: TransformNode; body: TransformNode; wheels: WheelNode[]; meshes: Mesh[]; length: number }
 
 export const buildTowVehicle = (scene: Scene, t: TrailerLayout): VehicleVis => {
-  const v = t.kind === "lancha" ? buildPickup(scene, "pickup", new Color3(0.93, 0.93, 0.92)) : buildCar(scene, "car", new Color3(0.62, 0.08, 0.08));
+  const v = t.kind !== "bote" ? buildPickup(scene, "pickup", new Color3(0.93, 0.93, 0.92)) : buildCar(scene, "car", new Color3(0.62, 0.08, 0.08));
   // o engate (bola, 0,25 m atrás do para-choque) fica sobre o acoplador da carretinha
   const sCenter = t.coupler - (v.length / 2 + 0.25);
   placeOnRamp(v.root, sCenter, t.cx, true);
