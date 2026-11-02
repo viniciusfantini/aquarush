@@ -206,7 +206,9 @@ export class InputManager {
   toggleLights(): boolean { this.lights = !this.lights; return this.lights; }
   setLights(on: boolean): void { this.lights = on; }
   /** buzina: segurando B */
-  get hornHeld(): boolean { return this.keys.has("KeyB"); }
+  /** botão de buzina/apito do painel do Y segurado */
+  panelHorn = false;
+  get hornHeld(): boolean { return this.keys.has("KeyB") || this.panelHorn; }
 }
 
 /** Controles touch: joystick de direção (esquerda), alavanca de acelerador (direita), botões. */

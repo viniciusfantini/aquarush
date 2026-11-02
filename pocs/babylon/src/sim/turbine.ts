@@ -200,7 +200,8 @@ export class Turbine {
   /** Troca FADEC ↔ manual. Ao entrar no FADEC com a turbina parada as chaves voltam ao padrão dele. */
   setFadec(on: boolean): void {
     this.fadec = on; this.seq = "none";
-    if (on && !this.lit && !this.starter) { this.master = true; this.boostPump = true; this.ignition = false; this.fuelValve = false; this.generator = false; }
+    // (a MAIN é do piloto: voltar ao FADEC não a liga)
+    if (on && !this.lit && !this.starter) { this.boostPump = true; this.ignition = false; this.fuelValve = false; this.generator = false; }
   }
 
   private oilAt(n1: number): number { return this.p.oilPsiMax * Math.pow(clamp((n1 - 4) / 70, 0, 1), 0.7); }

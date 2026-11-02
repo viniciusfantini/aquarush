@@ -96,11 +96,19 @@ A lancha é um **corpo rígido 6DOF** (massa seca de 1030 kg + gasolina, ocupant
 
 > Referência completa da lógica elétrica e dos motores: [`docs/SISTEMAS_ELETRICOS_E_MOTORES.md`](../../docs/SISTEMAS_ELETRICOS_E_MOTORES.md).
 
+## Painel da AR-10 sempre completo, checklist, buzina/apito (v0.62)
+
+- **Painel de partida sempre completo** (`turbinePanel.ts`): as 7 chaves (MAIN … GERADOR) ficam sempre à vista, ao lado de dois **botões redondos** (no estilo do STOP do bote): **START** = partida automática (FADEC; = P) e **CORTE** (no FADEC corta/aborta; no manual fecha o combustível e solta starter e ignição). O seletor FADEC/MANUAL saiu: um **indicador** no título mostra quem comanda — **mexer em qualquer chave (menos a MAIN) passa para o MANUAL** (o FADEC deixa de proteger), e START (ou P) devolve ao FADEC. Voltar ao FADEC não liga mais a MAIN (`Turbine.setFadec`).
+- **CHECKLIST**: o botão no título abre uma janela à parte (`ChecklistPanel`, arrastável) com a partida automática e a manual; cada item é marcado ✓ pela telemetria real e o próximo fica em destaque.
+- **Buzina** no painel Y de todas as embarcações (segurar, `InputManager.panelHorn`, o mesmo do B) e **apito** de bolinha no bote (`audio.setHorn("apito")`: ~3,1 kHz com o trinado ~27 Hz + sopro; não depende de bateria). A ajuda mostra "B apito" no bote.
+- **Trim só com a barra** (faixa de trim verde, tilt âmbar) + botão UP/DN; o bote segue com o pino.
+- **Compacto**: chaves e mostradores menores, dicas das manetes viraram tooltip, sem títulos de seção no painel da turbina (563 px de altura, antes ~720).
+
 ## Avisos no display do painel e trim no Y (v0.61)
 
 - **Avisos de sistemas/motor no display do painel**: `sysToast` (main.ts) manda os avisos de chaves, partida, marcha, combustível, porão, trim/tilt, GPU, jump start, eventos da turbina, avarias e falhas para o display do pé do painel do Y quando ele está aberto (`SystemsPanel.flash` / `TurbinePanel.flash`, ~6 s; depois volta o aviso de estado). Com o painel fechado continuam no aviso do HUD. Avisos que não são de sistemas (amarras, carro, vento, lotação, pausa, barco virado/afundado) seguem no HUD.
 - **Trim no painel Y** (`LeverControls.setTrim` / `updateTrim`, junto das manetes), pelo tipo de embarcação:
-  - **AR-6** (popa): **TRIM / TILT** — botão basculante UP/DN momentâneo (= E/Q), vista de lado com o motor girando no pivô (trim + tilt) e barra com a faixa de trim (verde, −6° a +10°) e a de tilt (âmbar, até +60°); mostra "TILT BLOQUEADO" e "SEM FORÇA (relé)".
+  - **AR-6** (popa): **TRIM / TILT** — botão basculante UP/DN momentâneo (= E/Q) e barra (a vista de lado do motor saiu na v0.62) com a faixa de trim (verde, −6° a +10°) e a de tilt (âmbar, até +60°); mostra "TILT BLOQUEADO" e "SEM FORÇA (relé)".
   - **AR-9** (rabetas): **TRIM DAS RABETAS** — o mesmo botão, as duas rabetas juntas (o trim é comum aos dois pés).
   - **AR-10**: **TRIM DA TRANSMISSÃO** — imersão da hélice de superfície (−5° a +8°, tilt curto de 12°).
   - **Bote**: sem trim elétrico — o **PINO DO TRIM** no suporte do motor (furos 1–3 e T = tilt travado), com ▲▼ para mudar o pino (só com o acelerador solto, como antes no E/Q).

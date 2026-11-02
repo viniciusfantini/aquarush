@@ -29,6 +29,7 @@ export interface TurbinePanelActions {
   setBattery(sel: "off" | "bus" | "both"): void;  // seletor de baterias (24 V: duas de 12 V em série)
   setLever(cmd: LeverCmd): void;                  // manete de potência + marcha (vai para o InputManager)
   setTrim(dir: number): void;                     // botão de trim da transmissão de superfície (segurado)
+  horn(on: boolean): void;                        // buzina segurada
   close(): void;
 }
 
@@ -48,51 +49,46 @@ export class TurbinePanel {
   private readonly act: TurbinePanelActions;
   private readonly q = <T extends HTMLElement>(sel: string) => this.el.querySelector<T>(sel)!;
   private readonly levers: LeverControls;
+  /** janela do checklist de partida (FADEC e manual), aberta pelo botão CHECKLIST */
+  readonly ck: ChecklistPanel;
   private readonly g: Record<"n1" | "egt" | "n2" | "tq" | "oil" | "oilT" | "bus" | "gpu", RoundGauge>;
 
   constructor(act: TurbinePanelActions) {
     this.act = act;
     const el = document.createElement("div");
     el.id = "tpanel"; el.dataset.disp = "glass";
+    const SCR = `<span class="screw s1"></span><span class="screw s2"></span><span class="screw s3"></span><span class="screw s4"></span>`;
+    const cell = (ctl: string, k: string) => `<div class="sw-cell">${ctl}<div class="rd" data-rd="${k}"></div></div>`;
     el.innerHTML = `
       <div class="tp-head" title="arraste para mover"><b>⠿ PARTIDA DA TURBINA</b>
-        <div class="tp-mode"><button data-mode="fadec">FADEC</button><button data-mode="manual">MANUAL</button></div>
-        <button class="tp-x" aria-label="fechar">×</button></div>
+        <span class="tp-fl" data-fl title="quem comanda a partida: FADEC (automático, protege) ou MANUAL (você mexeu numa chave)">FADEC</span>
+        <button class="tp-ck" data-ck>CHECKLIST</button><button class="tp-x" aria-label="fechar">×</button></div>
       <div class="tp-gauges"></div>
       <div class="tp-ann">${["BAT", "EXT PWR", "GEN", "STARTER", "IGNIÇÃO", "CHAMA", "EGT ALTA", "ÓLEO QUENTE"].map((k) => `<span data-a="${k}">${k}</span>`).join("")}</div>
-      <div class="tp-fadec">
-        <button class="tp-big" data-f="start">PARTIDA</button><button class="tp-big warn" data-f="cut">CORTE / ABORTAR</button>
-        <p>O FADEC faz a sequência: EXT PWR (com a GPU estável) → starter → ignição e combustível a 12 % N1 → acende → starter e ignição desligam a 45 % → marcha lenta 62 % → GERADOR ligado e EXT PWR aberto. Aborta sozinho partida pendurada, sem acendimento e quente (EGT &gt; 780 °C).</p>
-      </div>
-      <div class="tp-manual">
-        <div class="sw-plate tp-sw"><span class="screw s1"></span><span class="screw s2"></span><span class="screw s3"></span><span class="screw s4"></span>${SWITCHES.map((s, i) => s.id === "fuelValve"
+      <div class="tp-row">
+        <div class="sw-plate tp-sw">${SCR}${SWITCHES.map((s, i) => s.id === "fuelValve"
           // a manete de condição do combustível é um seletor rotativo (como os registros), não uma chave elétrica
           ? rotary("fv", "COMBUSTÍVEL", "condição", [{ v: "cut", l: "CORTE" }, { v: "idle", l: "LENTA" }], { num: i + 1, cls: "fuel" })
           : toggle({ attr: "s", val: s.id, label: s.label, sub: s.sub, on: s.on, off: s.off, variant: s.variant, num: i + 1 })).join("")}</div>
-        <ol>
-          <li>MAIN ligada e uma fonte no barramento: baterias em BOTH e/ou a GPU (cabo com J, espere ela estabilizar e feche o EXT PWR, com as baterias em BUS ou BOTH)</li>
-          <li>BOMBA ligada; STARTER: o N1 sobe</li>
-          <li>com o N1 em <b>12 %</b>: IGNIÇÃO e COMBUSTÍVEL (abrir antes = partida quente ou molhada)</li>
-          <li>acende: a EGT sobe — vigie o limite de <b>780 °C</b> (corte o combustível se passar)</li>
-          <li>com o N1 em <b>45 %</b>: desligue STARTER e IGNIÇÃO (antes = ela não se sustenta)</li>
-          <li>marcha lenta (N1 62 %, EGT ~480 °C, óleo ~70 psi): ligue o <b>GERADOR</b> e abra o <b>EXT PWR</b></li>
-        </ol>
+        <div class="sw-plate tp-auto">${SCR}
+          <div class="rb-w"><button class="rb rb-start" data-f="start" title="partida automática: o FADEC faz a sequência e protege"><span>START</span></button><b>FADEC</b></div>
+          <div class="rb-w"><button class="rb rb-stop" data-f="cut" title="corte: fecha o combustível (no FADEC também aborta a partida)"><span>CORTE</span></button><b>CORTE</b></div>
+        </div>
       </div>
-      <div class="tp-sys"><span class="tp-sys-t">SISTEMAS</span>
-        <div class="sw-plate"><span class="screw s1"></span><span class="screw s2"></span><span class="screw s3"></span><span class="screw s4"></span>
-          ${rotary("bsel", "BATERIAS", "2 × 12 V em série", [{ v: "off", l: "OFF" }, { v: "bus", l: "BUS" }, { v: "both", l: "BOTH" }])}
-          ${toggle({ attr: "bat", val: "1", label: "MAIN", sub: "sistemas eletrônicos", cls: "only-fadec" })}
-          ${rotary("tank", "TANQUE", "registro", [{ v: "closed", l: "FECHADO" }, { v: "open", l: "ABERTO" }], { cls: "fuel" })}
-          ${tri("bilge", "BOMBA PORÃO", "boia ou manual", { v: "on", l: "ON" }, { v: "off", l: "OFF" }, { v: "auto", l: "AUTO" })}
-          <div class="tp-sys-rd"><span data-rd="bat"></span><span data-rd="tank"></span><span data-rd="bilge"></span></div>
-        </div></div>
-      <div class="tp-sys"><span class="tp-sys-t">MANETES</span><div class="sw-plate tp-lev"></div></div>
+      <div class="tp-row">
+        <div class="sw-plate tp-sysp">${SCR}
+          ${cell(rotary("bsel", "BATERIAS", "2 × 12 V em série", [{ v: "off", l: "OFF" }, { v: "bus", l: "BUS" }, { v: "both", l: "BOTH" }]), "bat")}
+          ${cell(rotary("tank", "TANQUE", "registro", [{ v: "closed", l: "FECHADO" }, { v: "open", l: "ABERTO" }], { cls: "fuel" }), "tank")}
+          ${cell(tri("bilge", "BOMBA PORÃO", "boia ou manual", { v: "on", l: "ON" }, { v: "off", l: "OFF" }, { v: "auto", l: "AUTO" }), "bilge")}
+        </div>
+        <div class="sw-plate tp-lev">${SCR}</div>
+      </div>
       <div class="tp-foot"><button data-g="gpu">GPU (J)</button><div class="msg-rd" data-msg><span></span></div></div>`;
     el.addEventListener("click", (e) => {
       const b = (e.target as HTMLElement).closest<HTMLButtonElement>("button");
       if (!b) return;
       if (b.classList.contains("tp-x")) this.act.close();
-      else if (b.dataset.mode) this.act.setFadec(b.dataset.mode === "fadec");
+      else if (b.dataset.ck !== undefined) this.ck.setOpen(!this.ck.isOpen);
       else if (b.dataset.f === "start") this.act.fadecStart();
       else if (b.dataset.f === "cut") this.act.fadecCut();
       else if (b.dataset.g) this.act.gpu();
@@ -100,13 +96,14 @@ export class TurbinePanel {
       else if (b.dataset.bsel) this.act.setBattery(b.dataset.bsel as "off" | "bus" | "both");
       else if (b.dataset.fv) this.act.setSwitch("fuelValve", b.dataset.fv === "idle");
       else if (b.dataset.bilge) this.act.setBilge(b.dataset.bilge as "off" | "auto" | "on");
-      else if (b.dataset.bat) this.act.setSwitch("master", !isOn(b));
       else if (b.dataset.s) this.act.setSwitch(b.dataset.s as PanelSwitch, !isOn(b));
     });
     document.body.appendChild(el);
     this.el = el;
     makeDraggable(el, this.q<HTMLElement>(".tp-head"), "aquarush.tpanelPos");
+    this.ck = new ChecklistPanel();
     this.levers = new LeverControls("turbine", (_i, c) => this.act.setLever(c));
+    this.levers.setHorn("buzina", (on) => this.act.horn(on));
     this.q<HTMLElement>(".tp-lev").appendChild(this.levers.el);
     // instrumentos analógicos com faixas (os mesmos limites da simulação: idle 62 %, partida 780 °C, operação 700 °C)
     const box = this.q<HTMLElement>(".tp-gauges");
@@ -132,13 +129,18 @@ export class TurbinePanel {
   flash(msg: string): void { this.flashMsg = msg; this.flashT = performance.now(); }
 
   get isOpen(): boolean { return this.open; }
-  setOpen(on: boolean): void { this.open = on; this.el.classList.toggle("open", on); }
+  setOpen(on: boolean): void { this.open = on; this.el.classList.toggle("open", on); if (!on) this.ck.setOpen(false); }
 
   update(t: BoatTelemetry): void {
     if (!this.open || !t.turbine) return;
     const tb = t.turbine, blink = Math.floor(performance.now() / 350) % 2 === 0;
-    this.el.classList.toggle("manual", !tb.fadec);
-    for (const b of this.el.querySelectorAll<HTMLButtonElement>("[data-mode]")) b.classList.toggle("sel", (b.dataset.mode === "fadec") === tb.fadec);
+    this.ck.update(t);
+    // quem comanda a partida (indicador, não seletor): START devolve ao FADEC; mexer numa chave passa para o manual
+    const fl = this.q<HTMLElement>("[data-fl]"), flTxt = tb.fadec ? "FADEC" : "MANUAL";
+    if (fl.textContent !== flTxt) fl.textContent = flTxt;
+    fl.classList.toggle("man", !tb.fadec);
+    this.q<HTMLElement>(".rb-start").classList.toggle("busy", tb.fadec && tb.phase !== "off" && tb.phase !== "running" && tb.phase !== "spooldown" && blink);
+    this.q<HTMLElement>(".rb-start").classList.toggle("lit", tb.phase === "running");
     // instrumentos: sem tensão no barramento ficam apagados (ponteiro no zero)
     const on = tb.powered;
     const set = (g: RoundGauge, v: number, txt: string, sub = "", warn = false) => { g.el.classList.toggle("off", !on); g.set(on ? v : 0, on ? txt : "—", on ? sub : "", on && warn); };
@@ -164,7 +166,6 @@ export class TurbinePanel {
     const lit: Record<PanelSwitch, boolean> = { master: tb.master && on, extPwr: t.extPwr, boostPump: tb.boostPump && on, starter: tb.starter, ignition: tb.ignition, fuelValve: false, generator: t.busGen };
     for (const id of Object.keys(sw) as PanelSwitch[]) if (id !== "fuelValve") setToggle(this.el, "s", id, sw[id], lit[id]);
     setRotary(this.el, "fv", tb.fuelValve ? "idle" : "cut");
-    setToggle(this.el, "bat", "1", tb.master, lit.master);
     setRotary(this.el, "tank", t.fuelValveOpen ? "open" : "closed");
     setRotary(this.el, "bsel", t.batterySel === "off" ? "off" : t.batterySel === "bus" ? "bus" : "both");
     setTri(this.el, "bilge", t.bilgeMode, on && t.bilgeMode !== "off", t.bilgePump);
@@ -173,9 +174,9 @@ export class TurbinePanel {
     const sm = this.el.querySelector<HTMLElement>(".lev .tl-shift small");
     const smTxt = t.engine === "running" ? (t.gear === "N" ? "hidráulica: pronta para engatar" : `engatada: ${t.gear}`) : "SEM PRESSÃO: turbina parada, não engata";
     if (sm && sm.textContent !== smTxt) { sm.textContent = smTxt; sm.classList.toggle("warn", t.engine !== "running"); }
-    rd("bat", `baterias ${Math.round(t.batterySoc * 100)} % · ${t.busBattery ? "no barramento (24 V)" : t.batterySel === "bus" ? "fora (BUS: GPU/gerador)" : "fora"}`);
-    rd("tank", t.fuelValveOpen ? `tanque ${t.fuelL.toFixed(0)} L` : `linha ${Math.round(t.fuelLineFrac * 100)} %`);
-    rd("bilge", `porão ${t.bilgeL.toFixed(0)} L · bomba ${t.bilgePump ? "girando" : "parada"}`);
+    rd("bat", `${Math.round(t.batterySoc * 100)} % · ${t.busBattery ? "24 V no barram." : "fora"}`);
+    rd("tank", t.fuelValveOpen ? `${t.fuelL.toFixed(0)} L no tanque` : `linha ${Math.round(t.fuelLineFrac * 100)} %`);
+    rd("bilge", `${t.bilgePump ? "bombeando" : "parada"} · ${t.bilgeL.toFixed(0)} L`);
     this.q<HTMLButtonElement>("[data-g]").textContent = t.gpu ? (t.gpuState === "online" ? "cabo da GPU: recolher (J)" : "GPU partindo… (J)") : "conectar o cabo da GPU (J, só na doca)";
     // display de avisos no pé do painel (caixa fixa, o texto rola): avaria/starter/desgaste e combustível na câmara
     const wear = tb.seized ? "TURBINA DESTRUÍDA (sobretemperatura) — R leva à oficina"
@@ -185,5 +186,69 @@ export class TurbinePanel {
     const msg = [wear, pooled].filter(Boolean).join(" · ");
     const flashing = performance.now() - this.flashT < 6000;
     setRd(this.q<HTMLElement>("[data-msg]"), flashing ? this.flashMsg : msg, !flashing && msg !== "");
+  }
+}
+
+/**
+ * Checklist de partida da turbina (janela à parte, arrastável). Cada item fica marcado ✓ pela telemetria real
+ * (regra do HUD: nada decorativo). Duas listas: partida automática (FADEC) e partida manual, chave por chave.
+ */
+export class ChecklistPanel {
+  readonly el: HTMLElement;
+  private open = false;
+  private static readonly FADEC: [string, (t: BoatTelemetry) => boolean][] = [
+    ["MAIN — ON", (t) => !!t.turbine?.master],
+    ["BATERIAS — BOTH (ou BUS com a GPU)", (t) => !!t.turbine?.powered],
+    ["TANQUE — ABERTO", (t) => t.fuelValveOpen],
+    ["MARCHA — N", (t) => t.gear === "N"],
+    ["START (botão verde) ou P", (t) => !!t.turbine && t.turbine.fadec && t.turbine.phase !== "off"],
+    ["Marcha lenta: N1 62 %, EGT ~480 °C", (t) => t.turbine?.phase === "running"],
+    ["GPU — recolher o cabo (J)", (t) => t.turbine?.phase === "running" && !t.gpu],
+  ];
+  private static readonly MANUAL: [string, (t: BoatTelemetry) => boolean][] = [
+    ["MAIN — ON, com fonte no barramento", (t) => !!t.turbine?.master && !!t.turbine?.powered],
+    ["BOMBA COMB. — ON", (t) => !!t.turbine?.boostPump],
+    ["STARTER — ON: o N1 sobe", (t) => !!t.turbine && (t.turbine.starterSw || t.turbine.n1 > 10)],
+    ["N1 ≥ 12 %: IGNIÇÃO ON e COMBUSTÍVEL em LENTA", (t) => !!t.turbine && ((t.turbine.ignitionSw && t.turbine.fuelValve) || t.turbine.lit)],
+    ["Acendeu: vigie a EGT (limite 780 °C)", (t) => !!t.turbine?.lit],
+    ["N1 ≥ 45 %: STARTER e IGNIÇÃO OFF", (t) => !!t.turbine && t.turbine.lit && t.turbine.n1 >= 45 && !t.turbine.starterSw && !t.turbine.ignitionSw],
+    ["Marcha lenta (62 %): GERADOR ON", (t) => t.turbine?.phase === "running" && !!t.turbine?.generator],
+    ["EXT PWR — OFF (GPU fora do barramento)", (t) => t.turbine?.phase === "running" && !t.extPwrClosed],
+  ];
+
+  constructor() {
+    const el = document.createElement("div");
+    el.id = "ckpanel";
+    const list = (k: string, items: [string, unknown][]) => `<ol data-l="${k}">${items.map(([txt], i) => `<li data-i="${i}"><i></i>${txt}</li>`).join("")}</ol>`;
+    el.innerHTML = `<div class="tp-head"><b>⠿ CHECKLIST DE PARTIDA — AR-10</b><button class="tp-x" aria-label="fechar">×</button></div>
+      <div class="ck-cols">
+        <div class="ck-col" data-c="fadec"><h4>PARTIDA AUTOMÁTICA (FADEC)</h4>${list("fadec", ChecklistPanel.FADEC)}
+          <p>O FADEC faz a sequência e aborta sozinho partida pendurada, sem acendimento e quente (EGT &gt; 780 °C).</p></div>
+        <div class="ck-col" data-c="manual"><h4>PARTIDA MANUAL</h4>${list("manual", ChecklistPanel.MANUAL)}
+          <p>Ninguém protege: combustível cedo = partida quente/molhada; starter solto antes de 45 % = rollback.</p></div>
+      </div>`;
+    el.querySelector(".tp-x")!.addEventListener("click", () => this.setOpen(false));
+    document.body.appendChild(el);
+    this.el = el;
+    makeDraggable(el, el.querySelector<HTMLElement>(".tp-head")!, "aquarush.ckpanelPos");
+  }
+
+  get isOpen(): boolean { return this.open; }
+  setOpen(on: boolean): void { this.open = on; this.el.classList.toggle("open", on); }
+
+  update(t: BoatTelemetry): void {
+    if (!this.open || !t.turbine) return;
+    const mark = (k: string, items: [string, (t: BoatTelemetry) => boolean][]) => {
+      const rows = this.el.querySelectorAll<HTMLElement>(`ol[data-l="${k}"] li`);
+      let next = true; // o primeiro item ainda não feito fica em destaque
+      items.forEach(([, ok], i) => {
+        const done = ok(t);
+        rows[i].classList.toggle("done", done);
+        rows[i].classList.toggle("next", !done && next);
+        if (!done) next = false;
+      });
+    };
+    mark("fadec", ChecklistPanel.FADEC); mark("manual", ChecklistPanel.MANUAL);
+    for (const c of this.el.querySelectorAll<HTMLElement>(".ck-col")) c.classList.toggle("act", (c.dataset.c === "fadec") === t.turbine.fadec);
   }
 }

@@ -59,22 +59,22 @@ export class LeverControls {
     const el = document.createElement("div");
     el.className = `lev lev-${kind}`;
     if (kind === "binnacle" || kind === "twin") {
-      const unit = (i: number, label: string, cls: string) => `<div class="mt" data-mt="${i}">
+      const unit = (i: number, label: string, cls: string) => `<div class="mt" data-mt="${i}" title="arraste: F à direita, R à esquerda · clique no N para acelerar em neutro · duplo clique = N">
         <div class="mt-house"><span class="mt-arc"></span>
           <i class="mt-l r">R</i><button class="mt-nbtn" data-nb="${i}" title="botão de neutro: arme com a manete em N e empurre para acelerar sem engatar">N</button><i class="mt-l f">F</i>
           <span class="mt-arm ${cls}"><span class="mt-knob"></span></span><span class="mt-hub"></span></div>
         <em class="mt-rd">N</em><b>${label}</b></div>`;
       el.innerHTML = kind === "twin"
-        ? `${unit(0, "BOMBORDO", "port")}${unit(1, "BORESTE", "stbd")}<small class="lev-tip">arraste cada manete · clique no N para acelerar em neutro</small>`
-        : `${unit(0, "MANETE", "")}<small class="lev-tip">arraste: F à direita · R à esquerda · clique no N para acelerar em neutro</small>`;
+        ? `${unit(0, "BOMBORDO", "port")}${unit(1, "BORESTE", "stbd")}`
+        : `${unit(0, "MANETE", "")}`;
     } else if (kind === "tiller") {
-      el.innerHTML = `<div class="tl"><div class="tl-grip" data-grip="0"><span class="tl-ridges"></span><span class="tl-mark"></span></div>
-          <div class="tl-scale"><span>🐢 LENTO</span><span>RÁPIDO 🐇</span></div><em class="mt-rd">N · 0 %</em><b>PUNHO DO ACELERADOR</b><small>gire (arraste para os lados) · em N acelera em neutro</small></div>
-        <div class="tl-shift">${gearSel(0)}<b>CÂMBIO</b><small>no motor</small></div>`;
+      el.innerHTML = `<div class="tl" title="gire o punho (arraste para os lados) · em N acelera em neutro"><div class="tl-grip" data-grip="0"><span class="tl-ridges"></span><span class="tl-mark"></span></div>
+          <div class="tl-scale"><span>🐢 LENTO</span><span>RÁPIDO 🐇</span></div><em class="mt-rd">N · 0 %</em><b>PUNHO</b></div>
+        <div class="tl-shift">${gearSel(0)}<b>CÂMBIO</b></div>`;
     } else {
-      el.innerHTML = `<div class="pl"><div class="pl-track" data-pl="0"><span class="pl-slot"></span>
+      el.innerHTML = `<div class="pl" title="manete de potência em T (N1) · em N acelera em neutro"><div class="pl-track" data-pl="0"><span class="pl-slot"></span>
             <i class="pl-l max">MÁX</i><i class="pl-l idle">LENTA</i><span class="pl-handle"><span class="pl-t"></span></span></div>
-          <em class="mt-rd">N · 0 %</em><b>POTÊNCIA</b><small>manete em T (N1)</small></div>
+          <em class="mt-rd">N · 0 %</em><b>POTÊNCIA</b></div>
         <div class="tl-shift">${gearSel(0)}<b>MARCHA</b><small>hidráulica: só engata com a turbina rodando</small></div>`;
     }
     this.el = el;
@@ -162,6 +162,20 @@ export class LeverControls {
   private trimEl: HTMLElement | null = null;
   private trimOpts: TrimOpts | null = null;
 
+  /** Botão de buzina (ou apito, no bote): segurar toca; soltar em qualquer lugar para. */
+  setHorn(kind: "buzina" | "apito", onHorn: (on: boolean) => void): void {
+    this.el.querySelector(".hb-w")?.remove();
+    const w = document.createElement("div");
+    w.className = "hb-w";
+    w.innerHTML = `<button class="hb hb-${kind}" aria-label="${kind}"><span>${kind === "apito" ? "APITO" : "BUZINA"}</span></button><b>${kind === "apito" ? "APITO" : "BUZINA"}</b>`;
+    const b = w.querySelector<HTMLElement>("button")!;
+    let held = false;
+    b.addEventListener("pointerdown", (e) => { held = true; b.classList.add("down"); onHorn(true); e.preventDefault(); });
+    const up = () => { if (!held) return; held = false; b.classList.remove("down"); onHorn(false); };
+    addEventListener("pointerup", up); addEventListener("pointercancel", up); addEventListener("blur", up);
+    this.el.appendChild(w);
+  }
+
   /** Monta (ou tira) o controle de trim deste barco. `onTrim(+1/−1/0)` = segurar UP/DN (vai para o InputManager). */
   setTrim(opts: TrimOpts | null, onTrim: (dir: number) => void): void {
     this.trimEl?.remove(); this.trimEl = null; this.trimOpts = opts;
@@ -172,9 +186,10 @@ export class LeverControls {
     const side = opts.mode === "pin"
       ? `<div class="tr-pins">${Array.from({ length: opts.pins + 1 }, (_, k) => { const n = opts.pins + 1 - k; return `<i data-pin="${n}">${n > opts.pins ? "T" : n}</i>`; }).join("")}</div>`
       : `<div class="tr-bar"><span class="tr-z trim" style="bottom:0;height:${((opts.up - opts.down) / total) * 100}%"></span><span class="tr-z tilt" style="bottom:${((opts.up - opts.down) / total) * 100}%;height:${(opts.tilt / total) * 100}%"></span><span class="tr-mark"></span></div>`;
-    el.innerHTML = `<div class="tr-row"><div class="tr-view"><span class="tr-water"></span><span class="tr-hull"></span><span class="tr-leg"><span class="tr-prop"></span></span></div>${side}
+    el.title = opts.sub;
+    el.innerHTML = `<div class="tr-row">${side}
         <div class="tr-rocker"><button data-tr="1">▲<small>${opts.mode === "pin" ? "SOBE" : "UP"}</small></button><button data-tr="-1">▼<small>${opts.mode === "pin" ? "DESCE" : "DN"}</small></button></div></div>
-      <em class="mt-rd">0°</em><b>${opts.label}</b><small>${opts.sub}</small>`;
+      <em class="mt-rd">0°</em><b>${opts.label}</b>`;
     // botão basculante momentâneo: segurar = trim subindo/descendo; soltar em qualquer lugar = para
     let held = false;
     el.addEventListener("pointerdown", (e) => {
@@ -192,8 +207,6 @@ export class LeverControls {
     const el = this.trimEl, o = this.trimOpts;
     if (!el || !o || !s) return;
     const ang = s.deg + s.tilt;
-    const leg = el.querySelector<HTMLElement>(".tr-leg")!, tr = `rotate(${ang.toFixed(1)}deg)`;
-    if (leg.style.transform !== tr) leg.style.transform = tr;
     let txt: string;
     if (o.mode === "pin") {
       for (const p of el.querySelectorAll<HTMLElement>("[data-pin]")) p.classList.toggle("on", Number(p.dataset.pin) === s.pin);

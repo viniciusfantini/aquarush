@@ -47,7 +47,7 @@ import { BoatCamera } from "./presentation/cameras.ts";
 import { Hud } from "./presentation/hud.ts";
 import { EngineAudio } from "./presentation/audio.ts";
 
-const BUILD = "poc-babylon 0.61.0";
+const BUILD = "poc-babylon 0.62.0";
 /** Escala visual da rotação da hélice (proporcional ao RPM, abaixo do limite estroboscópico). */
 const PROP_VISUAL_SCALE = 0.12;
 
@@ -570,6 +570,7 @@ const boot = async () => {
     audio.cylinders = V.P.cylinders;
     tpanel.setOpen(false); spanel.setOpen(false);
     if (V.P.turbine) tpanel.configureTrim(trimOptsFor(V.P));
+    document.getElementById("help-horn")!.textContent = isBote ? "apito" : "buzina";
     spanel.configure({ title: V.P.name, banks: !V.P.electricStart ? 0 : V.boat.systems2 ? 2 : 1,
       keys: !V.P.electricStart || V.P.turbine ? [] : V.boat.units.length > 1 ? ["IGNIÇÃO BB", "IGNIÇÃO BE"] : ["IGNIÇÃO"],
       levers: isBote ? "tiller" : V.boat.units.length > 1 ? "twin" : "binnacle", display: isBote ? "grey" : V.boat.units.length > 1 ? "vfd" : "lcd",
@@ -619,8 +620,9 @@ const boot = async () => {
     },
     setSwitch: (sw, on) => {
       const tb = V.boat.units[0].turb; if (!tb) return;
+      // o painel é sempre completo: acionar qualquer chave (menos a MAIN) com o FADEC no comando passa a partida para o MANUAL
+      if (tb.fadec && sw !== "master") { tb.setFadec(false); sysToast("Chave acionada: partida MANUAL — o FADEC deixa de proteger (START devolve ao FADEC)"); }
       if (sw === "extPwr") {
-        if (tb.fadec) { sysToast("No FADEC o EXT PWR é automático: fecha com a GPU estável e abre na marcha lenta"); return; }
         // a chave muda de posição sempre; o efeito depende do cabo, da GPU estável e da MAIN
         const sy = V.boat.systems, powered = !!V.boat.telemetry.turbine?.powered;
         sy.extPwr = on;
@@ -637,8 +639,21 @@ const boot = async () => {
           : live ? "MAIN ligada: sistemas eletrônicos energizados" : "MAIN ligada: aguardando fonte (baterias em BUS — conecte a GPU ou ponha em BOTH)");
       }
     },
-    fadecStart: () => { const tb = V.boat.units[0].turb; if (tb && !tb.running && !tb.starting) input.pushAction("ignition"); },
-    fadecCut: () => { const tb = V.boat.units[0].turb; if (tb && (tb.running || tb.starting)) input.pushAction("ignition"); },
+    // START (redondo): partida automática — devolve o comando ao FADEC se estava no manual
+    fadecStart: () => {
+      const tb = V.boat.units[0].turb; if (!tb) return;
+      if (tb.running || tb.starting) { sysToast(tb.running ? "Turbina já está rodando" : "Partida em andamento"); return; }
+      if (!tb.fadec) tb.setFadec(true);
+      input.pushAction("ignition");
+    },
+    // CORTE (redondo): no FADEC corta/aborta; no manual fecha o combustível e solta starter e ignição
+    fadecCut: () => {
+      const tb = V.boat.units[0].turb; if (!tb) return;
+      if (tb.fadec) { if (tb.running || tb.starting) input.pushAction("ignition"); return; }
+      tb.setSwitch("fuelValve", false); tb.setSwitch("starter", false); tb.setSwitch("ignition", false);
+      sysToast("CORTE: combustível fechado, starter e ignição desligados");
+    },
+    horn: (on) => { input.panelHorn = on; },
     gpu: () => input.pushAction("jump"),
     setFuelTank: (open) => setFuelValve(open),
     setBattery: (sel) => {
@@ -684,6 +699,7 @@ const boot = async () => {
     },
     setLever: (i, cmd) => input.setPanelLever(i, cmd, V.boat.units.length),
     setTrim: (d) => { input.touchTrim = d; },
+    horn: (on) => { input.panelHorn = on; },
     pullStart: () => { if (V.boat.engine !== "running") input.pushAction("ignition"); },
     stopEngine: () => { if (V.boat.engine === "running") input.pushAction("ignition"); },
     close: () => spanel.setOpen(false),
@@ -692,10 +708,10 @@ const boot = async () => {
    *  superfície, ou o pino do bote). */
   const trimOptsFor = (P: typeof V.P): TrimOpts => {
     const DEGR = 180 / Math.PI;
-    if (P.trimMode === "manual") return { mode: "pin", label: "PINO DO TRIM", sub: "solte o acelerador · ▲▼ mudam o pino", down: P.trimPins[0] * DEGR, up: P.trimPins[P.trimPins.length - 1] * DEGR, tilt: P.tiltMax * DEGR, pins: P.trimPins.length, drive: "outboard" };
+    if (P.trimMode === "manual") return { mode: "pin", label: "PINO", sub: "solte o acelerador · ▲▼ mudam o pino", down: P.trimPins[0] * DEGR, up: P.trimPins[P.trimPins.length - 1] * DEGR, tilt: P.tiltMax * DEGR, pins: P.trimPins.length, drive: "outboard" };
     const drive = P.turbine ? "surface" : P.engines && P.engines.length > 1 ? "sterndrive" : "outboard";
-    return { mode: "power", label: drive === "surface" ? "TRIM DA TRANSMISSÃO" : drive === "sterndrive" ? "TRIM DAS RABETAS" : "TRIM / TILT",
-      sub: drive === "outboard" ? "segure ▲▼ · no fim do curso, tilt" : drive === "sterndrive" ? "as duas rabetas juntas" : "imersão da hélice de superfície",
+    return { mode: "power", label: drive === "outboard" ? "TRIM/TILT" : "TRIM",
+      sub: drive === "outboard" ? "segure ▲▼ · no fim do curso, tilt" : drive === "sterndrive" ? "as duas rabetas juntas" : "imersão da hélice de superfície (segure ▲▼)",
       down: P.trimDown * DEGR, up: P.trimUp * DEGR, tilt: P.tiltMax * DEGR, pins: 0, drive };
   };
   /** Aviso de sistemas/motor: com o painel do Y aberto vai para o display dele; fechado, é o aviso normal do HUD. */
@@ -835,6 +851,7 @@ const boot = async () => {
     else if (a === "help") hud.toggleHelp();
     else if (a === "ignition") {
       if (boat.capsized) { hud.showToast("Barco virado — R para recomeçar"); return; }
+      { const tb0 = boat.units[0].turb; if (tb0 && !tb0.fadec && !tb0.running && !tb0.starting) tb0.setFadec(true); } // P = START (FADEC)
       const r = boat.toggleIgnition();
       if (r === "noPilot") { sysToast("Ninguém no comando — o piloto está na água"); return; }
       if (r === "broken") { sysToast("Motor avariado: não liga — R leva à oficina do píer"); return; }
@@ -1211,7 +1228,7 @@ const boot = async () => {
     // buzina: do veículo quando você está nele; senão do barco (segurar B, ou toque no botão = 0,22 s)
     hornPulse = Math.max(0, hornPulse - dtReal);
     // buzina elétrica da lancha: tom e volume caem com a tensão da bateria (o bote tem buzina de ar; o carro, bateria própria)
-    audio.setHorn(mode === "game" && (input.hornHeld || hornPulse > 0), driving || carOnly ? "car" : V.kind === "bote" ? "bote" : "lancha", !driving && !carOnly && V.boat.systems.p.hasBattery ? T.houseV * 12 / T.nominalV : 12.6);
+    audio.setHorn(mode === "game" && (input.hornHeld || hornPulse > 0), driving || carOnly ? "car" : V.kind === "bote" ? "apito" : "lancha", !driving && !carOnly && V.boat.systems.p.hasBattery ? T.houseV * 12 / T.nominalV : 12.6);
     if (lights && V.vis.lights) setNavLights(V.vis, true, T.houseV * 12 / T.nominalV); // luzes de navegação: brilho pela tensão
     if ((windHudT -= dtReal) <= 0) { windHudT = 0.25; hud.updateWind(wind.speed * MS_TO_KNOTS, wind.dirFrom - Math.atan2(boat.forward.x, boat.forward.z)); }
     hud.update(T, fpsSmooth, {

@@ -169,7 +169,7 @@ export class EngineAudio {
   // ---- buzina (B): carro (2 tons ~500/630 Hz), lancha (buzina elétrica ~560/700 Hz), bote (buzina de ar ~760 Hz) ----
   private horn: { oscs: OscillatorNode[]; gain: GainNode; kind: string; base: number[] } | null = null;
   /** `volts`: tensão nos bornes — a buzina elétrica perde tom e volume com a bateria fraca (abaixo de ~8 V cala). */
-  setHorn(on: boolean, kind: "car" | "lancha" | "bote", volts = 12.6): void {
+  setHorn(on: boolean, kind: "car" | "lancha" | "bote" | "apito", volts = 12.6): void {
     const ctx = this.ctx;
     if (!ctx) return;
     const t = ctx.currentTime;
@@ -179,6 +179,19 @@ export class EngineAudio {
       const shaper = ctx.createWaveShaper();
       const curve = new Float32Array(256); for (let i = 0; i < 256; i++) { const x = (i / 255) * 2 - 1; curve[i] = Math.tanh(2.5 * x); }
       shaper.curve = curve;
+      if (kind === "apito") {
+        // apito de bolinha (o do colete): tom agudo ~3,1 kHz com o "trinado" da bolinha (FM ~27 Hz) + sopro
+        const o = ctx.createOscillator(); o.type = "sine"; o.frequency.value = 3150;
+        const lfo = ctx.createOscillator(); lfo.type = "sine"; lfo.frequency.value = 27;
+        const dev = ctx.createGain(); dev.gain.value = 220; lfo.connect(dev).connect(o.frequency);
+        const am = ctx.createGain(); am.gain.value = 0.75; const amDev = ctx.createGain(); amDev.gain.value = 0.25; lfo.connect(amDev).connect(am.gain);
+        const air = ctx.createBufferSource(); const nb = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate); const d = nb.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+        air.buffer = nb; air.loop = true; const airBP = ctx.createBiquadFilter(); airBP.type = "bandpass"; airBP.frequency.value = 3400; airBP.Q.value = 1.2; const airG = ctx.createGain(); airG.gain.value = 0.12;
+        o.connect(am); air.connect(airBP).connect(airG).connect(am);
+        am.connect(gain).connect(this.master);
+        o.start(); lfo.start(); air.start();
+        this.horn = { oscs: [o, lfo, air as unknown as OscillatorNode], gain, kind, base: [3150, 27, 0] };
+      } else {
       const bp = ctx.createBiquadFilter(); bp.type = "bandpass";
       // buzinas agudas e "secas" (dá para dar dois toques curtos): carro 2 tons, lancha buzina elétrica, bote buzina de ar
       const freqs = kind === "car" ? [500, 630] : kind === "lancha" ? [560, 700] : [760];
@@ -186,7 +199,9 @@ export class EngineAudio {
       const oscs = freqs.map((f) => { const o = ctx.createOscillator(); o.type = kind === "bote" ? "square" : "sawtooth"; o.frequency.value = f; o.connect(shaper); o.start(); return o; });
       shaper.connect(bp).connect(gain).connect(this.master);
       this.horn = { oscs, gain, kind, base: freqs };
+      }
     }
+    if (kind === "apito") { this.horn.gain.gain.setTargetAtTime(on && !this.muted ? 0.09 : 0, t, on ? 0.012 : 0.02); return; } // sopro: sem bateria
     const h = kind === "bote" ? 1 : Math.min(1.05, Math.max(0, (volts - 8) / 4.6)); // 12,6 V = 1
     this.horn.oscs.forEach((o, i) => o.frequency.setTargetAtTime(this.horn!.base[i] * (0.55 + 0.45 * h), t, 0.05));
     const vol = (this.muted ? 0 : kind === "lancha" ? 0.17 : kind === "car" ? 0.14 : 0.15) * Math.min(1, h * 1.3);

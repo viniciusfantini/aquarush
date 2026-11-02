@@ -28,6 +28,7 @@ export interface SystemsPanelActions {
   stopEngine(): void;                         // bote: botão STOP
   setLever(engine: number, cmd: LeverCmd): void; // manete do painel (vai para o InputManager)
   setTrim(dir: number): void;                     // botão de trim segurado (+1 sobe, −1 desce, 0 solta)
+  horn(on: boolean): void;                        // buzina (apito no bote) segurada
   close(): void;
 }
 
@@ -110,6 +111,7 @@ export class SystemsPanel {
     this.levers = new LeverControls(caps.levers, (i, c) => this.act.setLever(i, c));
     this.body.querySelector<HTMLElement>(".sp-lev")!.appendChild(this.levers.el);
     this.levers.setTrim(caps.trim, (d) => this.act.setTrim(d));
+    this.levers.setHorn(caps.banks === 0 ? "apito" : "buzina", (on) => this.act.horn(on));
   }
 
   get isOpen(): boolean { return this.open; }
