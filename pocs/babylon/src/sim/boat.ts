@@ -115,6 +115,11 @@ export interface BoatTelemetry {
   thrusts: number[];
   engines: EngineState[];
   propRpms: number[];
+  /** por motor/banco (AR-9: cada V8 tem arrefecimento e banco de bateria próprios) */
+  coolants: number[];
+  batteryVs: number[];
+  batterySocs: number[];
+  batteryAs: number[];
 }
 
 /**
@@ -234,6 +239,16 @@ export class Speedboat {
   trimMotorA = 0;
   /** combustível, arrefecimento, bateria e horímetro */
   readonly systems: EngineSystems;
+  /**
+   * 2º motor (AR-9): banco de bateria, alternador, arrefecimento e horímetro PRÓPRIOS. O tanque é o mesmo
+   * (o combustível é sincronizado com `systems`). O banco 1 (`systems`) também alimenta a casa: luzes, trim,
+   * molinete e bomba de porão; o jump start liga nele.
+   */
+  readonly systems2: EngineSystems | null;
+  /** Bancos/sistemas por motor ([0] = bombordo + casa, [1] = boreste). */
+  get banks(): EngineSystems[] { return this.systems2 ? [this.systems, this.systems2] : [this.systems]; }
+  /** sistemas do motor da unidade corrente (dentro de `eachUnit`) */
+  private get usys(): EngineSystems { return this.u.index > 0 && this.systems2 ? this.systems2 : this.systems; }
   /** trim manual (bote): furo atual do pino, ângulo atual (anima até o furo) e tilt pedido */
   trimPin = 1;
   private manualAngle = 0;
@@ -295,6 +310,7 @@ export class Speedboat {
     this.u = this.units[0];
     this.anchor = new AnchorGear(params.anchor);
     this.systems = new EngineSystems({ ...ENGINE_SYSTEMS, ...params.systems, tankLiters: params.tankLiters, hasBattery: params.electricStart });
+    this.systems2 = this.units.length > 1 ? new EngineSystems(this.systems.p) : null;
     this.trimPin = Math.max(0, Math.min(1, params.trimPins.length - 1));
     this.manualAngle = params.trimPins[this.trimPin] ?? 0;
     this.pos = { ...pos };
@@ -305,7 +321,7 @@ export class Speedboat {
       gear: "N", pitchDeg: 0, rollDeg: 0, wetFraction: 0, planing: false, thrustN: 0, ventilation: 1, cavitation: 0, propImmersion: 1, revLimiter: false, propSlip: 0, propRpm: 0, engine: "running", fuelL: 0, fuelFrac: 1, coolantC: 45, batteryV: 12.6, engineHours: 0, overheatWarn: false, protectMode: false, lowFuel: false, chargeWarn: false, stall: "", trimMotorA: 0, trimRelay: false, jumper: false, jumpCharge: 1, batteryA: 0, bilgeL: 0, bilgeInflowLps: 0, bilgePump: false, bilgeFlowLps: 0, bilgeAlarm: false, bilgeJetPos: v3(), bilgeJetVel: v3(), freeboard: 1, swamped: false, sunk: false, airPocketL: 0,
       anchorOut: 0, anchorState: "recolhida", anchorDepth: 0, anchorScope: 0, anchorTension: 0, anchorRelay: false, windlassA: 0, apparentWind: 0, neutralRev: false, fuelLph: 0, buzzer: false, starterRpm: 0, startFail: "", batterySoc: 0.92, trimPin: 0, pullStart: !params.electricStart,
       distanceM: 0, collisions: 0, draftHull: 0, draftMotor: 0, capsized: false, swimmers: 0, hullDamage: 0, engineDamage: 0, damageEvent: "", damageCount: 0, lastImpact: 0, depth: 0, submergedPoints: params.buoyancyPoints.map(() => false),
-      rpms: [params.idleRpm], gears: ["N"], throttles: [0], thrusts: [0], engines: ["running"], propRpms: [0],
+      rpms: [params.idleRpm], gears: ["N"], throttles: [0], thrusts: [0], engines: ["running"], propRpms: [0], coolants: [45], batteryVs: [12.6], batterySocs: [0.92], batteryAs: [0],
     };
   }
 
@@ -635,17 +651,14 @@ export class Speedboat {
     t.thrusts = this.units.map((x) => x.lastThrust); t.engines = this.units.map((x) => x.engine); t.propRpms = this.units.map((x) => x.propRpmState);
     // sistemas do motor: combustível, temperatura, bateria, horímetro
     const sys = this.systems;
-    sys.update(dt, { ...this.systemsEngineState(), fuelLph: t.fuelLph, intakeSubmerged, lightsOn: input.navigationLights, trimMotorA: this.trimMotorA, auxA: this.anchor.motorA + this.bilgePumpA });
+    this.runSystems(dt, { lightsOn: input.navigationLights, trimMotorA: this.trimMotorA, auxA: this.anchor.motorA + this.bilgePumpA, intakeSubmerged });
     this.updateBilge(dt, water, input);
     this.updateSlosh(dt);
     t.batteryA = sys.batteryA;
     t.anchorOut = this.anchor.out; t.anchorState = this.anchor.state; t.anchorDepth = this.anchor.depth; t.anchorScope = this.anchor.scope;
     t.anchorTension = this.anchor.tension; t.anchorRelay = this.anchor.relay; t.windlassA = this.anchor.motorA;
     t.trimMotorA = this.trimMotorA; t.jumper = sys.jumper; t.jumpCharge = sys.jumpCharge; t.neutralRev = this.neutralRev;
-    if (sys.stallReason && this.engine === "running") { this.engine = "off"; t.stall = sys.stallReason; }
-    t.fuelL = sys.fuelL; t.fuelFrac = sys.fuelFrac; t.coolantC = sys.coolantC; t.batteryV = sys.batteryV;
-    t.engineHours = sys.engineHours; t.overheatWarn = sys.overheatWarn; t.protectMode = sys.protect;
-    t.lowFuel = sys.lowFuel; t.chargeWarn = sys.chargeWarn;
+    this.banksTelemetry();
     t.buzzer = this.selfTestT > 0;
     t.starterRpm = this.engine === "cranking" ? this.rpm : 0;
     t.batterySoc = sys.batterySoc;
@@ -934,8 +947,8 @@ export class Speedboat {
       // engatar — para aquecer ou testar. Só em N; a rotação fica limitada pela central (NEUTRAL_REV_LIMIT).
       this.neutralRev = this.gear === "N" && this.wantGear === "N" && !!input.neutralThrottle && this.engine === "running";
       let target = (this.gear === "N" && !this.neutralRev) || this.engine !== "running" ? 0 : cmd;
-      if (this.systems.protect) target = Math.min(target, 0.3);   // modo de proteção
-      if (this.systems.starving) target = Math.min(target, 0.05); // engasgando sem combustível
+      if (this.usys.protect) target = Math.min(target, 0.3);   // modo de proteção (deste motor)
+      if (this.usys.starving) target = Math.min(target, 0.05); // engasgando sem combustível
       this.throttleActual += (target - this.throttleActual) * (1 - Math.exp(-dt / P.engineResponse));
     });
   }
@@ -1079,15 +1092,14 @@ export class Speedboat {
     t.rpm = this.units[0].rpm;
     t.rpms = this.units.map((x) => x.rpm); t.engines = this.units.map((x) => x.engine); t.propRpms = this.units.map((x) => x.propRpmState);
     t.fuelLph = this.units.filter((x) => x.engine === "running").length * P.fuelIdleLph;
-    this.systems.update(dt, { ...this.systemsEngineState(), load: 0, fuelLph: t.fuelLph, intakeSubmerged, lightsOn: false, trimMotorA: this.trimMotorA });
+    for (const x of this.units) x.fuelLph = x.engine === "running" ? P.fuelIdleLph : 0;
+    this.runSystems(dt, { lightsOn: false, trimMotorA: this.trimMotorA, auxA: 0, intakeSubmerged, load: 0 });
     const sys = this.systems;
-    if (sys.stallReason && this.engine === "running") { this.engine = "off"; t.stall = sys.stallReason; }
     t.trim = this.trim; t.trimDeg = trimAngle * 57.2958; t.tiltDeg = this.tilt * 57.2958;
     t.tiltBlocked = this.tiltBlocked || this.manualBlockT > 0;
     t.trimPin = P.trimMode === "manual" ? (this.tiltWanted ? P.trimPins.length + 1 : this.trimPin + 1) : 0;
-    t.trimMotorA = this.trimMotorA; t.batteryV = sys.batteryV; t.batterySoc = sys.batterySoc; t.jumper = sys.jumper; t.jumpCharge = sys.jumpCharge;
-    t.fuelL = sys.fuelL; t.fuelFrac = sys.fuelFrac; t.coolantC = sys.coolantC; t.engineHours = sys.engineHours;
-    t.overheatWarn = sys.overheatWarn; t.protectMode = sys.protect; t.lowFuel = sys.lowFuel; t.chargeWarn = sys.chargeWarn;
+    t.trimMotorA = this.trimMotorA; t.jumper = sys.jumper; t.jumpCharge = sys.jumpCharge;
+    this.banksTelemetry();
     t.buzzer = this.selfTestT > 0; t.starterRpm = this.engine === "cranking" ? this.rpm : 0;
     t.intakeSubmerged = intakeSubmerged; t.propImmersion = this.immersion; t.propRpm = this.propRpmState;
     t.hullDamage = this.hullDamage; t.engineDamage = this.engineDamage;
@@ -1262,6 +1274,43 @@ export class Speedboat {
     return this.units.some((o) => o.index < x.index && o.engine === "cranking");
   }
 
+  /**
+   * Atualiza os sistemas (combustível, arrefecimento, bateria, alternador, horímetro). Um motor: como sempre.
+   * Dois motores: cada um no SEU banco (arranque, alternador e temperatura dele); a casa (luzes, trim, molinete,
+   * bomba de porão) fica no banco 1; o tanque é comum (cada banco gasta o consumo do seu motor).
+   */
+  private runSystems(dt: number, h: { lightsOn: boolean; trimMotorA: number; auxA: number; intakeSubmerged: boolean; load?: number }): void {
+    const t = this.telemetry;
+    if (!this.systems2) {
+      const sys = this.systems;
+      sys.update(dt, { ...this.systemsEngineState(), ...(h.load !== undefined ? { load: h.load } : {}), fuelLph: t.fuelLph, intakeSubmerged: h.intakeSubmerged, lightsOn: h.lightsOn, trimMotorA: h.trimMotorA, auxA: h.auxA });
+      if (sys.stallReason && this.engine === "running") { this.engine = "off"; t.stall = sys.stallReason; }
+      return;
+    }
+    this.banks.forEach((sys, i) => {
+      const x = this.units[i], house = i === 0;
+      if (!house) sys.fuelL = this.systems.fuelL; // tanque comum
+      sys.update(dt, {
+        engine: x.engine, rpm: x.engine === "running" ? x.rpm : 0, load: h.load ?? x.throttleActual,
+        starterLoad: x.engine === "cranking" && !this.waitsToCrank(x) ? 1 : 0, alternators: 1,
+        fuelLph: x.fuelLph, intakeSubmerged: h.load === undefined ? x.intakeSubmerged : h.intakeSubmerged, // rebocado (load 0): a entrada comum
+        lightsOn: house && h.lightsOn, trimMotorA: house ? h.trimMotorA : 0, auxA: house ? h.auxA : 0,
+      });
+      if (!house) this.systems.fuelL = sys.fuelL;
+      if (sys.stallReason && x.engine === "running") { x.engine = "off"; t.stall = sys.stallReason; }
+    });
+  }
+
+  /** Telemetria dos sistemas: por banco e o resumo (alarme se QUALQUER motor esquentar / banco descarregar). */
+  private banksTelemetry(): void {
+    const t = this.telemetry, sys = this.systems, B = this.banks;
+    t.fuelL = sys.fuelL; t.fuelFrac = sys.fuelFrac; t.lowFuel = sys.lowFuel;
+    t.coolants = B.map((b) => b.coolantC); t.batteryVs = B.map((b) => b.batteryV); t.batterySocs = B.map((b) => b.batterySoc); t.batteryAs = B.map((b) => b.batteryA);
+    t.coolantC = Math.max(...t.coolants); t.batteryV = sys.batteryV; t.batterySoc = sys.batterySoc; t.batteryA = sys.batteryA;
+    t.engineHours = sys.engineHours;
+    t.overheatWarn = B.some((b) => b.overheatWarn); t.protectMode = B.some((b) => b.protect); t.chargeWarn = B.some((b) => b.chargeWarn);
+  }
+
   /** Estado agregado dos motores para os sistemas (bateria, alternadores, arranques, combustível, temperatura). */
   private systemsEngineState(): { engine: EngineState; rpm: number; load: number; starterLoad: number; alternators: number } {
     const cranking = this.units.filter((x) => x.engine === "cranking" && !this.waitsToCrank(x)).length;
@@ -1293,9 +1342,9 @@ export class Speedboat {
     let target = P.idleRpm + (P.maxRpm - P.idleRpm) * Math.pow(thr, 0.85) * load * freeRev;
     // limitador de giro: corta a ignição em pulsos quando passa do limite
     // modo de proteção (superaquecimento): a central limita a rotação; falta de combustível: engasga
-    if (this.systems.protect) target = Math.min(target, this.systems.p.protectRpm);
+    if (this.usys.protect) target = Math.min(target, this.usys.p.protectRpm);
     if (this.gear === "N") target = Math.min(target, NEUTRAL_REV_LIMIT); // central limita o giro em neutro
-    if (this.systems.starving) target = Math.min(target, P.idleRpm * 0.8);
+    if (this.usys.starving) target = Math.min(target, P.idleRpm * 0.8);
     this.revLimiting = this.engine === "running" && target > P.revLimitRpm;
     if (this.revLimiting) {
       this.limiterPhase += dt * 9;
@@ -1311,7 +1360,7 @@ export class Speedboat {
       this.crankTimer += dt;
       this.rpm += ((this.crankTimer < 0.45 ? 450 : 0) - this.rpm) * (1 - Math.exp(-dt / 0.08));
       if (this.crankTimer > 0.4 && this.pullCatch) { this.engine = "running"; this.rpm = 1400; }
-      else if (this.crankTimer > 0.9) { this.engine = "off"; this.telemetry.startFail = this.systems.fuelL > 0.005 ? "pull" : "fuel"; }
+      else if (this.crankTimer > 0.9) { this.engine = "off"; this.telemetry.startFail = this.usys.fuelL > 0.005 ? "pull" : "fuel"; }
       return this.rpm;
     }
     if (this.engine === "cranking" && this.waitsToCrank(this.u)) {
@@ -1324,15 +1373,15 @@ export class Speedboat {
       // Motor de arranque: a rotação depende da tensão nos bornes (que cai com a carga da bateria).
       // Bateria boa ≈ 250 rpm e pega em ~1 s; fraca gira devagar ("rrr… rrr…") e pode não pegar;
       // abaixo de ~7,5 V só o solenoide estala. O motor só pega com rotação de compressão suficiente.
-      const v = this.systems.batteryV;
+      const v = this.usys.batteryV;
       const starterTarget = 260 * clamp((v - 7.5) / 3.1, 0, 1.05);
       this.rpm += (starterTarget - this.rpm) * (1 - Math.exp(-dt / 0.12));
       this.crankTimer += dt;
       this.crankRevs += (this.rpm / 60) * dt * clamp((this.rpm - 60) / 100, 0, 1);
-      if (this.crankRevs >= this.crankNeed && this.systems.fuelL > 0.005) { this.engine = "running"; this.rpm = 1150; }
+      if (this.crankRevs >= this.crankNeed && this.usys.fuelL > 0.005) { this.engine = "running"; this.rpm = 1150; }
       else if (this.crankTimer > 4) { // o piloto solta a chave: não pegou
         this.engine = "off";
-        this.telemetry.startFail = this.systems.fuelL <= 0.005 && this.rpm >= 40 ? "fuel" : this.rpm < 40 ? "dead" : "weak";
+        this.telemetry.startFail = this.usys.fuelL <= 0.005 && this.rpm >= 40 ? "fuel" : this.rpm < 40 ? "dead" : "weak";
       }
       return this.rpm;
     }

@@ -94,6 +94,9 @@ export class Hud {
   private tempG: RoundGauge | null = null;
   private voltG: RoundGauge | null = null;
   private ampG: RoundGauge | null = null;
+  /** 2º motor (AR-9): temperatura e banco de bateria próprios */
+  private tempG2: RoundGauge | null = null;
+  private voltG2: RoundGauge | null = null;
   private bilgeChip = $("h-bilge");
   private anchorChip = $("h-anchor");
   private ancBox = $("g-anchor");
@@ -170,10 +173,16 @@ export class Hud {
       this.rpmG2 = null;
     }
     this.fuelG = new RoundGauge(small, { title: "COMBUST.", min: 0, max: 1, labels: [0, 0.5, 1], minor: 0.125, redFrom: 0, redTo: 0.12, labelFmt: (v) => (v === 0 ? "E" : v === 1 ? "F" : "½") });
-    this.tempG = opts.temp ? new RoundGauge(small, { title: "TEMP", min: 40, max: 120, labels: [40, 80, 120], minor: 10, redFrom: 90 }) : null;
-    this.voltG = opts.battery ? new RoundGauge(small, { title: "BATERIA", min: 8, max: 16, labels: [8, 12, 16], minor: 1, redFrom: 8, redTo: 11.5 }) : null;
+    // dois motores: um relógio de temperatura e um de bateria para cada (BB = bombordo, BE = boreste: bancos separados)
+    const tw = !!opts.twin;
+    const tempOpts = (t: string) => ({ title: t, min: 40, max: 120, labels: [40, 80, 120], minor: 10, redFrom: 90 });
+    const voltOpts = (t: string) => ({ title: t, min: 8, max: 16, labels: [8, 12, 16], minor: 1, redFrom: 8, redTo: 11.5 });
+    this.tempG = opts.temp ? new RoundGauge(small, tempOpts(tw ? "TEMP BB" : "TEMP")) : null;
+    this.tempG2 = opts.temp && tw ? new RoundGauge(small, tempOpts("TEMP BE")) : null;
+    this.voltG = opts.battery ? new RoundGauge(small, voltOpts(tw ? "BAT. BB" : "BATERIA")) : null;
+    this.voltG2 = opts.battery && tw ? new RoundGauge(small, voltOpts("BAT. BE")) : null;
     // amperímetro: corrente na bateria (+ carga do alternador, − consumo: arranque, trim, molinete, bomba)
-    this.ampG = opts.battery ? new RoundGauge(small, { title: "AMPÈRES", min: -60, max: 30, labels: [-60, -30, 0, 30], minor: 10, redFrom: -60, redTo: -40 }) : null;
+    this.ampG = opts.battery ? new RoundGauge(small, { title: tw ? "AMP. BB" : "AMPÈRES", min: -60, max: 30, labels: [-60, -30, 0, 30], minor: 10, redFrom: -60, redTo: -40 }) : null;
   }
 
   update(t: BoatTelemetry, fps: number, extra: Record<string, string>): void {
@@ -187,8 +196,16 @@ export class Hud {
     const autTxt = t.engine === "running" && autonomy > 0 ? ` · ${Math.floor(autonomy)}h${String(Math.floor((autonomy % 1) * 60)).padStart(2, "0")}` : "";
     this.fuelG.set(t.fuelFrac, `${t.fuelL.toFixed(1)} L`, `${t.fuelLph.toFixed(1)} L/h`, t.lowFuel);
     this.fuelAut.textContent = autTxt ? `autonomia${autTxt.replace(" ·", "")}` : "";
-    this.tempG?.set(t.coolantC, `${t.coolantC.toFixed(0)}°C`, t.protectMode ? "PROTEÇÃO" : t.overheatWarn ? "QUENTE" : "", t.overheatWarn);
-    this.voltG?.set(t.batteryV, `${t.batteryV.toFixed(1)} V`, t.jumper ? "jump" : t.engine === "running" && t.batteryV > 13.2 ? "carga" : `${Math.round(t.batterySoc * 100)}%`, t.chargeWarn);
+    if (this.tempG2 || this.voltG2) {
+      // dois motores: cada relógio lê o seu motor/banco (o alarme acende só no que está quente/descarregado)
+      const tempTag = (c: number) => (c >= 90 ? "PROTEÇÃO" : c >= 85 ? "QUENTE" : "");
+      const voltTag = (i: number) => (i === 0 && t.jumper ? "jump" : t.engines?.[i] === "running" && t.batteryVs[i] > 13.2 ? "carga" : `${Math.round(t.batterySocs[i] * 100)}%`);
+      [this.tempG, this.tempG2].forEach((g, i) => { const c = t.coolants[i] ?? t.coolantC; g?.set(c, `${c.toFixed(0)}°C`, tempTag(c), c >= 85); });
+      [this.voltG, this.voltG2].forEach((g, i) => { const v = t.batteryVs[i] ?? t.batteryV; g?.set(v, `${v.toFixed(1)} V`, voltTag(i), v < 12.2); });
+    } else {
+      this.tempG?.set(t.coolantC, `${t.coolantC.toFixed(0)}°C`, t.protectMode ? "PROTEÇÃO" : t.overheatWarn ? "QUENTE" : "", t.overheatWarn);
+      this.voltG?.set(t.batteryV, `${t.batteryV.toFixed(1)} V`, t.jumper ? "jump" : t.engine === "running" && t.batteryV > 13.2 ? "carga" : `${Math.round(t.batterySoc * 100)}%`, t.chargeWarn);
+    }
     const amps = t.batteryA;
     this.ampG?.set(Math.max(-60, Math.min(30, amps)), `${amps > 0.5 ? "+" : ""}${amps.toFixed(0)} A`, amps > 0.5 ? "carga" : amps < -0.5 ? "consumo" : "", amps < -40);
     // porão: bomba jogando água fora / água alta (alerta luminoso piscando)

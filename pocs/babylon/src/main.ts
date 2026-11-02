@@ -41,7 +41,7 @@ import { BoatCamera } from "./presentation/cameras.ts";
 import { Hud } from "./presentation/hud.ts";
 import { EngineAudio } from "./presentation/audio.ts";
 
-const BUILD = "poc-babylon 0.47.0";
+const BUILD = "poc-babylon 0.47.1";
 /** Escala visual da rotação da hélice (proporcional ao RPM, abaixo do limite estroboscópico). */
 const PROP_VISUAL_SCALE = 0.12;
 
@@ -555,10 +555,10 @@ const boot = async () => {
     tieToPier(b, world.pier, bs.side); moorWhere = "píer";
     b.repair();
     b.systems.jumper = false; b.systems.jumpCharge = 1; lastJumperOff = b.systems.jumperAutoOff; lastJumperTrips = b.systems.jumperTrips;
-    if (b.systems.p.hasBattery) b.systems.batterySoc = START_BATTERY; // bateria a 60 %
+    for (const bk of b.banks) if (bk.p.hasBattery) bk.batterySoc = START_BATTERY; // bateria(s) a 60 %
     b.engine = "off"; // começa desligado: dê a partida (P)
     b.systems.fuelL = START_FUEL[V.kind];
-    b.systems.coolantC = Math.min(b.systems.coolantC, 60);
+    for (const bk of b.banks) bk.coolantC = Math.min(bk.coolantC, 60);
     for (const p of [V.pilot, ...Object.values(V.pax)]) p.board(V.vis.root);
     if (V.dinghy) V.dinghy.pilotAboard = true;
     applyOccupants(occIdx, false);
@@ -948,7 +948,7 @@ const boot = async () => {
     // esguicho de refrigeração: bico no capô, jato para fora (+X local do motor, levemente para trás e para baixo)
     const ew = vis.engine.getWorldMatrix();
     fx.updateTelltale(vis.telltale.getAbsolutePosition().clone(), Vector3.TransformNormal(new Vector3(1, -0.15, -0.35), ew), T.rpm, new Vector3(boat.vel.x, boat.vel.y, boat.vel.z),
-      T.engine === "running" && T.intakeSubmerged); // sem água na entrada do pé = sem esguicho
+      T.engine === "running" && T.intakeSubmerged && V.kind !== "rapida"); // sem água na entrada do pé = sem esguicho; os V8 de centro (AR-9) não têm esguicho: a água sai com o escape
     if (T.tiltBlocked && !tiltWarned) { hud.showToast(isBote ? "Solte o acelerador para mudar a posição do motor" : "Tilt bloqueado: o empuxo da hélice segura o motor — reduza a rotação"); tiltWarned = true; }
     if (isBote && T.trimPin !== lastPin) { if (lastPin > 0) hud.showToast(T.trimPin > P.trimPins.length ? "Motor levantado (tilt) e travado" : `Motor no pino ${T.trimPin} de ${P.trimPins.length} (${(P.trimPins[T.trimPin - 1] * 180 / Math.PI).toFixed(0)}°)`); lastPin = T.trimPin; }
     if (!T.tiltBlocked) tiltWarned = false;

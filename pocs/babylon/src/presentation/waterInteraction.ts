@@ -5,7 +5,7 @@
 import { type Scene, DynamicTexture, Color4, ParticleSystem, Vector3, type Particle } from "@babylonjs/core";
 import type { GerstnerWater, IWaterSurface } from "../sim/water.ts";
 import type { Speedboat } from "../sim/boat.ts";
-import { v3, clamp, smoothstep } from "../sim/math.ts";
+import { v3, clamp, smoothstep, type Vec3 } from "../sim/math.ts";
 import { WakeMap } from "./wakeMap.ts";
 import type { WakeField } from "../sim/wake.ts";
 
@@ -51,16 +51,17 @@ const dropletTex = (scene: Scene): DynamicTexture => {
   return tex;
 };
 
+interface PropFx { rooster: ParticleSystem; chop: ParticleSystem; mist: ParticleSystem; bubbles: ParticleSystem }
+interface PropState { prop: Vec3; imm: number; cavitation: number; ventilation: number; throttle: number; thrustN: number; propRpm: number; running: boolean }
+
 export class WaterInteraction {
   readonly wake: WakeMap;
   private readonly bowL: ParticleSystem;
   private readonly bowR: ParticleSystem;
-  private readonly rooster: ParticleSystem;
+  /** efeitos de cada hélice (rooster tail, leque das pás, névoa, bolhas): um conjunto por motor */
+  private readonly props: PropFx[] = [];
   private readonly splash: ParticleSystem;
-  private readonly bubbles: ParticleSystem;
-  private readonly mist: ParticleSystem;
   private readonly telltale: ParticleSystem;
-  private readonly chop: ParticleSystem;
   private readonly drips: ParticleSystem;
   private dryTime = 99;
   /** superfície da água (física, com a esteira) para as partículas pararem nela */
@@ -93,26 +94,35 @@ export class WaterInteraction {
     const p = quality.particles;
     this.bowL = mk("sprayL", p * 0.25, drops);
     this.bowR = mk("sprayR", p * 0.25, drops);
-    this.rooster = mk("rooster", p * 0.2, drops);
     this.splash = mk("splash", p * 0.1, drops);
-    this.mist = mk("cavMist", p * 0.1, dot);
-    this.bubbles = mk("bubbles", p * 0.1, dot, 0);
     this.telltale = mk("telltale", 600, dot);
-    this.chop = mk("propChop", Math.max(200, p * 0.3), drops);
     this.drips = mk("drips", 120, dot);
+    // dois conjuntos de efeitos de hélice (o 2º só emite nos barcos de dois motores)
+    for (let i = 0; i < 2; i++) {
+      const sfx = i === 0 ? "" : String(i + 1);
+      const fx: PropFx = {
+        rooster: mk("rooster" + sfx, p * 0.2, drops),
+        mist: mk("cavMist" + sfx, p * 0.1, dot),
+        bubbles: mk("bubbles" + sfx, p * 0.1, dot, 0),
+        chop: mk("propChop" + sfx, Math.max(200, p * 0.3), drops),
+      };
+      fx.rooster.minSize = 0.25; fx.rooster.maxSize = 0.9; fx.rooster.minLifeTime = 0.5; fx.rooster.maxLifeTime = 1.3;
+      // névoa de cavitação/ventilação (sobe da popa)
+      fx.mist.minSize = 0.6; fx.mist.maxSize = 1.8; fx.mist.minLifeTime = 0.6; fx.mist.maxLifeTime = 1.4;
+      fx.mist.gravity = new Vector3(0, -1.5, 0);
+      fx.mist.color1 = new Color4(1, 1, 1, 0.35); fx.mist.color2 = new Color4(0.9, 0.95, 1, 0.25);
+      // bolhas: pequenas, sobem devagar (empuxo) atrás da hélice
+      fx.bubbles.minSize = 0.04; fx.bubbles.maxSize = 0.14; fx.bubbles.minLifeTime = 0.4; fx.bubbles.maxLifeTime = 1.2;
+      fx.bubbles.gravity = new Vector3(0, 2.5, 0);
+      fx.bubbles.color1 = new Color4(0.85, 0.97, 1, 0.75); fx.bubbles.color2 = new Color4(0.7, 0.9, 0.95, 0.55);
+      // hélice aflorando: as pás "picam" a superfície e jogam um leque de água para cima e para trás
+      fx.chop.minSize = 0.06; fx.chop.maxSize = 0.3; fx.chop.minLifeTime = 0.35; fx.chop.maxLifeTime = 1.0;
+      for (const ps of [fx.rooster, fx.mist, fx.chop]) this.clipToWater(ps, "fall");
+      this.clipToWater(fx.bubbles, "rise");
+      this.props.push(fx);
+    }
     for (const ps of [this.bowL, this.bowR]) { ps.minSize = 0.12; ps.maxSize = 0.5; ps.minLifeTime = 0.3; ps.maxLifeTime = 0.85; }
-    this.rooster.minSize = 0.25; this.rooster.maxSize = 0.9; this.rooster.minLifeTime = 0.5; this.rooster.maxLifeTime = 1.3;
     this.splash.minSize = 0.3; this.splash.maxSize = 1.1; this.splash.minLifeTime = 0.4; this.splash.maxLifeTime = 1.1;
-    // névoa de cavitação/ventilação (sobe da popa)
-    this.mist.minSize = 0.6; this.mist.maxSize = 1.8; this.mist.minLifeTime = 0.6; this.mist.maxLifeTime = 1.4;
-    this.mist.gravity = new Vector3(0, -1.5, 0);
-    this.mist.color1 = new Color4(1, 1, 1, 0.35); this.mist.color2 = new Color4(0.9, 0.95, 1, 0.25);
-    // bolhas: pequenas, sobem devagar (empuxo) atrás da hélice
-    this.bubbles.minSize = 0.04; this.bubbles.maxSize = 0.14; this.bubbles.minLifeTime = 0.4; this.bubbles.maxLifeTime = 1.2;
-    this.bubbles.gravity = new Vector3(0, 2.5, 0);
-    this.bubbles.color1 = new Color4(0.85, 0.97, 1, 0.75); this.bubbles.color2 = new Color4(0.7, 0.9, 0.95, 0.55);
-    // hélice aflorando: as pás "picam" a superfície e jogam um leque de água para cima e para trás
-    this.chop.minSize = 0.06; this.chop.maxSize = 0.3; this.chop.minLifeTime = 0.35; this.chop.maxLifeTime = 1.0;
     // gotas escorrendo do pé do motor depois que ele sai da água
     this.drips.minSize = 0.02; this.drips.maxSize = 0.04; this.drips.minLifeTime = 0.5; this.drips.maxLifeTime = 0.9;
     this.drips.minAngularSpeed = 0; this.drips.maxAngularSpeed = 0;
@@ -125,8 +135,7 @@ export class WaterInteraction {
     this.telltale.colorDead = new Color4(0.85, 0.95, 1, 0.2);
     // a água é uma superfície para as partículas: gota que cai nela para ali (vira respingo/bolha e some);
     // bolha que sobe estoura na superfície — nada atravessa e continua do outro lado
-    for (const ps of [this.bowL, this.bowR, this.rooster, this.splash, this.mist, this.telltale, this.chop, this.drips]) this.clipToWater(ps, "fall");
-    this.clipToWater(this.bubbles, "rise");
+    for (const ps of [this.bowL, this.bowR, this.splash, this.telltale, this.drips]) this.clipToWater(ps, "fall");
   }
 
   /** Envolve o update da partícula: ao cruzar a superfície ela fica nela, sem velocidade vertical, e encolhe até sumir. */
@@ -200,49 +209,24 @@ export class WaterInteraction {
     setBow(this.bowL, -1);
     setBow(this.bowR, 1);
 
-    // ---------------- hélice: rooster tail, cavitação, ventilação ----------------
-    const prop = boat.propWorld;
-    const surf = water.getHeight(prop.x, prop.z);
-    // só há água para ferver/espirrar se houver profundidade sob a hélice (encalhado na areia: nada)
-    const hasWater = smoothstep(0.15, 0.5, water.getDepth(prop.x, prop.z));
-    // fervura (cavitação/ar puxado) só com a hélice dentro d'água; no ar não há o que ferver
-    const imm = T.propImmersion;
-    const boil = clamp(Math.max(T.cavitation, (1 - T.ventilation) * smoothstep(0.15, 0.4, T.throttle)), 0, 1) * hasWater * smoothstep(0.2, 0.6, imm);
-    this.rooster.emitter = new Vector3(prop.x, surf, prop.z);
-    const rv = clamp(T.waterSpeed * 0.3, 0, 7) + boil * 3;
-    this.rooster.direction1 = new Vector3(-fwd.x * 0.8 + right.x * 0.3, 1.1, -fwd.z * 0.8 + right.z * 0.3).scale(rv);
-    this.rooster.direction2 = new Vector3(-fwd.x * 1.2 - right.x * 0.3, 1.7, -fwd.z * 1.2 - right.z * 0.3).scale(rv);
-    this.rooster.emitRate = hasWater * smoothstep(0.5, 0.9, imm) * (T.thrustN > 500 ? smoothstep(6, 20, T.waterSpeed) * 600 * T.throttle + boil * 500 : boil * 300);
-
-    // leque das pás "picando" a água: máximo com o disco pela metade (4·i·(1−i)), cresce com a rotação
-    const spin = Math.min(Math.abs(T.propRpm) / 1500, 2);
-    const chopAmt = hasWater * 4 * imm * (1 - imm) * spin;
-    const side = Math.sign(T.propRpm) || 1;
-    this.chop.emitter = new Vector3(prop.x, surf + 0.02, prop.z);
-    this.chop.minEmitBox = new Vector3(-0.15, 0, -0.15); this.chop.maxEmitBox = new Vector3(0.15, 0.05, 0.15);
-    const cv = 2 + 3.5 * Math.min(spin, 1.5);
-    this.chop.direction1 = new Vector3(-fwd.x * 0.9 + right.x * side * 0.9, 1.6, -fwd.z * 0.9 + right.z * side * 0.9).scale(cv).add(vel.scale(0.7));
-    this.chop.direction2 = new Vector3(-fwd.x * 1.5 - right.x * side * 0.2, 2.6, -fwd.z * 1.5 - right.z * side * 0.2).scale(cv).add(vel.scale(0.7));
-    this.chop.minEmitPower = 0.7; this.chop.maxEmitPower = 1.1;
-    this.chop.emitRate = chopAmt * 900;
-
-    // névoa/espuma subindo da popa quando a hélice cavita ou ventila
-    this.mist.emitter = new Vector3(prop.x, surf + 0.1, prop.z);
-    this.mist.minEmitBox = new Vector3(-0.5, 0, -0.5); this.mist.maxEmitBox = new Vector3(0.5, 0.2, 0.5);
-    this.mist.direction1 = new Vector3(-fwd.x * 2 - 0.5, 0.8, -fwd.z * 2 - 0.5);
-    this.mist.direction2 = new Vector3(-fwd.x * 3 + 0.5, 2.0, -fwd.z * 3 + 0.5);
-    this.mist.emitRate = boil * 140;
-
-    // bolhas logo atrás da hélice (visíveis através da água transparente)
-    this.bubbles.emitter = new Vector3(prop.x - fwd.x * 0.3, Math.min(prop.y, surf - 0.1), prop.z - fwd.z * 0.3);
-    this.bubbles.minEmitBox = new Vector3(-0.2, -0.15, -0.2); this.bubbles.maxEmitBox = new Vector3(0.2, 0.15, 0.2);
-    this.bubbles.direction1 = new Vector3(-fwd.x * 2.5 - 0.6, 0.0, -fwd.z * 2.5 - 0.6).add(vel.scale(0.6));
-    this.bubbles.direction2 = new Vector3(-fwd.x * 4 + 0.6, 0.6, -fwd.z * 4 + 0.6).add(vel.scale(0.8));
-    // + bolhas de escape na lenta: os gases saem pelo cubo da hélice e sobem em rajadas
-    const running = T.engine === "running" ? 1 : 0;
-    const exhIdle = running * hasWater * (1 - smoothstep(1.5, 5, Math.abs(T.waterSpeed)));
-    const puff = 0.55 + 0.45 * Math.sin(performance.now() / 1000 * 9.0) * Math.sin(performance.now() / 1000 * 3.1);
-    this.bubbles.emitRate = surf > prop.y ? (boil * 900 + T.throttle * 80 * smoothstep(0.5, 4, T.waterSpeed + T.throttle * 3) + exhIdle * 260 * puff) : 0;
+    // ---------------- hélices: rooster tail, cavitação, ventilação (uma por motor) ----------------
+    const n = boat.units.length;
+    this.props.forEach((fx, i) => {
+      if (i >= n) { fx.rooster.emitRate = fx.chop.emitRate = fx.mist.emitRate = fx.bubbles.emitRate = 0; return; }
+      const un = boat.units[i];
+      // barco de um motor: os valores da telemetria; de dois: os de cada motor
+      const one = n === 1;
+      this.updateProp(fx, water, fwd, right, vel, T.waterSpeed, {
+        prop: one ? boat.propWorld : un.propW,
+        imm: one ? T.propImmersion : un.immersion,
+        cavitation: one ? T.cavitation : un.cavitation,
+        ventilation: one ? T.ventilation : un.ventilation,
+        throttle: one ? T.throttle : un.throttleActual,
+        thrustN: one ? T.thrustN : (T.thrusts?.[i] ?? 0),
+        propRpm: one ? T.propRpm : un.propRpmState,
+        running: (one ? T.engine : un.engine) === "running",
+      });
+    });
 
     // ---------------- impactos ----------------
     const slam = Math.max(0, -boat.vel.y) * (T.wetFraction > 0 ? 1 : 0);
@@ -253,5 +237,50 @@ export class WaterInteraction {
     this.splash.minEmitBox = new Vector3(-1, 0, -1.5); this.splash.maxEmitBox = new Vector3(1, 0, 1.5);
     this.splash.direction1 = new Vector3(-2, 2.5, -2); this.splash.direction2 = new Vector3(2, 5, 2);
     this.splash.emitRate = (slam > 1.2 ? (slam - 1.2) * 900 : 0) + (impact > 8000 ? 1500 : 0);
+  }
+  /** Efeitos de uma hélice (rooster tail, leque das pás, névoa de cavitação, bolhas de escape). */
+  private updateProp(fx: PropFx, water: GerstnerWater, fwd: Vec3, right: Vec3, vel: Vector3, waterSpeed: number, h: PropState): void {
+    const prop = h.prop, imm = h.imm;
+    const surf = water.getHeight(prop.x, prop.z);
+    // só há água para ferver/espirrar se houver profundidade sob a hélice (encalhado na areia: nada)
+    const hasWater = smoothstep(0.15, 0.5, water.getDepth(prop.x, prop.z));
+    // fervura (cavitação/ar puxado) só com a hélice dentro d'água; no ar não há o que ferver
+    
+    const boil = clamp(Math.max(h.cavitation, (1 - h.ventilation) * smoothstep(0.15, 0.4, h.throttle)), 0, 1) * hasWater * smoothstep(0.2, 0.6, imm);
+    fx.rooster.emitter = new Vector3(prop.x, surf, prop.z);
+    const rv = clamp(waterSpeed * 0.3, 0, 7) + boil * 3;
+    fx.rooster.direction1 = new Vector3(-fwd.x * 0.8 + right.x * 0.3, 1.1, -fwd.z * 0.8 + right.z * 0.3).scale(rv);
+    fx.rooster.direction2 = new Vector3(-fwd.x * 1.2 - right.x * 0.3, 1.7, -fwd.z * 1.2 - right.z * 0.3).scale(rv);
+    fx.rooster.emitRate = hasWater * smoothstep(0.5, 0.9, imm) * (h.thrustN > 500 ? smoothstep(6, 20, waterSpeed) * 600 * h.throttle + boil * 500 : boil * 300);
+
+    // leque das pás "picando" a água: máximo com o disco pela metade (4·i·(1−i)), cresce com a rotação
+    const spin = Math.min(Math.abs(h.propRpm) / 1500, 2);
+    const chopAmt = hasWater * 4 * imm * (1 - imm) * spin;
+    const side = Math.sign(h.propRpm) || 1;
+    fx.chop.emitter = new Vector3(prop.x, surf + 0.02, prop.z);
+    fx.chop.minEmitBox = new Vector3(-0.15, 0, -0.15); fx.chop.maxEmitBox = new Vector3(0.15, 0.05, 0.15);
+    const cv = 2 + 3.5 * Math.min(spin, 1.5);
+    fx.chop.direction1 = new Vector3(-fwd.x * 0.9 + right.x * side * 0.9, 1.6, -fwd.z * 0.9 + right.z * side * 0.9).scale(cv).add(vel.scale(0.7));
+    fx.chop.direction2 = new Vector3(-fwd.x * 1.5 - right.x * side * 0.2, 2.6, -fwd.z * 1.5 - right.z * side * 0.2).scale(cv).add(vel.scale(0.7));
+    fx.chop.minEmitPower = 0.7; fx.chop.maxEmitPower = 1.1;
+    fx.chop.emitRate = chopAmt * 900;
+
+    // névoa/espuma subindo da popa quando a hélice cavita ou ventila
+    fx.mist.emitter = new Vector3(prop.x, surf + 0.1, prop.z);
+    fx.mist.minEmitBox = new Vector3(-0.5, 0, -0.5); fx.mist.maxEmitBox = new Vector3(0.5, 0.2, 0.5);
+    fx.mist.direction1 = new Vector3(-fwd.x * 2 - 0.5, 0.8, -fwd.z * 2 - 0.5);
+    fx.mist.direction2 = new Vector3(-fwd.x * 3 + 0.5, 2.0, -fwd.z * 3 + 0.5);
+    fx.mist.emitRate = boil * 140;
+
+    // bolhas logo atrás da hélice (visíveis através da água transparente)
+    fx.bubbles.emitter = new Vector3(prop.x - fwd.x * 0.3, Math.min(prop.y, surf - 0.1), prop.z - fwd.z * 0.3);
+    fx.bubbles.minEmitBox = new Vector3(-0.2, -0.15, -0.2); fx.bubbles.maxEmitBox = new Vector3(0.2, 0.15, 0.2);
+    fx.bubbles.direction1 = new Vector3(-fwd.x * 2.5 - 0.6, 0.0, -fwd.z * 2.5 - 0.6).add(vel.scale(0.6));
+    fx.bubbles.direction2 = new Vector3(-fwd.x * 4 + 0.6, 0.6, -fwd.z * 4 + 0.6).add(vel.scale(0.8));
+    // + bolhas de escape na lenta: os gases saem pelo cubo da hélice e sobem em rajadas
+    const running = h.running ? 1 : 0;
+    const exhIdle = running * hasWater * (1 - smoothstep(1.5, 5, Math.abs(waterSpeed)));
+    const puff = 0.55 + 0.45 * Math.sin(performance.now() / 1000 * 9.0) * Math.sin(performance.now() / 1000 * 3.1);
+    fx.bubbles.emitRate = surf > prop.y ? (boil * 900 + h.throttle * 80 * smoothstep(0.5, 4, waterSpeed + h.throttle * 3) + exhIdle * 260 * puff) : 0;
   }
 }

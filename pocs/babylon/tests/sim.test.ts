@@ -769,16 +769,36 @@ for (const [label, thr] of [["baixa", 0.25], ["alta", 1]] as const) {
   // largada do jogo: motores desligados e bateria a 60 % — os dois V8 têm de pegar (um arranque por vez;
   // os dois juntos derrubavam o banco a ~6 V e nenhum pegava)
   const st = new Speedboat(RAPIDA, v3(0, 0.3, 0));
-  st.systems.fuelL = 20; st.systems.batterySoc = 0.6;
+  st.systems.fuelL = 20; for (const b of st.banks) b.batterySoc = 0.6;
   for (const u of st.units) { u.engine = "off"; u.rpm = 0; }
-  let minV = 99, both60 = -1;
+  let minV = 99, both60 = -1, houseMinWhile2 = 99, t0on = -1;
   st.toggleIgnition();
   run(st, water, 10, { ...emptyInput(), gear: "N" }, openWater, (t) => {
-    minV = Math.min(minV, st.systems.batteryV);
+    minV = Math.min(minV, ...st.banks.map((b) => b.batteryV));
+    // enquanto SÓ o 2º motor gira o arranque, o banco 1 (casa) não sente
+    // (depois de o 1º estar ligado há 0,8 s: a tensão do banco 1 já se recuperou do arranque dele)
+    if (st.units[0].engine === "running" && t0on < 0) t0on = t;
+    if (t0on >= 0 && t - t0on > 0.8 && st.units[1].engine === "cranking" && st.telemetry.rpms[1] > 50) houseMinWhile2 = Math.min(houseMinWhile2, st.systems.batteryV);
     if (both60 < 0 && st.units.every((u) => u.engine === "running")) both60 = t;
   });
   check("rápida", "bateria a 60 %: os dois pegam (s)", both60, 1.5, 8, "s", 1);
   check("rápida", "bateria a 60 %: tensão mínima no arranque (V)", minV, 9, 12.5, "V", 1);
+  check("rápida", "dois bancos: o arranque do 2º motor não derruba o banco 1 (V)", houseMinWhile2, 12.4, 15, "V", 2);
+  // banco 2 zerado: o motor de bombordo pega, o de boreste não (cada motor no seu banco)
+  const dead = new Speedboat(RAPIDA, v3(0, 0.3, 0));
+  dead.systems.fuelL = 20; dead.banks[1].batterySoc = 0;
+  for (const u of dead.units) { u.engine = "off"; u.rpm = 0; }
+  dead.toggleIgnition();
+  run(dead, water, 12, { ...emptyInput(), gear: "N" });
+  check("rápida", "banco 2 zerado: pega só o motor de bombordo (1 = só BB)", dead.units[0].engine === "running" && dead.units[1].engine !== "running" ? 1 : 0, 1, 1, "", 0);
+  // temperatura por motor: só o de bombordo ligado 3 min — ele chega ao termostato, o outro fica frio
+  const warm = new Speedboat(RAPIDA, v3(0, 0.3, 0));
+  warm.systems.fuelL = 100; for (const b of warm.banks) b.coolantC = 30;
+  warm.units[1].engine = "off";
+  run(warm, water, 180, { ...emptyInput(), gear: "N" });
+  check("rápida", "temperatura do motor ligado (°C)", warm.telemetry.coolants[0], 50, 70, "°C", 1);
+  check("rápida", "temperatura do motor desligado (°C)", warm.telemetry.coolants[1], 25, 35, "°C", 1);
+  check("rápida", "cada banco com o seu alternador: só o banco 1 carrega (A)", warm.telemetry.batteryAs[1], -1, 0.5, "A", 2);
 }
 
 // ---------- Vento: 5 níveis, deriva, banda, âncora ----------

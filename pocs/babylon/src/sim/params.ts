@@ -468,7 +468,7 @@ export const RAPIDA: SpeedboatParams = {
   lateralLinear: 1800,
   keelLift: 3600,
   yawDamping: 60000,
-  // dois V8: banco de 2 baterias de 50 Ah em paralelo (metade da resistência interna) e arranque de ~200 A
+  // dois V8: DOIS bancos, um por motor (bateria de 100 Ah, grupo 31, cada), arranque de ~200 A
   systems: { batteryAh: 100, starterA: 200 },
   yawDampingLowSpeed: 0.05,  // parado gira solto: giro no lugar com empuxo diferencial
   heaveDamping: 4000,
