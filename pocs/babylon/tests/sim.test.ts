@@ -696,6 +696,33 @@ for (const [label, thr] of [["baixa", 0.25], ["alta", 1]] as const) {
   check("barranco", "parado numa encosta de ~35°: escorrega para baixo pela gravidade (m)", x0 - s.pos.x, 0.5, 50, "m", 2);
 }
 
+
+// ---------- Barco virado: bolsa de ar presa no casco; com furo o ar escapa e ele afunda; pessoas se agrupam ----------
+{
+  const flat: PhysicsWorld = { groundHeight: () => -20, spheres: [], boxes: [] };
+  const capsize = (P: typeof SPEEDBOAT, dmg: number, secs: number) => {
+    const b = new Speedboat(P, v3(0, 0.25, 0), 0);
+    b.occupants = (Object.keys(P.seats) as Occupant["seat"][]).slice(0, 3).map((seat) => ({ seat, mass: PERSON_KG }));
+    b.hullDamage = dmg;
+    b.rot = qFromAxisAngle(v3(0, 0, 1), Math.PI * 0.97);
+    let sunkAt = -1;
+    run(b, mkWater(0.35), secs, emptyInput(), flat, (t) => { if (sunkAt < 0 && b.telemetry.sunk) sunkAt = t; });
+    let spread = 0;
+    for (const a of b.swimmers) for (const c of b.swimmers) spread = Math.max(spread, Math.hypot(a.pos.x - c.pos.x, a.pos.z - c.pos.z));
+    return { b, sunkAt, spread };
+  };
+  const intact = capsize(SPEEDBOAT, 0, 180);
+  check("virado", "casco inteiro: a bolsa de ar segura o barco virado (não afunda em 3 min)", intact.b.telemetry.sunk ? 0 : 1, 1, 1, "", 0);
+  check("virado", "casco inteiro: ar preso depois de 3 min (L)", intact.b.airL, 1500, 3000, "L", 0);
+  const holed = capsize(SPEEDBOAT, 0.3, 120);
+  check("virado", "casco 30 %: o ar escapa pelo furo e ele afunda (s)", holed.sunkAt, 10, 90, "s", 0);
+  check("virado", "afundou: as 3 pessoas se juntam no mesmo ponto (maior distância, m)", holed.spread, 0.3, 1.3, "m", 2);
+  const big = capsize(SPEEDBOAT, 1, 60);
+  check("virado", "casco 100 %: afunda mais rápido (s)", big.sunkAt, 2, holed.sunkAt, "s", 0);
+  const rib = capsize(DINGHY, 1, 120);
+  check("virado", "bote inflável virado e furado: os flutuadores seguram (não afunda)", rib.b.telemetry.sunk ? 0 : 1, 1, 1, "", 0);
+}
+
 // ---------- Vento: 5 níveis, deriva, banda, âncora ----------
 {
   const water = mkWater(0);
@@ -755,7 +782,7 @@ for (const [label, thr] of [["baixa", 0.25], ["alta", 1]] as const) {
     let minD = 99;
     run(b, water, 60, { ...emptyInput(), gear: "F", throttle: thr, steering: 0.3 }, w, () => { minD = Math.min(minD, -groundHeight(b.pos.x, b.pos.z)); });
     check("lago", `${P.kind}: mar forte, círculo a ${thr * 100}% — sempre em água funda (m)`, minD, 5, 8, "m", 1);
-    check("lago", `${P.kind}: mar forte, círculo a ${thr * 100}% — água no porão (L, respingos e cantos de ré nas curvas)`, b.bilgeL, 0, 150, "L", 1);
+    check("lago", `${P.kind}: mar forte, círculo a ${thr * 100}% — água no porão sem virar (L)${b.capsized ? " [virou na curva fechada: não conta]" : ""}`, b.capsized ? 0 : b.bilgeL, 0, 150, "L", 1);
     check("lago", `${P.kind}: mar forte, 1 min em círculo a ${thr * 100}% no meio do lago — avaria do motor (%)`, b.engineDamage * 100, 0, 0, "%", 0);
   }
 }
@@ -865,7 +892,7 @@ for (const [label, thr] of [["baixa", 0.25], ["alta", 1]] as const) {
   check("emborcamento", "virou: detectado", b.telemetry.capsized ? 1 : 0, 1, 1, "", 0);
   check("emborcamento", "virou: 2 pessoas na água", b.swimmers.length, 2, 2, "", 0);
   check("emborcamento", "virou: motor desligado (kill switch)", b.telemetry.engine === "off" && b.telemetry.stall === "capsize" ? 1 : 0, 1, 1, "", 0);
-  check("emborcamento", "peso das pessoas saiu do barco (kg)", m0 - b.totalMass, 159, 161, "kg", 0);
+  check("emborcamento", "peso das pessoas saiu do barco (kg, descontando a água que entrou no casco virado)", m0 - (b.totalMass - b.bilgeL), 159, 161, "kg", 0);
   const dy = b.swimmers.map((s) => s.pos.y - water.getHeight(s.pos.x, s.pos.z));
   check("emborcamento", "colete: centro do colete na linha d'água (m)", Math.max(...dy.map(Math.abs)), 0, 0.2, "m", 2);
   check("emborcamento", "pessoas fora do casco: distância mín. do centro (m)", Math.min(...b.swimmers.map((s) => Math.hypot(s.pos.x - b.pos.x, s.pos.z - b.pos.z))), DINGHY.beam / 2 + 0.2, 6, "m", 2);

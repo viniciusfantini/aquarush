@@ -133,6 +133,8 @@
     #underwater { position: fixed; inset: 0; pointer-events: none; opacity: 0; transition: opacity 0.15s; z-index: 1;
       background: radial-gradient(ellipse at 50% 20%, rgba(40, 140, 140, 0.10), rgba(0, 35, 40, 0.55) 85%); }
     #underwater.on { opacity: 1; }
+    /* barco afundado: some todo alerta (combustível, bateria, porão, avarias…) — fica só o essencial */
+    body.sunk-quiet #status .chip.warn, body.sunk-quiet #h-trailer, body.sunk-quiet #h-anchor { display: none !important; }
     #h-build { position: absolute; left: 18px; bottom: 10px; font-size: 11px; color: var(--dim); }
 
     #h-debug { display: none; padding: 10px 14px; font-size: 12px; width: 270px; }

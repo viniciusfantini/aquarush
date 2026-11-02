@@ -55,6 +55,7 @@ npm run dev            # abrir http://localhost:5173, F3 mostra a telemetria; wi
 | Terreno visual do rio/cânion | `world.ts` (`groundHeight`, `RIVER`) | `environment.ts` (`RIVER_STRIP`, `buildRiverStrip`; malha grossa rebaixada embaixo) | — (medido por script: 0 % do rio desenhado como terra) |
 | Contato com fundo/margem | `boat.ts` (`collide`: normal do terreno pelo gradiente de `groundHeight`, atrito no plano da encosta) | — | "barranco", "lago", "rampa" |
 | Partículas de água | — | `waterInteraction.ts` (`clipToWater`: param na superfície `physWater`; bolhas estouram nela) | — (visual) |
+| Barco virado / bolsa de ar / afundar | `boat.ts` (`airL`, `bilge.capsizeAirFrac`/`ventM2`, `sinkSpot`) | `hud.ts` ("VIRADO · ar preso"; `setQuiet` some com os alertas ao afundar), `audio.ts` (`siren(2)` ao virar, `silenceAll` ao afundar) | "virado", "emborcamento" |
 | Emborcamento e pessoas na água | `boat.ts` (`updateCapsize`, `ejectOccupants`, `updateSwimmers`) | `pilot.ts` (`float`, `stand`, `board`) | "emborcamento" |
 
 Valores de referência (lancha): massa seca 1030 kg; empuxo máximo 8,5 t; borda livre seca 64 cm; 1.500 L em água calma = 36 cm de borda livre (com ondas fortes vira); alagada ~2.900 L; afunda ~3.850 L; bomba ~0,55 L/s; alternador 35 A; bateria 50 Ah; booster 10 Ah/200 A. Largada: atracada na vaga do píer, motor desligado, bateria 60 %, **5 L de gasolina (temporário)**.

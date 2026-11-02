@@ -184,6 +184,7 @@ export class Hud {
     if (bilgeShow) {
       const fb = t.freeboard < 5 ? ` · borda ${Math.max(0, t.freeboard * 100).toFixed(0)} cm` : "";
       this.bilgeChip.textContent = t.sunk ? `AFUNDOU · ${t.bilgeL.toFixed(0)} L dentro`
+        : t.capsized ? `VIRADO · ar preso ${t.airPocketL.toFixed(0)} L${t.airPocketL < 1000 ? " — afundando" : ""}`
         : t.swamped ? `ALAGADO — INAVEGÁVEL · ${t.bilgeL.toFixed(0)} L${fb}`
         : t.bilgePump ? `BOMBA DE PORÃO · ${t.bilgeL.toFixed(0)} L · ${t.bilgeFlowLps.toFixed(2)} L/s${fb}` : `ÁGUA NO PORÃO · ${t.bilgeL.toFixed(0)} L${fb}`;
     }
@@ -274,6 +275,7 @@ export class Hud {
         ["carga da bateria", `${(t.batterySoc * 100).toFixed(1)} %`],
         ["porão (L · entra L/s)", `${t.bilgeL.toFixed(1)} · ${t.bilgeInflowLps.toFixed(2)}`],
         ["borda livre (cm)", (t.freeboard * 100).toFixed(0)],
+        ["bolsa de ar (virado, L)", t.airPocketL.toFixed(0)],
         ["âncora (m · N)", `${t.anchorOut.toFixed(1)} · ${t.anchorTension.toFixed(0)}`],
         ["jump start", `${t.jumper ? "conectado · " : ""}${(t.jumpCharge * 100).toFixed(0)} %`],
         ["arranque (rpm)", t.starterRpm.toFixed(0)],
@@ -287,6 +289,9 @@ export class Hud {
   }
 
   setCamera(name: string): void { this.cam.textContent = name === "cockpit" ? "COCKPIT" : "EXTERNA"; }
+  /** Barco afundado: só o essencial na tela (sem chips de alerta nem avisos que já não importam). */
+  private quiet = false;
+  setQuiet(on: boolean): void { this.quiet = on; document.body.classList.toggle("sunk-quiet", on); }
   setWater(name: string): void { this.water.textContent = "ÁGUA: " + name.toUpperCase(); }
   private windChip = $("h-wind");
   private windName = "nenhum";
@@ -301,7 +306,8 @@ export class Hud {
   toggleDebug(): void { this.debugOn = !this.debugOn; this.debug.style.display = this.debugOn ? "block" : "none"; }
   toggleHelp(force?: boolean): void { this.help.classList.toggle("hidden", force === undefined ? undefined : !force); }
 
-  showToast(msg: string): void {
+  showToast(msg: string, force = false): void {
+    if (this.quiet && !force) return; // afundado: sem avisos que já não importam
     this.toast.textContent = msg;
     this.toast.classList.add("on");
     clearTimeout(this.toastTimer);

@@ -122,6 +122,8 @@ export class EngineAudio {
   private underLP!: BiquadFilterNode;
   private underGain!: GainNode;
   private underOn = false;
+  private killGain!: GainNode;
+  private silenced = false;
   private windGain!: GainNode;
   private windLP!: BiquadFilterNode;
   muted = false;
@@ -154,6 +156,40 @@ export class EngineAudio {
     this.horn.oscs.forEach((o, i) => o.frequency.setTargetAtTime(this.horn!.base[i] * (0.55 + 0.45 * h), t, 0.05));
     const vol = (this.muted ? 0 : kind === "lancha" ? 0.17 : kind === "car" ? 0.14 : 0.15) * Math.min(1, h * 1.3);
     this.horn.gain.gain.setTargetAtTime(on ? vol : 0, t, on ? 0.004 : 0.012); // ataque e corte rápidos
+  }
+
+  /** Silêncio total (barco afundado) ou volta do som (recomeçar). */
+  silenceAll(on: boolean): void {
+    if (!this.ctx || on === this.silenced) return;
+    this.silenced = on;
+    this.killGain.gain.setTargetAtTime(on ? 0 : 1, this.ctx.currentTime, on ? 0.25 : 0.05);
+  }
+
+  /** Sirene de emergência: `count` lamentos (sobe e desce, ~1,6 s cada), como a de um barco em perigo. */
+  siren(count = 2): void {
+    const ctx = this.ctx;
+    if (!ctx || this.muted || this.silenced) return;
+    const t0 = ctx.currentTime + 0.05, dur = 1.6;
+    const osc = ctx.createOscillator(); osc.type = "sawtooth";
+    const osc2 = ctx.createOscillator(); osc2.type = "square";
+    const bp = ctx.createBiquadFilter(); bp.type = "bandpass"; bp.frequency.value = 1100; bp.Q.value = 0.8;
+    const g = ctx.createGain(); g.gain.value = 0;
+    osc.connect(bp); osc2.connect(bp); bp.connect(g).connect(this.master);
+    for (let i = 0; i < count; i++) {
+      const a = t0 + i * dur;
+      for (const o of [osc, osc2]) {
+        const k = o === osc ? 1 : 1.006; // leve batimento entre as duas cornetas
+        o.frequency.setValueAtTime(620 * k, a);
+        o.frequency.linearRampToValueAtTime(1380 * k, a + dur * 0.55);
+        o.frequency.linearRampToValueAtTime(640 * k, a + dur);
+      }
+      g.gain.setValueAtTime(0.0001, a);
+      g.gain.linearRampToValueAtTime(0.09, a + 0.12);
+      g.gain.setValueAtTime(0.09, a + dur - 0.2);
+      g.gain.linearRampToValueAtTime(0.0001, a + dur - 0.02);
+    }
+    osc.start(t0); osc2.start(t0);
+    osc.stop(t0 + count * dur + 0.05); osc2.stop(t0 + count * dur + 0.05);
   }
 
   /** Câmera embaixo d'água: som abafado (passa-baixa ~350 Hz, volume menor); na superfície, aberto. */
@@ -197,7 +233,9 @@ export class EngineAudio {
     // embaixo d'água: passa-baixa forte (o som chega abafado, grave) e um pouco mais baixo
     this.underLP = ctx.createBiquadFilter(); this.underLP.type = "lowpass"; this.underLP.frequency.value = 20000; this.underLP.Q.value = 0.9;
     this.underGain = ctx.createGain(); this.underGain.gain.value = 1;
-    this.master.connect(this.underLP).connect(this.underGain).connect(comp).connect(ctx.destination);
+    // corte geral (barco afundado: silêncio total)
+    this.killGain = ctx.createGain(); this.killGain.gain.value = 1;
+    this.master.connect(this.underLP).connect(this.underGain).connect(this.killGain).connect(comp).connect(ctx.destination);
     const noiseSrc = () => { const s = ctx.createBufferSource(); s.buffer = this.noise; s.loop = true; s.loopStart = Math.random(); s.start(0, Math.random() * 1.5); return s; };
 
     // ---- bloco do motor ----

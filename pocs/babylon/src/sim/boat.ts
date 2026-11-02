@@ -94,6 +94,7 @@ export interface BoatTelemetry {
   freeboard: number;     // borda livre: menor altura da borda/espelho acima da água (m)
   swamped: boolean;      // alagado: borda na linha d'água (inavegável)
   sunk: boolean;         // afundou (peso acima do empuxo máximo do casco)
+  airPocketL: number;    // virado: bolsa de ar presa no casco (L)
   anchorOut: number;     // cabo da âncora lançado (m)
   anchorState: AnchorState;
   anchorDepth: number;   // profundidade da roldana ao fundo (m)
@@ -177,6 +178,10 @@ export class Speedboat {
   bilgeHole = 0; bilgeOver = 0; bilgeScoop = 0;
   /** água que sobe contra o espelho andando de ré (m) */
   private transomPile = 0;
+  /** bolsa de ar presa no casco virado (L); −1 = não virado */
+  airL = -1;
+  /** onde o barco afundou: as pessoas se juntam ali */
+  private sinkSpot: Vec3 | null = null;
   /** afundou: o peso (com a água de dentro) passou do empuxo máximo do casco */
   sunk = false;
   private cavitation = 0;
@@ -257,7 +262,7 @@ export class Speedboat {
     this.rpm = params.idleRpm;
     this.telemetry = {
       speedKmh: 0, waterSpeed: 0, rpm: params.idleRpm, throttle: 0, throttleCmd: 0, trim: 0, trimDeg: 0, tiltDeg: 0, tiltBlocked: false, intakeSubmerged: true, steerDeg: 0,
-      gear: "N", pitchDeg: 0, rollDeg: 0, wetFraction: 0, planing: false, thrustN: 0, ventilation: 1, cavitation: 0, propImmersion: 1, revLimiter: false, propSlip: 0, propRpm: 0, engine: "running", fuelL: 0, fuelFrac: 1, coolantC: 45, batteryV: 12.6, engineHours: 0, overheatWarn: false, protectMode: false, lowFuel: false, chargeWarn: false, stall: "", trimMotorA: 0, trimRelay: false, jumper: false, jumpCharge: 1, batteryA: 0, bilgeL: 0, bilgeInflowLps: 0, bilgePump: false, bilgeFlowLps: 0, bilgeAlarm: false, bilgeJetPos: v3(), bilgeJetVel: v3(), freeboard: 1, swamped: false, sunk: false,
+      gear: "N", pitchDeg: 0, rollDeg: 0, wetFraction: 0, planing: false, thrustN: 0, ventilation: 1, cavitation: 0, propImmersion: 1, revLimiter: false, propSlip: 0, propRpm: 0, engine: "running", fuelL: 0, fuelFrac: 1, coolantC: 45, batteryV: 12.6, engineHours: 0, overheatWarn: false, protectMode: false, lowFuel: false, chargeWarn: false, stall: "", trimMotorA: 0, trimRelay: false, jumper: false, jumpCharge: 1, batteryA: 0, bilgeL: 0, bilgeInflowLps: 0, bilgePump: false, bilgeFlowLps: 0, bilgeAlarm: false, bilgeJetPos: v3(), bilgeJetVel: v3(), freeboard: 1, swamped: false, sunk: false, airPocketL: 0,
       anchorOut: 0, anchorState: "recolhida", anchorDepth: 0, anchorScope: 0, anchorTension: 0, anchorRelay: false, windlassA: 0, apparentWind: 0, neutralRev: false, fuelLph: 0, buzzer: false, starterRpm: 0, startFail: "", batterySoc: 0.92, trimPin: 0, pullStart: !params.electricStart,
       distanceM: 0, collisions: 0, draftHull: 0, draftMotor: 0, capsized: false, swimmers: 0, hullDamage: 0, engineDamage: 0, damageEvent: "", damageCount: 0, lastImpact: 0, depth: 0, submergedPoints: params.buoyancyPoints.map(() => false),
     };
@@ -275,7 +280,7 @@ export class Speedboat {
     this.tilt = 0;
     this.tiltWanted = false;
     this.capsized = false; this.capsizeT = 0; this.swimmers = []; this.winchStrap = null; this.mooringLines = [];
-    this.anchor.reset(); this.bilgeL = 0; this.bilgeAuto = false; this.bilgePumpA = 0; this.sunk = false; this.sloshDeck = v3(); this.sloshUnder = v3();
+    this.anchor.reset(); this.bilgeL = 0; this.bilgeAuto = false; this.bilgePumpA = 0; this.sunk = false; this.airL = -1; this.sinkSpot = null; this.sloshDeck = v3(); this.sloshUnder = v3();
     this.trimPin = Math.max(0, Math.min(1, this.params.trimPins.length - 1));
     this.manualAngle = this.params.trimPins[this.trimPin] ?? 0;
     this.gear = this.wantGear = "N";
@@ -647,6 +652,7 @@ export class Speedboat {
    */
   private updateSlosh(dt: number): void {
     const B = this.params.bilge, L = this.bilgeL;
+    if (this.capsized) { this.sloshDeck = v3(); this.sloshUnder = v3(); return; }
     const fwd = this.forward, right = this.right;
     const tanP = fwd.y / Math.max(0.2, Math.sqrt(1 - fwd.y * fwd.y));    // > 0 proa para cima
     const tanR = right.y / Math.max(0.2, Math.sqrt(1 - right.y * right.y)); // > 0 boreste para cima
@@ -679,8 +685,17 @@ export class Speedboat {
     let inflow = 0;
     this.bilgeHole = 0; this.bilgeOver = 0;
     let freeboard = 9;
-    if (this.capsized && !this.sunk) this.bilgeL = 0; // virado: o peso da água deixa de ser "carga no porão"
-    else {
+    if (this.capsized && !this.sunk) {
+      // VIRADO: a água ocupa o casco, menos a bolsa de ar presa sob o convés/console. O ar escapa pelo furo do
+      // casco (e pelas frestas) empurrado pela coluna d'água: v ≈ √(2·ρágua·g·h / ρar) ≈ 60 m/s. Sem ar e com o
+      // peso acima do empuxo do casco, ele AFUNDA; casco inteiro = a bolsa segura por muito tempo.
+      if (this.airL < 0) this.airL = B.maxL * B.capsizeAirFrac;
+      const holeA = B.holeMaxM2 * Math.pow(this.hullDamage, 1.3) + B.ventM2;
+      const vAir = Math.sqrt((2 * 1000 * G * 0.6) / 1.2);
+      this.airL = Math.max(0, this.airL - 0.6 * holeA * vAir * 1000 * dt);
+      this.bilgeL = B.maxL - this.airL;
+    } else {
+      this.airL = -1;
       const holeA = B.holeMaxM2 * Math.pow(this.hullDamage, 1.3);
       const keel = this.keelLocalY;
       if (holeA > 0) {
@@ -766,11 +781,14 @@ export class Speedboat {
     // borda livre, alagado e afundando
     t.freeboard = freeboard;
     t.swamped = !this.capsized && freeboard < 0.03 && this.bilgeL > 50;
-    if (!this.sunk && !this.capsized && this.totalMass > this.maxBuoyancyKg && freeboard < -0.3) {
+    const goneUnder = this.capsized ? this.pos.y < water.getHeight(this.pos.x, this.pos.z) - 1.2 : freeboard < -0.3;
+    if (!this.sunk && this.totalMass > this.maxBuoyancyKg && goneUnder) {
       this.sunk = true;
       if (this.engine !== "off") { this.engine = "off"; t.stall = "sunk"; }
       this.ejectOccupants(1);
+      this.sinkSpot = { ...this.pos };
     }
+    t.airPocketL = Math.max(0, this.airL);
     t.sunk = this.sunk;
     // alarme: bomba acionada e jogando água fora, ou água alta (sem bomba / bomba sem força)
     t.bilgeAlarm = (powered && t.bilgeFlowLps > 0.05) || this.bilgeL > 40;
@@ -1054,11 +1072,22 @@ export class Speedboat {
         s.slot = Math.atan2(fx / ex, fz / ez);
       }
       s.t += dt;
-      const lx = Math.sin(s.slot) * ex, lz = Math.cos(s.slot) * ez;
-      const tx = this.pos.x + lx * Math.cos(yawB) + lz * Math.sin(yawB);
-      const tz = this.pos.z - lx * Math.sin(yawB) + lz * Math.cos(yawB);
+      let tx: number, tz: number;
+      if (this.sunk && this.sinkSpot) {
+        // barco afundado: todos nadam para o mesmo ponto (onde ele afundou) e ficam juntos, em roda, de frente
+        // uns para os outros (posição de grupo de quem está de colete: mais calor, mais visível, ninguém se perde)
+        const k = this.swimmers.indexOf(s), n = this.swimmers.length;
+        const r = n > 1 ? 0.32 + 0.06 * n : 0;
+        const a = (k / Math.max(1, n)) * Math.PI * 2;
+        tx = this.sinkSpot.x + Math.sin(a) * r; tz = this.sinkSpot.z + Math.cos(a) * r;
+      } else {
+        const lx = Math.sin(s.slot) * ex, lz = Math.cos(s.slot) * ez;
+        tx = this.pos.x + lx * Math.cos(yawB) + lz * Math.sin(yawB);
+        tz = this.pos.z - lx * Math.sin(yawB) + lz * Math.cos(yawB);
+      }
       const dxT = tx - s.pos.x, dzT = tz - s.pos.z, dT = Math.hypot(dxT, dzT);
-      let swx = this.vel.x, swz = this.vel.z; // perto do lugar: só acompanha o barco (segura no cabo)
+      // perto do lugar: acompanha o barco (segura no cabo); afundado, só a correnteza
+      let swx = this.sunk ? 0 : this.vel.x, swz = this.sunk ? 0 : this.vel.z;
       let effort = 0;
       if (s.t > 1 && inWater && dT > 0.25) {
         const sp = Math.min(0.7, dT * 0.8);
@@ -1066,7 +1095,9 @@ export class Speedboat {
         effort = clamp(sp / 0.7, 0.3, 1);
         s.yaw = Math.atan2(dxT, dzT); // de frente para onde nada
       } else if (s.t > 1) {
-        s.yaw = Math.atan2(this.pos.x - s.pos.x, this.pos.z - s.pos.z); // de frente para o barco
+        // de frente para o barco — ou, afundado, para o centro do grupo
+        const fx = this.sunk && this.sinkSpot ? this.sinkSpot.x : this.pos.x, fz = this.sunk && this.sinkSpot ? this.sinkSpot.z : this.pos.z;
+        s.yaw = Math.atan2(fx - s.pos.x, fz - s.pos.z);
       }
       s.swim += (effort - s.swim) * Math.min(1, dt * 3);
       // arrasto do corpo na água: puxa para a correnteza + a velocidade de nado
@@ -1077,7 +1108,7 @@ export class Speedboat {
       // não atravessa o casco: dentro da projeção do barco, empurra para o bordo mais próximo
       const L = rotateInv(this.rot, sub(s.pos, this.pos));
       const hx = this.params.beam / 2 + 0.22, hz = this.params.length / 2 + 0.15;
-      if (Math.abs(L.x) < hx && Math.abs(L.z) < hz && Math.abs(L.y) < 1.2) {
+      if (!this.sunk && Math.abs(L.x) < hx && Math.abs(L.z) < hz && Math.abs(L.y) < 1.2) {
         const px = (hx - Math.abs(L.x)) * (Math.sign(L.x) || 1);
         const push = rotate(this.rot, v3(px, 0, 0));
         s.pos = v3(s.pos.x + push.x * 6 * dt, s.pos.y, s.pos.z + push.z * 6 * dt);
@@ -1086,7 +1117,8 @@ export class Speedboat {
       for (const o of this.swimmers) {
         if (o === s) continue;
         const dx = s.pos.x - o.pos.x, dz = s.pos.z - o.pos.z, d = Math.hypot(dx, dz);
-        if (d < 0.6) { const k = ((0.6 - d) / (d || 1)) * 3 * dt; s.pos = v3(s.pos.x + dx * k + (d ? 0 : 0.01), s.pos.y, s.pos.z + dz * k); }
+        const dMin = this.sunk ? 0.42 : 0.6;
+        if (d < dMin) { const k = ((dMin - d) / (d || 1)) * 3 * dt; s.pos = v3(s.pos.x + dx * k + (d ? 0 : 0.01), s.pos.y, s.pos.z + dz * k); }
       }
       const g = world.groundHeight(s.pos.x, s.pos.z) + 0.25; // raso: fica sentado no fundo
       if (s.pos.y < g) { s.pos = v3(s.pos.x, g, s.pos.z); s.vel = v3(s.vel.x * 0.9, Math.max(0, s.vel.y), s.vel.z * 0.9); }

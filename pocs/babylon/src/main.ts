@@ -40,7 +40,7 @@ import { BoatCamera } from "./presentation/cameras.ts";
 import { Hud } from "./presentation/hud.ts";
 import { EngineAudio } from "./presentation/audio.ts";
 
-const BUILD = "poc-babylon 0.45.1";
+const BUILD = "poc-babylon 0.46.0";
 /** Escala visual da rotação da hélice (proporcional ao RPM, abaixo do limite estroboscópico). */
 const PROP_VISUAL_SCALE = 0.12;
 
@@ -744,7 +744,11 @@ const boot = async () => {
     if (V.dinghy) V.dinghy.pilotAboard = pilotAboard;
     if (pilotAboard) V.pilot.update(toRootLocal(V.helm.wheelGrip, vis.root), toRootLocal(V.helm.leverGrip, vis.root));
     else if (cam.mode === "cockpit") { cam.toggle(); hud.setCamera(cam.mode); setCockpitHead(false); }
-    if (T.capsized && !capsizeWarned && mode === "game") { hud.showToast("O barco virou! O corta-circuito desligou o motor e todos caíram na água (de colete) — R para recomeçar"); capsizeWarned = true; }
+    if (T.capsized && !capsizeWarned && mode === "game") {
+      hud.showToast("O barco virou! O corta-circuito desligou o motor e todos caíram na água (de colete) — R para recomeçar");
+      capsizeWarned = true;
+      audio.siren(2); // o alarme da bomba para; duas sirenes de emergência e silêncio
+    }
 
     // manobra da carretinha: guia de alinhamento perto dela; aviso quando o barco está carregado
     const ld = trailerLoadState(boat, V.trailer);
@@ -848,7 +852,9 @@ const boot = async () => {
     lastBilgeAlarm = T.bilgeAlarm;
     if (T.swamped && !lastSwamped && mode === "game" && !T.sunk) hud.showToast(`Barco ALAGADO: ${T.bilgeL.toFixed(0)} L dentro e a borda na linha d'água — inavegável; se entrar mais água ele afunda`);
     lastSwamped = T.swamped;
-    if (T.sunk && !lastSunk && mode === "game") hud.showToast(`O barco AFUNDOU com ${T.bilgeL.toFixed(0)} L de água dentro — todos na água de colete. R para recomeçar`);
+    if (T.sunk && !lastSunk && mode === "game") hud.showToast(`O barco AFUNDOU com ${T.bilgeL.toFixed(0)} L de água dentro — todos na água de colete. R para recomeçar`, true);
+    // afundou: silêncio total e sem alertas na tela (combustível, bateria… já não importam); R volta tudo
+    if (T.sunk !== lastSunk) { audio.silenceAll(T.sunk); hud.setQuiet(T.sunk); }
     lastSunk = T.sunk;
     if (boat.systems.jumperTrips !== lastJumperTrips) { if (mode === "game") hud.showToast(`Proteção do jump start desarmou: mais de ${JUMP_MAX_A} A (ex.: partida + molinete juntos) — J para religar`); lastJumperTrips = boat.systems.jumperTrips; }
     if (boat.systems.jumperAutoOff !== lastJumperOff) { if (mode === "game") hud.showToast(`O motor pegou — jump start desconectado (carga ${Math.round(T.jumpCharge * 100)} %, recarrega em cruzeiro)`); lastJumperOff = boat.systems.jumperAutoOff; }
@@ -924,7 +930,7 @@ const boot = async () => {
     if (T.gear !== lastGear) { audio.clunk(T.gear !== "N"); lastGear = T.gear; }
     audio.update({
       rpm: T.rpm, throttle: T.throttle, speed: Math.hypot(boat.vel.x, boat.vel.z), boil: Math.max(T.cavitation, 1 - T.ventilation),
-      inGear: T.gear !== "N", propInWater: T.propImmersion > 0.5, revLimiter: T.revLimiter, cockpit: cam.mode === "cockpit", engine: T.engine, trimMotorA: T.trimMotorA, trimRelay: T.trimRelay, bilgeAlarm: mode === "game" && T.bilgeAlarm, bilgeFlowLps: T.bilgeFlowLps, windlassA: T.windlassA, apparentWind: T.apparentWind, anchorRelay: T.anchorRelay, buzzer: T.buzzer, starterRpm: T.starterRpm, pullStart: T.pullStart,
+      inGear: T.gear !== "N", propInWater: T.propImmersion > 0.5, revLimiter: T.revLimiter, cockpit: cam.mode === "cockpit", engine: T.engine, trimMotorA: T.trimMotorA, trimRelay: T.trimRelay, bilgeAlarm: mode === "game" && T.bilgeAlarm && !T.capsized && !T.sunk, bilgeFlowLps: T.bilgeFlowLps, windlassA: T.windlassA, apparentWind: T.apparentWind, anchorRelay: T.anchorRelay, buzzer: T.buzzer, starterRpm: T.starterRpm, pullStart: T.pullStart,
     });
     // buzina: do veículo quando você está nele; senão do barco (segurar B, ou toque no botão = 0,22 s)
     hornPulse = Math.max(0, hornPulse - dtReal);
