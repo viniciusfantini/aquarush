@@ -108,7 +108,11 @@ cruzeiro (rpm ≥ 2000 e folga de alternador ≥ 10 A) a ~10 A.
 
 \* Na AR-10 o seletor é outro (abaixo).
 
-### AR-10: seletor OFF / BUS / BOTH + chave BAT (v0.59)
+### AR-10: seletor OFF / BUS / BOTH + chave MAIN (v0.59; MAIN desde a v0.60.2)
+> No painel a antiga chave BAT chama-se **MAIN**: ela liga o barramento dos sistemas eletrônicos (`Turbine.master` →
+> `busOn`), não a bateria. A **espia** da MAIN acende com a chave em ON **e** o barramento com tensão de qualquer
+> fonte (baterias em BOTH, GPU, gerador). Abaixo, "BAT" = MAIN. O anunciador BAT do painel = baterias no barramento.
+
 As duas baterias de 12 V ficam **em série** (24 V); por isso não há "1"/"2" (uma sozinha daria 12 V).
 
 | Seletor | BAT ligada | Efeito |

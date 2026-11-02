@@ -96,6 +96,10 @@ A lancha é um **corpo rígido 6DOF** (massa seca de 1030 kg + gasolina, ocupant
 
 > Referência completa da lógica elétrica e dos motores: [`docs/SISTEMAS_ELETRICOS_E_MOTORES.md`](../../docs/SISTEMAS_ELETRICOS_E_MOTORES.md).
 
+## AR-10: chave MAIN (v0.60.2)
+
+A antiga chave BAT da AR-10 chama-se **MAIN**: ela liga o barramento dos **sistemas eletrônicos** (`Turbine.master` → `EngineSystems.busOn`), não a bateria — quem coloca as baterias no barramento é o seletor **OFF / BUS / BOTH**. A **espia** da MAIN acende quando ela está em ON **e** o barramento tem tensão de qualquer fonte: baterias (BOTH), GPU (BUS ou BOTH, EXT PWR fechado) ou o gerador da turbina. Em BUS sem GPU nem gerador ela fica em ON com a espia apagada. O anunciador **BAT** continua mostrando as baterias no barramento. No navegador: BOTH → espia acesa (24,4 V); BUS sem GPU → ON e apagada; BUS + GPU → acesa (27,9 V); MAIN desligada → 0 V.
+
 ## Acelerar em neutro no painel, câmbio hidráulico, lanterna e displays (v0.60)
 
 - **Acelerar em neutro pelas manetes** (`LeverCmd.neutral` → `VehicleInput.neutralThrottle`, a mesma função do N + W): na manete de topo da AR-6/AR-9, o botão **N** no meio do quadrante só arma com a manete em N; armado, empurrar a manete só acelera (a marcha fica em N, a central limita a 3000 rpm) e ele desarma quando a manete volta para N. Na AR-9 cada manete tem o seu botão. No bote, o punho girado com o câmbio em N acelera em neutro (era o defeito relatado: o punho em N não fazia nada); na AR-10, a potência em N também.

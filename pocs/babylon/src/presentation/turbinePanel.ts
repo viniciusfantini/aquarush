@@ -32,7 +32,7 @@ export interface TurbinePanelActions {
 }
 
 const SWITCHES: { id: PanelSwitch; label: string; sub: string; on?: string; off?: string; variant?: "" | "red" | "guard" }[] = [
-  { id: "master", label: "BAT", sub: "chave geral 24 V" },
+  { id: "master", label: "MAIN", sub: "sistemas eletrônicos" },
   { id: "extPwr", label: "EXT PWR", sub: "relé da GPU", on: "FECH", off: "ABERTO" },
   { id: "boostPump", label: "BOMBA COMB.", sub: "pressão" },
   { id: "starter", label: "STARTER", sub: "gira o N1", variant: "guard" },
@@ -69,7 +69,7 @@ export class TurbinePanel {
           ? rotary("fv", "COMBUSTÍVEL", "condição", [{ v: "cut", l: "CORTE" }, { v: "idle", l: "LENTA" }], { num: i + 1, cls: "fuel" })
           : toggle({ attr: "s", val: s.id, label: s.label, sub: s.sub, on: s.on, off: s.off, variant: s.variant, num: i + 1 })).join("")}</div>
         <ol>
-          <li>uma fonte no barramento: BATERIA e/ou a GPU (cabo com J, espere ela estabilizar e feche o EXT PWR)</li>
+          <li>MAIN ligada e uma fonte no barramento: baterias em BOTH e/ou a GPU (cabo com J, espere ela estabilizar e feche o EXT PWR, com as baterias em BUS ou BOTH)</li>
           <li>BOMBA ligada; STARTER: o N1 sobe</li>
           <li>com o N1 em <b>12 %</b>: IGNIÇÃO e COMBUSTÍVEL (abrir antes = partida quente ou molhada)</li>
           <li>acende: a EGT sobe — vigie o limite de <b>780 °C</b> (corte o combustível se passar)</li>
@@ -80,7 +80,7 @@ export class TurbinePanel {
       <div class="tp-sys"><span class="tp-sys-t">SISTEMAS</span>
         <div class="sw-plate"><span class="screw s1"></span><span class="screw s2"></span><span class="screw s3"></span><span class="screw s4"></span>
           ${rotary("bsel", "BATERIAS", "2 × 12 V em série", [{ v: "off", l: "OFF" }, { v: "bus", l: "BUS" }, { v: "both", l: "BOTH" }])}
-          ${toggle({ attr: "bat", val: "1", label: "BAT", sub: "mestre do barramento", cls: "only-fadec" })}
+          ${toggle({ attr: "bat", val: "1", label: "MAIN", sub: "sistemas eletrônicos", cls: "only-fadec" })}
           ${rotary("tank", "TANQUE", "registro", [{ v: "closed", l: "FECHADO" }, { v: "open", l: "ABERTO" }], { cls: "fuel" })}
           ${tri("bilge", "BOMBA PORÃO", "boia ou manual", { v: "on", l: "ON" }, { v: "off", l: "OFF" }, { v: "auto", l: "AUTO" })}
           <div class="tp-sys-rd"><span data-rd="bat"></span><span data-rd="tank"></span><span data-rd="bilge"></span></div>
@@ -153,7 +153,7 @@ export class TurbinePanel {
     for (const s of this.el.querySelectorAll<HTMLElement>("[data-a]")) s.className = ann[s.dataset.a ?? ""] ?? "";
     const sw: Record<PanelSwitch, boolean> = { master: tb.master, extPwr: t.extPwrClosed, boostPump: tb.boostPump, starter: tb.starterSw, ignition: tb.ignitionSw, fuelValve: tb.fuelValve, generator: tb.generator };
     // posição das chaves (do piloto, mesmo sem energia no barramento); o LED só acende com a função energizada
-    const lit: Record<PanelSwitch, boolean> = { master: t.busBattery && tb.master && on, extPwr: t.extPwr, boostPump: tb.boostPump && on, starter: tb.starter, ignition: tb.ignition, fuelValve: false, generator: t.busGen };
+    const lit: Record<PanelSwitch, boolean> = { master: tb.master && on, extPwr: t.extPwr, boostPump: tb.boostPump && on, starter: tb.starter, ignition: tb.ignition, fuelValve: false, generator: t.busGen };
     for (const id of Object.keys(sw) as PanelSwitch[]) if (id !== "fuelValve") setToggle(this.el, "s", id, sw[id], lit[id]);
     setRotary(this.el, "fv", tb.fuelValve ? "idle" : "cut");
     setToggle(this.el, "bat", "1", tb.master, lit.master);

@@ -46,7 +46,7 @@ import { BoatCamera } from "./presentation/cameras.ts";
 import { Hud } from "./presentation/hud.ts";
 import { EngineAudio } from "./presentation/audio.ts";
 
-const BUILD = "poc-babylon 0.60.1";
+const BUILD = "poc-babylon 0.60.2";
 /** Escala visual da rotação da hélice (proporcional ao RPM, abaixo do limite estroboscópico). */
 const PROP_VISUAL_SCALE = 0.12;
 
@@ -623,7 +623,12 @@ const boot = async () => {
         return;
       }
       tb.setSwitch(sw, on);
-      if (sw === "master") hud.showToast(on ? "Chave geral BAT ligada: bateria de 24 V no barramento" : "Chave geral BAT desligada: a bateria saiu do barramento");
+      if (sw === "master") {
+        const live = V.boat.batterySel === "both" || (V.boat.batterySel === "bus" && (V.boat.systems.gpuOnline || V.boat.systems.genOn));
+        hud.showToast(!on ? "MAIN desligada: os sistemas eletrônicos saíram do barramento (sem GPU, sem gerador, sem baterias)"
+          : V.boat.batterySel === "off" ? "MAIN ligada, mas as baterias estão em OFF: barramento isolado"
+          : live ? "MAIN ligada: sistemas eletrônicos energizados" : "MAIN ligada: aguardando fonte (baterias em BUS — conecte a GPU ou ponha em BOTH)");
+      }
     },
     fadecStart: () => { const tb = V.boat.units[0].turb; if (tb && !tb.running && !tb.starting) input.pushAction("ignition"); },
     fadecCut: () => { const tb = V.boat.units[0].turb; if (tb && (tb.running || tb.starting)) input.pushAction("ignition"); },
@@ -814,7 +819,7 @@ const boot = async () => {
         const tb = boat.telemetry.turbine;
         const tm: Record<string, string> = { stopped: tb && tb.phase === "running" ? "Combustível cortado" : "Partida abortada", starting: "Partida da turbina: arranque girando o gerador de gás…",
           busy: `Turbina ainda girando (N1 ${tb ? tb.n1.toFixed(0) : 0} %) — espere passar de 8 % para nova partida`, needNeutral: "Coloque em N para dar partida", lowBattery: "Bateria descarregada: o arranque não gira — atraque na doca e conecte a GPU (J)",
-          noPower: "Sem energia no barramento: chave BAT ligada e baterias em BOTH (ou BUS com a GPU da doca, J) — painel Y" };
+          noPower: "Sem energia no barramento: MAIN ligada e baterias em BOTH (ou BUS com a GPU da doca, J) — painel Y" };
         if (tm[r]) { hud.showToast(tm[r]); return; }
       }
       const msg: Record<string, string> = { stopped: "Motor desligado", pulling: "Puxando a corda…", starting: "Chave ligada — autoteste…", busy: "Dando partida…", needNeutral: "Coloque em N para dar partida", noFuel: "Sem combustível — R para voltar ao píer e abastecer", lowBattery: "Bateria descarregada: nem o relé de partida arma — J conecta o jump start", hot: "Motor quente demais — espere esfriar" };
