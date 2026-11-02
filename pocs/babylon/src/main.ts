@@ -47,7 +47,7 @@ import { BoatCamera } from "./presentation/cameras.ts";
 import { Hud } from "./presentation/hud.ts";
 import { EngineAudio } from "./presentation/audio.ts";
 
-const BUILD = "poc-babylon 0.63.0";
+const BUILD = "poc-babylon 0.63.1";
 /** Escala visual da rotação da hélice (proporcional ao RPM, abaixo do limite estroboscópico). */
 const PROP_VISUAL_SCALE = 0.12;
 
@@ -856,8 +856,9 @@ const boot = async () => {
       const wasRunning = boat.engine !== "off";
       const r = boat.abandonShip();
       if (r === "empty") { hud.showToast(boat.swimmers.length ? "Todos já estão na água — eles voltam a bordo quando chegarem perto do barco" : "Ninguém a bordo"); return; }
-      hud.showToast(boat.capsized ? (V.P.enclosedCockpit ? "O piloto soltou o cinto e saiu da cabine: está na água de colete, a salvo" : "Todos na água de colete")
-        : `Todos pularam na água (de colete)!${wasRunning ? " O corta-circuito desligou o motor." : ""} Eles voltam a bordo ao chegar perto do barco`, true);
+      hud.showToast(r === "passengers" ? "Os passageiros pularam na água (de colete) — Espaço de novo e o piloto pula também; eles voltam a bordo ao chegar perto"
+        : boat.capsized ? (V.P.enclosedCockpit ? "O piloto soltou o cinto e saiu da cabine: está na água de colete, a salvo" : "O piloto está na água de colete")
+        : `O piloto pulou na água (de colete)!${wasRunning ? " O corta-circuito desligou o motor." : ""} Volta a bordo ao chegar perto do barco`, true);
       return;
     }
     else if (a === "ignition") {

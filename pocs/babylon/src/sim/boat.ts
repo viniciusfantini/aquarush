@@ -1231,18 +1231,21 @@ export class Speedboat {
    * que o piloto sai da cabine e se salva. Quem pulou volta a bordo sozinho ao chegar perto do barco (se ele não
    * estiver virado nem afundado e estiver quase parado).
    */
-  abandonShip(): "jumped" | "empty" {
+  abandonShip(): "passengers" | "pilot" | "empty" {
     if (!this.occupants.length) return "empty";
-    const pilot = this.occupants.some((o) => o.seat === "helm");
-    this.ejectOccupants(this.right.y < 0 ? 1 : -1, true);
-    if (pilot && this.engine !== "off") { this.engine = "off"; this.telemetry.stall = "lanyard"; }
-    return "jumped";
+    const side = this.right.y < 0 ? 1 : -1;
+    // 1º toque: só os passageiros pulam; o piloto fica no comando. 2º toque (ou sem passageiros): o piloto também
+    if (this.occupants.some((o) => o.seat !== "helm")) { this.ejectOccupants(side, true, (o) => o.seat !== "helm"); return "passengers"; }
+    this.ejectOccupants(side, true);
+    if (this.engine !== "off") { this.engine = "off"; this.telemetry.stall = "lanyard"; }
+    return "pilot";
   }
 
   /** Ocupantes vão para a água (de colete), cada um pelo bordo do seu banco (`jump` = pularam, com impulso). */
-  private ejectOccupants(rollSide: number, jump = false): void {
+  private ejectOccupants(rollSide: number, jump = false, only: (o: Occupant) => boolean = () => true): void {
     const fwd = this.forward, right = this.right;
     for (const o of this.occupants) {
+      if (!only(o)) continue;
       const seat = this.params.seats[o.seat];
       const p = this.toWorld(seat);
       const side = Math.abs(seat.x) > 0.1 ? Math.sign(seat.x) : rollSide;
@@ -1253,7 +1256,7 @@ export class Speedboat {
       this.swimmers.push({ seat: o.seat, mass: o.mass, pos: jump ? add(p, v3(0, 0.35, 0)) : p, vel: add(this.pointVelocity(p), kick), yaw: Math.atan2(fwd.x, fwd.z),
         slot: Math.atan2(side * 1, seat.z / (this.params.length / 2)), swim: 0, t: 0, jumped: jump });
     }
-    this.occupants = [];
+    this.occupants = this.occupants.filter((o) => !only(o));
   }
 
   private updateSwimmers(dt: number, water: IWaterSurface, world: PhysicsWorld): void {
@@ -1265,7 +1268,7 @@ export class Speedboat {
       const dSub = clamp(h - 0.05 - s.pos.y, -0.5, 0.6);
       const inWater = h - s.pos.y > -0.3;
       const ay = -G + (dSub > -0.3 ? (G + 60 * dSub) : 0) - (inWater ? 4 * s.vel.y : 0);
-      // nado: depois de ~1 s se recuperando, a pessoa nada (até ~0,7 m/s, crawl/peito de colete) para o
+      // nado: depois de ~1 s se recuperando, a pessoa nada (até ~0,35 m/s: de colete a braçada rende pouco) para o
       // seu lugar em volta do barco (elipse um pouco maior que o casco) e fica ali, acompanhando o barco
       const fwdH = this.forward;
       const yawB = Math.atan2(fwdH.x, fwdH.z);
@@ -1295,9 +1298,9 @@ export class Speedboat {
       let swx = this.sunk ? 0 : this.vel.x, swz = this.sunk ? 0 : this.vel.z;
       let effort = 0;
       if (s.t > 1 && inWater && dT > 0.25) {
-        const sp = Math.min(0.7, dT * 0.8);
+        const sp = Math.min(0.35, dT * 0.5);
         swx += (dxT / dT) * sp; swz += (dzT / dT) * sp;
-        effort = clamp(sp / 0.7, 0.3, 1);
+        effort = clamp(sp / 0.35, 0.3, 1);
         s.yaw = Math.atan2(dxT, dzT); // de frente para onde nada
       } else if (s.t > 1) {
         // de frente para o barco — ou, afundado, para o centro do grupo
