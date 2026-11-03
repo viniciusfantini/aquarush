@@ -12,7 +12,7 @@ import { SPEEDBOAT, DINGHY, RAPIDA, TURBINA, PERSON_KG, type Occupant } from "..
 import { Turbine } from "../src/sim/turbine.ts";
 import { GerstnerWater, WAVE_PRESETS, type CurrentZone } from "../src/sim/water.ts";
 import type { PhysicsWorld } from "../src/sim/world.ts";
-import { buildWorld, RAMP, groundHeight, fromFrame, ROAD_SAMPLES, LOT, YARD, lotDistance, RIVER, RIVER_CURRENT, riverCenterX, LAKE_LOBES, CANYON_BOOM } from "../src/sim/world.ts";
+import { buildWorld, RAMP, groundHeight, fromFrame, ROAD_SAMPLES, LOT, YARD, lotDistance, RIVER, RIVER_CURRENT, riverCenterX, LAKE_LOBES, CANYON_BOOM, FALLS, FALLS_CURRENT } from "../src/sim/world.ts";
 import { STATION, stationObstacles, fuelBayState, parkedStall } from "../src/sim/station.ts";
 import { pierBerth, pierBerthState, tieToPier, buoyState, tieToBuoy, BUOYS, BuoyField, CANYON_END, CHANNEL_MARKERS, berthStartPose } from "../src/sim/mooring.ts";
 import { buildTrailer, trailerLoadState, attachWinch } from "../src/sim/trailer.ts";
@@ -1821,6 +1821,18 @@ for (const [label, thr] of [["baixa", 0.25], ["alta", 1]] as const) {
   let zMax = -1e9;
   run(bw, mkWater(0), 25, { ...emptyInput(), gear: "F", throttle: 0.5 }, wc, () => { zMax = Math.max(zMax, bw.pos.z); });
   check("cenário", "cânion fechado: a barreira EM BREVE segura o barco (passou dela, m)", zMax - CANYON_BOOM.z, -10, 4, "m", 1);
+  // cachoeira no fim do cânion: correnteza forte perto da queda e o paredão segura o barco
+  const fw = mkWater(0, [RIVER_CURRENT, FALLS_CURRENT]);
+  const cNear = fw.getCurrent(FALLS.x, FALLS.z - 8).z, cRiver = fw.getCurrent(riverCenterX(500), 500).z;
+  check("cenário", "cachoeira: correnteza perto da queda (m/s, para o sul)", -cNear, 4.5, 7, "m/s", 1);
+  check("cenário", "cachoeira: bem mais forte que no meio do rio (×)", cNear / cRiver, 2.5, 6, "×", 1);
+  const fb = new Speedboat(SPEEDBOAT, v3(FALLS.x, 0.3, FALLS.z - 60)); fb.systems.fuelL = 60;
+  let fz = -1e9;
+  run(fb, fw, 30, { ...emptyInput(), gear: "F", throttle: 0.6 }, buildWorld(), () => { fz = Math.max(fz, fb.pos.z); });
+  check("cenário", "cachoeira: o paredão segura o barco (não passa da queda, m)", fz - FALLS.z, -40, 2, "m", 1);
+  const dr = new Speedboat(SPEEDBOAT, v3(FALLS.x, 0.3, FALLS.z - 25)); dr.systems.fuelL = 60; dr.engine = "off";
+  run(dr, fw, 15, { ...emptyInput(), gear: "N" }, buildWorld());
+  check("cenário", "cachoeira: barco à deriva é levado rio abaixo em 15 s (m)", FALLS.z - 25 - dr.pos.z, 15, 120, "m", 1);
 }
 
 // ---------- Poitas com física (boia + corrente) e vaga de estacionamento ----------
@@ -1925,7 +1937,7 @@ for (const [label, thr] of [["baixa", 0.25], ["alta", 1]] as const) {
 // ---------- Combustível inicial × fim do cânion ----------
 {
   const w = buildWorld();
-  const water = mkWater(0.35, [RIVER_CURRENT]);
+  const water = mkWater(0.35, [RIVER_CURRENT, FALLS_CURRENT]); // (como no jogo: rio + correnteza da cachoeira)
   const route: [number, number][] = [];
   for (let z = w.spawn.z; z <= RIVER.z0; z += 10) route.push([w.spawn.x + (riverCenterX(RIVER.z0) - w.spawn.x) * ((z - w.spawn.z) / (RIVER.z0 - w.spawn.z)), z]);
   for (let z = RIVER.z0; z <= CANYON_END.z + 30; z += 8) route.push([riverCenterX(z), z]);

@@ -96,6 +96,13 @@ A lancha é um **corpo rígido 6DOF** (massa seca de 1030 kg + gasolina, ocupant
 
 > Referência completa da lógica elétrica e dos motores: [`docs/SISTEMAS_ELETRICOS_E_MOTORES.md`](../../docs/SISTEMAS_ELETRICOS_E_MOTORES.md).
 
+## Cachoeira no fim do cânion e faixa "EM BREVE" no pórtico (v0.66.1)
+
+- O cânion está **aberto** de novo: a barreira de boias da entrada (`CANYON_BOOM`, `buildComingSoon`) ficou guardada para outro uso — `buildWorld({ canyonClosed: true })` ainda a monta.
+- **Cachoeira** (`FALLS` em `sim/world.ts`, `buildWaterfall` em `presentation/comingSoon.ts`): logo depois do pórtico, a água despenca ~13 m de um paredão de pedra (colisor na física). Visual: lâmina com estrias que escorrem, a água do rio em cima, névoa (partículas) e espuma na base; som de rugido pela distância (`audio.setWaterfall`).
+- **Correnteza** (`FALLS_CURRENT`, soma com a do rio): 5,5 m/s na queda (3,4× o meio do rio), suavizada do lado do rio; um barco à deriva é levado ~33 m rio abaixo em 15 s. A lancha e o bote com o tanque cheio ainda chegam ao pórtico (os testes do combustível passaram a usar as duas correntezas, como no jogo).
+- **Pórtico de largada** com a faixa **EM BREVE — O JOGO COMEÇA AQUI · NOVAS ÁREAS NAS PRÓXIMAS ATUALIZAÇÕES** (`comingSoonMaterial`) e o aviso "em breve vamos lançar as atualizações com as novas áreas!" ao chegar a 30 m.
+
 ## Lago ampliado e cânion "EM BREVE" (v0.66)
 
 - **Lago ~5× maior** (`LAKE_LOBES` em `sim/world.ts`): dois lobos elípticos — leste (centro 650, −10; 480 × 390 m) e oeste (−670, 90; 450 × 350 m) — unidos ao lago original por uma união suave (`smin`) no campo de distância `lakeR`. Água: 0,265 → 1,350 km² (sem o rio). Píer, rampa, marina, ilha, estrada, pátio e a foz do cânion: mesma cota de antes (conferido ponto a ponto); só as antigas margens leste e oeste viraram passagem para os lobos.
@@ -398,7 +405,7 @@ Limitação: é uma síntese aproximada, não uma gravação. Validar o timbre d
 | 6. Ondas e correnteza | ondas fortes (×2,5): roll ≤ 30°, não emborca; deriva com correnteza de 1,6 m/s: 1,54 m/s |
 | Lago | flutua no spawn; a toda contra a margem, encalha e para sem atravessar o terreno |
 
-Resultado: **588/590 OK + 2 KNOWN** (v0.66.0). Na v0.10, o peso do piloto na posição real (boreste, acima do CG) aumentou o roll em curva com ondas fortes; o `bankCoef` foi para 1800 e o `rollDamping` para 15000, com 1 limitação conhecida (abaixo). Na v0.2 a hélice foi para 0,5 m atrás do espelho, como no modelo visual, e o esterço máximo em alta velocidade caiu de 13° para 11°.
+Resultado: **592/594 OK + 2 KNOWN** (v0.66.1). Na v0.10, o peso do piloto na posição real (boreste, acima do CG) aumentou o roll em curva com ondas fortes; o `bankCoef` foi para 1800 e o `rollDamping` para 15000, com 1 limitação conhecida (abaixo). Na v0.2 a hélice foi para 0,5 m atrás do espelho, como no modelo visual, e o esterço máximo em alta velocidade caiu de 13° para 11°.
 
 ### Navegador (Chrome, Windows 11, WebGL2, `q=med`, ~1370×896)
 

@@ -260,6 +260,20 @@ export const groundHeight = (x: number, z: number): number => {
 /** perto da estrada/pátio (para a vegetação e as rochas ficarem fora) */
 export const onRoadOrLot = (x: number, z: number, margin = 0): boolean => lotDistance(x, z) < margin + 1 || parkDistance(x, z) < margin + 1 || yardDistance(x, z) < margin + 1 || nearestRoad(x, z, ROAD.halfWidth + margin) !== null;
 
+/**
+ * Cachoeira no FIM do cânion (v0.66.1): a água despenca ~13 m de um paredão de pedra logo depois do pórtico de
+ * largada. O paredão é um colisor (o barco não sobe) e, chegando perto, a correnteza fica forte (`FALLS_CURRENT`,
+ * soma com a do rio) e empurra o barco de volta.
+ */
+export const FALLS = (() => {
+  const z = RIVER.z1 + 19, x = riverCenterX(z);
+  return { x, z, width: 30, top: 13.5 };
+})();
+export const FALLS_CURRENT: CurrentZone = {
+  // (a borda suavizada fica do lado do rio; o fim da zona passa por trás do paredão — na queda a força é total)
+  minX: FALLS.x - 30, maxX: FALLS.x + 30, minZ: RIVER.z1 - 25, maxZ: FALLS.z + 40, vx: 0, vz: -5.5, feather: 25,
+};
+
 export const RIVER_CURRENT: CurrentZone = {
   // aproximação retangular do trecho mais reto do rio próximo à foz; vazão para o sul
   minX: -140, maxX: 20, minZ: RIVER.z0 + 10, maxZ: RIVER.z1, vx: 0, vz: -1.6, feather: 25,
@@ -305,6 +319,9 @@ export const buildWorld = (opts: { canyonClosed?: boolean } = {}): PhysicsWorld 
   });
 
   // (as rochas redondas foram removidas a pedido do usuário: lago e margens livres)
+  // paredão da cachoeira (fim do cânion)
+  boxes.push({ minX: FALLS.x - 32, maxX: FALLS.x + 32, minY: -4, maxY: FALLS.top, minZ: FALLS.z + 1, maxZ: FALLS.z + 30 });
+  // (a barreira "EM BREVE" na entrada do cânion fica guardada para outro uso — v0.66.1: não é ligada no jogo)
   if (opts.canyonClosed) {
     const B = CANYON_BOOM;
     boxes.push({ minX: B.x - B.half, maxX: B.x + B.half, minY: -2.5, maxY: 0.7, minZ: B.z - 0.6, maxZ: B.z + 0.6 });

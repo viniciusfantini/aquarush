@@ -7,6 +7,7 @@ import { groundHeight } from "../sim/world.ts";
 import type { PierLayout } from "../sim/world.ts";
 import type { Speedboat } from "../sim/boat.ts";
 import { signMat } from "./station.ts";
+import { comingSoonMaterial } from "./comingSoon.ts";
 
 export const buildMoorings = (scene: Scene, pier: PierLayout): { meshes: Mesh[]; buoys: Mesh[] } => {
   const meshes: Mesh[] = [], buoys: Mesh[] = [];
@@ -49,14 +50,15 @@ export const buildMoorings = (scene: Scene, pier: PierLayout): { meshes: Mesh[];
   // pórtico de LARGADA no fim do cânion (onde o jogo começa de verdade)
   {
     const g = CANYON_END;
-    const startM = signMat(scene, "startGateT", "LARGADA", "fim do cânion · início da corrida", "#0b2a4a", "#ffd34d", 1024, 200);
+    // (v0.66.1) faixa "EM BREVE": aqui começa o jogo de verdade — as novas áreas vêm nas próximas atualizações
+    const startM = comingSoonMaterial(scene, "EM BREVE", "O JOGO COMEÇA AQUI · NOVAS ÁREAS NAS PRÓXIMAS ATUALIZAÇÕES", "startGateSoon");
     for (const sx of [-1, 1]) {
       const px = g.x + sx * 16, gy = Math.max(groundHeight(px, g.z), -3.5);
       const tower = MeshBuilder.CreateBox("startTower", { width: 0.8, height: 9 - gy, depth: 0.8 }, scene);
       tower.material = orange; tower.position.set(px, (9 + gy) / 2, g.z); meshes.push(tower);
     }
-    const banner = MeshBuilder.CreatePlane("startBanner", { width: 26, height: 2.4, sideOrientation: Mesh.DOUBLESIDE }, scene);
-    banner.material = startM; banner.position.set(g.x, 8.2, g.z); meshes.push(banner); // de frente para quem sobe o rio (−Z)
+    const banner = MeshBuilder.CreatePlane("startBanner", { width: 26, height: 26 * 192 / 1024, sideOrientation: Mesh.DOUBLESIDE }, scene);
+    banner.material = startM; banner.position.set(g.x, 6.6, g.z); meshes.push(banner); // de frente para quem sobe o rio (−Z)
   }
   // vaga no píer: faixa pintada no deck, placa, 2 cunhos e defensas (pneus) no costado
   const B = pierBerth(pier);

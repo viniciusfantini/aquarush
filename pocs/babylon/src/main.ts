@@ -15,7 +15,7 @@ import { JUMP_AH, JUMP_MAX_A, GPU_V } from "./sim/engineSystems.ts";
 import { Wind, MS_TO_KNOTS } from "./sim/wind.ts";
 import { VESSELS, PERSON_KG, type VesselKind, type SeatId, type SpeedboatParams } from "./sim/params.ts";
 import { GerstnerWater, WAVE_PRESETS } from "./sim/water.ts";
-import { buildWorld, RIVER_CURRENT, RAMP, fromFrame, CANYON_BOOM } from "./sim/world.ts";
+import { buildWorld, RIVER_CURRENT, FALLS_CURRENT, FALLS, RAMP, fromFrame } from "./sim/world.ts";
 import { buildTrailer, trailerLoadState, attachWinch, seatedBoatLocal, type TrailerLayout } from "./sim/trailer.ts";
 import { TowRig, TOW_SPECS, type Pose } from "./sim/towVehicle.ts";
 import { buildRamp, buildTrailerMesh, buildTowVehicle, type WheelNode } from "./presentation/ramp.ts";
@@ -39,7 +39,7 @@ import { buildRapida } from "./presentation/rapidaMesh.ts";
 import { buildTurbina } from "./presentation/turbineMesh.ts";
 import { WaterInteraction } from "./presentation/waterInteraction.ts";
 import { TurbineExhaustFx } from "./presentation/exhaustFx.ts";
-import { buildComingSoon } from "./presentation/comingSoon.ts";
+import { buildWaterfall } from "./presentation/comingSoon.ts";
 import { GpuCart } from "./presentation/gpuCart.ts";
 import { TurbinePanel } from "./presentation/turbinePanel.ts";
 import { SystemsPanel } from "./presentation/systemsPanel.ts";
@@ -48,7 +48,7 @@ import { BoatCamera } from "./presentation/cameras.ts";
 import { Hud } from "./presentation/hud.ts";
 import { EngineAudio } from "./presentation/audio.ts";
 
-const BUILD = "poc-babylon 0.66.0";
+const BUILD = "poc-babylon 0.66.1";
 /** Escala visual da rotação da hélice (proporcional ao RPM, abaixo do limite estroboscópico). */
 const PROP_VISUAL_SCALE = 0.12;
 
@@ -166,8 +166,8 @@ const boot = async () => {
   skybox.isPickable = false;
 
   // ---------------- simulação ----------------
-  const world = buildWorld({ canyonClosed: true }); // cânion fechado por enquanto: barreira "EM BREVE" na entrada
-  const water = new GerstnerWater({ waves: WAVE_PRESETS.lago, groundHeight: world.groundHeight, currents: [RIVER_CURRENT] });
+  const world = buildWorld(); // (a barreira "EM BREVE" da entrada do cânion ficou guardada: buildWorld({ canyonClosed: true }))
+  const water = new GerstnerWater({ waves: WAVE_PRESETS.lago, groundHeight: world.groundHeight, currents: [RIVER_CURRENT, FALLS_CURRENT] });
   const spawnPos = () => v3(world.spawn.x, 0.25, world.spawn.z);
   const waitSpots = pierWaitSpots(world.pier);
   // GPU (fonte de solo de 28 V) parada no píer, à ré da vaga, com a saída do cabo virada para a água
@@ -266,7 +266,7 @@ const boot = async () => {
   const isKind = (k: string | null): k is VesselKind => k === "lancha" || k === "bote" || k === "rapida" || k === "turbina";
   let V = vessels[isKind(urlKind) ? urlKind : "lancha"];
   const allBoatMeshes = allVessels.flatMap((x) => x.vis.meshes).filter((m) => m.name !== "propDisc");
-  const comingSoonMeshes = buildComingSoon(scene);
+  const comingSoonMeshes = buildWaterfall(scene); // cachoeira do fim do cânion
   const staticExtras = [...comingSoonMeshes, ...rampMeshes, ...stationMeshes, ...moorVis.meshes, ...gpuCart.meshes, ...allVessels.flatMap((x) => x.trailerMeshes)];
 
   // ambiente para os materiais PBR (céu + margens, renderizado uma vez)
@@ -1119,10 +1119,7 @@ const boot = async () => {
     // AR-10 manual: EXT PWR em ON sem a GPU conectada com o barco energizado — falha (alarme + EXT PWR vermelho)
     if (T.extPwrFault && !lastExtFault && mode === "game") sysToast("FALHA EXT PWR: chave em ON sem a GPU conectada — desligue o EXT PWR ou conecte a GPU (J, na doca)", true);
     lastExtFault = T.extPwrFault;
-    // chegando à barreira do cânion: aviso de que as novas áreas vêm nas próximas atualizações
-    { const dB = Math.hypot(boat.pos.x - CANYON_BOOM.x, boat.pos.z - CANYON_BOOM.z);
-      if (dB < 90 && !boomWarned && mode === "game") { boomWarned = true; hud.showToast("EM BREVE: em breve vamos lançar atualizações — o cânion e novas áreas estão chegando!", true); }
-      if (dB > 160) boomWarned = false; }
+    audio.setWaterfall(Math.hypot(boat.pos.x - FALLS.x, boat.pos.z - FALLS.z));
     if (boat.reboarded !== lastReboarded) {
       if (mode === "game" && boat.reboarded > lastReboarded) hud.showToast(boat.swimmers.length ? `Voltou a bordo — ainda ${boat.swimmers.length} na água` : "Todos de volta a bordo");
       lastReboarded = boat.reboarded;
@@ -1187,7 +1184,7 @@ const boot = async () => {
     // chegada ao fim do cânion (largada)
     if (mode === "game" && !driving && !carOnly) {
       const dEnd = Math.hypot(boat.pos.x - CANYON_END.x, boat.pos.z - CANYON_END.z);
-      if (dEnd < 18 && !reachedEnd) { reachedEnd = true; hud.showToast("Fim do cânion! É aqui que o jogo começa de verdade (LARGADA)"); }
+      if (dEnd < 30 && !reachedEnd) { reachedEnd = true; hud.showToast("EM BREVE: o jogo começa aqui — em breve vamos lançar as atualizações com as novas áreas!", true); }
       if (dEnd > 60) reachedEnd = false;
     }
     ropes.update(boat);

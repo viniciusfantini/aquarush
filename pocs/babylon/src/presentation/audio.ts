@@ -154,6 +154,13 @@ export class EngineAudio {
   private bilgeMotorGain!: GainNode;
   private winchOsc!: OscillatorNode;
   private winchGain!: GainNode;
+  private fallsGain: GainNode | null = null;
+  /** Cachoeira do fim do cânion: volume pela distância (m) até a queda. */
+  setWaterfall(dist: number): void {
+    if (!this.ctx || !this.fallsGain) return;
+    const v = this.muted ? 0 : Math.min(0.22, 9 / Math.max(25, dist));
+    this.fallsGain.gain.setTargetAtTime(dist > 450 ? 0 : v, this.ctx.currentTime, 0.4);
+  }
   private underLP!: BiquadFilterNode;
   private underGain!: GainNode;
   private underOn = false;
@@ -400,6 +407,10 @@ export class EngineAudio {
     const bmLP = ctx.createBiquadFilter(); bmLP.type = "lowpass"; bmLP.frequency.value = 1400;
     this.bilgeMotorGain = ctx.createGain(); this.bilgeMotorGain.gain.value = 0;
     this.bilgeMotorOsc.connect(bmBP).connect(bmLP).connect(this.bilgeMotorGain).connect(this.master); this.bilgeMotorOsc.start();
+    // ---- cachoeira: rugido grave de ruído (cresce com a proximidade) ----
+    const fLP = ctx.createBiquadFilter(); fLP.type = "lowpass"; fLP.frequency.value = 900; fLP.Q.value = 0.5;
+    this.fallsGain = ctx.createGain(); this.fallsGain.gain.value = 0;
+    noiseSrc().connect(fLP).connect(this.fallsGain).connect(this.master);
     // ---- vento: chiado grave que abre com a velocidade (rajadas) ----
     this.windLP = ctx.createBiquadFilter(); this.windLP.type = "lowpass"; this.windLP.frequency.value = 300; this.windLP.Q.value = 0.8;
     this.windGain = ctx.createGain(); this.windGain.gain.value = 0;
