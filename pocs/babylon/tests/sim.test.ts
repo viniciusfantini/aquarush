@@ -12,7 +12,7 @@ import { SPEEDBOAT, DINGHY, RAPIDA, TURBINA, PERSON_KG, type Occupant } from "..
 import { Turbine } from "../src/sim/turbine.ts";
 import { GerstnerWater, WAVE_PRESETS, type CurrentZone } from "../src/sim/water.ts";
 import type { PhysicsWorld } from "../src/sim/world.ts";
-import { buildWorld, RAMP, groundHeight, fromFrame, ROAD_SAMPLES, LOT, YARD, lotDistance, RIVER, RIVER_CURRENT, riverCenterX } from "../src/sim/world.ts";
+import { buildWorld, RAMP, groundHeight, fromFrame, ROAD_SAMPLES, LOT, YARD, lotDistance, RIVER, RIVER_CURRENT, riverCenterX, LAKE_LOBES, CANYON_BOOM } from "../src/sim/world.ts";
 import { STATION, stationObstacles, fuelBayState, parkedStall } from "../src/sim/station.ts";
 import { pierBerth, pierBerthState, tieToPier, buoyState, tieToBuoy, BUOYS, BuoyField, CANYON_END, CHANNEL_MARKERS, berthStartPose } from "../src/sim/mooring.ts";
 import { buildTrailer, trailerLoadState, attachWinch } from "../src/sim/trailer.ts";
@@ -1806,6 +1806,21 @@ for (const [label, thr] of [["baixa", 0.25], ["alta", 1]] as const) {
     run(b, water, 10, { ...emptyInput(), gear: "R", throttle: 0.4 }, w);
     check("amarração", `${kind}: M solta e o barco se afasta (m)`, Math.hypot(b.pos.x - buoy.x, b.pos.z - buoy.z), 5, 200, "m", 1);
   }
+}
+
+// ---------- Lago ampliado (v0.66) e cânion fechado ("EM BREVE") ----------
+{
+  const waterArea = () => { let n = 0; for (let x = -1300; x <= 1300; x += 10) for (let z = -1100; z <= 1500; z += 10) {
+    if (groundHeight(x, z) < -0.3 && !(z > RIVER.z0 + 20 && Math.abs(x - riverCenterX(z)) < RIVER.width)) n++; } return n * 100; };
+  const big = waterArea();
+  const lobes = LAKE_LOBES.splice(0); const orig = waterArea(); LAKE_LOBES.push(...lobes);
+  check("cenário", "lago ampliado: área de água ÷ área original (sem o rio)", big / orig, 4, 7, "×", 2);
+  // a barreira flutuante na entrada do cânion segura o barco (só no jogo: buildWorld({ canyonClosed: true }))
+  const wc = buildWorld({ canyonClosed: true });
+  const bw = new Speedboat(SPEEDBOAT, v3(CANYON_BOOM.x, 0.3, CANYON_BOOM.z - 40)); bw.systems.fuelL = 60;
+  let zMax = -1e9;
+  run(bw, mkWater(0), 25, { ...emptyInput(), gear: "F", throttle: 0.5 }, wc, () => { zMax = Math.max(zMax, bw.pos.z); });
+  check("cenário", "cânion fechado: a barreira EM BREVE segura o barco (passou dela, m)", zMax - CANYON_BOOM.z, -10, 4, "m", 1);
 }
 
 // ---------- Poitas com física (boia + corrente) e vaga de estacionamento ----------

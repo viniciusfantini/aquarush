@@ -15,7 +15,7 @@ import { JUMP_AH, JUMP_MAX_A, GPU_V } from "./sim/engineSystems.ts";
 import { Wind, MS_TO_KNOTS } from "./sim/wind.ts";
 import { VESSELS, PERSON_KG, type VesselKind, type SeatId, type SpeedboatParams } from "./sim/params.ts";
 import { GerstnerWater, WAVE_PRESETS } from "./sim/water.ts";
-import { buildWorld, RIVER_CURRENT, RAMP, fromFrame } from "./sim/world.ts";
+import { buildWorld, RIVER_CURRENT, RAMP, fromFrame, CANYON_BOOM } from "./sim/world.ts";
 import { buildTrailer, trailerLoadState, attachWinch, seatedBoatLocal, type TrailerLayout } from "./sim/trailer.ts";
 import { TowRig, TOW_SPECS, type Pose } from "./sim/towVehicle.ts";
 import { buildRamp, buildTrailerMesh, buildTowVehicle, type WheelNode } from "./presentation/ramp.ts";
@@ -39,6 +39,7 @@ import { buildRapida } from "./presentation/rapidaMesh.ts";
 import { buildTurbina } from "./presentation/turbineMesh.ts";
 import { WaterInteraction } from "./presentation/waterInteraction.ts";
 import { TurbineExhaustFx } from "./presentation/exhaustFx.ts";
+import { buildComingSoon } from "./presentation/comingSoon.ts";
 import { GpuCart } from "./presentation/gpuCart.ts";
 import { TurbinePanel } from "./presentation/turbinePanel.ts";
 import { SystemsPanel } from "./presentation/systemsPanel.ts";
@@ -47,7 +48,7 @@ import { BoatCamera } from "./presentation/cameras.ts";
 import { Hud } from "./presentation/hud.ts";
 import { EngineAudio } from "./presentation/audio.ts";
 
-const BUILD = "poc-babylon 0.65.3";
+const BUILD = "poc-babylon 0.66.0";
 /** Escala visual da rotação da hélice (proporcional ao RPM, abaixo do limite estroboscópico). */
 const PROP_VISUAL_SCALE = 0.12;
 
@@ -165,7 +166,7 @@ const boot = async () => {
   skybox.isPickable = false;
 
   // ---------------- simulação ----------------
-  const world = buildWorld();
+  const world = buildWorld({ canyonClosed: true }); // cânion fechado por enquanto: barreira "EM BREVE" na entrada
   const water = new GerstnerWater({ waves: WAVE_PRESETS.lago, groundHeight: world.groundHeight, currents: [RIVER_CURRENT] });
   const spawnPos = () => v3(world.spawn.x, 0.25, world.spawn.z);
   const waitSpots = pierWaitSpots(world.pier);
@@ -186,7 +187,7 @@ const boot = async () => {
   // ---------------- cena ----------------
   const terrain = buildTerrain(scene, { terrainSubdiv: cfg.quality.terrainSubdiv, trees: cfg.quality.trees });
   const riverStrip = terrain.metadata.riverStrip as Mesh; // faixa detalhada do rio/cânion (2 m)
-  const trees = buildTrees(scene, cfg.quality.trees);
+  const trees = buildTrees(scene, cfg.quality.trees * 2); // (v0.66: área de árvores ~2× maior, em volta do lago ampliado)
   const pierMeshes = buildPier(scene, world.pier);
   const buoys = pierMeshes.filter((m) => m.name === "buoy");
   const moorVis = buildMoorings(scene, world.pier);
@@ -265,7 +266,8 @@ const boot = async () => {
   const isKind = (k: string | null): k is VesselKind => k === "lancha" || k === "bote" || k === "rapida" || k === "turbina";
   let V = vessels[isKind(urlKind) ? urlKind : "lancha"];
   const allBoatMeshes = allVessels.flatMap((x) => x.vis.meshes).filter((m) => m.name !== "propDisc");
-  const staticExtras = [...rampMeshes, ...stationMeshes, ...moorVis.meshes, ...gpuCart.meshes, ...allVessels.flatMap((x) => x.trailerMeshes)];
+  const comingSoonMeshes = buildComingSoon(scene);
+  const staticExtras = [...comingSoonMeshes, ...rampMeshes, ...stationMeshes, ...moorVis.meshes, ...gpuCart.meshes, ...allVessels.flatMap((x) => x.trailerMeshes)];
 
   // ambiente para os materiais PBR (céu + margens, renderizado uma vez)
   const probe = new ReflectionProbe("envProbe", 128, scene);
@@ -288,7 +290,7 @@ const boot = async () => {
   const fx = new WaterInteraction(scene, wakeField, { particles: cfg.quality.particles, wakeTexture: cfg.quality.wakeTexture });
   const exhaustFx = new TurbineExhaustFx(scene); // fumaça e fogo do escape da turbina (AR-10)
   const waterVis = new WaterVisual(scene, {
-    resolution: cfg.quality.waterResolution, innerExtent: 80, outerExtent: 2600, depth, wake: fx.wake, reflectionSize: cfg.quality.reflection,
+    resolution: cfg.quality.waterResolution, innerExtent: 80, outerExtent: 3600, depth, wake: fx.wake, reflectionSize: cfg.quality.reflection,
   });
   waterVis.sunDir = sunDir;
   waterVis.fogDensity = scene.fogDensity;
@@ -373,7 +375,7 @@ const boot = async () => {
   const prevRot = new Quaternion(), curRot = new Quaternion();
   const snap = (dst: Vector3, q: Quaternion) => { const b = V.boat; dst.set(b.pos.x, b.pos.y, b.pos.z); q.set(b.rot.x, b.rot.y, b.rot.z, b.rot.w); };
   let fpsSmooth = 60, resT = 0;
-  let lastStartFail = "", lowFuelWarned = false, trimRelayWarned = false, neutralRevWarned = false, lastJumperOff = 0, lastJumperTrips = 0, lastGpuOff = 0, lastGpuState = "off", lastAnchorState = "recolhida", lastBilgeAlarm = false, lastExtFault = false, lastReboarded = 0, lastSwamped = false, lastSunk = false, windHudT = 0;
+  let lastStartFail = "", lowFuelWarned = false, trimRelayWarned = false, neutralRevWarned = false, lastJumperOff = 0, lastJumperTrips = 0, lastGpuOff = 0, lastGpuState = "off", lastAnchorState = "recolhida", lastBilgeAlarm = false, lastExtFault = false, lastReboarded = 0, boomWarned = false, lastSwamped = false, lastSunk = false, windHudT = 0;
   const qTilt = new Quaternion(), qSteer = new Quaternion();
   let lastGear = V.boat.telemetry.gear;
   let tiltWarned = false, intakeWarned = false, capsizeWarned = false;
@@ -1117,6 +1119,10 @@ const boot = async () => {
     // AR-10 manual: EXT PWR em ON sem a GPU conectada com o barco energizado — falha (alarme + EXT PWR vermelho)
     if (T.extPwrFault && !lastExtFault && mode === "game") sysToast("FALHA EXT PWR: chave em ON sem a GPU conectada — desligue o EXT PWR ou conecte a GPU (J, na doca)", true);
     lastExtFault = T.extPwrFault;
+    // chegando à barreira do cânion: aviso de que as novas áreas vêm nas próximas atualizações
+    { const dB = Math.hypot(boat.pos.x - CANYON_BOOM.x, boat.pos.z - CANYON_BOOM.z);
+      if (dB < 90 && !boomWarned && mode === "game") { boomWarned = true; hud.showToast("EM BREVE: em breve vamos lançar atualizações — o cânion e novas áreas estão chegando!", true); }
+      if (dB > 160) boomWarned = false; }
     if (boat.reboarded !== lastReboarded) {
       if (mode === "game" && boat.reboarded > lastReboarded) hud.showToast(boat.swimmers.length ? `Voltou a bordo — ainda ${boat.swimmers.length} na água` : "Todos de volta a bordo");
       lastReboarded = boat.reboarded;

@@ -96,6 +96,13 @@ A lancha é um **corpo rígido 6DOF** (massa seca de 1030 kg + gasolina, ocupant
 
 > Referência completa da lógica elétrica e dos motores: [`docs/SISTEMAS_ELETRICOS_E_MOTORES.md`](../../docs/SISTEMAS_ELETRICOS_E_MOTORES.md).
 
+## Lago ampliado e cânion "EM BREVE" (v0.66)
+
+- **Lago ~5× maior** (`LAKE_LOBES` em `sim/world.ts`): dois lobos elípticos — leste (centro 650, −10; 480 × 390 m) e oeste (−670, 90; 450 × 350 m) — unidos ao lago original por uma união suave (`smin`) no campo de distância `lakeR`. Água: 0,265 → 1,350 km² (sem o rio). Píer, rampa, marina, ilha, estrada, pátio e a foz do cânion: mesma cota de antes (conferido ponto a ponto); só as antigas margens leste e oeste viraram passagem para os lobos.
+- **Visual:** terreno de 3,6 km (antes 2,6) com as subdivisões crescendo junto (~10 m por célula, igual), água até 3,6 km e o dobro de árvores numa área maior.
+- **Cânion fechado por enquanto** (`CANYON_BOOM`, `buildWorld({ canyonClosed: true })` só no jogo): barreira flutuante de boias laranja atravessando o rio logo depois da foz (colisor raso na linha d'água) e a faixa **EM BREVE** entre dois mastros (`presentation/comingSoon.ts`); ao chegar a 90 m aparece o aviso "em breve vamos lançar atualizações — o cânion e novas áreas estão chegando!". O relevo do cânion não mudou e os testes dele continuam com o rio aberto.
+- Testes ("cenário"): área de água 5,10× a original; a barreira segura o barco 2,6 m antes dela. No navegador: faixa legível de quem vem do lago, aviso na aproximação, lobo leste com 7 m de fundo.
+
 ## AR-10: chave GOV e sobrevelocidade do N2 (v0.64)
 
 **v0.65.3:** o TESTE (18 px) fica alinhado com a letra "E" de "N2 SOBREV." e na altura dos LEDs (`TurbinePanel.alignTest`, recalculado a cada 0,4 s); o painel continua com 744 px. Splash com "JOGAR MODO PLAYGROUND".
@@ -391,7 +398,7 @@ Limitação: é uma síntese aproximada, não uma gravação. Validar o timbre d
 | 6. Ondas e correnteza | ondas fortes (×2,5): roll ≤ 30°, não emborca; deriva com correnteza de 1,6 m/s: 1,54 m/s |
 | Lago | flutua no spawn; a toda contra a margem, encalha e para sem atravessar o terreno |
 
-Resultado: **586/588 OK + 2 KNOWN** (v0.64.1). Na v0.10, o peso do piloto na posição real (boreste, acima do CG) aumentou o roll em curva com ondas fortes; o `bankCoef` foi para 1800 e o `rollDamping` para 15000, com 1 limitação conhecida (abaixo). Na v0.2 a hélice foi para 0,5 m atrás do espelho, como no modelo visual, e o esterço máximo em alta velocidade caiu de 13° para 11°.
+Resultado: **588/590 OK + 2 KNOWN** (v0.66.0). Na v0.10, o peso do piloto na posição real (boreste, acima do CG) aumentou o roll em curva com ondas fortes; o `bankCoef` foi para 1800 e o `rollDamping` para 15000, com 1 limitação conhecida (abaixo). Na v0.2 a hélice foi para 0,5 m atrás do espelho, como no modelo visual, e o esterço máximo em alta velocidade caiu de 13° para 11°.
 
 ### Navegador (Chrome, Windows 11, WebGL2, `q=med`, ~1370×896)
 

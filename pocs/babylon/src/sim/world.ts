@@ -67,14 +67,27 @@ export const rng = (seed: number) => () => {
 
 // ---------- relevo do lago ----------
 export const LAKE = { rx: 330, rz: 240 };
+/**
+ * Lago ampliado (v0.66, ~4× a área): dois lobos grandes, a LESTE e a OESTE, unidos ao lago original por uma união
+ * suave. O lago original — píer, rampa, marina, ilha, estrada e a foz do cânion — fica exatamente onde estava.
+ */
+export const LAKE_LOBES = [
+  { cx: 650, cz: -10, rx: 480, rz: 390 },
+  { cx: -670, cz: 90, rx: 450, rz: 350 },
+];
+/** união suave de dois campos de distância (k = largura da emenda) */
+const smin = (a: number, b: number, k: number): number => { const h = clamp(0.5 + 0.5 * (b - a) / k, 0, 1); return b + (a - b) * h - k * h * (1 - h); };
 export const ISLAND = { x: 140, z: 70, r: 48 };
 /** Canal de rio que desemboca no lago pelo norte (com correnteza). */
 export const RIVER = { z0: 170, z1: 760, width: 34 };
 export const riverCenterX = (z: number): number => -60 + 38 * Math.sin(z / 95);
 
 /** Distância normalizada ao contorno do lago (1 = margem). */
-const lakeR = (x: number, z: number): number =>
-  Math.hypot(x / LAKE.rx, z / LAKE.rz) + 0.11 * fbm(x / 140 + 7.3, z / 140 - 2.1, 3);
+const lakeR = (x: number, z: number): number => {
+  let r = Math.hypot(x / LAKE.rx, z / LAKE.rz);
+  for (const L of LAKE_LOBES) r = smin(r, Math.hypot((x - L.cx) / L.rx, (z - L.cz) / L.rz), 0.18);
+  return r + 0.11 * fbm(x / 140 + 7.3, z / 140 - 2.1, 3);
+};
 
 const baseGround = (x: number, z: number): number => {
   const r = lakeR(x, z);
@@ -268,7 +281,17 @@ export const findShore = (dirX: number, dirZ: number): { x: number; z: number } 
   return { x: dirX * t, z: dirZ * t };
 };
 
-export const buildWorld = (): PhysicsWorld & { pier: PierLayout; rockList: SphereCollider[]; spawn: { x: number; z: number; heading: number } } => {
+/**
+ * Cânion FECHADO por enquanto ("EM BREVE"): barreira flutuante de boias atravessando a entrada do rio, logo depois da
+ * foz. O relevo do cânion não muda; a barreira é um colisor (caixa rasa na linha d'água) que só o jogo liga — os
+ * testes do cânion continuam usando o rio aberto.
+ */
+export const CANYON_BOOM = (() => {
+  const z = RIVER.z0 + 28, cx = riverCenterX(z), half = RIVER.width / 2 + 7;
+  return { x: cx, z, half };
+})();
+
+export const buildWorld = (opts: { canyonClosed?: boolean } = {}): PhysicsWorld & { pier: PierLayout; rockList: SphereCollider[]; spawn: { x: number; z: number; heading: number } } => {
   const spheres: SphereCollider[] = [];
   const boxes: BoxCollider[] = [];
 
@@ -282,6 +305,10 @@ export const buildWorld = (): PhysicsWorld & { pier: PierLayout; rockList: Spher
   });
 
   // (as rochas redondas foram removidas a pedido do usuário: lago e margens livres)
+  if (opts.canyonClosed) {
+    const B = CANYON_BOOM;
+    boxes.push({ minX: B.x - B.half, maxX: B.x + B.half, minY: -2.5, maxY: 0.7, minZ: B.z - 0.6, maxZ: B.z + 0.6 });
+  }
 
   const spawn = { x: pier.shoreX + 9, z: pier.shoreZ + pier.length - 6, heading: 0 };
   return { groundHeight, spheres, boxes, trailers: [], pier, rockList: spheres, spawn };

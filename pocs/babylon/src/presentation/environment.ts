@@ -86,8 +86,9 @@ const buildRiverStrip = (scene: Scene, mat: StandardMaterial): Mesh => {
 };
 
 export const buildTerrain = (scene: Scene, q: EnvQuality): Mesh => {
-  const size = 2600;
-  const ground = MeshBuilder.CreateGround("terrain", { width: size, height: size, subdivisions: q.terrainSubdiv, updatable: true }, scene);
+  // (v0.66: 3,6 km para cobrir o lago ampliado; as subdivisões crescem junto — a malha mantém ~10 m por célula)
+  const size = 3600;
+  const ground = MeshBuilder.CreateGround("terrain", { width: size, height: size, subdivisions: Math.round(q.terrainSubdiv * size / 2600), updatable: true }, scene);
   const pos = ground.getVerticesData(VertexBuffer.PositionKind)!;
   const colors: number[] = [];
   for (let i = 0; i < pos.length; i += 3) {
@@ -181,7 +182,7 @@ export const buildTrees = (scene: Scene, count: number): Mesh => {
   let placed = 0, tries = 0;
   while (placed < count && tries < count * 30) {
     tries++;
-    const x = (rand() * 2 - 1) * 900, z = (rand() * 2 - 1) * 650 + 180;
+    const x = (rand() * 2 - 1) * 1500, z = (rand() * 2 - 1) * 900 + 180; // (v0.66: em volta do lago ampliado)
     const h = groundHeight(x, z);
     if (h < 2.2 || h > 30) continue;
     if (slopeAt(x, z) > 0.6) continue;
