@@ -8,7 +8,7 @@ para continuar o trabalho em outra IA/ferramenta ou portar para Unity/Unreal sem
 > Arquivos: `src/sim/engineSystems.ts` (combustível, temperatura, bateria, alternador, booster, GPU, barramento),
 > `src/sim/turbine.ts` (turbina a gás + FADEC), `src/sim/boat.ts` (motores `EngineUnit`, partida, chaves,
 > roteamento de baterias, porão), `src/sim/anchor.ts` (molinete), `src/sim/params.ts` (parâmetros = contrato entre
-> as POCs). Testes: `tests/sim.test.ts` (`npm run test:sim`, hoje **623/625 + 2 KNOWN**).
+> as POCs). Testes: `tests/sim.test.ts` (`npm run test:sim`, hoje **629/631 + 2 KNOWN**).
 
 ---
 
@@ -367,6 +367,11 @@ girando → `"busy"`.
   marcha (sem rotação livre em N; consumo em N igual). A marcha é a **caçamba (iBR)**: N = empuxo líquido 0, R = ré e
   **freio** (pode baixar com o motor acelerado — sem a trava de acelerador do câmbio). O **bocal** é o leme
   (`gearcaseRudder: 0`): sem empuxo não há direção. O trim **VTS** inclina o bocal (sem tilt).
+- **Freio iBR no teclado e luz** (v0.67.1): andando em F, segurar S = `InputManager.ibrMode` manda R com o giro
+  subindo sozinho (freia; parada, ré); soltar = F; toque curto = N. `telemetry.ibr` = off / neutral / brake (R ou
+  indo para R com a moto andando para a frente > 0,8 m/s) / reverse → luz no HUD e no Y.
+- **Compressor** (`params.supercharger.maxBar` 1,05): `telemetry.boostBar` = maxBar × (rpm/rpm máx)² × (0,15 + 0,85 ×
+  acelerador), atraso 0,25 s; 0 com o motor parado. Manômetro BOOST no HUD.
 - **Modo ECO** (`Speedboat.driveMode`, `params.ecoThrottle` 0,55): o gatilho pleno abre só até 55 % (~90 km/h,
   ~29 L/h); SPORT = potência total (~108 km/h, ~72 L/h).
 - **Casco selado** (`params.sealedHull`): o convés é autodrenante — a água sobre a borda/espelho não entra no casco
@@ -388,7 +393,7 @@ girando → `"busy"`.
 `windlassA`, `coolingLps`, `extPwrFault`, `keys[]`, `houseV`, `swimmers`, `capsized`, `hullDamage`,
 `engineDamage`, `turbine { n1, n2, egt, torque, oilPsi, oilC, oilHot, oilRed, phase, lit, powered,
 starter, ignition, starterSw, ignitionSw, master, boostPump, fuelValve, generator, fadec, pooledL, wear, seized,
-starterLock }`, `lanyard`, `driveMode` ("normal"/"eco"), `righting`.
+starterLock }`, `lanyard`, `driveMode` ("normal"/"eco"), `righting`, `boostBar`, `ibr`.
 
 ---
 

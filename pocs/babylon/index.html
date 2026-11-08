@@ -532,6 +532,18 @@
     .gauge.small .g-title { font-size: 7.5px; }
     #g-aut { font-size: 11px; color: #8fe3d8; text-align: center; margin-top: 2px; min-height: 0; font-variant-numeric: tabular-nums; }
     #g-aut:empty { display: none; }
+    /* moto aquática: luz do iBR (caçamba do jato) — apagada em FRENTE, âmbar em NEUTRO/RÉ, vermelha piscando no FREIO */
+    #g-ibr, .ibr-l { display: flex; align-items: center; justify-content: center; gap: 6px; font: 700 10px/1 system-ui, sans-serif; letter-spacing: 0.06em; color: rgba(255,255,255,0.45); }
+    #g-ibr { margin-top: 4px; }
+    #g-ibr b, .ibr-l b { color: #e9eef2; }
+    #g-ibr em, .ibr-l em { font-style: normal; min-width: 52px; text-align: left; }
+    .ibr-dot { width: 13px; height: 13px; border-radius: 50%; background: radial-gradient(circle at 40% 35%, #4a4f55, #15181b 70%); box-shadow: inset 0 1px 2px rgba(0,0,0,0.7), 0 0 0 2px rgba(0,0,0,0.35); }
+    [data-s=neutral] .ibr-dot, [data-s=reverse] .ibr-dot { background: radial-gradient(circle at 40% 35%, #fff1b8, #ffb020 55%, #9a5f00); box-shadow: 0 0 10px 2px rgba(255,176,32,0.7); }
+    [data-s=neutral] em, [data-s=reverse] em { color: #ffc24d; }
+    [data-s=brake] .ibr-dot { background: radial-gradient(circle at 40% 35%, #ffd0c8, #ff3b2a 55%, #8a0f06); box-shadow: 0 0 14px 4px rgba(255,59,42,0.85); animation: ibrBlink 0.35s steps(2) infinite; }
+    [data-s=brake] em { color: #ff6b5c; }
+    @keyframes ibrBlink { 50% { opacity: 0.35; } }
+    .ibr-l { margin-top: 2px; }
     .gauge .g-l1 { fill: #ffffff; font-size: 15px; font-weight: 700; text-anchor: middle; font-variant-numeric: tabular-nums; }
     .gauge.small .g-l1 { font-size: 11.5px; }
     .gauge .g-l2 { fill: #8fe3d8; font-size: 6.6px; text-anchor: middle; font-variant-numeric: tabular-nums; }

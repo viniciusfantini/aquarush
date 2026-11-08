@@ -49,7 +49,7 @@ import { BoatCamera } from "./presentation/cameras.ts";
 import { Hud } from "./presentation/hud.ts";
 import { EngineAudio } from "./presentation/audio.ts";
 
-const BUILD = "poc-babylon 0.67.0";
+const BUILD = "poc-babylon 0.67.1";
 /** Escala visual da rotação da hélice (proporcional ao RPM, abaixo do limite estroboscópico). */
 const PROP_VISUAL_SCALE = 0.12;
 
@@ -562,8 +562,9 @@ const boot = async () => {
     const twin = V.boat.units.length > 1;
     const turbine = !!V.P.turbine;
     const isJet = kind === "jetski";
+    input.ibrMode = isJet; input.ibrBraking = false; // S segurado em F = freio do iBR
     hud.configure(isBote ? { speedMax: 60, temp: true, battery: false, trimPins: V.P.trimPins.length, gear: "dial" }
-      : isJet ? { speedMax: 120, temp: true, battery: true, trimPins: 0, gear: "bar", rpmMax: 9000, rpmRed: 8000 }
+      : isJet ? { speedMax: 120, temp: true, battery: true, trimPins: 0, gear: "bar", rpmMax: 9000, rpmRed: 8000, jet: true }
       : turbine ? { speedMax: 180, temp: true, battery: true, trimPins: 0, gear: "bar", turbine }
       : { speedMax: twin ? 140 : 100, temp: true, battery: true, trimPins: 0, gear: "bar", twin });
     document.getElementById("help-twin")!.style.display = twin ? "" : "none";
@@ -572,7 +573,7 @@ const boot = async () => {
       : isJet ? "<kbd>E</kbd><kbd>Q</kbd> trim do bocal (VTS)" : "<kbd>E</kbd><kbd>Q</kbd> trim + / −";
     document.getElementById("help-occ")!.innerHTML = turbine ? "piloto único (habitáculo fechado)" : "<kbd>O</kbd> embarque (só na vaga do píer)";
     document.getElementById("help-ign")!.innerHTML = isBote ? "<kbd>P</kbd> corda (em N) · <kbd>Y</kbd> sistemas (afogador)"
-      : isJet ? "<kbd>P</kbd> START/STOP (em N, cordão preso) · <kbd>S</kbd> freio/ré (iBR) · <kbd>Y</kbd> painel (cordão, ECO)"
+      : isJet ? "<kbd>P</kbd> START/STOP (em N, cordão preso) · segure <kbd>S</kbd> andando: freio iBR (toque: N) · <kbd>Y</kbd> painel (cordão, ECO)"
       : turbine ? "<kbd>P</kbd> partida FADEC / corte · <kbd>Y</kbd> painel de partida (manual) · <kbd>J</kbd> GPU (na doca)"
       : "<kbd>P</kbd> liga/desliga (em N) · <kbd>N</kbd>+<kbd>W</kbd> neutro · <kbd>J</kbd> jump start · <kbd>Y</kbd> sistemas";
     document.getElementById("help-lights")!.innerHTML = isBote ? "<kbd>L</kbd> lanterna" : isJet ? "sem luzes (uso diurno)" : "<kbd>L</kbd> luzes";

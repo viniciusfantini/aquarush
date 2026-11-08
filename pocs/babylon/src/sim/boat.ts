@@ -84,6 +84,10 @@ export interface BoatTelemetry {
   driveMode: "normal" | "eco";
   /** virada: o piloto na água está desvirando a embarcação */
   righting: boolean;
+  /** pressão de sobrealimentação do compressor (bar, manométrica; 0 = sem compressor / sem carga) */
+  boostBar: number;
+  /** caçamba do jato (iBR): "off" = recolhida (frente), "neutral", "brake" (R andando para a frente), "reverse" */
+  ibr: "off" | "neutral" | "brake" | "reverse";
   pullStart: boolean;    // partida na corda (sem arranque elétrico)
   trimMotorA: number;    // corrente da bomba do power trim (A)
   trimRelay: boolean;    // botão do trim apertado mas a bomba sem força (bateria zerada): só o relé estala
@@ -417,7 +421,7 @@ export class Speedboat {
       anchorOut: 0, anchorState: "recolhida", anchorDepth: 0, anchorScope: 0, anchorTension: 0, anchorRelay: false, windlassA: 0, apparentWind: 0, neutralRev: false, fuelLph: 0, buzzer: false, starterRpm: 0, startFail: "", batterySoc: 0.92, trimPin: 0, pullStart: !params.electricStart,
       distanceM: 0, collisions: 0, draftHull: 0, draftMotor: 0, capsized: false, swimmers: 0, hullDamage: 0, engineDamage: 0, damageEvent: "", damageCount: 0, lastImpact: 0, depth: 0, submergedPoints: params.buoyancyPoints.map(() => false),
       rpms: [params.idleRpm], gears: ["N"], throttles: [0], thrusts: [0], engines: ["running"], keys: ["on"], houseV: 12.6, propRpms: [0], coolants: [45], batteryVs: [12.6], batterySocs: [0.92], batteryAs: [0], turbine: null, nominalV: 12, gpu: false, gpuState: "off", gpuT: 0, gpuKw: 0, busBattery: true, busGen: false, extPwr: false, extPwrClosed: false, extPwrFault: false, gpuA: 0, coolingLps: 0, fuelValveOpen: true, fuelLineFrac: 1, bilgeMode: "auto", batterySel: "ind", choke: false,
-      lanyard: true, driveMode: "normal", righting: false,
+      lanyard: true, driveMode: "normal", righting: false, boostBar: 0, ibr: "off",
     };
   }
 
@@ -802,6 +806,17 @@ export class Speedboat {
     this.updateCapsize(dt, water, world);
     t.capsized = this.capsized;
     t.lanyard = this.lanyard; t.driveMode = this.driveMode;
+    // compressor: pressão ∝ (giro/máx)² × carga (a válvula de alívio abre sem carga), com o atraso do rotor/plenum
+    if (P.supercharger) {
+      const r = clamp(this.rpm / P.maxRpm, 0, 1.1);
+      const target = this.engine === "running" ? P.supercharger.maxBar * r * r * (0.15 + 0.85 * this.throttleActual) : 0;
+      t.boostBar += (target - t.boostBar) * (1 - Math.exp(-dt / 0.25));
+    }
+    // iBR: estado da caçamba (o freio é a caçamba baixada com a moto ainda andando para a frente)
+    if (P.waterjet) {
+      const uFwd = this.vel.x * this.forward.x + this.vel.z * this.forward.z;
+      t.ibr = this.gear === "R" ? (uFwd > 0.8 ? "brake" : "reverse") : this.gear === "N" || this.wantGear !== this.gear ? (this.wantGear === "R" && uFwd > 0.8 ? "brake" : "neutral") : "off";
+    }
     t.hullDamage = this.hullDamage; t.engineDamage = this.engineDamage;
     t.swimmers = this.swimmers.length;
     if (impact > 0) t.lastImpact = impact;

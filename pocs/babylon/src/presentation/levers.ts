@@ -77,7 +77,8 @@ export class LeverControls {
       el.innerHTML = `<div class="pl pl-trig" title="gatilho do acelerador (manopla direita) · em N acelera em neutro"><div class="pl-track" data-pl="0"><span class="pl-slot"></span>
             <i class="pl-l max">TODO</i><i class="pl-l idle">SOLTO</i><span class="pl-handle"><span class="pl-t"></span></span></div>
           <em class="mt-rd">N · 0 %</em><b>GATILHO</b></div>
-        <div class="tl-shift" title="iBR (manopla esquerda): F = frente · N = caçamba no meio · R = ré e freio (baixa a caçamba, até acelerado)">${gearSel(0)}<b>iBR · FREIO/RÉ</b></div>`;
+        <div class="tl-shift" title="iBR (manopla esquerda): F = frente · N = caçamba no meio · R = ré e freio (baixa a caçamba, até acelerado)">${gearSel(0)}<b>iBR · FREIO/RÉ</b>
+          <div class="ibr-l" data-s="off"><span class="ibr-dot"></span><em>FRENTE</em></div></div>`;
     } else {
       el.innerHTML = `<div class="pl" title="manete de potência em T (N1) · em N acelera em neutro"><div class="pl-track" data-pl="0"><span class="pl-slot"></span>
             <i class="pl-l max">MÁX</i><i class="pl-l idle">LENTA</i><span class="pl-handle"><span class="pl-t"></span></span></div>
@@ -227,6 +228,14 @@ export class LeverControls {
     const rd = el.querySelector<HTMLElement>(".mt-rd")!;
     if (rd.textContent !== txt) rd.textContent = txt;
     rd.classList.toggle("warn", s.relay || s.blocked);
+  }
+
+  /** Luz do iBR (moto aquática): estado REAL da caçamba, da telemetria (FRENTE / NEUTRO / FREIO / RÉ). */
+  setIbr(st: string): void {
+    const l = this.el.querySelector<HTMLElement>(".ibr-l");
+    if (!l || l.dataset.s === st) return;
+    l.dataset.s = st;
+    l.querySelector("em")!.textContent = st === "brake" ? "FREIO" : st === "reverse" ? "RÉ" : st === "neutral" ? "NEUTRO" : "FRENTE";
   }
 
   /** Mostra os comandos atuais (do InputManager); a manete que o piloto está segurando fica onde a mão está. */

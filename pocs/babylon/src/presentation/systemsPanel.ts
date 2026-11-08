@@ -182,12 +182,13 @@ export class SystemsPanel {
       info(`key${i}`, eng === "running" ? `ligado · ${Math.round(rpm)} rpm` : eng === "cranking" ? `arranque · ${Math.round(rpm)} rpm` : t.keys[i] === "on" ? "ignição ligada" : "desligado", t.startFail !== "" && eng === "off" && t.keys[i] === "on");
     });
     if (c.startStop) {
+      this.levers?.setIbr(t.ibr);
       const awake = (t.keys[0] ?? "off") !== "off" || t.engine !== "off";
       const sb = el.querySelector<HTMLElement>("button[data-ss='start']");
       sb?.classList.toggle("lit", t.engine === "running" && hv > 9); sb?.classList.toggle("busy", t.engine === "cranking");
       el.querySelector<HTMLElement>("button[data-lan]")?.classList.toggle("on", t.lanyard);
       setToggle(el, "eco", "1", t.driveMode === "eco", t.driveMode === "eco" && awake && hv > 9);
-      info("ss", (t.driveMode === "eco" ? "ECO · " : "") + (t.engine === "running" ? `ligada · ${Math.round(t.rpm)} rpm` : t.engine === "cranking" ? `arranque · ${Math.round(t.rpm)} rpm`
+      info("ss", (t.driveMode === "eco" ? "ECO · " : "") + (t.engine === "running" ? `ligada · ${Math.round(t.rpm)} rpm · ${t.boostBar.toFixed(2)} bar` : t.engine === "cranking" ? `arranque · ${Math.round(t.rpm)} rpm`
         : !t.lanyard ? "cordão SOLTO: não liga" : awake ? "central acordada" : "desligada"), !t.lanyard || (t.startFail !== "" && t.engine === "off" && awake));
 
     }

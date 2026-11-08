@@ -183,6 +183,9 @@ export interface SpeedboatParams {
   startStop?: boolean;
   /** modo ECO: fração máxima do acelerador (o gatilho pleno só abre até aqui). Ausente = sem modos */
   ecoThrottle?: number;
+  /** compressor mecânico (supercharger), acionado pelo virabrequim: pressão máxima de sobrealimentação (bar) a giro
+   *  máximo e acelerador todo; a pressão cresce ~com o quadrado do giro e abre a válvula de alívio sem carga */
+  supercharger?: { maxBar: number };
 }
 
 const hl = 0.72; // meia-distância transversal dos pontos de flutuação
@@ -681,6 +684,7 @@ export const JETSKI: SpeedboatParams = {
   sealedHull: true,
   rightable: true,
   ecoThrottle: 0.55,
+  supercharger: { maxBar: 1.05 }, // ~15 psi a pleno
   tankLiters: 70,
   fuelIdleLph: 2.2,
   fuelMaxLph: 72,
