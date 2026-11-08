@@ -91,7 +91,7 @@ export class RoundGauge {
   }
 }
 
-export interface HudOpts { speedMax: number; temp: boolean; battery: boolean; trimPins: number; gear?: "bar" | "dial"; /** dois motores: um conta-giros por motor (BB / BE) */ twin?: boolean; /** turbina: N1, EGT, torque, N2, óleo e luzes da partida */ turbine?: boolean }
+export interface HudOpts { speedMax: number; temp: boolean; battery: boolean; trimPins: number; gear?: "bar" | "dial"; /** dois motores: um conta-giros por motor (BB / BE) */ twin?: boolean; /** turbina: N1, EGT, torque, N2, óleo e luzes da partida */ turbine?: boolean; /** fundo de escala do conta-giros (padrão 7000; moto aquática 9000) e início do vermelho */ rpmMax?: number; rpmRed?: number }
 
 export class Hud {
   private speedG!: RoundGauge;
@@ -192,7 +192,8 @@ export class Hud {
       this.rpmG = new RoundGauge(big, rpmOpts("RPM BB"));
       this.rpmG2 = new RoundGauge(big, rpmOpts("RPM BE"));
     } else {
-      this.rpmG = new RoundGauge(big, { title: "RPM x1000", min: 0, max: 7000, labels: [0, 1000, 2000, 3000, 4000, 5000, 6000, 7000], minor: 250, redFrom: 6000, big: true, labelFmt: (v) => String(v / 1000) });
+      const mx = opts.rpmMax ?? 7000;
+      this.rpmG = new RoundGauge(big, { title: "RPM x1000", min: 0, max: mx, labels: Array.from({ length: mx / 1000 + 1 }, (_, i) => i * 1000), minor: 250, redFrom: opts.rpmRed ?? 6000, big: true, labelFmt: (v) => String(v / 1000) });
       this.rpmG2 = null;
     }
     if (opts.turbine) {

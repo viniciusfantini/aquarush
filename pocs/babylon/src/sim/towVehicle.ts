@@ -13,6 +13,7 @@
 import type { TrailerLayout } from "./trailer.ts";
 import { obbOverlap, type Obb } from "./station.ts";
 import { RAMP } from "./world.ts";
+import { smallTow } from "./params.ts";
 import { clamp, approach, v3, qMul, qFromAxisAngle, rotateInv, type Vec3 } from "./math.ts";
 
 /** profundidade máxima de água nas rodas traseiras ao dar ré na rampa (m) */
@@ -176,7 +177,7 @@ export class TowRig {
     this.az = h.z + (dz / d) * this.hitchToAxle;
     // a roda da carretinha gira com o deslocamento do eixo dela (sinal: para onde a carretinha anda)
     const tdir = (this.ax - oax) * -(dx / d) + (this.az - oaz) * -(dz / d);
-    this.trailerWheelSpin += tdir / (this.t.kind !== "bote" ? 0.33 : 0.23);
+    this.trailerWheelSpin += tdir / (!smallTow(this.t.kind) ? 0.33 : 0.23);
     // canivete: o cabeçalho encosta no para-choque a ~80° — daí em diante a carretinha é arrastada junto
     const art = this.articulation, lim = MAX_ARTICULATION; // (só acoplada)
     if (Math.abs(art) > lim) {

@@ -96,6 +96,32 @@ A lancha é um **corpo rígido 6DOF** (massa seca de 1030 kg + gasolina, ocupant
 
 > Referência completa da lógica elétrica e dos motores: [`docs/SISTEMAS_ELETRICOS_E_MOTORES.md`](../../docs/SISTEMAS_ELETRICOS_E_MOTORES.md).
 
+## Moto aquática AR-J — 300 hp com jato d'água (v0.67)
+
+- **Quinta embarcação** (`JETSKI` em `sim/params.ts`, `?barco=jetski`, no menu entre a AR-6 e a AR-9 pela potência):
+  3,45 m, seca 360 kg, até 3 pessoas **montadas** em fila (pose `straddle` em `pilot.ts`), motor de 3 cilindros com
+  compressor de 300 hp ligado direto ao **rotor de um jato d'água**, tanque de 70 L (começa com 8 L, temporário).
+- **Física do jato** (`params.waterjet` em `boat.ts`): sem hélice exposta; o empuxo sai do **bocal** (que o guidão
+  gira e o trim VTS inclina) e só existe com a **grade de admissão** no fundo submersa — no ar o giro dispara e o
+  empuxo some. Sem empuxo não há direção. **iBR**: N = caçamba no meio (empuxo líquido zero, o rotor continua girando),
+  R = ré e **freio** (de ~100 km/h a < 5 km/h em ~4 s com o gatilho apertado).
+- **Comandos** (painel Y, `systemsPanel.ts` com `startStop`): **START** (segurar) e **STOP** redondos, **clipe do
+  cordão de segurança** (solto = não liga; puxado = desliga), **MODO ECO/SPORT** (ECO limita o gatilho a 55 %),
+  manete `handlebar` (`levers.ts`: **gatilho** do acelerador + alavanca do **iBR** F·N·R), **VTS** (trim do bocal) e
+  buzina. Sem chave geral, sem registro de combustível, sem luzes (uso diurno). Display de avisos estilo vidro.
+- **Casco selado + sifão**: o convés autodrena (a água por cima não entra); o sifão do jato esvazia o porão com o
+  motor rodando. **Virou?** O piloto nada até a moto e a **desvira** (`updateRighting`), depois todos sobem pela popa
+  e ele prende o cordão de novo.
+- **Visual** (`presentation/jetskiMesh.ts`): casco em V com quina e verdugo, convés com estribos e tapete, capô com
+  adesivo **300**, banco com degrau do garupa, guidão que gira (gatilho e alavanca do iBR animados), botões START/STOP
+  e o cordão laranja, painel digital que acende com a central acordada, retrovisores, plataforma de popa com alça,
+  bocal com o rotor e a **caçamba de ré** que desce em N/R. Esguicho de refrigeração ("xixi") a boreste.
+- **Som**: o 3 cilindros procedural + o **assobio do compressor** (sobe com o giro e a carga). Carretinha leve de um
+  eixo puxada por um carro azul (`smallTow`); as vagas do pátio agora guardam 4 conjuntos (0, 2, 3 e 4; a 1 fica livre).
+- **Calibração** (`node tests/debug-jetski.ts`): ~108 km/h a toda (limitador ~7900 rpm), 0→60 em 2,7 s, 0→100 em
+  ~7 s, 72 L/h; curva a toda com o guidão todo ~30°/s sem virar; lotada ~100 km/h; ECO ~90 km/h; pega em ~1,5 s
+  com a bateria a 60 % (a 35 % fica fraca, como nos outros).
+
 ## Cachoeira no fim do cânion e faixa "EM BREVE" no pórtico (v0.66.1)
 
 - O cânion está **aberto** de novo: a barreira de boias da entrada (`CANYON_BOOM`, `buildComingSoon`) ficou guardada para outro uso — `buildWorld({ canyonClosed: true })` ainda a monta.
@@ -404,8 +430,9 @@ Limitação: é uma síntese aproximada, não uma gravação. Validar o timbre d
 | 5. Manete | de cruzeiro para N: empuxo 0 e < 1 km/h em 27 s; a hélice gira **solta** (~990 rpm 1,5 s depois do N) e para junto com a lancha. F em lenta: 5,0 km/h a 750 rpm. R em lenta: 2,8 km/h para trás. No navegador: 1 toque W = F a 4 km/h; segurar = 45 km/h; 1 toque S = N; 2º toque = R lenta; segurar S = ré acelerando |
 | 6. Ondas e correnteza | ondas fortes (×2,5): roll ≤ 30°, não emborca; deriva com correnteza de 1,6 m/s: 1,54 m/s |
 | Lago | flutua no spawn; a toda contra a margem, encalha e para sem atravessar o terreno |
+| Moto aquática AR-J (v0.67) | parada: CG −0,03 m da água, borda 0,25 m; a toda 108,3 km/h a 7880 rpm, 0→60 2,7 s, 0→100 7,1 s, 72 L/h; curva a toda 29,2°/s sem virar; iBR de 102 km/h a < 5 km/h em 4,2 s e depois ré; N com o guidão todo: 0,2° em 6 s; lenta + guidão 10,6°/s; N acelerado: empuxo 0, rotor a 7478 rpm; no ar: empuxo 0, giro 7951 rpm; ECO 55 % / 89,9 km/h; lotada 101,5 km/h; cordão solto não liga, puxado desliga; START pega em 1,5 s (60 %); central dorme em 30 s; casco selado 40 s lotada em ondas fortes: 0,0 L; sifão 6,1 L em 30 s (= contrato); virada: desvira em 4,5 s, piloto a bordo com o cordão, liga de novo; carretinha 3,9 m no carro |
 
-Resultado: **592/594 OK + 2 KNOWN** (v0.66.1). Na v0.10, o peso do piloto na posição real (boreste, acima do CG) aumentou o roll em curva com ondas fortes; o `bankCoef` foi para 1800 e o `rollDamping` para 15000, com 1 limitação conhecida (abaixo). Na v0.2 a hélice foi para 0,5 m atrás do espelho, como no modelo visual, e o esterço máximo em alta velocidade caiu de 13° para 11°.
+Resultado: **623/625 OK + 2 KNOWN** (v0.67.0). Na v0.10, o peso do piloto na posição real (boreste, acima do CG) aumentou o roll em curva com ondas fortes; o `bankCoef` foi para 1800 e o `rollDamping` para 15000, com 1 limitação conhecida (abaixo). Na v0.2 a hélice foi para 0,5 m atrás do espelho, como no modelo visual, e o esterço máximo em alta velocidade caiu de 13° para 11°.
 
 ### Navegador (Chrome, Windows 11, WebGL2, `q=med`, ~1370×896)
 

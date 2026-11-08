@@ -77,6 +77,8 @@ export interface AudioState {
   windlassA?: number;     // molinete da âncora (A)
   apparentWind?: number;  // vento aparente (m/s): chiado do vento
   anchorRelay?: boolean;  // molinete sem força: só o relé
+  /** motor com compressor mecânico (moto aquática de 300 hp): o assobio agudo do rotor, que sobe com o giro e a carga */
+  supercharger?: boolean;
   oilAlarm?: boolean;     // turbina: óleo quente — alarme de dois tons ("master caution") até alguém resolver
   /** 2º motor (AR-9, dois V8): rotação, carga e estado próprios — uma segunda voz de síntese */
   rpm2?: number;
@@ -124,6 +126,9 @@ export class EngineAudio {
   private waterGain!: GainNode;
   private waterFilter!: BiquadFilterNode;
   private telltaleGain!: GainNode;
+  private scOsc: OscillatorNode | null = null;
+  private scGain: GainNode | null = null;
+  private scBP: BiquadFilterNode | null = null;
   private cavGain!: GainNode;
   private cavLfo!: OscillatorNode;
   private noise!: AudioBuffer;
@@ -353,6 +358,16 @@ export class EngineAudio {
     this.telltaleGain = ctx.createGain(); this.telltaleGain.gain.value = 0;
     noiseSrc().connect(ttBP).connect(this.telltaleGain).connect(this.master);
 
+    // ---- compressor mecânico (supercharger): assobio do rotor (~6× o giro do motor) ----
+    {
+      const o = ctx.createOscillator(); o.type = "triangle"; o.frequency.value = 900;
+      const bp = ctx.createBiquadFilter(); bp.type = "bandpass"; bp.frequency.value = 3000; bp.Q.value = 2.5;
+      const g = ctx.createGain(); g.gain.value = 0;
+      o.connect(bp).connect(g).connect(this.master); o.start();
+      this.scOsc = o; this.scGain = g;
+      this.scBP = bp;
+    }
+
     // ---- cavitação ----
     const cavHP = ctx.createBiquadFilter(); cavHP.type = "highpass"; cavHP.frequency.value = 1800;
     const cavAM = ctx.createGain(); cavAM.gain.value = 0.5;
@@ -502,7 +517,7 @@ export class EngineAudio {
     const m = this.muted ? 0 : 1;
     const rpm = Math.max(st.rpm, 300);
     const load = Math.min(Math.max(st.throttle, 0), 1);
-    const r = (rpm - 750) / (5800 - 750); // 0 lenta .. 1 rotação máxima
+    const r = Math.min(1.15, (rpm - 750) / (5800 - 750)); // 0 lenta .. 1 rotação máxima (a moto aquática gira até ~7900: limitado)
     const cam = rpm / 120;     // ciclo completo de 4 tempos
     const firing = rpm / 30;   // 4 cilindros, 4 tempos: 2 explosões por volta
     const dist = st.cockpit ? 0.8 : 1;
@@ -588,6 +603,12 @@ export class EngineAudio {
     this.telltaleGain.gain.setTargetAtTime(running && !st.turbine ? m * (0.004 + 0.009 * r) * (st.cockpit ? 0.5 : 1) : 0, t, 0.2);
     this.cavGain.gain.setTargetAtTime(m * Math.min(st.boil, 1) * 0.14 * (0.3 + load), t, 0.05);
     this.cavLfo.frequency.setTargetAtTime(20 + rpm / 120, t, 0.1);
+    // assobio do compressor: frequência pelo giro, volume pela carga (quase some na lenta)
+    if (this.scOsc && this.scGain && this.scBP) {
+      const f = 380 + Math.max(0, st.rpm) * 0.56;
+      this.scOsc.frequency.setTargetAtTime(f, t, 0.05); this.scBP.frequency.setTargetAtTime(f, t, 0.05);
+      this.scGain.gain.setTargetAtTime(st.supercharger && running ? m * dist * (0.004 + 0.03 * load * Math.min(1, Math.max(0, st.rpm - 2500) / 5000)) : 0, t, 0.08);
+    }
   }
 
   /**

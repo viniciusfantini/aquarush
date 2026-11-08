@@ -1,14 +1,14 @@
 # AQUA RUSH — Sistemas elétricos e de motores (referência para qualquer IA ou dev)
 
 Este documento descreve **toda a lógica** dos sistemas elétricos, de combustível, de arrefecimento, de partida e
-dos motores das 4 embarcações da POC 1 (Babylon.js, `pocs/babylon`), como estão no código na **v0.65.0**. Serve
+dos motores das 5 embarcações da POC 1 (Babylon.js, `pocs/babylon`), como estão no código na **v0.67.0**. Serve
 para continuar o trabalho em outra IA/ferramenta ou portar para Unity/Unreal sem precisar redescobrir as regras.
 
 > Fonte da verdade = o código. Se divergir, vale o código e este arquivo deve ser corrigido.
 > Arquivos: `src/sim/engineSystems.ts` (combustível, temperatura, bateria, alternador, booster, GPU, barramento),
 > `src/sim/turbine.ts` (turbina a gás + FADEC), `src/sim/boat.ts` (motores `EngineUnit`, partida, chaves,
 > roteamento de baterias, porão), `src/sim/anchor.ts` (molinete), `src/sim/params.ts` (parâmetros = contrato entre
-> as POCs). Testes: `tests/sim.test.ts` (`npm run test:sim`, hoje **586/588 + 2 KNOWN**).
+> as POCs). Testes: `tests/sim.test.ts` (`npm run test:sim`, hoje **623/625 + 2 KNOWN**).
 
 ---
 
@@ -28,23 +28,23 @@ para continuar o trabalho em outra IA/ferramenta ou portar para Unity/Unreal sem
 
 ---
 
-## 2. As 4 embarcações (o que muda nos sistemas)
+## 2. As 5 embarcações (o que muda nos sistemas)
 
-| | AR-6 lancha (`lancha`) | AR-3 bote (`bote`) | AR-9 rápida (`rapida`) | AR-10 turbina (`turbina`) |
-|---|---|---|---|---|
-| Motor | popa 4T 150 hp | popa 15 hp de cana, **carburado** | 2 × V8 de centro com rabeta (300 hp cada) | turbina a gás de eixo livre ~1100 shp |
-| Partida | elétrica (chave/P) | **corda** (`electricStart: false`) | elétrica, **uma chave por motor** | FADEC ou manual por chaves |
-| Elétrico | 12 V, 1 banco 50 Ah | **sem bateria** (`hasBattery: false`) | 12 V, **2 bancos de 100 Ah** (um por motor) | **24 V** = 2 × 12 V em série (150 Ah eq.), seletor **OFF/BUS/BOTH** + chave **BAT** (mestre do barramento) |
-| Arranque | 170 A | — | 200 A cada | starter-gerador (350 A eq.) |
-| Alternador | 35 A (27 % na lenta) | — | 35 A por motor | gerador 120 A eq. (80 % já na lenta), chave **GEN** |
-| Linha de combustível após o registro | 0,08 L | 0,04 L | 0,2 L | 0,3 L |
-| Ajuda externa | jump start 10 Ah/200 A | — | jump start | **GPU da doca** (28 V) |
-| Bomba de porão | 1500 GPH (5,5 A) | não tem | 1500 GPH | 1500 GPH |
-| Molinete da âncora | 60 A | à mão (0 A) | 60 A | 70 A eq. (= 35 A reais em 24 V) |
-| Temperatura | água (termostato 58 °C) | água | água por motor | **óleo da turbina** (sem corte automático) |
+| | AR-6 lancha (`lancha`) | AR-3 bote (`bote`) | AR-J moto aquática (`jetski`) | AR-9 rápida (`rapida`) | AR-10 turbina (`turbina`) |
+|---|---|---|---|---|---|
+| Motor | popa 4T 150 hp | popa 15 hp de cana, **carburado** | 3 cil. 1,8 L com **compressor**, 300 hp, ligado **direto ao rotor do jato** | 2 × V8 de centro com rabeta (300 hp cada) | turbina a gás de eixo livre ~1100 shp |
+| Partida | elétrica (chave/P) | **corda** (`electricStart: false`) | botões **START/STOP** + **cordão de segurança** (`startStop`) | elétrica, **uma chave por motor** | FADEC ou manual por chaves |
+| Elétrico | 12 V, 1 banco 50 Ah | **sem bateria** (`hasBattery: false`) | 12 V, bateria AGM 30 Ah, **sem chave geral** | 12 V, **2 bancos de 100 Ah** (um por motor) | **24 V** = 2 × 12 V em série (150 Ah eq.), seletor **OFF/BUS/BOTH** + chave **BAT** (mestre do barramento) |
+| Arranque | 170 A | — | 95 A (com redução) | 200 A cada | starter-gerador (350 A eq.) |
+| Alternador | 35 A (27 % na lenta) | — | estator 30 A (30 % na lenta) | 35 A por motor | gerador 120 A eq. (80 % já na lenta), chave **GEN** |
+| Linha de combustível após o registro | 0,08 L | 0,04 L | 0,03 L (**sem registro**) | 0,2 L | 0,3 L |
+| Ajuda externa | jump start 10 Ah/200 A | — | jump start | jump start | **GPU da doca** (28 V) |
+| Bomba de porão | 1500 GPH (5,5 A) | não tem | **sifão do jato** (0,3 L/s a pleno ∝ rpm, sem corrente) | 1500 GPH | 1500 GPH |
+| Molinete da âncora | 60 A | à mão (0 A) | à mão (fateixa 15 m) | 60 A | 70 A eq. (= 35 A reais em 24 V) |
+| Temperatura | água (termostato 58 °C) | água | água (pressão do jato) | água por motor | **óleo da turbina** (sem corte automático) |
 
 Largada (todos): atracada na vaga do píer, motor desligado (turbina fria), chaves em OFF, bateria 60 %, combustível
-temporário (`START_FUEL` em `main.ts`: 5 L lancha/bote, 20 L AR-9, 120 L AR-10). O bote sai com o motor frio (24 °C).
+temporário (`START_FUEL` em `main.ts`: 5 L lancha/bote, 8 L AR-J, 20 L AR-9, 120 L AR-10). O bote sai com o motor frio (24 °C).
 
 ---
 
@@ -350,6 +350,34 @@ girando → `"busy"`.
 - **Volta a bordo** sozinha (`occupants`, contador `reboarded`) a ~0,45 m do lugar, depois de 2,5 s na água, com o
   barco **de pé, não afundado e a até 3 km/h**. Barco virado ou afundado: ninguém volta (R recomeça).
 
+## 10c. Moto aquática AR-J: START/STOP, cordão, jato, ECO e desvirar (v0.67)
+
+- **Partida por botões** (`params.startStop`): não há chave de ignição, chave geral nem registro de combustível. No
+  painel Y, **START** segurado = `setKey(0, "start")` (acorda a central e gira o arranque; soltar = `"on"`); **STOP** =
+  `setKey(0, "off")`. P faz o mesmo que nos outros barcos (`toggleIgnition`: autoteste e arranque). A central fica
+  acordada com o motor parado e **dorme 30 s depois** (`EngineUnit.sleepT` → `key = "off"`). Só em N.
+- **Cordão de segurança** (`Speedboat.lanyard`, `setLanyard`): o clipe fica no botão de parada e a outra ponta no
+  pulso do piloto. Solto: `toggleIgnition`/`setKey(start)` devolvem **`"noLanyard"`** (`startFail = "lanyard"`);
+  puxado com o motor ligado: desliga (`stall = "lanyard"`). O piloto indo para a água (pulo, queda, virada) solta o
+  cordão; ao voltar ao banco ele o prende de novo (`ejectOccupants`/`updateSwimmers`). Vale para todos os barcos, mas
+  só a moto mostra o clipe no painel.
+- **Jato d'água** (`params.waterjet`): o empuxo depende da **grade de admissão** no fundo (`intakePos`) estar
+  submersa (imersão 0..1 entre −3 e +6 cm); com ela no ar (pulando onda) o rotor suga ar, o empuxo vai a zero e o giro
+  dispara. O rotor é ligado direto ao virabrequim (`propGear: 1`): gira em F, N e R e carrega o motor em qualquer
+  marcha (sem rotação livre em N; consumo em N igual). A marcha é a **caçamba (iBR)**: N = empuxo líquido 0, R = ré e
+  **freio** (pode baixar com o motor acelerado — sem a trava de acelerador do câmbio). O **bocal** é o leme
+  (`gearcaseRudder: 0`): sem empuxo não há direção. O trim **VTS** inclina o bocal (sem tilt).
+- **Modo ECO** (`Speedboat.driveMode`, `params.ecoThrottle` 0,55): o gatilho pleno abre só até 55 % (~90 km/h,
+  ~29 L/h); SPORT = potência total (~108 km/h, ~72 L/h).
+- **Casco selado** (`params.sealedHull`): o convés é autodrenante — a água sobre a borda/espelho não entra no casco
+  (só por furo, ou virada pelas tomadas de ar: `capsizeAirFrac` 0,93). O **sifão** (`bilge.siphonLps`) esvazia o porão
+  com o motor rodando, ∝ rpm/rpm máx, sem corrente.
+- **Desvirar** (`params.rightable`, `Speedboat.updateRighting`, antes da integração): virada, o piloto nada até ela e,
+  ~1,2 s depois de chegar, rola o casco (binário em torno do eixo proa-popa; 4,5 kN·m até 70° do prumo, depois 30 %).
+  De pé (`up.y > 0,8`), `capsized = false`, `righted++`, todos sobem pela popa (a ≤ 3 km/h) e o piloto prende o
+  cordão. Aproximação: os 6 pontos dão ao casco de cabeça para baixo a mesma estabilidade de pé, por isso o binário é
+  calibrado para desvirar em 2–3 s, não pela força de uma pessoa.
+
 ## 11. Telemetria relevante (`BoatTelemetry`)
 
 `engine`, `engines[]`, `keys[]`, `rpm`, `rpms[]`, `startFail`, `stall`, `buzzer`, `starterRpm`, `pullStart`,
@@ -360,7 +388,7 @@ girando → `"busy"`.
 `windlassA`, `coolingLps`, `extPwrFault`, `keys[]`, `houseV`, `swimmers`, `capsized`, `hullDamage`,
 `engineDamage`, `turbine { n1, n2, egt, torque, oilPsi, oilC, oilHot, oilRed, phase, lit, powered,
 starter, ignition, starterSw, ignitionSw, master, boostPump, fuelValve, generator, fadec, pooledL, wear, seized,
-starterLock }`.
+starterLock }`, `lanyard`, `driveMode` ("normal"/"eco"), `righting`.
 
 ---
 

@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1920 1080" preserveAspectRatio="xMidYMid slice">
   <!-- AQUA RUSH — arte da tela de abertura (pôr do sol num cânion com lago: AR-10 em primeiro plano, AR-9,
-       wakeboard, parasail, banana boat, bote e boias). Ilustração vetorial; sem texto além da marca. -->
+       moto aquática AR-J, wakeboard, parasail, banana boat, bote e boias). Ilustração vetorial; sem texto além da marca. -->
   <defs>
     <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0" stop-color="#0b2346"/>
@@ -133,6 +133,19 @@
       <path d="M588 744 L602 768" stroke="#e9b07c" stroke-width="5" stroke-linecap="round"/>
     </g>
     <g fill="#ffffff" opacity="0.55"><circle cx="556" cy="798" r="5"/><circle cx="570" cy="806" r="4"/><circle cx="545" cy="806" r="3"/></g>
+  </g>
+
+  <!-- AR-J (moto aquática) cruzando, com o jato d'água levantando o spray atrás -->
+  <g>
+    <path d="M1300 768 Q1340 742 1386 756" stroke="#ffffff" stroke-width="10" opacity="0.35" fill="none" stroke-linecap="round"/>
+    <g fill="#ffffff" opacity="0.6"><circle cx="1352" cy="748" r="7"/><circle cx="1336" cy="744" r="5"/><circle cx="1366" cy="752" r="5"/><circle cx="1322" cy="752" r="4"/></g>
+    <path d="M1386 760 H1452 Q1472 758 1482 748 L1478 764 Q1468 770 1440 770 H1392 Q1386 769 1386 764 Z" fill="#f4f6f8"/>
+    <path d="M1387 760 H1480 L1478 764 H1387 Z" fill="#0b2a6b"/><path d="M1440 752 Q1462 748 1480 748 L1474 756 H1440 Z" fill="#ff7a12"/>
+    <rect x="1400" y="750" width="34" height="8" rx="4" fill="#15181b"/>
+    <path d="M1436 750 l10 -12" stroke="#20262c" stroke-width="3" stroke-linecap="round"/>
+    <path d="M1416 750 L1428 732" stroke="#ff8c1a" stroke-width="11" stroke-linecap="round"/>
+    <circle cx="1431" cy="722" r="7" fill="#e9b07c"/><path d="M1426 736 L1446 738" stroke="#e9b07c" stroke-width="4" stroke-linecap="round"/>
+    <path d="M1384 770 Q1350 772 1300 770" stroke="#ffffff" stroke-width="2" opacity="0.5" fill="none"/>
   </g>
 
   <!-- boias do canal -->

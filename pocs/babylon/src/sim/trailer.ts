@@ -4,7 +4,7 @@
 // pose da carretinha, o barco pode ser carregado/descarregado onde ela estiver (puxada pelo veículo).
 
 import { RAMP, rampY, toFrameLocal, fromFrame, type TrailerCollider, type FramePose } from "./world.ts";
-import type { SpeedboatParams, VesselKind } from "./params.ts";
+import { smallTow, type SpeedboatParams, type VesselKind } from "./params.ts";
 import type { Speedboat } from "./boat.ts";
 import type { Vec3 } from "./math.ts";
 
@@ -28,13 +28,14 @@ export interface TrailerLayout {
 
 /** Monta a carretinha de cada barco (dimensões de carretinhas reais para cascos de 3 e 6 m). */
 export const buildTrailer = (P: SpeedboatParams): TrailerLayout => {
-  const lancha = P.kind !== "bote"; // lancha e rápida: carretinha grande (rodado duplo), puxada pela caminhonete
+  const lancha = !smallTow(P.kind); // lancha e rápida: carretinha grande (rodado duplo), puxada pela caminhonete
+  const jet = P.kind === "jetski";   // moto aquática: carretinha leve de um eixo, berço em V fechado
   const rapida = P.kind === "rapida" || P.kind === "turbina"; // 8,6 m / 10 m: carretinha mais longa e berço mais alto (V profundo)
   const sFront = lancha ? -1.0 : -0.2;
-  const length = rapida ? P.length : lancha ? 7.0 : 3.6;
+  const length = rapida ? P.length : lancha ? 7.0 : jet ? 3.9 : 3.6;
   const sRear = sFront + length;
-  const clear = P.kind === "turbina" ? 0.47 : rapida ? 0.44 : lancha ? 0.38 : 0.22;
-  const vSlope = rapida ? 0.2 : lancha ? 0.18 : 0.14; // ≈ V do fundo do casco (bunkPoints)
+  const clear = P.kind === "turbina" ? 0.47 : rapida ? 0.44 : lancha ? 0.38 : jet ? 0.3 : 0.22;
+  const vSlope = rapida ? 0.2 : lancha ? 0.18 : jet ? 0.25 : 0.14; // ≈ V do fundo do casco (bunkPoints)
   const halfW = rapida ? 1.0 : lancha ? 0.95 : 0.7;
   const postX = P.beam / 2 + 0.12;
   const cx = RAMP.x;

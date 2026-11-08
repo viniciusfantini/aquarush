@@ -58,6 +58,8 @@ export interface PersonOpts {
   prefix: string;       // prefixo dos nomes das malhas ("pilot" = escondido na câmera de cockpit)
   skin: Color3; shirt: Color3; vest: Color3; shorts: Color3; cap: Color3; hair: Color3;
   floor?: number;       // altura do piso sob os pés (local); padrão = piso da lancha
+  /** montado (moto aquática): pernas abertas dos dois lados do banco, pés nos estribos, tronco inclinado para a frente */
+  straddle?: boolean;
 }
 
 /** Pessoa sentada (proporções humanas, braços por IK). */
@@ -130,8 +132,11 @@ export const buildPerson = (scene: Scene, root: TransformNode, o: PersonOpts): P
     for (const L of legs) {
       const s = L.s, kk = kick * Math.sin(ph + (s > 0 ? Math.PI : 0));
       const hip = new Vector3(X + s * 0.1, FLOOR + 0.5, -0.24 + DZ - 0.03 * stand);
-      const knee = Vector3.Lerp(new Vector3(X + s * 0.12, FLOOR + 0.52, 0.16 + DZ), new Vector3(X + s * 0.11, FLOOR + 0.06, -0.24 + DZ + 0.6 * kk), stand);
-      const ankle = Vector3.Lerp(new Vector3(X + s * 0.13, FLOOR + 0.09, 0.27 + DZ), new Vector3(X + s * 0.11, FLOOR - 0.38, -0.3 + DZ + kk), stand);
+      // sentado num banco (joelhos à frente, canelas para baixo) ou montado (coxas abertas, pés nos estribos)
+      const kneeSit = o.straddle ? new Vector3(X + s * 0.27, FLOOR + 0.4, 0.1 + DZ) : new Vector3(X + s * 0.12, FLOOR + 0.52, 0.16 + DZ);
+      const ankleSit = o.straddle ? new Vector3(X + s * 0.31, FLOOR + 0.08, -0.06 + DZ) : new Vector3(X + s * 0.13, FLOOR + 0.09, 0.27 + DZ);
+      const knee = Vector3.Lerp(kneeSit, new Vector3(X + s * 0.11, FLOOR + 0.06, -0.24 + DZ + 0.6 * kk), stand);
+      const ankle = Vector3.Lerp(ankleSit, new Vector3(X + s * 0.11, FLOOR - 0.38, -0.3 + DZ + kk), stand);
       setLimb(L.thigh, knee, hip);
       L.knee.position.copyFrom(knee);
       setLimb(L.shin, knee, ankle);
@@ -215,23 +220,25 @@ export const buildPerson = (scene: Scene, root: TransformNode, o: PersonOpts): P
 };
 
 /** Piloto no posto de boreste (mãos controladas por IK no volante e na manete). */
-export const buildPilot = (scene: Scene, root: TransformNode, seat = { x: HELM_X, zc: -0.08, floor: FLOOR_LANCHA }): Pilot => buildPerson(scene, root, {
-  x: seat.x, zc: seat.zc, floor: seat.floor, prefix: "pilot",
+export const buildPilot = (scene: Scene, root: TransformNode, seat: { x: number; zc: number; floor: number; straddle?: boolean } = { x: HELM_X, zc: -0.08, floor: FLOOR_LANCHA }): Pilot => buildPerson(scene, root, {
+  x: seat.x, zc: seat.zc, floor: seat.floor, straddle: seat.straddle, prefix: "pilot",
   skin: new Color3(0.78, 0.57, 0.43), shirt: new Color3(0.06, 0.45, 0.55), vest: new Color3(0.95, 0.4, 0.05),
   shorts: new Color3(0.82, 0.78, 0.66), cap: new Color3(0.06, 0.12, 0.28), hair: new Color3(0.18, 0.12, 0.08),
 });
 
 /** Passageiro sentado com as mãos sobre as coxas. */
-export const buildPassenger = (scene: Scene, root: TransformNode, x: number, zc: number, prefix: string, look: number, floor = FLOOR_LANCHA): Pilot => {
+export const buildPassenger = (scene: Scene, root: TransformNode, x: number, zc: number, prefix: string, look: number, floor = FLOOR_LANCHA, straddle = false): Pilot => {
   const FLOOR = floor;
   const looks = [
     { skin: new Color3(0.55, 0.38, 0.27), shirt: new Color3(0.85, 0.2, 0.25), cap: new Color3(0.9, 0.9, 0.88), hair: new Color3(0.08, 0.06, 0.05) },
     { skin: new Color3(0.86, 0.68, 0.55), shirt: new Color3(0.95, 0.85, 0.3), cap: new Color3(0.15, 0.5, 0.3), hair: new Color3(0.55, 0.38, 0.18) },
     { skin: new Color3(0.68, 0.48, 0.35), shirt: new Color3(0.35, 0.3, 0.75), cap: new Color3(0.8, 0.35, 0.1), hair: new Color3(0.12, 0.08, 0.06) },
   ][look % 3];
-  const p = buildPerson(scene, root, { x, zc, prefix, floor, vest: new Color3(0.95, 0.4, 0.05), shorts: new Color3(0.2, 0.3, 0.45), ...looks });
+  const p = buildPerson(scene, root, { x, zc, prefix, floor, straddle, vest: new Color3(0.95, 0.4, 0.05), shorts: new Color3(0.2, 0.3, 0.45), ...looks });
   const DZ = zc + 0.22;
-  const rest = () => p.update(new Vector3(x - 0.12, FLOOR + 0.6, 0.06 + DZ), new Vector3(x + 0.12, FLOOR + 0.6, 0.06 + DZ));
+  // (montado: as mãos seguram a cintura de quem vai na frente / as alças do banco)
+  const rest = straddle ? () => p.update(new Vector3(x - 0.17, FLOOR + 0.66, 0.2 + DZ), new Vector3(x + 0.17, FLOOR + 0.66, 0.2 + DZ))
+    : () => p.update(new Vector3(x - 0.12, FLOOR + 0.6, 0.06 + DZ), new Vector3(x + 0.12, FLOOR + 0.6, 0.06 + DZ));
   rest();
   const board = p.board;
   p.board = (r) => { board(r); rest(); };

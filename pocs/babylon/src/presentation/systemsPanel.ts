@@ -5,7 +5,9 @@
 //  • chave de baterias (rotativa): OFF / ON (um banco) ou OFF / IND / BB / BE / AMBAS (AR-9, dois bancos);
 //  • registro do tanque de combustível (rotativo): FECHADO / ABERTO;
 //  • afogador (bote carburado): EMPURRADO / PUXADO;
-//  • bomba de porão: ON / OFF / AUTO; luzes de navegação.
+//  • bomba de porão: ON / OFF / AUTO; luzes de navegação;
+//  • moto aquática: botões START (segurar) e STOP redondos, clipe do CORDÃO de segurança e o MODO (ECO / SPORT) — sem
+//    chave de bateria, sem registro de combustível, sem bomba (o sifão do jato esvazia o porão).
 // As chaves elétricas ficam na posição escolhida mesmo sem bateria — só o LED delas depende da tensão.
 
 import type { BoatTelemetry } from "../sim/boat.ts";
@@ -29,6 +31,8 @@ export interface SystemsPanelActions {
   setLever(engine: number, cmd: LeverCmd): void; // manete do painel (vai para o InputManager)
   setTrim(dir: number): void;                     // botão de trim segurado (+1 sobe, −1 desce, 0 solta)
   horn(on: boolean): void;                        // buzina (apito no bote) segurada
+  setLanyard(on: boolean): void;                  // moto aquática: prender/soltar o cordão de segurança
+  setEco(on: boolean): void;                      // moto aquática: modo ECO
   close(): void;
 }
 
@@ -40,8 +44,15 @@ export interface SystemsPanelCaps {
   bilgePump: boolean;
   lights: string;       // "LUZES" / "LANTERNA"
   levers: LeverKind;    // tipo de manete do barco
-  display: "lcd" | "vfd" | "grey"; // estilo dos displays de informação (LCD verde, VFD âmbar, LCD cinza)
+  display: "lcd" | "vfd" | "grey" | "glass"; // estilo dos displays de informação (LCD verde, VFD âmbar, LCD cinza, vidro)
   trim: TrimOpts | null; // controle de trim do barco (power trim ou pino)
+  /** partida por botões START/STOP + cordão de segurança (moto aquática), no lugar da chave de ignição */
+  startStop?: boolean;
+  /** tem chave geral de bateria / registro de combustível (padrão: sim) */
+  batterySwitch?: boolean;
+  fuelValve?: boolean;
+  /** modos de condução ECO / SPORT */
+  ecoMode?: boolean;
 }
 
 const plate = (inner: string, cls = "") => `<div class="sw-plate ${cls}"><span class="screw s1"></span><span class="screw s2"></span><span class="screw s3"></span><span class="screw s4"></span>${inner}</div>`;
@@ -77,8 +88,20 @@ export class SystemsPanel {
       else if (d.choke) this.act.setChoke(!b.classList.contains("on"));
       else if (d.bilge) this.act.setBilge(d.bilge as BilgeMode);
       else if (d.lights) this.act.toggleLights();
+      else if (d.ss === "stop") this.act.setKey(0, "off");
+      else if (d.lan) this.act.setLanyard(!b.classList.contains("on"));
+      else if (d.eco) this.act.setEco(!b.classList.contains("on"));
     });
     bindKeySpring(el, (i, pos) => this.act.setKey(i, pos));
+    // START da moto aquática: segurar = arranque (acorda a central e gira); soltar em qualquer lugar = solta
+    let ssHeld = false;
+    el.addEventListener("pointerdown", (e) => {
+      const b = (e.target as HTMLElement).closest<HTMLElement>("button[data-ss='start']");
+      if (!b) return;
+      ssHeld = true; b.classList.add("down"); this.act.setKey(0, "start"); e.preventDefault();
+    });
+    const ssUp = () => { if (!ssHeld) return; ssHeld = false; el.querySelector("button[data-ss='start']")?.classList.remove("down"); this.act.setKey(0, "on"); };
+    addEventListener("pointerup", ssUp); addEventListener("pointercancel", ssUp); addEventListener("blur", ssUp);
     document.body.appendChild(el);
     this.el = el;
     makeDraggable(el, el.querySelector<HTMLElement>(".tp-head")!, "aquarush.spanelPos");
@@ -91,22 +114,29 @@ export class SystemsPanel {
     const cell = (ctl: string, info: string) => `<div class="sw-cell">${ctl}<div class="rd" data-info="${info}"></div></div>`;
     this.el.dataset.disp = caps.display;
     // partida: chave(s) de ignição ou a corda
-    const start = caps.keys.length
+    const start = caps.startStop
+      ? cell(`<div class="ss"><div class="rb-w"><button class="rb rb-start" data-ss="start" title="segure: acorda a central e dá a partida (em N, com o cordão preso)"><span>START</span></button></div>
+          <div class="rb-w"><button class="rb rb-stop" data-ss="stop" title="desliga o motor"><span>STOP</span></button></div>
+          <div class="ly-w"><button class="ly" data-lan="1" title="cordão de segurança: preso no botão de parada e no pulso do piloto"><span class="ly-coil"></span><span class="ly-clip"></span></button><b>CORDÃO</b><small>de segurança</small></div>
+          ${caps.ecoMode ? toggle({ attr: "eco", val: "1", label: "MODO", sub: "ECO / SPORT", on: "ECO", off: "SPORT" }) : ""}</div>`, "ss")
+      : caps.keys.length
       ? caps.keys.map((l, i) => cell(ignKey(i, l, "OFF · ON · START"), `key${i}`)).join("")
       : cell(rope("PARTIDA", "corda + STOP"), "rope");
     const cells: string[] = [];
-    if (caps.banks === 2) cells.push(cell(rotary("bat", "BATERIAS", "chave geral · 2 bancos", [{ v: "off", l: "OFF" }, { v: "ind", l: "IND" }, { v: "bb", l: "BB" }, { v: "be", l: "BE" }, { v: "both", l: "AMBAS" }]), "bat"));
+    if (caps.batterySwitch === false) { /* (sem chave geral: a bateria fica sempre ligada) */ }
+    else if (caps.banks === 2) cells.push(cell(rotary("bat", "BATERIAS", "chave geral · 2 bancos", [{ v: "off", l: "OFF" }, { v: "ind", l: "IND" }, { v: "bb", l: "BB" }, { v: "be", l: "BE" }, { v: "both", l: "AMBAS" }]), "bat"));
     else if (caps.banks === 1) cells.push(cell(rotary("bat", "BATERIA", "chave geral", [{ v: "off", l: "OFF" }, { v: "ind", l: "ON" }]), "bat"));
-    cells.push(cell(rotary("fuel", "COMBUSTÍVEL", "registro do tanque", [{ v: "closed", l: "FECHADO" }, { v: "open", l: "ABERTO" }], { cls: "fuel" }), "fuel"));
+    if (caps.fuelValve !== false) cells.push(cell(rotary("fuel", "COMBUSTÍVEL", "registro do tanque", [{ v: "closed", l: "FECHADO" }, { v: "open", l: "ABERTO" }], { cls: "fuel" }), "fuel"));
+    if (caps.ecoMode && !caps.startStop) cells.push(cell(toggle({ attr: "eco", val: "1", label: "MODO", sub: "ECO limita o gatilho", on: "ECO", off: "SPORT" }), "eco"));
     if (caps.choke) cells.push(cell(pull("choke", "1", "AFOGADOR", "partida a frio"), "choke"));
     if (caps.bilgePump) cells.push(cell(tri("bilge", "BOMBA PORÃO", "boia ou manual", { v: "on", l: "ON" }, { v: "off", l: "OFF" }, { v: "auto", l: "AUTO" }), "bilge"));
     // bote: lanterna de mão a pilha (manual) — não é chave de painel
-    cells.push(cell(caps.banks ? toggle({ attr: "lights", val: "1", label: caps.lights, sub: "navegação" }) : lantern("lights", caps.lights, "de mão, a pilha"), "lights"));
+    if (caps.lights) cells.push(cell(caps.banks ? toggle({ attr: "lights", val: "1", label: caps.lights, sub: "navegação" }) : lantern("lights", caps.lights, "de mão, a pilha"), "lights"));
     this.title.textContent = `⠿ SISTEMAS — ${caps.title}`;
     this.body.innerHTML = `
       <div class="sp-top"><div><div class="sp-sec">PARTIDA</div>${plate(start, "sp-start")}</div>
         <div class="sp-grow"><div class="sp-sec">COMANDO</div>${plate("", "sp-lev")}</div></div>
-      <div class="sp-sec">SISTEMAS</div>${plate(cells.join(""))}
+      ${cells.length ? `<div class="sp-sec">SISTEMAS</div>${plate(cells.join(""))}` : ""}
       <div class="msg-rd" data-note><span></span></div>`;
     this.levers = new LeverControls(caps.levers, (i, c) => this.act.setLever(i, c));
     this.body.querySelector<HTMLElement>(".sp-lev")!.appendChild(this.levers.el);
@@ -140,7 +170,7 @@ export class SystemsPanel {
       const key = t.keys[i] ?? "off";
       setKey(el, i, key, key !== "off" && bankV > 9);
     });
-    if (!c.keys.length) setRope(el, t.engine === "running" ? "running" : t.engine === "cranking" ? "cranking" : "off");
+    if (!c.keys.length && !c.startStop) setRope(el, t.engine === "running" ? "running" : t.engine === "cranking" ? "cranking" : "off");
     const info = (k: string, s: string, warn = false) => {
       const e = el.querySelector<HTMLElement>(`[data-info="${k}"]`);
       if (!e) return;
@@ -151,7 +181,17 @@ export class SystemsPanel {
       const eng = t.engines[i], rpm = t.rpms[i] ?? t.rpm;
       info(`key${i}`, eng === "running" ? `ligado · ${Math.round(rpm)} rpm` : eng === "cranking" ? `arranque · ${Math.round(rpm)} rpm` : t.keys[i] === "on" ? "ignição ligada" : "desligado", t.startFail !== "" && eng === "off" && t.keys[i] === "on");
     });
-    if (!c.keys.length) info("rope", t.engine === "running" ? `${Math.round(t.rpm)} rpm` : t.startFail === "pull" ? "não pegou: puxe de novo" : "motor parado", t.startFail === "pull");
+    if (c.startStop) {
+      const awake = (t.keys[0] ?? "off") !== "off" || t.engine !== "off";
+      const sb = el.querySelector<HTMLElement>("button[data-ss='start']");
+      sb?.classList.toggle("lit", t.engine === "running" && hv > 9); sb?.classList.toggle("busy", t.engine === "cranking");
+      el.querySelector<HTMLElement>("button[data-lan]")?.classList.toggle("on", t.lanyard);
+      setToggle(el, "eco", "1", t.driveMode === "eco", t.driveMode === "eco" && awake && hv > 9);
+      info("ss", (t.driveMode === "eco" ? "ECO · " : "") + (t.engine === "running" ? `ligada · ${Math.round(t.rpm)} rpm` : t.engine === "cranking" ? `arranque · ${Math.round(t.rpm)} rpm`
+        : !t.lanyard ? "cordão SOLTO: não liga" : awake ? "central acordada" : "desligada"), !t.lanyard || (t.startFail !== "" && t.engine === "off" && awake));
+
+    }
+    if (!c.keys.length && !c.startStop) info("rope", t.engine === "running" ? `${Math.round(t.rpm)} rpm` : t.startFail === "pull" ? "não pegou: puxe de novo" : "motor parado", t.startFail === "pull");
     if (c.banks === 2) info("bat", `BB ${t.batteryVs[0]?.toFixed(1)} V · BE ${t.batteryVs[1]?.toFixed(1)} V`, sel === "off");
     else if (c.banks === 1) info("bat", `${t.batteryV.toFixed(1)} V · ${Math.round(t.batterySoc * 100)} %`, sel === "off");
     info("fuel", t.fuelValveOpen ? `${t.fuelL.toFixed(1)} L no tanque` : `linha ${Math.round(t.fuelLineFrac * 100)} %`, !t.fuelValveOpen);
@@ -164,6 +204,8 @@ export class SystemsPanel {
       : c.choke && !t.choke && t.coolantC < 40 && t.engine !== "running" ? "Motor frio: puxe o afogador para dar a partida (e empurre quando ele esquentar)."
       : sel === "off" && c.banks > 0 && t.engine === "running" ? "Chave geral em OFF com o motor ligado: o alternador segura a ignição, mas a bateria não carrega (e a queda de carga pode queimar o regulador)."
       : sel === "off" && c.banks > 0 ? "Chave de baterias em OFF: sem partida, sem bomba de porão, sem luzes (as chaves ficam onde estão, só os LEDs apagam)."
+      : c.startStop && !t.lanyard ? "Cordão de segurança SOLTO: prenda o clipe no botão de parada para dar partida (ele fica no pulso do piloto)."
+      : c.startStop && (t.keys[0] ?? "off") === "on" && t.engine === "off" ? "Central acordada: segure START até o motor pegar (em N); ela dorme 30 s depois de parada."
       : c.keys.length && t.keys.some((k) => k === "on") && t.engine !== "running" ? "Chave em ON: segure START até o motor pegar (só em N)." : "";
     // display de avisos: caixa fixa no pé do painel, o texto rola; um aviso novo de sistemas/motor fica ~6 s
     const flashing = performance.now() - this.flashT < 6000;

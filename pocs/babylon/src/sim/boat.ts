@@ -75,9 +75,15 @@ export interface BoatTelemetry {
   stall: "" | "fuel" | "overheat" | "capsize" | "broken" | "sunk" | "flooded" | "lanyard"; // lanyard = corta-circuito (o piloto pulou) // último motivo de o motor ter morrido sozinho (flooded = afogado pelo afogador)
   buzzer: boolean;       // alarme do motor apitando (autoteste da chave)
   starterRpm: number;    // rotação do motor de arranque (0 = só o "clique" do solenoide)
-  startFail: "" | "weak" | "dead" | "pull" | "fuel"; // última partida que não pegou (bateria fraca / sem força / corda / sem combustível)
+  startFail: "" | "weak" | "dead" | "pull" | "fuel" | "lanyard"; // última partida que não pegou (bateria fraca / sem força / corda / sem combustível)
   batterySoc: number;    // estado de carga 0..1
   trimPin: number;       // trim manual: furo do pino 1..N, N+1 = tilt total; 0 = power trim
+  /** cordão de segurança (lanyard) preso no botão de parada: sem ele o motor não liga (moto aquática) */
+  lanyard: boolean;
+  /** modo de condução: "eco" limita o acelerador a `params.ecoThrottle` (moto aquática) */
+  driveMode: "normal" | "eco";
+  /** virada: o piloto na água está desvirando a embarcação */
+  righting: boolean;
   pullStart: boolean;    // partida na corda (sem arranque elétrico)
   trimMotorA: number;    // corrente da bomba do power trim (A)
   trimRelay: boolean;    // botão do trim apertado mas a bomba sem força (bateria zerada): só o relé estala
@@ -190,6 +196,8 @@ export class EngineUnit {
   testT = 0;
   /** o banco deste motor tinha tensão no passo anterior (chave em ON + bateria ligada depois = autoteste) */
   keyLive = false;
+  /** START/STOP (moto aquática): tempo com a central acordada e o motor parado (dorme depois de 30 s) */
+  sleepT = 0;
   cavitation = 0; propRpmState = 0; immersion = 1; revLimiting = false; limiterPhase = 0; lastThrust = 0; pullCatch = false;
   // última passada da física (telemetria / efeitos)
   axial = 0; ventilation = 1; slip = 0; propW: Vec3 = v3(); intakeSubmerged = true; fuelLph = 0;
@@ -339,6 +347,14 @@ export class Speedboat {
   /** barco virado: ocupantes ejetados, motor desligado pelo corta-circuito (kill switch) */
   capsized = false;
   private capsizeT = 0;
+  /** desvirando (moto aquática): tempo que o piloto está empurrando o casco virado */
+  private rightT = 0;
+  /** vezes que a embarcação foi desvirada (o main avisa) */
+  righted = 0;
+  /** cordão de segurança preso (lanyard): o clipe segura o botão de parada; puxado, o motor morre */
+  lanyard = true;
+  /** modo de condução (moto aquática): "eco" limita o acelerador */
+  driveMode: "normal" | "eco" = "normal";
   /** Ocupantes (posição = banco). Padrão: só o piloto. */
   occupants: Occupant[] = [{ seat: "helm", mass: PERSON_KG }];
   totalMass = 0;
@@ -401,6 +417,7 @@ export class Speedboat {
       anchorOut: 0, anchorState: "recolhida", anchorDepth: 0, anchorScope: 0, anchorTension: 0, anchorRelay: false, windlassA: 0, apparentWind: 0, neutralRev: false, fuelLph: 0, buzzer: false, starterRpm: 0, startFail: "", batterySoc: 0.92, trimPin: 0, pullStart: !params.electricStart,
       distanceM: 0, collisions: 0, draftHull: 0, draftMotor: 0, capsized: false, swimmers: 0, hullDamage: 0, engineDamage: 0, damageEvent: "", damageCount: 0, lastImpact: 0, depth: 0, submergedPoints: params.buoyancyPoints.map(() => false),
       rpms: [params.idleRpm], gears: ["N"], throttles: [0], thrusts: [0], engines: ["running"], keys: ["on"], houseV: 12.6, propRpms: [0], coolants: [45], batteryVs: [12.6], batterySocs: [0.92], batteryAs: [0], turbine: null, nominalV: 12, gpu: false, gpuState: "off", gpuT: 0, gpuKw: 0, busBattery: true, busGen: false, extPwr: false, extPwrClosed: false, extPwrFault: false, gpuA: 0, coolingLps: 0, fuelValveOpen: true, fuelLineFrac: 1, bilgeMode: "auto", batterySel: "ind", choke: false,
+      lanyard: true, driveMode: "normal", righting: false,
     };
   }
 
@@ -415,7 +432,7 @@ export class Speedboat {
     this.trim = 0;
     this.tilt = 0;
     this.tiltWanted = false;
-    this.capsized = false; this.capsizeT = 0; this.swimmers = []; this.winchStrap = null; this.mooringLines = [];
+    this.capsized = false; this.capsizeT = 0; this.rightT = 0; this.lanyard = true; this.swimmers = []; this.winchStrap = null; this.mooringLines = [];
     this.anchor.reset(); this.bilgeL = 0; this.bilgeAuto = false; this.bilgePumpA = 0; this.sunk = false; this.airL = -1; this.sinkSpot = null; this.sloshDeck = v3(); this.sloshUnder = v3();
     this.trimPin = Math.max(0, Math.min(1, this.params.trimPins.length - 1));
     this.manualAngle = this.params.trimPins[this.trimPin] ?? 0;
@@ -469,6 +486,7 @@ export class Speedboat {
     this.updateMassProperties();
     this.F = add(this.F, v3(0, -P.mass * G, 0));
     for (const L of this.loads) this.addForceAt(v3(0, -L.mass * G, 0), this.toWorld(L.pos), "buoy");
+    this.updateRighting(dt); // (moto aquática virada: o piloto na água rola o casco — força, antes da integração)
 
     // Sistema de ondas do próprio casco (Kelvin): no "hump" (Froude ~0.5) a proa sobe numa
     // onda e a popa fica num cavado -> a proa empina antes do planeio. Some ao planar.
@@ -567,8 +585,15 @@ export class Speedboat {
       //  • aeração (ventilação) = ar puxado da superfície quando o disco está raso → perde mais empuxo;
       //  • fora d'água: sem carga — o motor dispara até o limitador de giro.
       const R = P.propRadius;
-      const immersion = clamp((propDepth + R) / (2 * R), 0, 1);
-      const aeration = immersion * (1 - smoothstep(R, R + 0.3, propDepth));
+      let immersion = clamp((propDepth + R) / (2 * R), 0, 1);
+      let aeration = immersion * (1 - smoothstep(R, R + 0.3, propDepth));
+      if (P.waterjet) {
+        // JATO: quem precisa de água é a GRADE de admissão no fundo (o bocal pode estar no ar). Grade rasa = o rotor
+        // suga ar (ventila): perde a carga e o empuxo e dispara o giro
+        const iDepth = water.getHeight(intakeW.x, intakeW.z) - intakeW.y;
+        immersion = smoothstep(-0.03, 0.06, iDepth);
+        aeration = 1 - immersion;
+      }
       const ventilation = 1 - aeration; // 1 = hélice limpa (telemetria/efeitos)
       this.immersion = immersion;
       // Direção do empuxo: esterçar à direita gira a rabeta e empurra a popa para a esquerda.
@@ -601,6 +626,13 @@ export class Speedboat {
         thrust *= lerp(0.62, 1, smoothstep(6, 22, u)) * (1 - 0.7 * this.engineDamage);
         // "prop walk": a hélice de superfície empurra a popa para o lado da rotação (o piloto corrige no volante)
         if (thrust !== 0 && P.propWalk) this.addForceAt(scale(right, P.propWalk * Math.abs(thrust) * immersion), propW, "thrust");
+      } else if (P.waterjet) {
+        // JATO D'ÁGUA: o rotor fica no duto (rendimento quase igual devagar e rápido); só cavita um pouco na arrancada a
+        // pleno parado. Em N/R a caçamba desvia o jato: em N o empuxo líquido é ~zero (já é 0 acima), em R vira ré/freio
+        this.u.propLoad = 0.15 + 0.85 * immersion;
+        const cavTarget = this.engine === "running" && this.gear === "F" ? 0.5 * clamp((load * slip - 0.7) / 0.25, 0, 1) : 0;
+        this.cavitation += (cavTarget - this.cavitation) * (1 - Math.exp(-dt / 0.15));
+        thrust *= Math.pow(immersion, 1.5) * (1 - 0.15 * this.cavitation) * (1 - 0.7 * this.engineDamage);
       } else {
         this.u.propLoad = Math.pow(immersion, 1.5) * (1 - 0.35 * clamp(axial / P.propPitchSpeed, 0, 1));
         const cavTarget = immersion > 0.9 && this.engine === "running" ? clamp((load * slip - 0.55) / 0.25, 0, 1) : 0;
@@ -733,11 +765,12 @@ export class Speedboat {
     // arrastada pela água (como um cata-vento), desacelerando junto com a lancha.
     const PROP_PITCH_M = 0.48;
     this.eachUnit((un) => {
-      const engaged = un.gear !== "N";
-      const target = engaged ? (un.gear === "R" ? -1 : 1) * un.rpm / (P.propGear ?? 2) : (un.axial / PROP_PITCH_M) * 60 * 0.55 * un.immersion;
+      // (jato: o rotor é ligado direto ao virabrequim — gira com o motor em F, N e R; a caçamba é que inverte)
+      const engaged = un.gear !== "N" || !!P.waterjet;
+      const target = engaged ? (un.gear === "R" && !P.waterjet ? -1 : 1) * un.rpm / (P.propGear ?? 2) : (un.axial / PROP_PITCH_M) * 60 * 0.55 * un.immersion;
       // solta no ar não há água freando: demora bem mais para parar
       un.propRpmState += (target - un.propRpmState) * (1 - Math.exp(-dt / (engaged ? 0.08 : un.immersion > 0.2 ? 0.6 : 3.5)));
-      un.fuelLph = un.turb ? un.turb.fuelLph : un.engine === "running" ? P.fuelIdleLph + (P.fuelMaxLph - P.fuelIdleLph) * Math.pow(un.throttleActual, 1.6) * (un.gear === "N" ? 0.3 : 1) : 0;
+      un.fuelLph = un.turb ? un.turb.fuelLph : un.engine === "running" ? P.fuelIdleLph + (P.fuelMaxLph - P.fuelIdleLph) * Math.pow(un.throttleActual, 1.6) * (un.gear === "N" && !P.waterjet ? 0.3 : 1) : 0;
     });
     t.propRpm = un0.propRpmState;
     t.fuelLph = this.units.reduce((a, x) => a + x.fuelLph, 0);
@@ -768,6 +801,7 @@ export class Speedboat {
     }
     this.updateCapsize(dt, water, world);
     t.capsized = this.capsized;
+    t.lanyard = this.lanyard; t.driveMode = this.driveMode;
     t.hullDamage = this.hullDamage; t.engineDamage = this.engineDamage;
     t.swimmers = this.swimmers.length;
     if (impact > 0) t.lastImpact = impact;
@@ -884,12 +918,12 @@ export class Speedboat {
           const w = this.toWorld(v3(sx * (P.beam / 2 - 0.04), gy, z));
           const h = water.getHeight(w.x, w.z) - w.y;
           freeboard = Math.min(freeboard, -h);
-          this.bilgeOver += moving * weir(h, seg);
+          if (!P.sealedHull) this.bilgeOver += moving * weir(h, seg); // (casco selado: o convés autodrena, nada entra)
         }
       }
       // drenos do cockpit no piso da popa (sem válvula): com a popa baixa o lado de fora fica mais alto que o
       // piso e a água ENTRA por eles — é assim que barco pesado de popa afunda (até parado no píer)
-      if (B.scupperM2 > 0) {
+      if (B.scupperM2 > 0 && !P.sealedHull) {
         const sp = this.toWorld(v3(0, B.floorY + 0.01, -P.length / 2 + B.scupperFromStern));
         const insideAbove = Math.max(0, this.bilgeLevelY() - (B.floorY + 0.01));
         const dh = water.getHeight(sp.x, sp.z) - sp.y - insideAbove;
@@ -906,6 +940,7 @@ export class Speedboat {
         const tw = this.toWorld(v3(x, notch ? B.transomY : P.gunwaleY, -P.length / 2 + 0.05));
         const ht = water.getHeight(tw.x, tw.z) - tw.y + this.transomPile;
         freeboard = Math.min(freeboard, -ht);
+        if (P.sealedHull) continue;
         const well = notch ? 0.35 + 0.65 * smoothstep(0.03, 0.12, ht) : 1;
         this.bilgeOver += well * weir(ht, tSeg);
         if (ht > 0) {
@@ -932,6 +967,9 @@ export class Speedboat {
       flowLps = (B.pumpLph / 3600) * curve * clamp((this.systems.batteryV - 9) / 3.4, 0.2, 1.05);
       if (this.bilgeL < 0.3) flowLps *= this.bilgeL / 0.3; // poço quase seco: suga ar
     }
+    // sifão do jato (moto aquática): o venturi da bomba do jato suga o porão com o motor rodando (∝ rpm)
+    if (B.siphonLps && this.engine === "running" && !this.capsized && !this.sunk && this.bilgeL > 0.05)
+      flowLps += B.siphonLps * clamp(this.rpm / P.maxRpm, 0.15, 1);
     const out = Math.min(flowLps * dt, Math.max(0, this.bilgeL + inflow * dt));
     this.bilgeL = clamp(this.bilgeL + inflow * dt - out, 0, B.maxL);
     this.bilgePumpA = powered ? B.pumpA * (0.7 + 0.3 * clamp(this.bilgeL, 0, 1)) : 0; // seca: a corrente cai
@@ -1025,7 +1063,8 @@ export class Speedboat {
     this.eachUnit(() => {
       const ec = input.engineCmd?.[this.u.index];
       const desired: Gear = ec ? ec.gear : input.gear;
-      const cmd = clamp(ec ? ec.throttle : input.throttle, 0, 1);
+      // modo ECO (moto aquática): o gatilho pleno só abre até ecoThrottle
+      const cmd = clamp(ec ? ec.throttle : input.throttle, 0, 1) * (this.driveMode === "eco" && P.ecoThrottle ? P.ecoThrottle : 1);
       if (desired !== this.wantGear) {
         this.wantGear = desired;
         if (this.gear !== desired) {
@@ -1038,7 +1077,8 @@ export class Speedboat {
       if (!pressure && this.gear !== "N") { this.gear = "N"; this.shiftTimer = P.shiftTime; }
       if (this.gear === "N" && this.wantGear !== "N") {
         this.shiftTimer -= dt;
-        if (this.shiftTimer <= 0 && this.throttleActual < 0.12 && pressure) this.gear = this.wantGear;
+        // (jato: a caçamba de ré desce com o motor acelerado — é o freio do iBR; não há embreagem para poupar)
+        if (this.shiftTimer <= 0 && (this.throttleActual < 0.12 || P.waterjet) && pressure) this.gear = this.wantGear;
       }
       // aceleração em neutro (botão da manete segurado com a marcha em N): o motor sobe o giro sem
       // engatar — para aquecer ou testar. Só em N. Sem limite próprio em neutro (por ora nenhum barco precisa): vale o
@@ -1226,6 +1266,39 @@ export class Speedboat {
   }
 
   /**
+   * DESVIRAR (moto aquática, `params.rightable`): virada, o piloto nada até o casco e, segurando a borda, rola a
+   * embarcação de volta (o peso do corpo na borda + o empurrão = um binário em torno do eixo proa-popa). De pé de
+   * novo, ela deixa de estar "virada" e todos sobem pela popa como sempre.
+   * Aproximação documentada: os 6 pontos de flutuação dão ao casco de cabeça para baixo a mesma estabilidade de pé
+   * (o convés real é arredondado e quase não tem estabilidade virado), por isso o binário (4,5 kN·m até 70° do
+   * prumo, depois 30 %) está calibrado para desvirar em ~2–3 s, não pela força de uma pessoa.
+   */
+  private updateRighting(dt: number): void {
+    this.telemetry.righting = false;
+    if (!this.capsized || this.sunk || !this.params.rightable) { this.rightT = 0; return; }
+    const reach = this.params.beam / 2 + 0.9;
+    const helper = this.swimmers.some((s) => s.t > 2 && Math.hypot(s.pos.x - this.pos.x, s.pos.z - this.pos.z) < reach + 0.4);
+    this.rightT = helper ? this.rightT + dt : 0;
+    if (this.up.y > 0.8 && this.rightT > 0) {
+      this.capsized = false; this.capsizeT = 0; this.rightT = 0; this.righted++;
+      return;
+    }
+    if (this.rightT < 1.2) return;
+    this.telemetry.righting = true;
+    // sentido: o que leva o "cima" do casco de volta para cima, em torno do eixo proa-popa
+    const fwd = this.forward, up = this.up;
+    const c = v3(up.y * 0 - up.z * 1, up.z * 0 - up.x * 0, up.x * 1 - up.y * 0); // up × Ŷ
+    const s = Math.sign(c.x * fwd.x + c.y * fwd.y + c.z * fwd.z) || 1;
+    const tau = 4500 * s * (up.y < 0.35 ? 1 : 0.3);
+    // binário puro: F nos dois lados do casco, em sentidos opostos (torque = 2·r·F em torno de fwd)
+    const r = scale(this.right, 0.5);
+    const fDir = v3(fwd.y * r.z - fwd.z * r.y, fwd.z * r.x - fwd.x * r.z, fwd.x * r.y - fwd.y * r.x); // fwd × r (|r| = 0,5)
+    const f = scale(fDir, tau / (2 * 0.5 * 0.5));
+    this.addForceAt(f, add(this.pos, r), "contact");
+    this.addForceAt(scale(f, -1), sub(this.pos, r), "contact");
+  }
+
+  /**
    * ABANDONAR o barco (barra de espaço): todos pulam na água de colete, cada um pelo bordo do seu banco. O cordão do
    * corta-circuito está preso ao piloto: com ele fora, o motor desliga. No habitáculo fechado (AR-10) virado, é assim
    * que o piloto sai da cabine e se salva. Quem pulou volta a bordo sozinho ao chegar perto do barco (se ele não
@@ -1256,6 +1329,8 @@ export class Speedboat {
       this.swimmers.push({ seat: o.seat, mass: o.mass, pos: jump ? add(p, v3(0, 0.35, 0)) : p, vel: add(this.pointVelocity(p), kick), yaw: Math.atan2(fwd.x, fwd.z),
         slot: Math.atan2(side * 1, seat.z / (this.params.length / 2)), swim: 0, t: 0, jumped: jump });
     }
+    // o cordão de segurança está preso no pulso do piloto: ele foi para a água, o clipe saiu do botão
+    if (this.occupants.some((o) => o.seat === "helm" && only(o))) this.lanyard = false;
     this.occupants = this.occupants.filter((o) => !only(o));
   }
 
@@ -1339,8 +1414,14 @@ export class Speedboat {
     for (const s of boarding) {
       this.swimmers.splice(this.swimmers.indexOf(s), 1);
       this.occupants.push({ seat: s.seat, mass: s.mass });
+      if (s.seat === "helm") this.lanyard = true; // de volta ao banco, o piloto prende o cordão de novo
       this.reboarded++;
     }
+  }
+  /** Cordão de segurança (lanyard): solto, o botão de parada desliga o motor e ele não dá partida. */
+  setLanyard(on: boolean): void {
+    this.lanyard = on;
+    if (!on && this.engine !== "off") { this.engine = "off"; this.telemetry.stall = "lanyard"; }
   }
   /** pessoas que voltaram a bordo (contador; o main avisa) */
   reboarded = 0;
@@ -1375,8 +1456,9 @@ export class Speedboat {
    * Ignição (tecla P): desliga o motor ou dá partida. Por segurança (como nos motores reais),
    * a partida só funciona em NEUTRO. Retorna o que aconteceu.
    */
-  toggleIgnition(): "stopped" | "starting" | "pulling" | "needNeutral" | "busy" | "noFuel" | "lowBattery" | "hot" | "noPilot" | "broken" | "manual" | "noPower" {
+  toggleIgnition(): "stopped" | "starting" | "pulling" | "needNeutral" | "busy" | "noFuel" | "lowBattery" | "hot" | "noPilot" | "broken" | "manual" | "noPower" | "noLanyard" {
     if (!this.occupants.some((o) => o.seat === "helm")) return "noPilot";
+    if (!this.lanyard && this.engine === "off") { this.telemetry.startFail = "lanyard"; return "noLanyard"; }
     if (this.engine !== "running" && this.engineDamage >= 0.95) return "broken";
     if (this.engine === "running") { this.engine = "off"; for (const x of this.units) { x.key = "off"; x.manualCrank = false; } return "stopped"; }
     const tb = this.units[0].turb;
@@ -1425,7 +1507,7 @@ export class Speedboat {
    * autoteste (apito ~1 s, se houver tensão); START gira o arranque ENQUANTO segurada (mola: o painel manda "on" ao
    * soltar). O arranque gira pela tensão do banco desse motor — sem tensão, só o silêncio. Só em neutro.
    */
-  setKey(i: number, pos: IgnitionKey): "" | "needNeutral" | "noPilot" | "broken" {
+  setKey(i: number, pos: IgnitionKey): "" | "needNeutral" | "noPilot" | "broken" | "noLanyard" {
     const x = this.units[i];
     if (!x || x.turb || !this.params.electricStart) return "";
     if (pos === "off") {
@@ -1452,6 +1534,7 @@ export class Speedboat {
     if (x.engine === "running" || x.engine === "cranking") { if (x.key !== "off") x.key = "start"; return ""; }
     if (this.engineDamage >= 0.95) return "broken";
     if (x.gear !== "N") return "needNeutral";
+    if (!this.lanyard) { this.telemetry.startFail = "lanyard"; return "noLanyard"; }
     x.key = "start"; x.testT = 0;
     x.engine = "cranking"; x.manualCrank = true; x.crankTimer = 0; x.crankRevs = 0; x.crankNeed = 3 + Math.random() * 2; x.crankWait = 0;
     this.telemetry.stall = ""; this.telemetry.startFail = "";
@@ -1480,6 +1563,9 @@ export class Speedboat {
       const live = this.bankFor(x.index).supplyV(2) > 9;
       if (live && !x.keyLive && x.key === "on" && x.engine === "off") x.testT = 1.1;
       x.keyLive = live;
+      // START/STOP (moto aquática): a central acorda no START e dorme 30 s depois de o motor parar
+      x.sleepT = this.params.startStop && x.key === "on" && x.engine === "off" ? x.sleepT + dt : 0;
+      if (x.sleepT > 30) { x.key = "off"; x.sleepT = 0; }
     }
     if (!this.systems2) {
       const sys = this.systems;
@@ -1596,9 +1682,11 @@ export class Speedboat {
     // estimativa documentada: rotação cresce com o acelerador; a carga da hélice
     // segura a rotação em baixa velocidade; hélice ventilando dispara a rotação.
     // carga da hélice: segura a rotação na água; no ar (ou em N) o motor gira livre
-    const waterLoad = lerp(0.68, 1.0, clamp(Math.abs(axial) / (P.propPitchSpeed * 0.75), 0, 1));
-    const load = this.gear === "N" ? 1 : lerp(1, waterLoad, this.immersion);
-    const freeRev = 1 + (1 - ventilation) * 0.25 + this.cavitation * 0.12 + (this.gear === "N" ? 0 : (1 - this.immersion) * 0.3);
+    // (jato: o rotor é feito para chegar perto da rotação máxima até parado, e carrega o motor também em N e R)
+    const waterLoad = lerp(P.waterjet ? 0.93 : 0.68, 1.0, clamp(Math.abs(axial) / (P.propPitchSpeed * 0.75), 0, 1));
+    const free = this.gear === "N" && !P.waterjet;
+    const load = free ? 1 : lerp(1, waterLoad, this.immersion);
+    const freeRev = 1 + (1 - ventilation) * 0.25 + this.cavitation * 0.12 + (free ? 0 : (1 - this.immersion) * 0.3);
     let target = P.idleRpm + (P.maxRpm - P.idleRpm) * Math.pow(thr, 0.85) * load * freeRev;
     // limitador de giro: corta a ignição em pulsos quando passa do limite
     // modo de proteção (superaquecimento): a central limita a rotação; falta de combustível: engasga

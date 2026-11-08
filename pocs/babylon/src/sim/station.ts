@@ -12,7 +12,7 @@ export interface Pump { x: number; z: number; lanes: number[] /* z do centro de 
 
 const L = LOT;
 /** vagas ocupadas pelos conjuntos que não estão em uso */
-const PARKED_STALLS = [0, 3, 4];
+const PARKED_STALLS = [0, 2, 3, 4]; // (4 conjuntos fora de uso; a vaga 1 fica livre)
 const CAN = { x: L.cx + 15, z: L.cz + 10 };
 /**
  * Pátio grande (76 × 50 m): posto perto da entrada (leste), loja e oficina no fundo (oeste), vaga do outro
@@ -27,9 +27,9 @@ export const STATION = {
   islandLen: 4, islandW: 1.0,
   shop: { x: L.cx - 25, z: L.cz + 12, w: 12, d: 9, h: 3.6 },          // loja (porta para +X)
   workshop: { x: L.cx - 25, z: L.cz - 11, w: 12, d: 12, h: 5.0 },     // oficina (portões para +X)
-  /** vagas dos outros três conjuntos (veículo + carretinha, de frente para a saída, +X): vagas 0, 3 e 4 */
+  /** vagas dos outros quatro conjuntos (veículo + carretinha, de frente para a saída, +X): vagas 0, 2, 3 e 4 */
   parking: PARKED_STALLS.map((k) => ({ x: L.cx + 22, z: L.cz - 21 + k * 4.2, yaw: Math.PI / 2 })),
-  /** vagas longas (carro + carretinha), lado a lado ao sul; 0, 3 e 4 são dos outros conjuntos, 1 e 2 livres */
+  /** vagas longas (carro + carretinha), lado a lado ao sul; 0, 2, 3 e 4 são dos outros conjuntos, a 1 fica livre */
   stalls: [0, 1, 2, 3, 4].map((k) => ({ x: L.cx + 15, z: L.cz - 21 + k * 4.2, len: 24, w: 4.2 })),
 };
 

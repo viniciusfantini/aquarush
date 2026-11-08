@@ -6,7 +6,7 @@
 - **Lógica elétrica e de sistemas dos motores** (fonte de consulta antes de mexer em `engineSystems.ts`, `turbine.ts`, partida, chaves e baterias): `docs/SISTEMAS_ELETRICOS_E_MOTORES.md`. Ao mudar essa lógica, **atualize esse arquivo** junto com o README.
 - **Fase atual: POC comparativa** (GDD §10). A mesma fatia jogável será feita em três tecnologias, da mais simples para a mais complexa: Babylon.js (feita), Unity 6 + URP e Unreal. **Não transformar POC em jogo completo.** A economia, o multiplayer e o mapa completo estão fora do escopo (GDD A.14).
 - O usuário escreve em português. Docs, comentários e UI são em **pt-BR**.
-- A POC 1 tem **4 embarcações** na mesma física (`VESSELS` em `params.ts`, `?barco=`): **lancha AR-6** (`lancha`, motor de popa 150 hp), **bote AR-3** (`bote`, 15 hp de cana), **lancha rápida AR-9** (`rapida`, dois V8 de centro com rabeta) e **lancha de turbina AR-10** (`turbina`, turbina a gás, hélice de superfície, habitáculo fechado, 24 V).
+- A POC 1 tem **5 embarcações** na mesma física (`VESSELS` em `params.ts`, `?barco=`): **lancha AR-6** (`lancha`, motor de popa 150 hp), **bote AR-3** (`bote`, 15 hp de cana), **moto aquática AR-J** (`jetski`, 300 hp com jato d'água, guidão, iBR, START/STOP com cordão), **lancha rápida AR-9** (`rapida`, dois V8 de centro com rabeta) e **lancha de turbina AR-10** (`turbina`, turbina a gás, hélice de superfície, habitáculo fechado, 24 V).
 
 ## Regras do GDD que valem para todo código
 
@@ -15,7 +15,7 @@
 3. **O HUD lê só a telemetria real** (`BoatTelemetry`). Nada de valores decorativos.
 4. **`VehicleInput` é o único contrato** entre dispositivos e controladores. Os controladores não sabem a origem do comando.
 5. **Nada é marcado como concluído sem um teste executado e o resultado registrado** (README da POC).
-6. Os parâmetros dos barcos (`pocs/babylon/src/sim/params.ts`: `SPEEDBOAT`, `DINGHY`, `RAPIDA` e `TURBINA`, mais a turbina em `turbine.ts`) são o **contrato entre as POCs**. As POCs Unity e Unreal devem usar a mesma massa, as mesmas dimensões, os 6 pontos e os mesmos coeficientes.
+6. Os parâmetros dos barcos (`pocs/babylon/src/sim/params.ts`: `SPEEDBOAT`, `DINGHY`, `JETSKI`, `RAPIDA` e `TURBINA`, mais a turbina em `turbine.ts`) são o **contrato entre as POCs**. As POCs Unity e Unreal devem usar a mesma massa, as mesmas dimensões, os 6 pontos e os mesmos coeficientes.
 
 ## POC 1: Babylon (`pocs/babylon`)
 
@@ -38,7 +38,7 @@ npm run dev            # abrir http://localhost:5173, F3 mostra a telemetria; wi
 ```
 
 - Ao mexer em `params.ts` ou `boat.ts`, **rode `test:sim` e atualize a tabela de resultados** em `pocs/babylon/README.md`.
-- Para calibrar, use `node tests/debug-trim.ts` (forças por ponto em regime permanente) e `node tests/debug-turn.ts <acelerador> <t_curva>`. Por barco: `node tests/debug-rapida.ts` (AR-9), `node tests/debug-turbina.ts [trim]` (AR-10: partida, velocidade, imersão da hélice) e `node tests/debug-trailer.ts lancha|bote|rapida|turbina`.
+- Para calibrar, use `node tests/debug-trim.ts` (forças por ponto em regime permanente) e `node tests/debug-turn.ts <acelerador> <t_curva>`. Por barco: `node tests/debug-jetski.ts` (AR-J: velocidade, curva, iBR, ECO, pulo, desvirar), `node tests/debug-rapida.ts` (AR-9), `node tests/debug-turbina.ts [trim]` (AR-10: partida, velocidade, imersão da hélice) e `node tests/debug-trailer.ts lancha|bote|rapida|turbina`.
 - No navegador a física só anda com a aba em primeiro plano (o `requestAnimationFrame` é estrangulado em segundo plano): medições de FPS ou de tempo feitas com a aba escondida saem erradas.
 - Uma limitação nova vai para o README da POC e, se for o caso, para o mapa `KNOWN` em `tests/sim.test.ts`. Nunca afrouxe um critério só para passar.
 
@@ -46,8 +46,9 @@ npm run dev            # abrir http://localhost:5173, F3 mostra a telemetria; wi
 
 | Sistema | Simulação (`src/sim`) | Visual / UI (`src/presentation`, `main.ts`) | Testes (`tests/sim.test.ts`) |
 |---|---|---|---|
-| Casco, planeio, trim/tilt, cavitação | `boat.ts`, `params.ts` | `boatMesh.ts`, `dinghyMesh.ts`, `rapidaMesh.ts`, `turbineMesh.ts` | testes 1–6, "power trim", "bote", "rápida", "turbina" |
-| Splash, menu e troca de barco | `params.ts` (`VESSELS`) | `index.html` (`#splash`: imagem `public/splash.svg`, "JOGAR MODO PLAYGROUND" e idioma; `#menu` `.pick-b`), `main.ts` (`showSplash`/`leaveSplash`/`showMenu`, `makeVessel`, `activate`, `parkInLot`: os outros conjuntos nas vagas 0, 3 e 4 de `STATION.parking`) | — (visual) |
+| Casco, planeio, trim/tilt, cavitação | `boat.ts`, `params.ts` | `boatMesh.ts`, `dinghyMesh.ts`, `jetskiMesh.ts`, `rapidaMesh.ts`, `turbineMesh.ts` | testes 1–6, "power trim", "bote", "moto aquática", "rápida", "turbina" |
+| Moto aquática AR-J: jato d'água, iBR, VTS, START/STOP, cordão, ECO, casco selado, sifão, desvirar | `params.ts` (`JETSKI`: `waterjet`, `sealedHull`, `rightable`, `startStop`, `ecoThrottle`, `bilge.siphonLps`, `smallTow`), `boat.ts` (ramo `P.waterjet` na propulsão e em `updateRpm`; `lanyard`/`setLanyard`, `driveMode`, `updateRighting` antes da integração, `righted`, `EngineUnit.sleepT`) | `jetskiMesh.ts` (`JET_FOOT`, guidão, caçamba, painel), `pilot.ts` (`straddle`), `systemsPanel.ts` (`startStop`, `.ss`/`.ly` em index.html), `levers.ts` (`handlebar`), `audio.ts` (`supercharger`), `hud.ts` (`rpmMax`) | "moto aquática" |
+| Splash, menu e troca de barco | `params.ts` (`VESSELS`) | `index.html` (`#splash`: imagem `public/splash.svg`, "JOGAR MODO PLAYGROUND" e idioma; `#menu` `.pick-b`), `main.ts` (`showSplash`/`leaveSplash`/`showMenu`, `makeVessel`, `activate`, `parkInLot`: os outros 4 conjuntos nas vagas 0, 2, 3 e 4 de `STATION.parking`; a 1 fica livre) | — (visual) |
 | GPU da doca (AR-10) | `engineSystems.ts` (`gpu`, `gpuState` off/starting/online, `gpuT`, `GPU_START_S`, `gpuAutoOff`, `GPU_V`) | `gpuCart.ts` (carrinho, lâmpada, cabo), `main.ts` (`docked()`, J na AR-10, assistente `gpuCrew`, só com a AR-10), `audio.ts` (`updateGpu`: diesel), `turbineMesh.ts` (tomadas no costado) | "turbina" (GPU) |
 | Temperatura do óleo da turbina (sem corte automático) | `turbine.ts` (`oilC`, `oilWarnC`/`oilRedC`, `coolingFrac`; desgaste acima do limite), `boat.ts` (passa a vazão; `systems.coolantC` = óleo), `params.ts` (TURBINA sem protect/shutdown) | `hud.ts`/`turbinePanel.ts` (ÓLEO °C), `audio.ts` (`oilAlarm`) | "turbina" (óleo) |
 | Água de resfriamento da turbina (trocador de calor do óleo) | `params.ts` (`cooling`: saída, direção, seção, vazão a 100 % N1), `boat.ts` (`telemetry.coolingLps` ∝ N1 com a tomada submersa), `bilgeJet.ts` (`jetStreakLocal` com `dirL`) | `waterJet.ts` (jato), `boatGear.ts` (instancia) | "turbina" (resfriamento) |
@@ -72,14 +73,17 @@ npm run dev            # abrir http://localhost:5173, F3 mostra a telemetria; wi
 
 AR-10 (turbina): 10 m, seca 2900 kg, ~1100 shp, 24 V (~19 V no arranque, ~28 V com o gerador), GPU da doca (28 V) no lugar do jump start, 150 km/h, marcha lenta N1 62 % / EGT ~480 °C, partida ~21 s (pico de EGT ~660 °C a 60 % de bateria; 780 °C = partida quente), 85–430 L/h, começa com 120 L (temporário).
 
+AR-J (moto aquática): 3,45 m, seca 360 kg, 300 hp, jato d'água (empuxo estático 5,8 kN, `propGear` 1), ~108 km/h a ~7900 rpm, 0→100 ~7 s, 72 L/h a pleno (ECO 55 %: ~90 km/h), bateria 30 Ah / arranque 95 A / estator 30 A, sem chave geral nem registro, sifão 0,3 L/s, começa com 8 L (temporário).
+
 AR-9 (rápida): 8,6 m, seca 2500 kg, 2 × 13,5 kN, 96,6 km/h, 210 L/h a pleno, dois bancos de 100 Ah (um por motor), arranque 200 A, começa com 20 L (temporário).
 
-Valores de referência (lancha): massa seca 1030 kg; empuxo máximo 8,5 t; borda livre seca 64 cm; 1.500 L em água calma = 36 cm de borda livre (com ondas fortes vira); alagada ~2.900 L; afunda ~3.850 L; bomba 1500 GPH ≈ 1,15 L/s; alternador 35 A; bateria 50 Ah; booster 10 Ah/200 A. Largada (todos os barcos): atracada na vaga do píer, motor desligado (turbina fria), bateria 60 %, combustível **temporário** em `START_FUEL` (main.ts): 5 L na lancha e no bote, 20 L na AR-9, 120 L na AR-10.
+Valores de referência (lancha): massa seca 1030 kg; empuxo máximo 8,5 t; borda livre seca 64 cm; 1.500 L em água calma = 36 cm de borda livre (com ondas fortes vira); alagada ~2.900 L; afunda ~3.850 L; bomba 1500 GPH ≈ 1,15 L/s; alternador 35 A; bateria 50 Ah; booster 10 Ah/200 A. Largada (todos os barcos): atracada na vaga do píer, motor desligado (turbina fria), bateria 60 %, combustível **temporário** em `START_FUEL` (main.ts): 5 L na lancha e no bote, 8 L na AR-J, 20 L na AR-9, 120 L na AR-10.
 
 ## Decisões registradas
 
 | Data | Decisão | Motivo |
 |---|---|---|
+| 2026-11-08 | **Quinta embarcação: moto aquática AR-J** (`JETSKI`, `VesselKind` "jetski"). Novos parâmetros do contrato: `waterjet` (empuxo pelo bocal = `propPos`, com a grade `intakePos` submersa; rotor direto `propGear: 1`; N/R = caçamba iBR, troca sem esperar o acelerador cair), `sealedHull` (sem entrada por borda/espelho/drenos), `bilge.siphonLps`, `rightable` (`updateRighting`: binário de 4,5 kN·m aplicado ANTES da integração — no `updateCapsize` ele era descartado), `startStop` (START/STOP + `lanyard`; central dorme em 30 s), `ecoThrottle`, `steering: "handlebar"`. `smallTow(kind)` decide carro × caminhonete. O cordão (`lanyard`) é genérico: o piloto na água o solta, voltando ao banco o prende. HUD `rpmMax`/`rpmRed`; `audio.ts` normaliza o giro com teto (o 3 cil. gira até 7900) e tem o assobio do compressor | Pedido do usuário: "faça um jetski (moto aquática) com 300 HP (pense no painel Y, comandos, etc)" |
 | 2026-10-31 | A POC 1 é Babylon.js, com física própria em vez de Havok | É a mais simples (sem instalar engine, roda por URL). Uma física própria e testável no Node controla flutuação, planeio e trim do jeito que o GDD exige e serve de referência para Unity e Unreal |
 | 2026-10-31 | 6 pontos de flutuação + sustentação de planeio por ponto + sistema de ondas do casco (hump) | O GDD pede 6 pontos, e o planeio precisa surgir da física, não de animação |
 | 2026-10-31 | Monorepo com `pocs/<tecnologia>` | O GDD §15 pede pastas claramente isoladas |

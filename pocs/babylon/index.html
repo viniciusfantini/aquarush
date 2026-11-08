@@ -260,6 +260,10 @@
     .pl-t { position: absolute; left: -26px; top: 4px; width: 52px; height: 16px; border-radius: 6px; background: linear-gradient(180deg, #f2f4f6, #9aa3ab 55%, #5a6168);
       box-shadow: 0 3px 5px rgba(0,0,0,0.6); }
     .pl-t::after { content: ""; position: absolute; left: 50%; top: 4px; width: 30px; height: 4px; margin-left: -15px; border-radius: 2px; background: rgba(0,0,0,0.35); }
+    /* gatilho do acelerador da moto aquática (borracha preta, curvo) */
+    .pl-trig .pl-track { width: 96px; height: 116px; }
+    .pl-trig .pl-t { left: -20px; width: 40px; height: 18px; border-radius: 4px 12px 12px 4px; background: linear-gradient(180deg, #3a3f45, #15181b 60%, #08090a); box-shadow: 0 3px 5px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.15); }
+    .pl-trig .pl-t::after { width: 22px; margin-left: -11px; background: repeating-linear-gradient(90deg, rgba(255,255,255,0.18) 0 2px, transparent 2px 5px); }
     /* ---------------- display de AVISOS no pé dos painéis do Y (setRd): caixa fixa, texto rola; estilo por embarcação ---------------- */
     .msg-rd { position: relative; display: block; width: 0; min-width: 100%; height: 22px; margin-top: 10px; padding: 0 10px; overflow: hidden; white-space: nowrap; border-radius: 4px; box-sizing: border-box;
       font-family: "Consolas", "Lucida Console", "Courier New", monospace; font-size: 12px; line-height: 22px; letter-spacing: 0.03em; font-variant-numeric: tabular-nums; }
@@ -411,6 +415,18 @@
     .rb-start.busy { box-shadow: 0 0 0 4px #1b1f24, 0 0 0 5px rgba(255,255,255,0.15), 0 0 16px 4px rgba(61,220,132,0.8); }
     .rb-start.lit { box-shadow: 0 0 0 4px #1b1f24, 0 0 0 5px rgba(61,220,132,0.7), 0 0 12px 3px rgba(61,220,132,0.55); }
     .rb-stop { background: radial-gradient(circle at 40% 35%, #ff7a6e, #d62a20 55%, #7d120c); }
+    .rb.down { transform: translateY(1px) scale(0.95); filter: brightness(1.15); }
+    /* moto aquática: START / STOP + clipe do cordão de segurança (lanyard) */
+    .ss { display: flex; align-items: center; gap: 12px; padding: 4px 2px; }
+    .ly-w { display: flex; flex-direction: column; align-items: center; gap: 3px; }
+    .ly-w b { font-size: 9.5px; letter-spacing: 0.08em; color: #e9eef2; font-weight: 800; }
+    .ly-w small { font-size: 8.5px; color: #9aa6b0; }
+    .ly { position: relative; width: 46px; height: 46px; border-radius: 50%; border: none; padding: 0; background: radial-gradient(circle at 40% 35%, #3b4148, #1a1d21 70%); box-shadow: 0 0 0 3px #1b1f24, 0 0 0 4px rgba(255,255,255,0.12), inset 0 2px 4px rgba(0,0,0,0.6); }
+    .ly-clip { position: absolute; left: 50%; top: 50%; width: 22px; height: 22px; margin: -11px 0 0 -11px; border-radius: 50%; background: radial-gradient(circle at 40% 35%, #ffd27a, #f07a12 60%, #8a3a05); box-shadow: 0 2px 3px rgba(0,0,0,0.6); transition: transform 0.2s, opacity 0.2s; }
+    .ly-coil { position: absolute; left: 50%; top: 50%; width: 30px; height: 12px; margin: 6px 0 0 -15px; border-radius: 6px; border: 3px solid #f07a12; border-top-color: transparent; opacity: 0.9; transition: transform 0.2s, opacity 0.2s; }
+    .ly:not(.on) .ly-clip { transform: translate(14px, 16px) scale(0.85); opacity: 0.55; }
+    .ly:not(.on) .ly-coil { transform: translate(14px, 14px); opacity: 0.4; }
+    .ly.on { box-shadow: 0 0 0 3px #1b1f24, 0 0 0 4px rgba(240,122,18,0.55), inset 0 2px 4px rgba(0,0,0,0.6); }
     /* buzina (botão preto com aro cromado) e apito (laranja) */
     .hb-w { display: flex; flex-direction: column; align-items: center; gap: 6px; align-self: center; margin: 0 6px 0 10px; }
     .lev .tr { margin-left: 8px; }
@@ -609,6 +625,7 @@
       <div class="pick-row">
         <button class="pick-b" data-kind="bote"><b>Bote de apoio AR-3</b><span>3,1 m · 15 hp · até 3 pessoas · tanque 10 L (começa com 5 L)</span><span>cana do leme no motor, partida na corda, trim manual (3 furos + tilt), lanterna de mão</span></button>
         <button class="pick-b" data-kind="lancha"><b>Lancha AR-6</b><span>6 m · 150 hp · até 4 pessoas · tanque 120 L (começa com 5 L)</span><span>volante, manete, power trim elétrico, partida na chave, luzes de navegação</span></button>
+        <button class="pick-b" data-kind="jetski"><b>Moto aquática AR-J</b><span>3,45 m · 300 hp com compressor · até 3 pessoas montadas · tanque 70 L (começa com 8 L)</span><span>jato d'água (sem hélice): guidão gira o bocal, gatilho, freio/ré iBR, trim VTS, START/STOP com cordão de segurança, modo ECO; virou, o piloto desvira</span></button>
         <button class="pick-b" data-kind="rapida"><b>Lancha rápida AR-9</b><span>8,6 m · 2 × V8 300 hp · 2 pessoas · tanque 380 L (começa com 20 L)</span><span>dois motores de centro com rabeta, um conta-giros por motor, empuxo diferencial (Z/X) para girar no lugar</span></button>
         <button class="pick-b" data-kind="turbina"><b>Lancha de turbina AR-10</b><span>10 m · turbina a gás de 1100 shp · piloto único no habitáculo fechado · 900 L (começa com 120 L)</span><span>hélice de superfície, partida de turbina (arranque → ignição → acende), N1, N2, EGT, torque e óleo no painel, 24 V e GPU na doca</span></button>
       </div>

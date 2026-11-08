@@ -5,7 +5,9 @@
 //    independentes — empuxo diferencial na mão;
 //  • "tiller"   — bote AR-3 (cana): punho giratório do acelerador (tartaruga ↔ lebre) + alavanca de câmbio F-N-R
 //    na lateral do motor;
-//  • "turbine"  — AR-10: manete de potência em T num trilho reto (LENTA → MÁX) + alavanca de marcha F-N-R separada.
+//  • "turbine"  — AR-10: manete de potência em T num trilho reto (LENTA → MÁX) + alavanca de marcha F-N-R separada;
+//  • "handlebar" — moto aquática AR-J: GATILHO do acelerador (manopla direita, SOLTO → TODO) + alavanca do iBR na
+//    manopla esquerda (FRENTE · NEUTRO · RÉ/FREIO: baixa a caçamba do jato; pode puxar com o motor acelerado).
 // ACELERAR EM NEUTRO, como nos barcos reais: na manete de topo (AR-6/AR-9) o botão "N" no meio do quadrante (o
 // botão de neutro/aquecimento) só arma com a manete em N; armado, empurrar a manete só acelera, sem engatar, e ele
 // desarma quando ela volta para N. Na cana e na turbina, o punho/potência em N acelera em neutro.
@@ -14,13 +16,13 @@
 
 export type Gear = "F" | "N" | "R";
 export interface LeverCmd { gear: Gear; throttle: number; neutral?: boolean }
-export type LeverKind = "binnacle" | "twin" | "tiller" | "turbine";
+export type LeverKind = "binnacle" | "twin" | "tiller" | "turbine" | "handlebar";
 /**
  * Trim no painel: "power" = botão basculante UP/DN (power trim/tilt da AR-6, das rabetas da AR-9 e da transmissão de
  * superfície da AR-10) com a posição do pé desenhada e uma barra (faixa de trim + faixa de tilt); "pin" = bote: não
  * há trim elétrico, só o PINO de regulagem (furos 1..N e T = tilt travado), mostrado no suporte do motor.
  */
-export interface TrimOpts { mode: "power" | "pin"; label: string; sub: string; down: number; up: number; tilt: number; pins: number; drive: "outboard" | "sterndrive" | "surface" }
+export interface TrimOpts { mode: "power" | "pin"; label: string; sub: string; down: number; up: number; tilt: number; pins: number; drive: "outboard" | "sterndrive" | "surface" | "jet" }
 export interface TrimState { deg: number; tilt: number; pin: number; blocked: boolean; relay: boolean }
 
 const ARC = 50; // graus de curso da manete de topo para cada lado
@@ -71,6 +73,11 @@ export class LeverControls {
       el.innerHTML = `<div class="tl" title="gire o punho (arraste para os lados) · em N acelera em neutro"><div class="tl-grip" data-grip="0"><span class="tl-ridges"></span><span class="tl-mark"></span></div>
           <div class="tl-scale"><span>🐢 LENTO</span><span>RÁPIDO 🐇</span></div><em class="mt-rd">N · 0 %</em><b>PUNHO</b></div>
         <div class="tl-shift">${gearSel(0)}<b>CÂMBIO</b></div>`;
+    } else if (kind === "handlebar") {
+      el.innerHTML = `<div class="pl pl-trig" title="gatilho do acelerador (manopla direita) · em N acelera em neutro"><div class="pl-track" data-pl="0"><span class="pl-slot"></span>
+            <i class="pl-l max">TODO</i><i class="pl-l idle">SOLTO</i><span class="pl-handle"><span class="pl-t"></span></span></div>
+          <em class="mt-rd">N · 0 %</em><b>GATILHO</b></div>
+        <div class="tl-shift" title="iBR (manopla esquerda): F = frente · N = caçamba no meio · R = ré e freio (baixa a caçamba, até acelerado)">${gearSel(0)}<b>iBR · FREIO/RÉ</b></div>`;
     } else {
       el.innerHTML = `<div class="pl" title="manete de potência em T (N1) · em N acelera em neutro"><div class="pl-track" data-pl="0"><span class="pl-slot"></span>
             <i class="pl-l max">MÁX</i><i class="pl-l idle">LENTA</i><span class="pl-handle"><span class="pl-t"></span></span></div>

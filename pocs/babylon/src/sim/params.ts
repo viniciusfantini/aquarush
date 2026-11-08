@@ -1,5 +1,6 @@
-// Parâmetros físicos documentados das 4 embarcações da POC: lancha AR-6 (SPEEDBOAT), bote AR-3 (DINGHY),
-// lancha rápida AR-9 (RAPIDA, dois V8) e lancha de turbina AR-10 (TURBINA; a turbina em turbine.ts).
+// Parâmetros físicos documentados das 5 embarcações da POC: lancha AR-6 (SPEEDBOAT), bote AR-3 (DINGHY),
+// lancha rápida AR-9 (RAPIDA, dois V8), lancha de turbina AR-10 (TURBINA; a turbina em turbine.ts) e a moto
+// aquática AR-J (JETSKI, 300 hp com jato d'água).
 // Estes valores são o "contrato" entre as POCs (Babylon, Unity, Unreal):
 // a mesma massa, dimensões, potência e coeficientes devem ser usados nas três.
 
@@ -23,13 +24,14 @@ export interface BuoyancyPoint {
   incidence: number;
 }
 
-export type VesselKind = "lancha" | "bote" | "rapida" | "turbina";
+export type VesselKind = "lancha" | "bote" | "rapida" | "turbina" | "jetski";
 
 export interface SpeedboatParams {
   kind: VesselKind;
   name: string;
-  /** "remote" = volante + manete no console; "tiller" = cana do leme no próprio motor (bote) */
-  steering: "remote" | "tiller";
+  /** "remote" = volante + manete no console; "tiller" = cana do leme no próprio motor (bote); "handlebar" = guidão
+   *  da moto aquática (o guidão gira o bocal do jato) */
+  steering: "remote" | "tiller" | "handlebar";
   /** "power" = power trim elétrico (bomba); "manual" = pino de trim em furos + tilt à mão */
   trimMode: "power" | "manual";
   /** ângulos do pino de trim manual (rad), do mais baixo ao mais alto */
@@ -78,6 +80,9 @@ export interface SpeedboatParams {
     ventM2: number;      // frestas por onde a bolsa de ar vaza com o casco inteiro (escotilhas, respiros)
     /** nível (y local) → litros alagáveis sob o piso (forma real do casco); sem tabela = poço linear até sumpL */
     underFloor?: { levels: number[]; liters: number[] };
+    /** sifão do jato (moto aquática): o venturi da bomba do jato suga a água do porão com o motor rodando (L/s a
+     *  plena rotação, ∝ rpm). Sem bomba elétrica, sem consumo */
+    siphonLps?: number;
   };
   /** âncora de proa (molinete elétrico se motorA > 0; senão, à mão) */
   anchor: AnchorParams;
@@ -160,6 +165,24 @@ export interface SpeedboatParams {
    * por uma saída no espelho. `lpsAt100` = vazão a 100 % N1; saída (local), direção (unitária, local) e seção.
    */
   cooling?: { outlet: Vec3; dir: Vec3; outletAreaM2: number; lpsAt100: number };
+  /**
+   * JATO D'ÁGUA (moto aquática): no lugar da hélice exposta, um rotor dentro do duto. A água entra pela grade no fundo
+   * (`intakePos`) e sai pelo bocal (`propPos`), que o guidão gira (`steer`) e o trim (VTS) inclina. Sem empuxo não há
+   * direção (o bocal é o leme). O motor é ligado direto ao rotor (sem embreagem): a marcha é a CAÇAMBA de ré (iBR) —
+   * N = caçamba no meio (o jato sai, mas o empuxo líquido é ~zero), R = caçamba baixada (ré / freio). Com a grade fora
+   * d'água (pulando onda) o rotor suga ar: perde a carga e dispara.
+   */
+  waterjet?: boolean;
+  /** casco SELADO (moto aquática): o convés é aberto e autodrenante — a água do convés não entra no casco (só por furo
+   *  ou, virado, pelas tomadas de ar) */
+  sealedHull?: boolean;
+  /** virado, o piloto na água desvira a embarcação (empurrando pelo lado/puxando a alça da popa) */
+  rightable?: boolean;
+  /** partida por botões START/STOP (moto aquática): sem chave de ignição, sem chave de bateria e sem registro de
+   *  combustível; o cordão de segurança (lanyard) tem de estar preso para dar partida */
+  startStop?: boolean;
+  /** modo ECO: fração máxima do acelerador (o gatilho pleno só abre até aqui). Ausente = sem modos */
+  ecoThrottle?: number;
 }
 
 const hl = 0.72; // meia-distância transversal dos pontos de flutuação
@@ -635,4 +658,126 @@ export const TURBINA: SpeedboatParams = {
   windage: { sideCdA: 6.5, center: v3(0, 0.7, 0.5) },
 };
 
-export const VESSELS: Record<VesselKind, SpeedboatParams> = { lancha: SPEEDBOAT, bote: DINGHY, rapida: RAPIDA, turbina: TURBINA };
+// ---------------------------------------------------------------------------------------------
+// Moto aquática AR-J (3,45 m, até 3 pessoas montadas em fila) — motor 4T de 3 cilindros 1,8 L com compressor
+// (supercharger), 300 hp, ligado DIRETO ao rotor de um jato d'água (sem hélice exposta, sem embreagem). O guidão
+// gira o bocal; o gatilho da direita acelera; a alavanca da esquerda (iBR) baixa a caçamba: neutro, ré e freio.
+// Trim elétrico do bocal (VTS) nos botões do guidão. Partida por botões START/STOP com cordão de segurança.
+// Casco selado (convés autodrenante, porão esvaziado pelo sifão do jato). Virada, o piloto a desvira na água.
+// Referência: motos de 300 hp de série (seca ~360 kg, ~108 km/h com o limitador, tanque ~70 L, ~70 L/h a pleno).
+// Origem = CG da moto seca. X boreste, Y cima, Z proa.
+// ---------------------------------------------------------------------------------------------
+const jl = 0.38; // meia-distância transversal dos pontos de flutuação
+
+export const JETSKI: SpeedboatParams = {
+  kind: "jetski",
+  name: "Moto aquática AR-J",
+  steering: "handlebar",
+  trimMode: "power",
+  trimPins: [],
+  electricStart: true,
+  startStop: true,
+  waterjet: true,
+  sealedHull: true,
+  rightable: true,
+  ecoThrottle: 0.55,
+  tankLiters: 70,
+  fuelIdleLph: 2.2,
+  fuelMaxLph: 72,
+  cylinders: 3,
+  maxPeople: 3,
+  length: 3.45,
+  beam: 1.25,
+  mass: 360,
+  fuelTankPos: v3(0, -0.1, 0.45),
+  fuelDensity: 0.74,
+  seats: {
+    helm: v3(0, 0.86, -0.15),        // piloto montado no banco, pés nos estribos do convés
+    passenger: v3(0, 0.88, -0.62),   // garupa 1
+    rearLeft: v3(0, 0.9, -1.05),     // garupa 2 (na ponta do banco)
+    rearRight: v3(0, 0.9, -1.05),    // (não usado: lotação máxima 3)
+  },
+  inertia: v3(300, 330, 62),
+  waterplaneArea: 2.5,
+  pointMaxDepth: 0.5,
+  wetDepth: 0.06,
+  buoyancyPoints: [
+    { p: v3(-jl * 0.8, -0.15, 1.15), areaWeight: 0.6, liftWeight: 0.8, incidence: 7 * DEG },
+    { p: v3(jl * 0.8, -0.15, 1.15), areaWeight: 0.6, liftWeight: 0.8, incidence: 7 * DEG },
+    { p: v3(-jl, -0.15, 0.05), areaWeight: 1.1, liftWeight: 1.0, incidence: 3 * DEG },
+    { p: v3(jl, -0.15, 0.05), areaWeight: 1.1, liftWeight: 1.0, incidence: 3 * DEG },
+    { p: v3(-jl, -0.15, -1.15), areaWeight: 1.3, liftWeight: 0.25, incidence: 1.5 * DEG },
+    { p: v3(jl, -0.15, -1.15), areaWeight: 1.3, liftWeight: 0.25, incidence: 1.5 * DEG },
+  ],
+  contactPoints: [
+    v3(0, 0.12, 1.72), v3(0, -0.27, 1.0), v3(0, -0.32, 0), v3(0, -0.3, -1.55),
+    v3(-0.6, 0.12, 0.55), v3(0.6, 0.12, 0.55), v3(-0.62, 0.12, -0.6), v3(0.62, 0.12, -0.6),
+    v3(-0.56, 0.12, -1.66), v3(0.56, 0.12, -1.66),
+    v3(0, 0.78, 0.45), v3(0, 0.72, -0.9), // guidão/painel e banco (virada, é o que toca no fundo)
+  ],
+  bunkPoints: [-1.35, -0.45, 0.5].flatMap((z) => [v3(0, -0.32, z), v3(-0.3, -0.24, z), v3(0.3, -0.24, z)]),
+  gunwaleY: 0.3,
+  // casco selado: ~250 L de ar sob o convés (o resto é motor, tanque, espuma); sem bomba elétrica — o sifão do jato
+  // esvazia o porão com o motor rodando. Virada, a água entra devagar pelas tomadas de ar do motor
+  bilge: { pos: v3(0, -0.2, -0.3), maxL: 250, pumpLph: 0, pumpA: 0, outlet: v3(0.0, -0.05, -1.7), areaM2: 1.2, holeMaxM2: 0.0015, bowRise: 0.12, transomY: 0.3, transomW: 0.01,
+    sumpL: 250, floorY: 0.25, floodCenter: v3(0, 0, -0.2), floodLen: 2.4, floodHalfW: 0.4, scupperM2: 0, scupperFromStern: 0.3, shutoffHeadM: 2, outletAreaM2: 1.3e-4, capsizeAirFrac: 0.93, ventM2: 4e-6,
+    siphonLps: 0.3 },
+  // fateixa dobrável (~1,5 kg) com 15 m de cabo, no compartimento de proa, à mão
+  anchor: { roller: v3(0, 0.32, 1.66), rodeMax: 15, rateOut: 0.7, rateIn: 0.35, motorA: 0, holdN: 600 },
+
+  enginePowerHp: 300,
+  maxThrust: 5800,             // empuxo estático do jato
+  reverseThrustFactor: 0.3,    // caçamba baixada: o jato é desviado para a frente e para baixo
+  propPitchSpeed: 42,          // velocidade em que o empuxo do jato zera (o jato sai a ~45 m/s a pleno)
+  propPos: v3(0, -0.12, -1.8), // bocal (saída do jato), na popa, na linha d'água
+  propRadius: 0.085,           // raio do bocal
+  propGear: 1,                 // rotor ligado direto ao virabrequim
+  revLimitRpm: 8100,
+  engineResponse: 0.16,
+  idleRpm: 1700,
+  maxRpm: 7900,
+  shiftTime: 0.35,             // caçamba elétrica (iBR)
+  idleThrustFraction: 0.08,    // na lenta engatada ela anda (o jato nunca para)
+
+  maxSteerLow: 28 * DEG,       // giro do bocal
+  maxSteerHigh: 16 * DEG,
+  steerRate: 4.0,
+  gearcaseRudder: 0,           // sem leme: sem empuxo não há direção
+
+  trimUp: 8 * DEG,             // VTS: bocal para baixo = proa sobe
+  tiltMax: 0,                  // não tem tilt
+  tiltRate: 0,
+  tiltMaxThrust: 1e9,
+  tiltMaxSpeed: 1e9,
+  tiltMaxRpm: 1e9,
+  drivePivot: v3(0, -0.12, -1.62),
+  intakePos: v3(0, -0.3, -0.75), // grade de admissão do jato no fundo
+  trimDown: -6 * DEG,
+  trimRate: 0.7,
+  driveLiftArea: 0.02,
+
+  planingLiftCoef: 0.6,
+  maxAoa: 14 * DEG,
+  dragFrictionQuad: 3.5,
+  dragLinear: 15,
+  lateralQuad: 300,
+  lateralLinear: 250,
+  keelLift: 520,
+  yawDamping: 5500,
+  yawDampingLowSpeed: 0.05,   // devagar ela gira no próprio comprimento (bocal na lenta)
+  heaveDamping: 650,
+  waveDragPeakRatio: 0.12,
+  sternTrough: 0.12,
+  bowWave: 0.05,
+  bankCoef: 1000,               // deita bem para dentro da curva
+  rollDamping: 1600,
+  airDragCdA: 0.75,            // moto + piloto
+  // bateria AGM pequena (~30 Ah), arranque com redução ~95 A (3 cilindros), estator (gerador do volante) ~30 A
+  systems: { batteryAh: 30, starterA: 95, altMaxA: 30, altIdleFrac: 0.3, lineL: 0.03 },
+  windage: { sideCdA: 1.4, center: v3(0, 0.55, 0) },
+};
+
+/** embarcação pequena (bote, moto aquática): carretinha leve puxada por um carro comum (as outras: caminhonete) */
+export const smallTow = (k: VesselKind): boolean => k === "bote" || k === "jetski";
+
+export const VESSELS: Record<VesselKind, SpeedboatParams> = { lancha: SPEEDBOAT, bote: DINGHY, rapida: RAPIDA, turbina: TURBINA, jetski: JETSKI };

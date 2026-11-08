@@ -8,7 +8,7 @@ import { Speedboat } from "../src/sim/boat.ts";
 import { JUMP_AH } from "../src/sim/engineSystems.ts";
 import { Wind, WIND_LEVELS } from "../src/sim/wind.ts";
 import { jetStreakLocal } from "../src/sim/bilgeJet.ts";
-import { SPEEDBOAT, DINGHY, RAPIDA, TURBINA, PERSON_KG, type Occupant } from "../src/sim/params.ts";
+import { SPEEDBOAT, DINGHY, RAPIDA, TURBINA, JETSKI, PERSON_KG, smallTow, type Occupant } from "../src/sim/params.ts";
 import { Turbine } from "../src/sim/turbine.ts";
 import { GerstnerWater, WAVE_PRESETS, type CurrentZone } from "../src/sim/water.ts";
 import type { PhysicsWorld } from "../src/sim/world.ts";
@@ -1174,6 +1174,92 @@ for (const [label, thr] of [["baixa", 0.25], ["alta", 1]] as const) {
   run(c, mkWater(0.35), 10, emptyInput());
   check("turbina", "virou: piloto preso no habitáculo (pessoas na água)", c.swimmers.length, 0, 0, "", 0);
   check("turbina", "virou: a turbina apaga (spool-down)", c.units[0].turb!.burning ? 0 : 1, 1, 1, "", 0);
+}
+
+// ---------- Moto aquática AR-J: jato d'água 300 hp, iBR, VTS, START/STOP com cordão, ECO, casco selado, desvirar ----------
+{
+  const water = mkWater(0.35);
+  const mk = (pax = 1) => {
+    const b = new Speedboat(JETSKI, v3(0, 0.1, 0)); b.systems.fuelL = 50;
+    b.occupants = [{ seat: "helm", mass: PERSON_KG }, ...(pax > 1 ? [{ seat: "passenger" as const, mass: PERSON_KG }] : []), ...(pax > 2 ? [{ seat: "rearLeft" as const, mass: PERSON_KG }] : [])];
+    run(b, water, 3, { ...emptyInput(), gear: "N" }); return b;
+  };
+  const a = mk();
+  check("moto aquática", "parada: CG em relação à água (m)", a.pos.y - water.getHeight(a.pos.x, a.pos.z), -0.12, 0.1, "m", 3);
+  check("moto aquática", "parada: borda livre do convés (m)", a.telemetry.freeboard, 0.12, 0.4, "m", 2);
+  let t60 = -1, t100 = -1;
+  run(a, water, 40, { ...emptyInput(), gear: "F", throttle: 1 }, openWater, (t) => { const v = a.telemetry.speedKmh; if (t60 < 0 && v >= 60) t60 = t; if (t100 < 0 && v >= 100) t100 = t; });
+  check("moto aquática", "velocidade final a toda (km/h)", a.telemetry.speedKmh, 95, 115, "km/h", 1);
+  check("moto aquática", "0→60 km/h (s)", t60, 1.5, 4, "s", 1);
+  check("moto aquática", "0→100 km/h (s)", t100, 4, 12, "s", 1);
+  check("moto aquática", "consumo a toda (L/h)", a.telemetry.fuelLph, 60, 85, "L/h", 0);
+  check("moto aquática", "rotação a toda (rpm)", a.telemetry.rpm, 7500, 8100, "rpm", 0);
+  run(a, water, 6, { ...emptyInput(), gear: "F", throttle: 1, steering: 1 }, openWater);
+  check("moto aquática", "curva a toda com o guidão todo: guinada (°/s)", a.angVel.y * 57.3, 15, 60, "°/s", 1);
+  check("moto aquática", "curva a toda: não vira", a.capsized ? 1 : 0, 0, 0, "", 0);
+  // freio iBR: caçamba baixada com o gatilho apertado
+  run(a, water, 6, { ...emptyInput(), gear: "F", throttle: 1 }, openWater);
+  const v0 = a.telemetry.speedKmh; let tStop = -1;
+  run(a, water, 10, { ...emptyInput(), gear: "R", throttle: 1 }, openWater, (t) => { if (tStop < 0 && a.telemetry.speedKmh < 5) tStop = t; });
+  check("moto aquática", `iBR: freia de ${v0.toFixed(0)} km/h a < 5 km/h (s)`, tStop, 1, 6, "s", 1);
+  check("moto aquática", "iBR: depois de parar, dá ré", a.telemetry.gear === "R" && (a.vel.x * a.forward.x + a.vel.z * a.forward.z) < -0.3 ? 1 : 0, 1, 1, "", 0);
+  // sem empuxo não há direção (o bocal é o leme)
+  const n = mk(); const y0 = Math.atan2(n.forward.x, n.forward.z);
+  run(n, water, 6, { ...emptyInput(), gear: "N", steering: 1 });
+  check("moto aquática", "sem acelerar (N), guidão todo: quase não vira (°)", Math.abs(Math.atan2(n.forward.x, n.forward.z) - y0) * 57.3, 0, 3, "°", 1);
+  run(n, water, 6, { ...emptyInput(), gear: "F", throttle: 0, steering: 1 });
+  check("moto aquática", "lenta engatada + guidão: gira (°/s)", Math.abs(n.angVel.y) * 57.3, 5, 40, "°/s", 1);
+  // N acelerado: o rotor gira (direto), mas a caçamba anula o empuxo
+  run(n, water, 4, { ...emptyInput(), gear: "N", throttle: 1, neutralThrottle: true });
+  check("moto aquática", "acelerando em N: empuxo líquido (N)", Math.abs(n.telemetry.thrustN), 0, 1, "N", 0);
+  check("moto aquática", "acelerando em N: o rotor gira com o motor (rpm)", n.telemetry.propRpm, 6000, 8200, "rpm", 0);
+  // grade fora d'água (pulo): sem empuxo, o giro dispara
+  const j = mk(); run(j, water, 25, { ...emptyInput(), gear: "F", throttle: 1 }, openWater);
+  j.pos = v3(j.pos.x, j.pos.y + 0.6, j.pos.z); let thrMin = 1e9, rMax = 0;
+  run(j, water, 0.3, { ...emptyInput(), gear: "F", throttle: 1 }, openWater, () => { thrMin = Math.min(thrMin, j.telemetry.thrustN); rMax = Math.max(rMax, j.telemetry.rpm); });
+  check("moto aquática", "no ar (grade fora d'água): empuxo mínimo (N)", thrMin, 0, 50, "N", 0);
+  check("moto aquática", "no ar: o giro dispara (rpm)", rMax, 7850, 8300, "rpm", 0);
+  // modo ECO
+  const e = mk(); e.driveMode = "eco"; run(e, water, 40, { ...emptyInput(), gear: "F", throttle: 1 }, openWater);
+  check("moto aquática", "ECO: gatilho pleno abre só até 55 %", e.telemetry.throttle, 0.5, 0.56, "", 2);
+  check("moto aquática", "ECO: velocidade final (km/h)", e.telemetry.speedKmh, 70, 95, "km/h", 1);
+  // 3 pessoas
+  const t3 = mk(3); run(t3, water, 40, { ...emptyInput(), gear: "F", throttle: 1 }, openWater);
+  check("moto aquática", "lotada (3): ainda planeia (km/h)", t3.telemetry.speedKmh, 80, 110, "km/h", 1);
+  // partida por botões e cordão de segurança
+  const p = mk(); p.engine = "off"; for (const x of p.units) x.key = "off"; p.systems.batterySoc = 0.6;
+  run(p, water, 3, { ...emptyInput(), gear: "N" }); // motor parado de verdade (giro a zero) antes da partida
+  p.setLanyard(false);
+  check("moto aquática", "cordão solto: não dá partida", p.toggleIgnition() === "noLanyard" && p.setKey(0, "start") === "noLanyard" ? 1 : 0, 1, 1, "", 0);
+  p.setLanyard(true); p.setKey(0, "start"); let tOn = -1;
+  run(p, water, 6, { ...emptyInput(), gear: "N" }, undefined, (t) => { if (tOn < 0 && p.engine === "running") tOn = t; });
+  p.setKey(0, "on");
+  check("moto aquática", "START segurado (bateria 60 %): pega em (s)", tOn, 0.3, 4, "s", 1);
+  p.setLanyard(false);
+  check("moto aquática", "cordão puxado com o motor ligado: desliga", p.engine === "off" && p.telemetry.stall === "lanyard" ? 1 : 0, 1, 1, "", 0);
+  run(p, water, 31, { ...emptyInput(), gear: "N" });
+  check("moto aquática", "central dorme 30 s depois de parada (chave virtual em OFF)", p.units[0].key === "off" ? 1 : 0, 1, 1, "", 0);
+  // casco selado: ondas fortes paradas não enchem o casco; sifão esvazia o porão com o motor rodando
+  const sw = new Speedboat(JETSKI, v3(0, 0.1, 0)); sw.systems.fuelL = 30; sw.occupants = [{ seat: "helm", mass: PERSON_KG }, { seat: "passenger", mass: PERSON_KG }, { seat: "rearLeft", mass: PERSON_KG }];
+  const rough = mkWater(1);
+  run(sw, rough, 40, { ...emptyInput(), gear: "N" });
+  check("moto aquática", "casco selado: 40 s lotada em ondas fortes (água dentro, L)", sw.telemetry.bilgeL, 0, 1, "L", 1);
+  sw.bilgeL = 20; let rpmSum = 0, nS = 0;
+  run(sw, water, 30, { ...emptyInput(), gear: "N", throttle: 0.6, neutralThrottle: true }, undefined, () => { rpmSum += sw.telemetry.rpm; nS++; });
+  // contrato: siphonLps × rpm/maxRpm → litros esperados em 30 s
+  const expL = (JETSKI.bilge.siphonLps ?? 0) * (rpmSum / nS / JETSKI.maxRpm) * 30;
+  check("moto aquática", `sifão do jato: 20 L, 30 s acelerada em N — retirou (esperado ${expL.toFixed(1)} L)`, 20 - sw.telemetry.bilgeL, expL * 0.85, expL * 1.15, "L", 1);
+  check("moto aquática", "sifão do jato: tira água de verdade (L em 30 s)", 20 - sw.telemetry.bilgeL, 3, 20, "L", 1);
+  // virou: o piloto nada até ela e desvira; sobe; liga de novo
+  const c = mk(); run(c, water, 1, { ...emptyInput(), gear: "N" });
+  c.rot = qFromAxisAngle(v3(0, 0, 1), Math.PI * 0.97); c.pos = v3(c.pos.x, 0.2, c.pos.z);
+  let tUp = -1; run(c, water, 20, { ...emptyInput(), gear: "N" }, undefined, (t) => { if (tUp < 0 && c.righted > 0) tUp = t; });
+  check("moto aquática", "virada: o piloto desvira (s)", tUp, 1.5, 12, "s", 1);
+  check("moto aquática", "desvirada: o piloto volta a bordo e prende o cordão", c.occupants.length === 1 && c.lanyard && !c.capsized ? 1 : 0, 1, 1, "", 0);
+  check("moto aquática", "desvirada: dá partida de novo", c.toggleIgnition() === "starting" ? 1 : 0, 1, 1, "", 0);
+  // carretinha leve no carro
+  const tr = buildTrailer(JETSKI);
+  check("moto aquática", "carretinha leve, puxada pelo carro (comprimento, m)", smallTow("jetski") ? tr.length : -1, 3.6, 4.2, "m", 2);
 }
 
 // ---------- Painel de sistemas (Y): registro de combustível, bomba de porão, afogador, chave de baterias ----------
