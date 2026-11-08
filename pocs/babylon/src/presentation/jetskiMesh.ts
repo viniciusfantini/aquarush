@@ -4,7 +4,7 @@
 // (iBR) na esquerda, que baixa a CAÇAMBA sobre o bocal (N = meio, R = toda baixada). Sem hélice exposta: o rotor fica
 // dentro do duto (aparece no fundo do bocal). Painel digital no console do guidão (acende com a central acordada).
 
-import { type Scene, Mesh, MeshBuilder, StandardMaterial, PBRMaterial, Color3, TransformNode, Vector3 } from "@babylonjs/core";
+import { type Scene, Mesh, MeshBuilder, StandardMaterial, PBRMaterial, Color3, Color4, TransformNode, Vector3, DynamicTexture, ParticleSystem } from "@babylonjs/core";
 import { JETSKI } from "../sim/params.ts";
 import type { BoatTelemetry } from "../sim/boat.ts";
 import type { VehicleInput } from "../gameplay/vehicleInput.ts";
@@ -153,12 +153,62 @@ export const buildJetski = (scene: Scene): BoatVisual & { controls: JetskiContro
   nozzle.rotation.x = -Math.PI / 2; nozzle.position.set(0, ny / 2, nz / 2);
   // rotor (aparece no fundo do bocal) — gira com o motor
   const { propeller, propBlur } = buildPropeller(scene, engine, new Vector3(0, ny, nz + 0.04), JETSKI.propRadius * 0.9, 0.1, steel, add, meshes);
-  // caçamba de ré (iBR): placa curva que desce na frente da saída do jato
+  // ---- caçamba de ré (iBR) ----
+  // Concha em "C" articulada num eixo transversal ACIMA da saída do bocal. Fechada (R / freio) ela envolve a saída por
+  // trás e por baixo e devolve o jato para a frente e para baixo; em N fica a meio caminho (metade do jato volta);
+  // em F sobe toda e o jato sai 100 % livre. Os braços laterais giram com ela; as orelhas ficam presas no bocal.
+  const PIV = new Vector3(0, ny + 0.115, nz + 0.02);       // eixo da caçamba (local do bocal)
   const bucketPivot = new TransformNode("jetBucketPivot", scene);
-  bucketPivot.parent = engine; bucketPivot.position.set(0, ny + 0.12, nz - 0.02);
-  const bucket = add(MeshBuilder.CreateCylinder("jetBucket", { height: 0.22, diameter: 0.26, tessellation: 18, arc: 0.45 }, scene), blackGloss, bucketPivot);
-  bucket.rotation.z = Math.PI / 2; bucket.rotation.y = Math.PI / 2 + Math.PI * 0.27; bucket.position.set(0, -0.04, -0.07);
-  for (const s of [-1, 1]) add(MeshBuilder.CreateBox("jetBucketArm", { width: 0.012, height: 0.03, depth: 0.16 }, scene), blackGloss, bucketPivot).position.set(s * 0.11, -0.01, 0.0);
+  bucketPivot.parent = engine; bucketPivot.position.copyFrom(PIV);
+  const bucketMat = pbr(scene, "jetBucketMat", new Color3(0.09, 0.1, 0.11), 0.4, 0.35, 0.4);
+  bucketMat.backFaceCulling = false;
+  {
+    // concha: arco de 15° (em cima) a 165° (embaixo, voltando para a frente) em volta da saída, raio 0,115 m
+    const exit = new Vector3(0, ny - PIV.y, nz - 0.03 - PIV.z); // saída do bocal no referencial do eixo
+    const R = 0.115, W = 0.12, rows: Vector3[][] = [];
+    for (let i = 0; i <= 14; i++) {
+      const a = (15 + 150 * (i / 14)) * Math.PI / 180;
+      const y = exit.y + R * Math.cos(a), z = exit.z - R * Math.sin(a);
+      rows.push([new Vector3(-W, y, z), new Vector3(-W * 0.6, y, z - 0.012), new Vector3(0, y, z - 0.016), new Vector3(W * 0.6, y, z - 0.012), new Vector3(W, y, z)]);
+    }
+    const shell = add(MeshBuilder.CreateRibbon("jetBucket", { pathArray: rows, sideOrientation: Mesh.DOUBLESIDE }, scene), bucketMat, bucketPivot);
+    shell.isPickable = false;
+    // bordas laterais da concha (placas em "D") e lábio de baixo (que joga a água para a frente)
+    for (const s of [-1, 1]) {
+      const side = add(MeshBuilder.CreateDisc("jetBucketSide", { radius: R, tessellation: 20, arc: 0.45, sideOrientation: Mesh.DOUBLESIDE }, scene), bucketMat, bucketPivot);
+      side.rotation.y = s * Math.PI / 2; side.rotation.x = -0.25;
+      side.position.set(s * W, exit.y, exit.z);
+      // braço do eixo até a concha
+      const arm = add(MeshBuilder.CreateBox("jetBucketArm", { width: 0.014, height: 0.03, depth: Math.abs(exit.z) + 0.05 }, scene), blackGloss, bucketPivot);
+      arm.position.set(s * (W + 0.012), -0.01, exit.z / 2 - 0.01);
+      // orelha fixa no bocal com o pino
+      const ear = add(MeshBuilder.CreateCylinder("jetBucketPin", { height: 0.03, diameter: 0.03, tessellation: 12 }, scene), steel, engine);
+      ear.rotation.z = Math.PI / 2; ear.position.set(s * (W + 0.02), PIV.y, PIV.z);
+    }
+    const lip = add(MeshBuilder.CreateBox("jetBucketLip", { width: 2 * W, height: 0.012, depth: 0.05 }, scene), bucketMat, bucketPivot);
+    lip.position.set(0, exit.y - R * 0.97, exit.z + 0.02); lip.rotation.x = 0.35;
+  }
+  // jato devolvido pela caçamba: freando rápido a água sobe numa coluna atrás da popa
+  const sprayTex = new DynamicTexture("jetIbrSprayTex", { width: 64, height: 64 }, scene, false);
+  {
+    const c = sprayTex.getContext() as unknown as CanvasRenderingContext2D;
+    const g = c.createRadialGradient(32, 32, 2, 32, 32, 30); g.addColorStop(0, "rgba(255,255,255,1)"); g.addColorStop(0.45, "rgba(240,248,255,0.7)"); g.addColorStop(1, "rgba(255,255,255,0)");
+    c.fillStyle = g; c.fillRect(0, 0, 64, 64); sprayTex.hasAlpha = true; sprayTex.update();
+  }
+  const ibrSpray = new ParticleSystem("jetIbrSpray", 1400, scene);
+  ibrSpray.particleTexture = sprayTex;
+  ibrSpray.emitter = new Vector3(0, -100, 0);
+  ibrSpray.minEmitBox = new Vector3(-0.08, 0, -0.05); ibrSpray.maxEmitBox = new Vector3(0.08, 0.05, 0.05);
+  ibrSpray.color1 = new Color4(1, 1, 1, 0.85); ibrSpray.color2 = new Color4(0.85, 0.93, 1, 0.7); ibrSpray.colorDead = new Color4(0.9, 0.95, 1, 0);
+  ibrSpray.minSize = 0.12; ibrSpray.maxSize = 0.5; ibrSpray.minScaleX = 0.8; ibrSpray.maxScaleX = 1.4;
+  ibrSpray.minLifeTime = 0.6; ibrSpray.maxLifeTime = 1.4;
+  ibrSpray.minEmitPower = 1; ibrSpray.maxEmitPower = 1;
+  ibrSpray.gravity = new Vector3(0, -9.81, 0);
+  ibrSpray.minAngularSpeed = -2; ibrSpray.maxAngularSpeed = 2;
+  ibrSpray.blendMode = ParticleSystem.BLENDMODE_STANDARD;
+  ibrSpray.renderingGroupId = 1;
+  ibrSpray.emitRate = 0;
+  ibrSpray.start();
 
   // esguicho de refrigeração (lado de boreste, na popa): o "xixi" que mostra que a água está circulando
   const telltale = new TransformNode("telltale", scene);
@@ -241,10 +291,28 @@ export const buildJetski = (scene: Scene): BoatVisual & { controls: JetskiContro
       const br = t.gear === "R" ? 1 : t.gear === "N" ? 0.45 : 0;
       brake += (br - brake) * Math.min(1, dt * 10);
       brakePivot.rotation.x = 0.45 * brake;
-      // caçamba: F = recolhida (para cima), N = meio, R = toda baixada sobre o bocal
-      const bk = t.gear === "R" ? 1.15 : t.gear === "N" ? 0.6 : 0;
-      bucketAng += (bk - bucketAng) * Math.min(1, dt * 6);
+      // caçamba pelo estado REAL do iBR: FRENTE = 100 % aberta (levantada), NEUTRO = parcial, RÉ e FREIO = fechada
+      const bk = t.ibr === "off" ? 1.75 : t.ibr === "neutral" ? 0.8 : 0;
+      bucketAng += (bk - bucketAng) * Math.min(1, dt * 7);
       bucketPivot.rotation.x = bucketAng;
+      // FREIO em velocidade: o jato bate na caçamba e sobe numa coluna d'água atrás da popa (∝ velocidade e giro)
+      const v = t.speedKmh / 3.6;
+      const closed = 1 - Math.min(1, bucketAng / 0.8);
+      const strength = t.engine === "running" && t.propImmersion > 0.3 && t.ibr === "brake" ? closed * Math.min(1, Math.max(0, (t.speedKmh - 12) / 50)) * (0.35 + 0.65 * t.throttle) : 0;
+      ibrSpray.emitRate = 1100 * strength;
+      if (strength > 0) {
+        root.computeWorldMatrix(true); bucketPivot.computeWorldMatrix(true);
+        const wm = root.getWorldMatrix();
+        const fwd = Vector3.TransformNormal(Vector3.Forward(), wm).normalize();
+        const up = Vector3.TransformNormal(Vector3.Up(), wm).normalize();
+        const right = Vector3.TransformNormal(Vector3.Right(), wm).normalize();
+        (ibrSpray.emitter as Vector3).copyFrom(bucketPivot.getAbsolutePosition().add(fwd.scale(-0.2)));
+        // a moto vai para a frente a v; a água sai para cima (e um pouco para trás em relação à moto)
+        const base = fwd.scale(v * 0.5), upS = 5 + 6 * strength;
+        ibrSpray.direction1 = base.add(up.scale(upS * 0.75)).add(fwd.scale(-1.5)).add(right.scale(-1.6));
+        ibrSpray.direction2 = base.add(up.scale(upS * 1.25)).add(fwd.scale(0.4)).add(right.scale(1.6));
+        ibrSpray.maxSize = 0.35 + 0.35 * strength;
+      }
       // painel: aceso com a central acordada (START/autoteste/motor) e com tensão
       const awake = t.engine !== "off" || (t.keys[0] ?? "off") !== "off";
       dispMat.emissiveColor = awake && t.houseV > 9 ? new Color3(0.25, 0.75, 0.95) : Color3.Black();
