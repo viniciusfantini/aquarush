@@ -10,6 +10,7 @@ import {
 import { SkyMaterial } from "@babylonjs/materials/sky/skyMaterial";
 
 import { readUrlConfig, PHYSICS_DT, MAX_SUBSTEPS } from "./core/config.ts";
+import { LANG, setLang, installI18n } from "./platform/i18n.ts";
 import { Speedboat } from "./sim/boat.ts";
 import { JUMP_AH, JUMP_MAX_A, GPU_V } from "./sim/engineSystems.ts";
 import { Wind, MS_TO_KNOTS } from "./sim/wind.ts";
@@ -49,7 +50,8 @@ import { BoatCamera } from "./presentation/cameras.ts";
 import { Hud } from "./presentation/hud.ts";
 import { EngineAudio } from "./presentation/audio.ts";
 
-const BUILD = "poc-babylon 0.67.2";
+installI18n(); // inglês: traduz o DOM, as escritas futuras e os letreiros 3D (antes de montar a cena e o HUD)
+const BUILD = "poc-babylon 0.68.0";
 /** Escala visual da rotação da hélice (proporcional ao RPM, abaixo do limite estroboscópico). */
 const PROP_VISUAL_SCALE = 0.12;
 
@@ -789,11 +791,13 @@ const boot = async () => {
   const leaveSplash = () => { splash.classList.add("hidden"); showMenu(); };
   document.getElementById("splash-play")!.addEventListener("click", leaveSplash);
   document.getElementById("splash-ver")!.textContent = BUILD;
-  // idioma: só português por enquanto (o inglês aparece com o selo SOON e não faz nada ainda)
-  try { localStorage.setItem("aquarush.lang", "pt-BR"); } catch { /* sem storage */ }
-  for (const b of splash.querySelectorAll<HTMLButtonElement>(".sp-lang button")) b.addEventListener("click", () => {
-    if (b.classList.contains("soon")) { b.animate([{ transform: "translateX(0)" }, { transform: "translateX(-4px)" }, { transform: "translateX(4px)" }, { transform: "translateX(0)" }], { duration: 260 }); return; }
-  });
+  if (LANG === "en") splash.style.backgroundImage = 'url("splash-en.svg")'; // arte com o subtítulo em inglês
+  // idioma: português ou inglês (a tradução é uma camada única em platform/i18n.ts; trocar recarrega o jogo)
+  for (const b of splash.querySelectorAll<HTMLButtonElement>(".sp-lang button")) {
+    const l = b.dataset.lang === "en" ? "en" : "pt";
+    b.classList.toggle("sel", l === LANG); b.setAttribute("aria-pressed", String(l === LANG));
+    b.addEventListener("click", () => { if (l !== LANG) setLang(l); });
+  }
   for (const c of cards) c.addEventListener("click", () => {
     const k = c.dataset.kind as VesselKind;
     if (k !== V.kind) activate(k);

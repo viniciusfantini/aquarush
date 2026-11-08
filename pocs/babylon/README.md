@@ -96,6 +96,19 @@ A lancha é um **corpo rígido 6DOF** (massa seca de 1030 kg + gasolina, ocupant
 
 > Referência completa da lógica elétrica e dos motores: [`docs/SISTEMAS_ELETRICOS_E_MOTORES.md`](../../docs/SISTEMAS_ELETRICOS_E_MOTORES.md).
 
+## Idioma: português e inglês (v0.68)
+
+- O botão **English** do splash funciona: grava `aquarush.lang` e recarrega (a cena tem letreiros desenhados na
+  carga). Também dá para forçar com `?lang=en` ou `?lang=pt`.
+- **Uma camada só** (`src/platform/i18n.ts`): em inglês ela intercepta o que vai para a tela — `textContent`,
+  `innerHTML`, `title`/`aria-label` (HUD, relógios SVG, painéis, manetes, chaves, avisos, menu, ajuda, F3) e o
+  `fillText` do canvas (letreiros 3D) — e traduz pelo dicionário `src/platform/i18n.en.ts` (texto exato, padrões com
+  `{}` para as partes variáveis, CAIXA ALTA automática e textos compostos por " · " / " — "). O código do jogo
+  continua escrevendo em pt-BR; em português a camada nem é instalada.
+- **Texto novo na interface** precisa da entrada no `i18n.en.ts`. Para achar o que falta: jogue em inglês e rode
+  `__i18nMissing()` no console (lista os textos com cara de português que passaram sem tradução).
+- A arte do splash tem o subtítulo em inglês em `public/splash-en.svg`.
+
 ## Moto aquática: caçamba do iBR e jato d'água no freio (v0.67.2)
 
 - **Caçamba** (`jetskiMesh.ts`): concha em "C" (raio 0,115 m) articulada num eixo transversal acima da saída do
