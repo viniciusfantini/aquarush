@@ -83,6 +83,7 @@ Valores de referência (lancha): massa seca 1030 kg; empuxo máximo 8,5 t; borda
 
 | Data | Decisão | Motivo |
 |---|---|---|
+| 2026-11-08 | **Projeto aberto, licença MIT** (todo o repositório). Arquivos de contribuição em pt e en: `CONTRIBUTING(.en).md`, `CODE_OF_CONDUCT(.en).md`, `.github/` (modelos bilíngues de issue/PR, CI `ci.yml`: `npm ci` + typecheck + `test:sim` + build em PR e push no `main`), `docs/GOOD_FIRST_ISSUES.md`. Ao mudar regras do projeto, atualize os dois CONTRIBUTING | Pedido do usuário: deixar o projeto convidativo a contribuições, tudo MIT, arquivos criados e traduzidos |
 | 2026-11-08 | Nado `SWIM_MS` = 1,1 m/s. **README em inglês** (`README.en.md`, link no topo dos dois): ao mudar o README em português, atualize o inglês (pelo menos a tabela de status, controles e "Recent changes") | Pedido do usuário: pessoas nadando mais rápido; informações do README também em inglês no GitHub |
 | 2026-11-08 | Freio/ré da caçamba da moto = **iBB** em toda a UI, código e docs. Regra geral: **sem nomes/marcas de fabricantes** nos textos do jogo (como já valia para o som do motor) | Pedido do usuário: trocar o nome por causa de direitos autorais |
 | 2026-11-08 | Moto aquática: imersão da grade do jato = smoothstep(−0,10; −0,02) da profundidade (a sucção puxa a água colada no casco); `JETSKI.bankCoef` 1000 → 500 (1000 virava em curva fechada a meia velocidade; os testes só cobriam a curva a toda) | Relato do usuário: devagar o jetski cavitava muito fácil (era ventilação da grade em curva) |

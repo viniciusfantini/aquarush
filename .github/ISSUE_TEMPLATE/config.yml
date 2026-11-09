@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: "🎮 Jogar online · Play online"
+    url: https://viniciusfantini.github.io/aquarush/
+    about: "Teste a versão publicada antes de relatar · Try the published version before reporting"
+  - name: "📖 Como contribuir · How to contribute"
+    url: https://github.com/viniciusfantini/aquarush/blob/main/CONTRIBUTING.md
+    about: "Guia de contribuição (pt) · Contributing guide (en: CONTRIBUTING.en.md)"

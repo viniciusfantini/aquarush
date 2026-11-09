@@ -1,0 +1,28 @@
+# Testes automáticos em todo Pull Request e em todo push no main: typecheck, roteiro físico (test:sim) e build.
+# Automatic checks on every Pull Request and every push to main: typecheck, physics script (test:sim) and build.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  babylon:
+    name: POC Babylon — typecheck · test:sim · build
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: pocs/babylon
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: pocs/babylon/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run test:sim
+      - run: npm run build

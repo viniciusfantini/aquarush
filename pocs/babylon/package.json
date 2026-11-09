@@ -4,6 +4,12 @@
   "version": "0.68.5",
   "type": "module",
   "description": "AQUA RUSH — POC 1 (Babylon.js, browser-first)",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/viniciusfantini/aquarush.git",
+    "directory": "pocs/babylon"
+  },
   "scripts": {
     "dev": "vite --host",
     "build": "vite build",

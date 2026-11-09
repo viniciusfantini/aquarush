@@ -93,12 +93,28 @@ Na escolha do barco, o **menu já fica no lago**: a embarcação escolhida boia 
 
 **Temporário**: o combustível da largada está alto para os testes: **5 L** na lancha e no bote, **8 L** na AR-J, **20 L** na AR-9 e **120 L** na AR-10 (`START_FUEL` em `pocs/babylon/src/main.ts`). A regra de jogo (o combustível inicial não chega ao fim do cânion) volta com 0,25 L na lancha e 0,05 L no bote; para a AR-9 e a AR-10 o valor ainda precisa ser calculado.
 
+## Contribuir
+
+O projeto é aberto e contribuições são muito bem-vindas — código, física, som, visual, tradução, testes, ideias e
+relatos de bugs. Comece pelo [guia de contribuição](CONTRIBUTING.md) e pelas
+[primeiras tarefas](docs/GOOD_FIRST_ISSUES.md) (`good first issue`); relate bugs ou sugira ideias pelas
+[issues](https://github.com/viniciusfantini/aquarush/issues/new/choose). Todo Pull Request passa automaticamente por
+typecheck, `test:sim` e build (GitHub Actions). Participar implica seguir o [Código de Conduta](CODE_OF_CONDUCT.md).
+
+## Licença
+
+[MIT](LICENSE) — você pode usar, copiar, modificar e distribuir o código livremente, mantendo o aviso de copyright.
+
 ## Estrutura do repositório
 
 ```
-README.md            este arquivo
+README.md            este arquivo (README.en.md = em inglês)
+CONTRIBUTING.md      como contribuir (CONTRIBUTING.en.md = em inglês)
+CODE_OF_CONDUCT.md   código de conduta (CODE_OF_CONDUCT.en.md = em inglês)
+LICENSE              licença MIT
+.github/             modelos de issue e Pull Request + CI (typecheck · test:sim · build em todo PR)
 CLAUDE.md            guia para agentes de IA (convenções, decisões, como validar)
-docs/                GDD original + comparativo das POCs + lógica elétrica/motores (SISTEMAS_ELETRICOS_E_MOTORES.md)
+docs/                GDD original + comparativo das POCs + lógica elétrica/motores (SISTEMAS_ELETRICOS_E_MOTORES.md) + primeiras tarefas (GOOD_FIRST_ISSUES.md)
 pocs/babylon/        POC 1 — Babylon.js (TypeScript + Vite)
 pocs/unity/          POC 2 — planejada
 pocs/unreal/         POC 3 — planejada
@@ -110,6 +126,7 @@ pocs/unreal/         POC 3 — planejada
 |---|---|---|
 | 2026-10-31 | babylon 0.1.0 | POC 1: lago com margens, ilha, rio com correnteza, rochas, vegetação, píer e marina. Lancha com corpo rígido 6DOF, flutuação em 6 pontos, planeio emergente, trim físico, colisões. Água Gerstner compartilhada entre física e shader. Esteira, spray, câmeras externa e cockpit, HUD, teclado, gamepad e touch, áudio procedural. Testes físicos headless. |
 | 2026-10-31 | babylon 0.2.0 | Água **vidro (glass)** e presets de água. **Reflexo planar real** (lancha, margens e píer refletidos). **Esteira integrada à água**: um mapa de esteira deforma a superfície (braços do V de Kelvin, cristas e cavados), perturba os reflexos e gera espuma da hélice, do casco e da fervura. **Cavitação e ventilação da hélice** na física (perda de empuxo, RPM sobe), com fervura branca, bolhas, névoa, spray, aviso no HUD e som. **Lancha refeita**: casco com strakes e flare, cockpit rebaixado, para-brisa envolvente, guarda-mancebo, bancos estofados, plataformas e escada de banho, painel com velocímetro e conta-giros de ponteiro, motor de popa com capô, placa anticavitação, pé e skeg, **hélice de 3 pás com passo, torção e skew** e disco de borrão. Materiais PBR com ambiente. |
+| 2026-11-08 | repositório | **Projeto aberto a contribuições**: licença **MIT**, guia de contribuição e código de conduta (pt e en), modelos de issue e de Pull Request, CI no GitHub Actions (typecheck, `test:sim` e build em todo PR e push no `main`) e a lista de primeiras tarefas (`docs/GOOD_FIRST_ISSUES.md`). |
 | 2026-11-08 | babylon 0.68.5 | **Nado mais rápido**: de colete até ~1,1 m/s (era 0,8; a volta a bordo depois de pular caiu para 3,3 s). **README em inglês** ([`README.en.md`](README.en.md)), com link nos dois. 635/637 + 2 KNOWN. |
 | 2026-11-08 | babylon 0.68.4 | Moto aquática com **apito** (o mesmo apito de bolinha do bote, sem bateria) no lugar da buzina: som, botão do painel Y (`SystemsPanelCaps.horn`) e ajuda. |
 | 2026-11-08 | babylon 0.68.3 | O freio/ré da caçamba da moto aquática passa a se chamar **iBB** em todo o jogo, nas traduções, nos testes, no código (`ibbMode`, `telemetry.ibb`, `#g-ibb`…) e na documentação. Só renomeação: 635/637 + 2 KNOWN. |

@@ -93,12 +93,29 @@ The **selection menu is already on the lake**: the chosen craft floats at the pi
 
 **Temporary**: starting fuel is high for testing: **5 L** on the runabout and the tender, **8 L** on the AR-J, **20 L** on the AR-9 and **120 L** on the AR-10 (`START_FUEL` in `pocs/babylon/src/main.ts`).
 
+## Contributing
+
+The project is open and contributions are very welcome — code, physics, sound, visuals, translation, tests, ideas and
+bug reports. Start with the [contributing guide](CONTRIBUTING.en.md) and the
+[good first issues](docs/GOOD_FIRST_ISSUES.md); report bugs or suggest ideas through
+[issues](https://github.com/viniciusfantini/aquarush/issues/new/choose). Every Pull Request is automatically checked
+with typecheck, `test:sim` and a build (GitHub Actions). Taking part means following the
+[Code of Conduct](CODE_OF_CONDUCT.en.md).
+
+## License
+
+[MIT](LICENSE) — you may use, copy, modify and distribute the code freely, keeping the copyright notice.
+
 ## Repository layout
 
 ```
 README.md            Portuguese readme (README.en.md = this file)
+CONTRIBUTING.md      how to contribute (CONTRIBUTING.en.md = English)
+CODE_OF_CONDUCT.md   code of conduct (CODE_OF_CONDUCT.en.md = English)
+LICENSE              MIT license
+.github/             issue and Pull Request templates + CI (typecheck · test:sim · build on every PR)
 CLAUDE.md            guide for AI agents (conventions, decisions, how to validate) — in Portuguese
-docs/                original GDD + POC comparison + electrical/engine logic (SISTEMAS_ELETRICOS_E_MOTORES.md)
+docs/                original GDD + POC comparison + electrical/engine logic (SISTEMAS_ELETRICOS_E_MOTORES.md) + good first issues (GOOD_FIRST_ISSUES.md)
 pocs/babylon/        POC 1 — Babylon.js (TypeScript + Vite)
 pocs/unity/          POC 2 — planned
 pocs/unreal/         POC 3 — planned
@@ -110,6 +127,7 @@ The full, detailed change log (since v0.1) is in the Portuguese [README](README.
 
 | Date | Version | What changed |
 |---|---|---|
+| 2026-11-08 | repository | **Open to contributions**: **MIT** license, contributing guide and code of conduct (pt and en), issue and Pull Request templates, GitHub Actions CI (typecheck, `test:sim` and build on every PR and push to `main`) and the good first issues list (`docs/GOOD_FIRST_ISSUES.md`). |
 | 2026-11-08 | babylon 0.68.5 | People in the water swim faster (up to ~1.1 m/s with life jackets). English README. |
 | 2026-11-08 | babylon 0.68.4 | The AR-J uses the tender's ball whistle instead of a horn. |
 | 2026-11-08 | babylon 0.68.3 | The jet bucket brake/reverse is now called **iBB**. |
