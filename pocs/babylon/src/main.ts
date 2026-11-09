@@ -51,7 +51,7 @@ import { Hud } from "./presentation/hud.ts";
 import { EngineAudio } from "./presentation/audio.ts";
 
 installI18n(); // inglês: traduz o DOM, as escritas futuras e os letreiros 3D (antes de montar a cena e o HUD)
-const BUILD = "poc-babylon 0.68.3";
+const BUILD = "poc-babylon 0.68.4";
 /** Escala visual da rotação da hélice (proporcional ao RPM, abaixo do limite estroboscópico). */
 const PROP_VISUAL_SCALE = 0.12;
 
@@ -591,13 +591,13 @@ const boot = async () => {
     audio.cylinders = V.P.cylinders;
     tpanel.setOpen(false); spanel.setOpen(false);
     if (V.P.turbine) tpanel.configureTrim(trimOptsFor(V.P));
-    document.getElementById("help-horn")!.textContent = isBote ? "apito" : "buzina";
+    document.getElementById("help-horn")!.textContent = isBote || isJet ? "apito" : "buzina"; // bote e moto aquática: apito de bolinha
     spanel.configure({ title: V.P.name, banks: !V.P.electricStart ? 0 : V.boat.systems2 ? 2 : 1,
       keys: !V.P.electricStart || V.P.turbine || V.P.startStop ? [] : V.boat.units.length > 1 ? ["IGNIÇÃO BB", "IGNIÇÃO BE"] : ["IGNIÇÃO"],
       levers: isBote ? "tiller" : isJet ? "handlebar" : V.boat.units.length > 1 ? "twin" : "binnacle",
       display: isBote ? "grey" : isJet ? "glass" : V.boat.units.length > 1 ? "vfd" : "lcd",
       trim: trimOptsFor(V.P), choke: !!V.P.carbureted, bilgePump: V.P.bilge.pumpLph > 0, lights: isBote ? "LANTERNA" : isJet ? "" : "LUZES",
-      startStop: !!V.P.startStop, batterySwitch: !V.P.startStop, fuelValve: !V.P.startStop, ecoMode: !!V.P.ecoThrottle });
+      startStop: !!V.P.startStop, batterySwitch: !V.P.startStop, fuelValve: !V.P.startStop, ecoMode: !!V.P.ecoThrottle, horn: isBote || isJet ? "apito" : "buzina" });
     lights = false; input.setLights(false);
     setNavLights(V.vis, false); V.dinghy?.setLantern(false);
     hud.setLights(false, isBote ? "LANTERNA" : "LUZES");
@@ -1299,7 +1299,7 @@ const boot = async () => {
     // buzina: do veículo quando você está nele; senão do barco (segurar B, ou toque no botão = 0,22 s)
     hornPulse = Math.max(0, hornPulse - dtReal);
     // buzina elétrica da lancha: tom e volume caem com a tensão da bateria (o bote tem buzina de ar; o carro, bateria própria)
-    audio.setHorn(mode === "game" && (input.hornHeld || hornPulse > 0), driving || carOnly ? "car" : V.kind === "bote" ? "apito" : "lancha", !driving && !carOnly && V.boat.systems.p.hasBattery ? T.houseV * 12 / T.nominalV : 12.6);
+    audio.setHorn(mode === "game" && (input.hornHeld || hornPulse > 0), driving || carOnly ? "car" : V.kind === "bote" || V.kind === "jetski" ? "apito" : "lancha", !driving && !carOnly && V.boat.systems.p.hasBattery ? T.houseV * 12 / T.nominalV : 12.6);
     if (lights && V.vis.lights) setNavLights(V.vis, true, T.houseV * 12 / T.nominalV); // luzes de navegação: brilho pela tensão
     if ((windHudT -= dtReal) <= 0) { windHudT = 0.25; hud.updateWind(wind.speed * MS_TO_KNOTS, wind.dirFrom - Math.atan2(boat.forward.x, boat.forward.z)); }
     hud.update(T, fpsSmooth, {

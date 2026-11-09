@@ -30,7 +30,7 @@ export interface SystemsPanelActions {
   stopEngine(): void;                         // bote: botão STOP
   setLever(engine: number, cmd: LeverCmd): void; // manete do painel (vai para o InputManager)
   setTrim(dir: number): void;                     // botão de trim segurado (+1 sobe, −1 desce, 0 solta)
-  horn(on: boolean): void;                        // buzina (apito no bote) segurada
+  horn(on: boolean): void;                        // buzina (apito no bote e na moto aquática) segurada
   setLanyard(on: boolean): void;                  // moto aquática: prender/soltar o cordão de segurança
   setEco(on: boolean): void;                      // moto aquática: modo ECO
   close(): void;
@@ -53,6 +53,8 @@ export interface SystemsPanelCaps {
   fuelValve?: boolean;
   /** modos de condução ECO / SPORT */
   ecoMode?: boolean;
+  /** buzina elétrica ou apito de bolinha (bote, moto aquática). Ausente = buzina com bateria, apito sem */
+  horn?: "buzina" | "apito";
 }
 
 const plate = (inner: string, cls = "") => `<div class="sw-plate ${cls}"><span class="screw s1"></span><span class="screw s2"></span><span class="screw s3"></span><span class="screw s4"></span>${inner}</div>`;
@@ -141,7 +143,7 @@ export class SystemsPanel {
     this.levers = new LeverControls(caps.levers, (i, c) => this.act.setLever(i, c));
     this.body.querySelector<HTMLElement>(".sp-lev")!.appendChild(this.levers.el);
     this.levers.setTrim(caps.trim, (d) => this.act.setTrim(d));
-    this.levers.setHorn(caps.banks === 0 ? "apito" : "buzina", (on) => this.act.horn(on));
+    this.levers.setHorn(caps.horn ?? (caps.banks === 0 ? "apito" : "buzina"), (on) => this.act.horn(on));
   }
 
   get isOpen(): boolean { return this.open; }
