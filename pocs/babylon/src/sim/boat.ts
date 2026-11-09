@@ -202,6 +202,8 @@ export class EngineUnit {
   keyLive = false;
   /** START/STOP (moto aquática): tempo com a central acordada e o motor parado (dorme depois de 30 s) */
   sleepT = 0;
+  /** tempo desde que este motor pegou (s): na partida pelo P, o próximo motor espera ele estabilizar */
+  runT = 0;
   cavitation = 0; propRpmState = 0; immersion = 1; revLimiting = false; limiterPhase = 0; lastThrust = 0; pullCatch = false;
   // última passada da física (telemetria / efeitos)
   axial = 0; ventilation = 1; slip = 0; propW: Vec3 = v3(); intakeSubmerged = true; fuelLph = 0;
@@ -1023,10 +1025,10 @@ export class Speedboat {
     if (this.selfTestT > 0) {
       this.selfTestT -= dt;
       if (this.selfTestT <= 0) {
-        // cada motor desligado entra no arranque; com dois, o segundo espera o primeiro (~1,2 s)
-        let k = 0;
+        // cada motor desligado entra no arranque, UM DE CADA VEZ: o seguinte só gira quando o anterior pegou e
+        // estabilizou na lenta (STAGGER_S) — ver waitsToCrank
         for (const un of this.units) if (un.engine === "off") {
-          un.engine = "cranking"; un.crankTimer = 0; un.crankRevs = 0; un.crankNeed = 3 + Math.random() * 2; un.crankWait = 1.2 * k++;
+          un.engine = "cranking"; un.crankTimer = 0; un.crankRevs = 0; un.crankNeed = 3 + Math.random() * 2; un.crankWait = 0;
         }
       }
     }
@@ -1358,7 +1360,7 @@ export class Speedboat {
       const dSub = clamp(h - 0.05 - s.pos.y, -0.5, 0.6);
       const inWater = h - s.pos.y > -0.3;
       const ay = -G + (dSub > -0.3 ? (G + 60 * dSub) : 0) - (inWater ? 4 * s.vel.y : 0);
-      // nado: depois de ~1 s se recuperando, a pessoa nada (até ~0,55 m/s: de colete a braçada rende menos que sem ele) para o
+      // nado: depois de ~1 s se recuperando, a pessoa nada (até ~0,8 m/s: de colete a braçada rende menos que sem ele) para o
       // seu lugar em volta do barco (elipse um pouco maior que o casco) e fica ali, acompanhando o barco
       const fwdH = this.forward;
       const yawB = Math.atan2(fwdH.x, fwdH.z);
@@ -1390,9 +1392,9 @@ export class Speedboat {
       let swx = holding ? this.vel.x : cur.x, swz = holding ? this.vel.z : cur.z;
       let effort = 0;
       if (s.t > 1 && inWater && dT > 0.25) {
-        const sp = Math.min(0.55, dT * 0.6);
+        const sp = Math.min(Speedboat.SWIM_MS, dT * 0.8);
         swx += (dxT / dT) * sp; swz += (dzT / dT) * sp;
-        effort = clamp(sp / 0.55, 0.3, 1);
+        effort = clamp(sp / Speedboat.SWIM_MS, 0.3, 1);
         s.yaw = Math.atan2(dxT, dzT); // de frente para onde nada
       } else if (s.t > 1) {
         // de frente para o barco — ou, afundado, para o centro do grupo
@@ -1556,13 +1558,22 @@ export class Speedboat {
     return "";
   }
 
-  /** Este motor ainda espera a vez do arranque (pausa curta + nenhum motor anterior girando o arranque)? */
+  /**
+   * Partida pelo P com dois ou mais motores: este motor ainda espera a vez? Espera enquanto um motor anterior estiver
+   * girando o arranque OU tiver acabado de pegar e ainda não estabilizou (STAGGER_S na lenta) — como o piloto faz:
+   * liga um, espera a rotação assentar e o alternador entrar, e só então dá a partida no outro. Se o anterior não
+   * pegou (desistiu), este tenta mesmo assim.
+   */
   private waitsToCrank(x: EngineUnit): boolean {
     if (x.engine !== "cranking") return false;
     if (x.manualCrank) return false; // na chave o piloto decide (dois arranques juntos derrubam a tensão)
     if (x.crankWait > 0) return true;
-    return this.units.some((o) => o.index < x.index && o.engine === "cranking");
+    return this.units.some((o) => o.index < x.index && (o.engine === "cranking" || (o.engine === "running" && o.runT < Speedboat.STAGGER_S)));
   }
+  /** velocidade máxima de nado de quem está na água, de colete (m/s) */
+  static readonly SWIM_MS = 0.8;
+  /** tempo que um motor recém-pego roda na lenta antes de o próximo dar a partida (s) */
+  static readonly STAGGER_S = 2.5;
 
   /**
    * Atualiza os sistemas (combustível, arrefecimento, bateria, alternador, horímetro). Um motor: como sempre.
@@ -1573,6 +1584,7 @@ export class Speedboat {
     const t = this.telemetry;
     for (const x of this.units) {
       x.testT = Math.max(0, x.testT - dt);
+      x.runT = x.engine === "running" ? x.runT + dt : 0;
       if (x.turb || !this.params.electricStart) continue;
       // chave já em ON e a bateria chega agora (chave geral ligada): a central acorda e faz o autoteste (apito)
       const live = this.bankFor(x.index).supplyV(2) > 9;

@@ -338,6 +338,13 @@ girando → `"busy"`.
 
 ---
 
+## 10a. Partida em sequência pelo P (dois ou mais motores, v0.68.1)
+
+- `toggleIgnition` faz o autoteste (1,1 s) e põe todos os motores desligados em `cranking`; `waitsToCrank` segura um
+  motor enquanto um de índice menor estiver girando o arranque **ou** tiver pegado há menos de `Speedboat.STAGGER_S`
+  (2,5 s, `EngineUnit.runT`). Enquanto espera, o arranque dele não gira e não puxa corrente. Na chave do painel
+  (`manualCrank`) não há espera: o piloto decide.
+
 ## 10b. Abandonar o barco e pessoas na água (`boat.ts`, v0.63)
 
 - **Barra de espaço** → `Speedboat.abandonShip()`: 1º toque, só os **passageiros** pulam (o piloto segue no comando);
@@ -345,7 +352,7 @@ girando → `"busy"`.
   (`stall = "lanyard"`; na turbina = corte de combustível). Na **AR-10 virada** (habitáculo fechado, o piloto fica
   preso no cinto ao virar) é assim que ele sai da cabine.
 - Na água (`updateSwimmers`): colete (centro ~5 cm abaixo da superfície), arrasto, correnteza; depois de ~1 s nadam
-  até o seu lugar em volta do casco a até **~0,55 m/s**. Só quem está junto do casco (< 0,6 m do lugar) acompanha o
+  até o seu lugar em volta do casco a até **~0,8 m/s** (`Speedboat.SWIM_MS`, v0.68.1). Só quem está junto do casco (< 0,6 m do lugar) acompanha o
   barco (segura o cabo de mão); longe, a pessoa fica parada na água e avança só o que nada.
 - **Volta a bordo** sozinha (`occupants`, contador `reboarded`) a ~0,45 m do lugar, depois de 2,5 s na água, com o
   barco **de pé, não afundado e a até 3 km/h**. Barco virado ou afundado: ninguém volta (R recomeça).

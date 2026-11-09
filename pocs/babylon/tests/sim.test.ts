@@ -765,8 +765,9 @@ for (const [label, thr] of [["baixa", 0.25], ["alta", 1]] as const) {
     const n = ig.units.filter((u) => u.engine === "running").length;
     if (oneOn < 0 && n >= 1) oneOn = t; if (both < 0 && n === 2) both = t;
   });
-  check("rápida", "partida: os dois pegam (s)", both, 1.5, 7, "s", 1);
-  check("rápida", "um motor de cada vez (o 2º pega depois do 1º, s)", both - oneOn, 0.5, 4, "s", 1);
+  check("rápida", "partida: os dois pegam (s)", both, 3, 9, "s", 1);
+  // o 2º só gira o arranque depois que o 1º pegou e estabilizou (2,5 s na lenta) — e ainda leva o tempo de pegar
+  check("rápida", "um motor de cada vez: o 2º pega depois de o 1º estabilizar (s)", both - oneOn, Speedboat.STAGGER_S, Speedboat.STAGGER_S + 3, "s", 1);
   // largada do jogo: motores desligados e bateria a 60 % — os dois V8 têm de pegar (um arranque por vez;
   // os dois juntos derrubavam o banco a ~6 V e nenhum pegava)
   const st = new Speedboat(RAPIDA, v3(0, 0.3, 0));
@@ -1479,7 +1480,7 @@ for (const [label, thr] of [["baixa", 0.25], ["alta", 1]] as const) {
     if (backAt < 0 && b.swimmers.length === 0) backAt = t;
   });
   check("abandonar", "saltam para fora do casco (afastamento máximo, m)", maxOut, 1.3, 6, "m", 1);
-  check("abandonar", "nadam de volta (de colete, ~0,55 m/s) e sobem com o barco de pé (s)", backAt, 4, 30, "s", 1);
+  check("abandonar", "nadam de volta (de colete, ~0,8 m/s) e sobem com o barco de pé (s)", backAt, 2.5, 30, "s", 1); // piso = a regra: ninguém sobe antes de 2,5 s na água
   check("abandonar", "a bordo de novo: os dois ocupantes nos seus lugares", b.occupants.length === 2 && b.occupants.some((o) => o.seat === "helm") ? 1 : 0, 1, 1, "", 0);
   // pulando com o barco a ~40 km/h: na água a pessoa perde o embalo (não "segue" o barco) e nada devagar;
   // o barco sem piloto para e eles voltam a bordo quando ele está a menos de ~3 km/h
@@ -1493,7 +1494,7 @@ for (const [label, thr] of [["baixa", 0.25], ["alta", 1]] as const) {
   let fBack = -1;
   // (o barco desliza ~80 m até parar; de colete, a ~0,55 m/s, a volta leva uns 2–3 min — é o tempo de nado)
   run(f, water, 420, { ...emptyInput(), gear: "N" }, openWater, (t) => { if (fBack < 0 && f.swimmers.length === 0) fBack = t; });
-  check("abandonar", `pulando a ${vJump.toFixed(0)} km/h: 6 s depois, só a velocidade de nado (m/s)`, swSpd, 0, 0.65, "m/s", 2);
+  check("abandonar", `pulando a ${vJump.toFixed(0)} km/h: 6 s depois, só a velocidade de nado (m/s)`, swSpd, 0, Speedboat.SWIM_MS + 0.1, "m/s", 2);
   check("abandonar", "o barco desliza e para; eles nadam até ele e sobem (s)", fBack, 60, 420, "s", 0);
   // AR-10 virada: o piloto fica preso no cinto (habitáculo fechado); o espaço o tira da cabine — e com o barco virado ninguém volta
   const h = new Speedboat(TURBINA, v3(0, 0.3, 0)); h.systems.fuelL = 100; h.occupants = [{ seat: "helm", mass: PERSON_KG }];

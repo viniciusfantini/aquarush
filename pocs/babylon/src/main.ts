@@ -51,7 +51,7 @@ import { Hud } from "./presentation/hud.ts";
 import { EngineAudio } from "./presentation/audio.ts";
 
 installI18n(); // inglês: traduz o DOM, as escritas futuras e os letreiros 3D (antes de montar a cena e o HUD)
-const BUILD = "poc-babylon 0.68.0";
+const BUILD = "poc-babylon 0.68.1";
 /** Escala visual da rotação da hélice (proporcional ao RPM, abaixo do limite estroboscópico). */
 const PROP_VISUAL_SCALE = 0.12;
 
@@ -388,7 +388,7 @@ const boot = async () => {
   const prevRot = new Quaternion(), curRot = new Quaternion();
   const snap = (dst: Vector3, q: Quaternion) => { const b = V.boat; dst.set(b.pos.x, b.pos.y, b.pos.z); q.set(b.rot.x, b.rot.y, b.rot.z, b.rot.w); };
   let fpsSmooth = 60, resT = 0;
-  let lastStartFail = "", lowFuelWarned = false, trimRelayWarned = false, neutralRevWarned = false, lastJumperOff = 0, lastJumperTrips = 0, lastGpuOff = 0, lastGpuState = "off", lastAnchorState = "recolhida", lastBilgeAlarm = false, lastExtFault = false, lastReboarded = 0, lastRighted = 0, boomWarned = false, lastSwamped = false, lastSunk = false, windHudT = 0;
+  let lastStartFail = "", lowFuelWarned = false, trimRelayWarned = false, neutralRevWarned = false, lastJumperOff = 0, lastJumperTrips = 0, lastGpuOff = 0, lastGpuState = "off", lastAnchorState = "recolhida", lastBilgeAlarm = false, lastExtFault = false, lastReboarded = 0, lastRighted = 0, lastRunCount = 0, boomWarned = false, lastSwamped = false, lastSunk = false, windHudT = 0;
   const qTilt = new Quaternion(), qSteer = new Quaternion();
   let lastGear = V.boat.telemetry.gear;
   let tiltWarned = false, intakeWarned = false, capsizeWarned = false;
@@ -1211,6 +1211,15 @@ const boot = async () => {
     if (!T.lowFuel) lowFuelWarned = false;
     if (T.stall && T.stall !== lastStall && T.stall !== "capsize" && T.stall !== "broken" && T.stall !== "lanyard") sysToast(T.stall === "fuel" ? (T.fuelValveOpen ? "O motor morreu: acabou o combustível" : "O motor morreu: registro do tanque FECHADO (Y abre)") : T.stall === "flooded" ? "O motor AFOGOU: afogador puxado com o motor quente — empurre o afogador (Y) e puxe a corda de novo" : "O motor desligou: superaquecimento");
     lastStall = T.stall;
+    // partida pelo P com dois motores: um pegou, o outro espera ele estabilizar na lenta antes do arranque
+    if (boat.units.length > 1) {
+      const nRun = boat.units.filter((u) => u.engine === "running").length;
+      if (nRun > lastRunCount && boat.units.some((u) => u.engine === "cranking") && mode === "game") {
+        const on = boat.units.findIndex((u) => u.engine === "running" && u.runT < 1);
+        if (on >= 0) sysToast(`Motor ${on === 0 ? "de bombordo" : "de boreste"} ligado — estabilizando na lenta; em seguida a partida no ${on === 0 ? "de boreste" : "de bombordo"}`);
+      }
+      lastRunCount = nRun;
+    }
     if ((hoursSaveT += dtReal) > 10) { hoursSaveT = 0; try { localStorage.setItem(V.hoursKey, String(boat.systems.engineHours)); } catch { /* sem storage */ } }
     // hélice: velocidade visual PROPORCIONAL ao RPM real (escala fixa de 0,12). A rotação real (até ~48 voltas/s)
     // daria efeito estroboscópico a 60 FPS (a hélice pareceria parada ou girando ao contrário).

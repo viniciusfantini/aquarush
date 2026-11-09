@@ -160,6 +160,7 @@ export const EN: Record<string, string> = {
   "Reposicionado no píer — {} L no tanque": "Back at the pier — {} L in the tank",
   "colisões": "collisions", "o barco deriva e adorna; carneirinhos na água": "the boat drifts and heels; whitecaps on the water", "o barco deriva e adorna": "the boat drifts and heels",
   " — o barco deriva e adorna; carneirinhos na água": " — the boat drifts and heels; whitecaps on the water", " — o barco deriva e adorna": " — the boat drifts and heels",
+  "Motor {} ligado — estabilizando na lenta; em seguida a partida no {}": "{} engine running — settling at idle; then the {} engine starts",
   "velas": "igniters", "24 V no barram.": "24 V on bus", "fora": "off-line", "bombeando": "pumping", "parada": "stopped", "acelerando": "accelerating",
   "desacelerando": "spooling down", "BB {} V": "PORT {} V", "BE {} V": "STBD {} V", "motor frio": "cold engine", "motor quente": "warm engine",
   "VAGA": "BERTH", "descida de barcos": "boat launch", "sistemas eletrônicos": "electronics", "LENTA ": "IDLE ", "atracação": "docking", "POITA": "BUOY",

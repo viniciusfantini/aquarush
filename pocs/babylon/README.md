@@ -96,6 +96,16 @@ A lancha é um **corpo rígido 6DOF** (massa seca de 1030 kg + gasolina, ocupant
 
 > Referência completa da lógica elétrica e dos motores: [`docs/SISTEMAS_ELETRICOS_E_MOTORES.md`](../../docs/SISTEMAS_ELETRICOS_E_MOTORES.md).
 
+## Nado mais rápido e partida em sequência (v0.68.1)
+
+- Quem está na água nada até **~0,8 m/s** de colete (`Speedboat.SWIM_MS`; era 0,55). Ninguém sobe antes de 2,5 s na
+  água (critério do teste "abandonar" passou a usar esse piso: com o nado mais rápido a volta caiu para 3,9 s).
+- **P com dois ou mais motores**: depois do autoteste, um motor por vez — o seguinte só gira o arranque quando o
+  anterior **pegou e rodou 2,5 s na lenta** (`STAGGER_S`, `EngineUnit.runT`, `waitsToCrank`). Se o anterior não pegar,
+  o seguinte tenta mesmo assim. Aviso: "Motor de bombordo ligado — estabilizando na lenta; em seguida a partida no de
+  boreste". Medido: AR-9 com os dois em 6,0 s (o 2º pega 3,7 s depois do 1º); a 60 % de bateria, 5,9 s. Na chave do
+  painel o piloto continua decidindo (sem espera automática).
+
 ## Idioma: português e inglês (v0.68)
 
 - O botão **English** do splash funciona: grava `aquarush.lang` e recarrega (a cena tem letreiros desenhados na
@@ -467,7 +477,7 @@ Limitação: é uma síntese aproximada, não uma gravação. Validar o timbre d
 | Lago | flutua no spawn; a toda contra a margem, encalha e para sem atravessar o terreno |
 | Moto aquática AR-J (v0.67–0.67.1) | compressor 1,04 bar a toda, 0,007 bar na lenta; luz do iBR: apagada em F, FREIO freando a toda, RÉ parada em R, NEUTRO em N; navegador: S segurado a 107 km/h → FREIO, 53 km/h em 1,5 s; soltar → F; toque → N; parada: CG −0,03 m da água, borda 0,25 m; a toda 108,3 km/h a 7880 rpm, 0→60 2,7 s, 0→100 7,1 s, 72 L/h; curva a toda 29,2°/s sem virar; iBR de 102 km/h a < 5 km/h em 4,2 s e depois ré; N com o guidão todo: 0,2° em 6 s; lenta + guidão 10,6°/s; N acelerado: empuxo 0, rotor a 7478 rpm; no ar: empuxo 0, giro 7951 rpm; ECO 55 % / 89,9 km/h; lotada 101,5 km/h; cordão solto não liga, puxado desliga; START pega em 1,5 s (60 %); central dorme em 30 s; casco selado 40 s lotada em ondas fortes: 0,0 L; sifão 6,1 L em 30 s (= contrato); virada: desvira em 4,5 s, piloto a bordo com o cordão, liga de novo; carretinha 3,9 m no carro |
 
-Resultado: **629/631 OK + 2 KNOWN** (v0.67.2). Na v0.10, o peso do piloto na posição real (boreste, acima do CG) aumentou o roll em curva com ondas fortes; o `bankCoef` foi para 1800 e o `rollDamping` para 15000, com 1 limitação conhecida (abaixo). Na v0.2 a hélice foi para 0,5 m atrás do espelho, como no modelo visual, e o esterço máximo em alta velocidade caiu de 13° para 11°.
+Resultado: **629/631 OK + 2 KNOWN** (v0.68.1). Na v0.10, o peso do piloto na posição real (boreste, acima do CG) aumentou o roll em curva com ondas fortes; o `bankCoef` foi para 1800 e o `rollDamping` para 15000, com 1 limitação conhecida (abaixo). Na v0.2 a hélice foi para 0,5 m atrás do espelho, como no modelo visual, e o esterço máximo em alta velocidade caiu de 13° para 11°.
 
 ### Navegador (Chrome, Windows 11, WebGL2, `q=med`, ~1370×896)
 
