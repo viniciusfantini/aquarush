@@ -1362,7 +1362,7 @@ export class Speedboat {
       const dSub = clamp(h - 0.05 - s.pos.y, -0.5, 0.6);
       const inWater = h - s.pos.y > -0.3;
       const ay = -G + (dSub > -0.3 ? (G + 60 * dSub) : 0) - (inWater ? 4 * s.vel.y : 0);
-      // nado: depois de ~1 s se recuperando, a pessoa nada (até ~0,8 m/s: de colete a braçada rende menos que sem ele) para o
+      // nado: depois de ~1 s se recuperando, a pessoa nada (até ~1,1 m/s: de colete a braçada rende menos que sem ele) para o
       // seu lugar em volta do barco (elipse um pouco maior que o casco) e fica ali, acompanhando o barco
       const fwdH = this.forward;
       const yawB = Math.atan2(fwdH.x, fwdH.z);
@@ -1394,7 +1394,7 @@ export class Speedboat {
       let swx = holding ? this.vel.x : cur.x, swz = holding ? this.vel.z : cur.z;
       let effort = 0;
       if (s.t > 1 && inWater && dT > 0.25) {
-        const sp = Math.min(Speedboat.SWIM_MS, dT * 0.8);
+        const sp = Math.min(Speedboat.SWIM_MS, dT * 1.0);
         swx += (dxT / dT) * sp; swz += (dzT / dT) * sp;
         effort = clamp(sp / Speedboat.SWIM_MS, 0.3, 1);
         s.yaw = Math.atan2(dxT, dzT); // de frente para onde nada
@@ -1573,7 +1573,7 @@ export class Speedboat {
     return this.units.some((o) => o.index < x.index && (o.engine === "cranking" || (o.engine === "running" && o.runT < Speedboat.STAGGER_S)));
   }
   /** velocidade máxima de nado de quem está na água, de colete (m/s) */
-  static readonly SWIM_MS = 0.8;
+  static readonly SWIM_MS = 1.1;
   /** tempo que um motor recém-pego roda na lenta antes de o próximo dar a partida (s) */
   static readonly STAGGER_S = 2.5;
 

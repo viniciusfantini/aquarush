@@ -83,6 +83,7 @@ Valores de referência (lancha): massa seca 1030 kg; empuxo máximo 8,5 t; borda
 
 | Data | Decisão | Motivo |
 |---|---|---|
+| 2026-11-08 | Nado `SWIM_MS` = 1,1 m/s. **README em inglês** (`README.en.md`, link no topo dos dois): ao mudar o README em português, atualize o inglês (pelo menos a tabela de status, controles e "Recent changes") | Pedido do usuário: pessoas nadando mais rápido; informações do README também em inglês no GitHub |
 | 2026-11-08 | Freio/ré da caçamba da moto = **iBB** em toda a UI, código e docs. Regra geral: **sem nomes/marcas de fabricantes** nos textos do jogo (como já valia para o som do motor) | Pedido do usuário: trocar o nome por causa de direitos autorais |
 | 2026-11-08 | Moto aquática: imersão da grade do jato = smoothstep(−0,10; −0,02) da profundidade (a sucção puxa a água colada no casco); `JETSKI.bankCoef` 1000 → 500 (1000 virava em curva fechada a meia velocidade; os testes só cobriam a curva a toda) | Relato do usuário: devagar o jetski cavitava muito fácil (era ventilação da grade em curva) |
 | 2026-11-08 | Nado `Speedboat.SWIM_MS` = 0,8 m/s; partida pelo P em sequência: `waitsToCrank` espera o motor anterior pegar e rodar `STAGGER_S` = 2,5 s (`EngineUnit.runT`) — os critérios da AR-9 passaram a medir esse intervalo (o 2º pega ≥ STAGGER_S depois do 1º) | Pedido do usuário: natação um pouco mais rápida; com 2+ motores, o P espera um ligar e estabilizar antes de dar a partida no outro |

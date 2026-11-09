@@ -352,7 +352,7 @@ girando → `"busy"`.
   (`stall = "lanyard"`; na turbina = corte de combustível). Na **AR-10 virada** (habitáculo fechado, o piloto fica
   preso no cinto ao virar) é assim que ele sai da cabine.
 - Na água (`updateSwimmers`): colete (centro ~5 cm abaixo da superfície), arrasto, correnteza; depois de ~1 s nadam
-  até o seu lugar em volta do casco a até **~0,8 m/s** (`Speedboat.SWIM_MS`, v0.68.1). Só quem está junto do casco (< 0,6 m do lugar) acompanha o
+  até o seu lugar em volta do casco a até **~1,1 m/s** (`Speedboat.SWIM_MS`, v0.68.5). Só quem está junto do casco (< 0,6 m do lugar) acompanha o
   barco (segura o cabo de mão); longe, a pessoa fica parada na água e avança só o que nada.
 - **Volta a bordo** sozinha (`occupants`, contador `reboarded`) a ~0,45 m do lugar, depois de 2,5 s na água, com o
   barco **de pé, não afundado e a até 3 km/h**. Barco virado ou afundado: ninguém volta (R recomeça).

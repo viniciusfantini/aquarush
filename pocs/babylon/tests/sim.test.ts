@@ -1489,7 +1489,7 @@ for (const [label, thr] of [["baixa", 0.25], ["alta", 1]] as const) {
     if (backAt < 0 && b.swimmers.length === 0) backAt = t;
   });
   check("abandonar", "saltam para fora do casco (afastamento máximo, m)", maxOut, 1.3, 6, "m", 1);
-  check("abandonar", "nadam de volta (de colete, ~0,8 m/s) e sobem com o barco de pé (s)", backAt, 2.5, 30, "s", 1); // piso = a regra: ninguém sobe antes de 2,5 s na água
+  check("abandonar", "nadam de volta (de colete, ~1,1 m/s) e sobem com o barco de pé (s)", backAt, 2.5, 30, "s", 1); // piso = a regra: ninguém sobe antes de 2,5 s na água
   check("abandonar", "a bordo de novo: os dois ocupantes nos seus lugares", b.occupants.length === 2 && b.occupants.some((o) => o.seat === "helm") ? 1 : 0, 1, 1, "", 0);
   // pulando com o barco a ~40 km/h: na água a pessoa perde o embalo (não "segue" o barco) e nada devagar;
   // o barco sem piloto para e eles voltam a bordo quando ele está a menos de ~3 km/h
