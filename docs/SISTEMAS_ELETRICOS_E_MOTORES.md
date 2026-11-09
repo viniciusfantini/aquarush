@@ -371,11 +371,11 @@ girando → `"busy"`.
 - **Jato d'água** (`params.waterjet`): o empuxo depende da **grade de admissão** no fundo (`intakePos`) estar
   submersa (imersão 0..1 entre −3 e +6 cm); com ela no ar (pulando onda) o rotor suga ar, o empuxo vai a zero e o giro
   dispara. O rotor é ligado direto ao virabrequim (`propGear: 1`): gira em F, N e R e carrega o motor em qualquer
-  marcha (sem rotação livre em N; consumo em N igual). A marcha é a **caçamba (iBR)**: N = empuxo líquido 0, R = ré e
+  marcha (sem rotação livre em N; consumo em N igual). A marcha é a **caçamba (iBB)**: N = empuxo líquido 0, R = ré e
   **freio** (pode baixar com o motor acelerado — sem a trava de acelerador do câmbio). O **bocal** é o leme
   (`gearcaseRudder: 0`): sem empuxo não há direção. O trim **VTS** inclina o bocal (sem tilt).
-- **Freio iBR no teclado e luz** (v0.67.1): andando em F, segurar S = `InputManager.ibrMode` manda R com o giro
-  subindo sozinho (freia; parada, ré); soltar = F; toque curto = N. `telemetry.ibr` = off / neutral / brake (R ou
+- **Freio iBB no teclado e luz** (v0.67.1): andando em F, segurar S = `InputManager.ibbMode` manda R com o giro
+  subindo sozinho (freia; parada, ré); soltar = F; toque curto = N. `telemetry.ibb` = off / neutral / brake (R ou
   indo para R com a moto andando para a frente > 0,8 m/s) / reverse → luz no HUD e no Y.
 - **Compressor** (`params.supercharger.maxBar` 1,05): `telemetry.boostBar` = maxBar × (rpm/rpm máx)² × (0,15 + 0,85 ×
   acelerador), atraso 0,25 s; 0 com o motor parado. Manômetro BOOST no HUD.
@@ -400,7 +400,7 @@ girando → `"busy"`.
 `windlassA`, `coolingLps`, `extPwrFault`, `keys[]`, `houseV`, `swimmers`, `capsized`, `hullDamage`,
 `engineDamage`, `turbine { n1, n2, egt, torque, oilPsi, oilC, oilHot, oilRed, phase, lit, powered,
 starter, ignition, starterSw, ignitionSw, master, boostPump, fuelValve, generator, fadec, pooledL, wear, seized,
-starterLock }`, `lanyard`, `driveMode` ("normal"/"eco"), `righting`, `boostBar`, `ibr`.
+starterLock }`, `lanyard`, `driveMode` ("normal"/"eco"), `righting`, `boostBar`, `ibb`.
 
 ---
 

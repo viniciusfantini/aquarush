@@ -532,18 +532,18 @@
     .gauge.small .g-title { font-size: 7.5px; }
     #g-aut { font-size: 11px; color: #8fe3d8; text-align: center; margin-top: 2px; min-height: 0; font-variant-numeric: tabular-nums; }
     #g-aut:empty { display: none; }
-    /* moto aquática: luz do iBR (caçamba do jato) — apagada em FRENTE, âmbar em NEUTRO/RÉ, vermelha piscando no FREIO */
-    #g-ibr, .ibr-l { display: flex; align-items: center; justify-content: center; gap: 6px; font: 700 10px/1 system-ui, sans-serif; letter-spacing: 0.06em; color: rgba(255,255,255,0.45); }
-    #g-ibr { margin-top: 4px; }
-    #g-ibr b, .ibr-l b { color: #e9eef2; }
-    #g-ibr em, .ibr-l em { font-style: normal; min-width: 52px; text-align: left; }
-    .ibr-dot { width: 13px; height: 13px; border-radius: 50%; background: radial-gradient(circle at 40% 35%, #4a4f55, #15181b 70%); box-shadow: inset 0 1px 2px rgba(0,0,0,0.7), 0 0 0 2px rgba(0,0,0,0.35); }
-    [data-s=neutral] .ibr-dot, [data-s=reverse] .ibr-dot { background: radial-gradient(circle at 40% 35%, #fff1b8, #ffb020 55%, #9a5f00); box-shadow: 0 0 10px 2px rgba(255,176,32,0.7); }
+    /* moto aquática: luz do iBB (caçamba do jato) — apagada em FRENTE, âmbar em NEUTRO/RÉ, vermelha piscando no FREIO */
+    #g-ibb, .ibb-l { display: flex; align-items: center; justify-content: center; gap: 6px; font: 700 10px/1 system-ui, sans-serif; letter-spacing: 0.06em; color: rgba(255,255,255,0.45); }
+    #g-ibb { margin-top: 4px; }
+    #g-ibb b, .ibb-l b { color: #e9eef2; }
+    #g-ibb em, .ibb-l em { font-style: normal; min-width: 52px; text-align: left; }
+    .ibb-dot { width: 13px; height: 13px; border-radius: 50%; background: radial-gradient(circle at 40% 35%, #4a4f55, #15181b 70%); box-shadow: inset 0 1px 2px rgba(0,0,0,0.7), 0 0 0 2px rgba(0,0,0,0.35); }
+    [data-s=neutral] .ibb-dot, [data-s=reverse] .ibb-dot { background: radial-gradient(circle at 40% 35%, #fff1b8, #ffb020 55%, #9a5f00); box-shadow: 0 0 10px 2px rgba(255,176,32,0.7); }
     [data-s=neutral] em, [data-s=reverse] em { color: #ffc24d; }
-    [data-s=brake] .ibr-dot { background: radial-gradient(circle at 40% 35%, #ffd0c8, #ff3b2a 55%, #8a0f06); box-shadow: 0 0 14px 4px rgba(255,59,42,0.85); animation: ibrBlink 0.35s steps(2) infinite; }
+    [data-s=brake] .ibb-dot { background: radial-gradient(circle at 40% 35%, #ffd0c8, #ff3b2a 55%, #8a0f06); box-shadow: 0 0 14px 4px rgba(255,59,42,0.85); animation: ibbBlink 0.35s steps(2) infinite; }
     [data-s=brake] em { color: #ff6b5c; }
-    @keyframes ibrBlink { 50% { opacity: 0.35; } }
-    .ibr-l { margin-top: 2px; }
+    @keyframes ibbBlink { 50% { opacity: 0.35; } }
+    .ibb-l { margin-top: 2px; }
     .gauge .g-l1 { fill: #ffffff; font-size: 15px; font-weight: 700; text-anchor: middle; font-variant-numeric: tabular-nums; }
     .gauge.small .g-l1 { font-size: 11.5px; }
     .gauge .g-l2 { fill: #8fe3d8; font-size: 6.6px; text-anchor: middle; font-variant-numeric: tabular-nums; }
@@ -637,7 +637,7 @@
       <div class="pick-row">
         <button class="pick-b" data-kind="bote"><b>Bote de apoio AR-3</b><span>3,1 m · 15 hp · até 3 pessoas · tanque 10 L (começa com 5 L)</span><span>cana do leme no motor, partida na corda, trim manual (3 furos + tilt), lanterna de mão</span></button>
         <button class="pick-b" data-kind="lancha"><b>Lancha AR-6</b><span>6 m · 150 hp · até 4 pessoas · tanque 120 L (começa com 5 L)</span><span>volante, manete, power trim elétrico, partida na chave, luzes de navegação</span></button>
-        <button class="pick-b" data-kind="jetski"><b>Moto aquática AR-J</b><span>3,45 m · 300 hp com compressor · até 3 pessoas montadas · tanque 70 L (começa com 8 L)</span><span>jato d'água (sem hélice): guidão gira o bocal, gatilho, freio/ré iBR, trim VTS, START/STOP com cordão de segurança, modo ECO; virou, o piloto desvira</span></button>
+        <button class="pick-b" data-kind="jetski"><b>Moto aquática AR-J</b><span>3,45 m · 300 hp com compressor · até 3 pessoas montadas · tanque 70 L (começa com 8 L)</span><span>jato d'água (sem hélice): guidão gira o bocal, gatilho, freio/ré iBB, trim VTS, START/STOP com cordão de segurança, modo ECO; virou, o piloto desvira</span></button>
         <button class="pick-b" data-kind="rapida"><b>Lancha rápida AR-9</b><span>8,6 m · 2 × V8 300 hp · 2 pessoas · tanque 380 L (começa com 20 L)</span><span>dois motores de centro com rabeta, um conta-giros por motor, empuxo diferencial (Z/X) para girar no lugar</span></button>
         <button class="pick-b" data-kind="turbina"><b>Lancha de turbina AR-10</b><span>10 m · turbina a gás de 1100 shp · piloto único no habitáculo fechado · 900 L (começa com 120 L)</span><span>hélice de superfície, partida de turbina (arranque → ignição → acende), N1, N2, EGT, torque e óleo no painel, 24 V e GPU na doca</span></button>
       </div>

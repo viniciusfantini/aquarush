@@ -1,7 +1,7 @@
 // Moto aquática AR-J (3,45 m, 300 hp, jato d'água). Origem = CG da moto seca (mesma origem da física, params JETSKI).
 // X boreste, Y cima, Z proa. Tudo procedural (sem assets).
 // Comandos: o GUIDÃO gira o bocal do jato (direção); gatilho do acelerador na manopla direita; alavanca do freio/ré
-// (iBR) na esquerda, que baixa a CAÇAMBA sobre o bocal (N = meio, R = toda baixada). Sem hélice exposta: o rotor fica
+// (iBB) na esquerda, que baixa a CAÇAMBA sobre o bocal (N = meio, R = toda baixada). Sem hélice exposta: o rotor fica
 // dentro do duto (aparece no fundo do bocal). Painel digital no console do guidão (acende com a central acordada).
 
 import { type Scene, Mesh, MeshBuilder, StandardMaterial, PBRMaterial, Color3, Color4, TransformNode, Vector3, DynamicTexture, ParticleSystem } from "@babylonjs/core";
@@ -28,7 +28,7 @@ const sheerY = (z: number) => 0.2 + 0.08 * Math.max(0, (z - 0.2) / (Z_BOW - 0.2)
 
 export interface JetskiControls {
   meshes: Mesh[];
-  /** manopla esquerda (mão esquerda: alavanca do iBR) */
+  /** manopla esquerda (mão esquerda: alavanca do iBB) */
   wheelGrip: TransformNode;
   /** manopla direita (mão direita: gatilho do acelerador) */
   leverGrip: TransformNode;
@@ -153,7 +153,7 @@ export const buildJetski = (scene: Scene): BoatVisual & { controls: JetskiContro
   nozzle.rotation.x = -Math.PI / 2; nozzle.position.set(0, ny / 2, nz / 2);
   // rotor (aparece no fundo do bocal) — gira com o motor
   const { propeller, propBlur } = buildPropeller(scene, engine, new Vector3(0, ny, nz + 0.04), JETSKI.propRadius * 0.9, 0.1, steel, add, meshes);
-  // ---- caçamba de ré (iBR) ----
+  // ---- caçamba de ré (iBB) ----
   // Concha em "C" articulada num eixo transversal ACIMA da saída do bocal. Fechada (R / freio) ela envolve a saída por
   // trás e por baixo e devolve o jato para a frente e para baixo; em N fica a meio caminho (metade do jato volta);
   // em F sobe toda e o jato sai 100 % livre. Os braços laterais giram com ela; as orelhas ficam presas no bocal.
@@ -189,26 +189,26 @@ export const buildJetski = (scene: Scene): BoatVisual & { controls: JetskiContro
     lip.position.set(0, exit.y - R * 0.97, exit.z + 0.02); lip.rotation.x = 0.35;
   }
   // jato devolvido pela caçamba: freando rápido a água sobe numa coluna atrás da popa
-  const sprayTex = new DynamicTexture("jetIbrSprayTex", { width: 64, height: 64 }, scene, false);
+  const sprayTex = new DynamicTexture("jetIbbSprayTex", { width: 64, height: 64 }, scene, false);
   {
     const c = sprayTex.getContext() as unknown as CanvasRenderingContext2D;
     const g = c.createRadialGradient(32, 32, 2, 32, 32, 30); g.addColorStop(0, "rgba(255,255,255,1)"); g.addColorStop(0.45, "rgba(240,248,255,0.7)"); g.addColorStop(1, "rgba(255,255,255,0)");
     c.fillStyle = g; c.fillRect(0, 0, 64, 64); sprayTex.hasAlpha = true; sprayTex.update();
   }
-  const ibrSpray = new ParticleSystem("jetIbrSpray", 1400, scene);
-  ibrSpray.particleTexture = sprayTex;
-  ibrSpray.emitter = new Vector3(0, -100, 0);
-  ibrSpray.minEmitBox = new Vector3(-0.08, 0, -0.05); ibrSpray.maxEmitBox = new Vector3(0.08, 0.05, 0.05);
-  ibrSpray.color1 = new Color4(1, 1, 1, 0.85); ibrSpray.color2 = new Color4(0.85, 0.93, 1, 0.7); ibrSpray.colorDead = new Color4(0.9, 0.95, 1, 0);
-  ibrSpray.minSize = 0.12; ibrSpray.maxSize = 0.5; ibrSpray.minScaleX = 0.8; ibrSpray.maxScaleX = 1.4;
-  ibrSpray.minLifeTime = 0.6; ibrSpray.maxLifeTime = 1.4;
-  ibrSpray.minEmitPower = 1; ibrSpray.maxEmitPower = 1;
-  ibrSpray.gravity = new Vector3(0, -9.81, 0);
-  ibrSpray.minAngularSpeed = -2; ibrSpray.maxAngularSpeed = 2;
-  ibrSpray.blendMode = ParticleSystem.BLENDMODE_STANDARD;
-  ibrSpray.renderingGroupId = 1;
-  ibrSpray.emitRate = 0;
-  ibrSpray.start();
+  const ibbSpray = new ParticleSystem("jetIbbSpray", 1400, scene);
+  ibbSpray.particleTexture = sprayTex;
+  ibbSpray.emitter = new Vector3(0, -100, 0);
+  ibbSpray.minEmitBox = new Vector3(-0.08, 0, -0.05); ibbSpray.maxEmitBox = new Vector3(0.08, 0.05, 0.05);
+  ibbSpray.color1 = new Color4(1, 1, 1, 0.85); ibbSpray.color2 = new Color4(0.85, 0.93, 1, 0.7); ibbSpray.colorDead = new Color4(0.9, 0.95, 1, 0);
+  ibbSpray.minSize = 0.12; ibbSpray.maxSize = 0.5; ibbSpray.minScaleX = 0.8; ibbSpray.maxScaleX = 1.4;
+  ibbSpray.minLifeTime = 0.6; ibbSpray.maxLifeTime = 1.4;
+  ibbSpray.minEmitPower = 1; ibbSpray.maxEmitPower = 1;
+  ibbSpray.gravity = new Vector3(0, -9.81, 0);
+  ibbSpray.minAngularSpeed = -2; ibbSpray.maxAngularSpeed = 2;
+  ibbSpray.blendMode = ParticleSystem.BLENDMODE_STANDARD;
+  ibbSpray.renderingGroupId = 1;
+  ibbSpray.emitRate = 0;
+  ibbSpray.start();
 
   // esguicho de refrigeração (lado de boreste, na popa): o "xixi" que mostra que a água está circulando
   const telltale = new TransformNode("telltale", scene);
@@ -255,7 +255,7 @@ export const buildJetski = (scene: Scene): BoatVisual & { controls: JetskiContro
     const g = new TransformNode("jetGripPt", scene); g.parent = bar; g.position.set(s * 0.33, 0.085, -0.01);
     grips.push(g);
   }
-  // gatilho do acelerador (manopla direita) e alavanca do iBR (esquerda) — giram com o comando real
+  // gatilho do acelerador (manopla direita) e alavanca do iBB (esquerda) — giram com o comando real
   const trigPivot = new TransformNode("jetTrigger", scene); trigPivot.parent = bar; trigPivot.position.set(0.27, 0.07, 0.03);
   add(MeshBuilder.CreateBox("jetTriggerM", { width: 0.012, height: 0.02, depth: 0.08 }, scene), blackMatte, trigPivot).position.set(0, -0.005, 0.04);
   const brakePivot = new TransformNode("jetBrake", scene); brakePivot.parent = bar; brakePivot.position.set(-0.27, 0.075, 0.03);
@@ -291,27 +291,27 @@ export const buildJetski = (scene: Scene): BoatVisual & { controls: JetskiContro
       const br = t.gear === "R" ? 1 : t.gear === "N" ? 0.45 : 0;
       brake += (br - brake) * Math.min(1, dt * 10);
       brakePivot.rotation.x = 0.45 * brake;
-      // caçamba pelo estado REAL do iBR: FRENTE = 100 % aberta (levantada), NEUTRO = parcial, RÉ e FREIO = fechada
-      const bk = t.ibr === "off" ? 1.75 : t.ibr === "neutral" ? 0.8 : 0;
+      // caçamba pelo estado REAL do iBB: FRENTE = 100 % aberta (levantada), NEUTRO = parcial, RÉ e FREIO = fechada
+      const bk = t.ibb === "off" ? 1.75 : t.ibb === "neutral" ? 0.8 : 0;
       bucketAng += (bk - bucketAng) * Math.min(1, dt * 7);
       bucketPivot.rotation.x = bucketAng;
       // FREIO em velocidade: o jato bate na caçamba e sobe numa coluna d'água atrás da popa (∝ velocidade e giro)
       const v = t.speedKmh / 3.6;
       const closed = 1 - Math.min(1, bucketAng / 0.8);
-      const strength = t.engine === "running" && t.propImmersion > 0.3 && t.ibr === "brake" ? closed * Math.min(1, Math.max(0, (t.speedKmh - 12) / 50)) * (0.35 + 0.65 * t.throttle) : 0;
-      ibrSpray.emitRate = 1100 * strength;
+      const strength = t.engine === "running" && t.propImmersion > 0.3 && t.ibb === "brake" ? closed * Math.min(1, Math.max(0, (t.speedKmh - 12) / 50)) * (0.35 + 0.65 * t.throttle) : 0;
+      ibbSpray.emitRate = 1100 * strength;
       if (strength > 0) {
         root.computeWorldMatrix(true); bucketPivot.computeWorldMatrix(true);
         const wm = root.getWorldMatrix();
         const fwd = Vector3.TransformNormal(Vector3.Forward(), wm).normalize();
         const up = Vector3.TransformNormal(Vector3.Up(), wm).normalize();
         const right = Vector3.TransformNormal(Vector3.Right(), wm).normalize();
-        (ibrSpray.emitter as Vector3).copyFrom(bucketPivot.getAbsolutePosition().add(fwd.scale(-0.2)));
+        (ibbSpray.emitter as Vector3).copyFrom(bucketPivot.getAbsolutePosition().add(fwd.scale(-0.2)));
         // a moto vai para a frente a v; a água sai para cima (e um pouco para trás em relação à moto)
         const base = fwd.scale(v * 0.5), upS = 5 + 6 * strength;
-        ibrSpray.direction1 = base.add(up.scale(upS * 0.75)).add(fwd.scale(-1.5)).add(right.scale(-1.6));
-        ibrSpray.direction2 = base.add(up.scale(upS * 1.25)).add(fwd.scale(0.4)).add(right.scale(1.6));
-        ibrSpray.maxSize = 0.35 + 0.35 * strength;
+        ibbSpray.direction1 = base.add(up.scale(upS * 0.75)).add(fwd.scale(-1.5)).add(right.scale(-1.6));
+        ibbSpray.direction2 = base.add(up.scale(upS * 1.25)).add(fwd.scale(0.4)).add(right.scale(1.6));
+        ibbSpray.maxSize = 0.35 + 0.35 * strength;
       }
       // painel: aceso com a central acordada (START/autoteste/motor) e com tensão
       const awake = t.engine !== "off" || (t.keys[0] ?? "off") !== "off";

@@ -91,7 +91,7 @@ export class RoundGauge {
   }
 }
 
-export interface HudOpts { speedMax: number; temp: boolean; battery: boolean; trimPins: number; gear?: "bar" | "dial"; /** dois motores: um conta-giros por motor (BB / BE) */ twin?: boolean; /** turbina: N1, EGT, torque, N2, óleo e luzes da partida */ turbine?: boolean; /** fundo de escala do conta-giros (padrão 7000; moto aquática 9000) e início do vermelho */ rpmMax?: number; rpmRed?: number; /** moto aquática: manômetro do compressor (BOOST) e luz do iBR */ jet?: boolean }
+export interface HudOpts { speedMax: number; temp: boolean; battery: boolean; trimPins: number; gear?: "bar" | "dial"; /** dois motores: um conta-giros por motor (BB / BE) */ twin?: boolean; /** turbina: N1, EGT, torque, N2, óleo e luzes da partida */ turbine?: boolean; /** fundo de escala do conta-giros (padrão 7000; moto aquática 9000) e início do vermelho */ rpmMax?: number; rpmRed?: number; /** moto aquática: manômetro do compressor (BOOST) e luz do iBB */ jet?: boolean }
 
 export class Hud {
   private speedG!: RoundGauge;
@@ -108,9 +108,9 @@ export class Hud {
   private tempG: RoundGauge | null = null;
   private voltG: RoundGauge | null = null;
   private ampG: RoundGauge | null = null;
-  /** moto aquática: pressão do compressor e a luz do iBR (caçamba: NEUTRO / FREIO / RÉ) */
+  /** moto aquática: pressão do compressor e a luz do iBB (caçamba: NEUTRO / FREIO / RÉ) */
   private boostG: RoundGauge | null = null;
-  private ibrLamp: HTMLElement | null = null;
+  private ibbLamp: HTMLElement | null = null;
   /** 2º motor (AR-9): temperatura e banco de bateria próprios */
   private tempG2: RoundGauge | null = null;
   /** escala do voltímetro (1 = 12 V, 2 = 24 V) */
@@ -184,7 +184,7 @@ export class Hud {
     this.speedG = new RoundGauge(big, { title: "km/h", min: 0, max: sm, labels: Array.from({ length: 6 }, (_, i) => (sm / 5) * i), minor: sm / 20, big: true });
     this.egtG = this.tqG = this.n2G = this.oilG = this.oilTG = null;
     this.annun?.remove(); this.annun = null;
-    this.boostG = null; this.ibrLamp?.remove(); this.ibrLamp = null;
+    this.boostG = null; this.ibbLamp?.remove(); this.ibbLamp = null;
     if (opts.turbine) {
       // turbina: N1 (gerador de gás, %) e EGT (gases de escape, °C) grandes; vermelho no limite de partida/operação
       this.rpmG = new RoundGauge(big, { title: "N1 %", min: 0, max: 110, labels: [0, 20, 40, 60, 80, 100], minor: 5, big: true, bands: [{ from: 60, to: 101, c: "g" }, { from: 102, to: 110, c: "r" }] });
@@ -218,10 +218,10 @@ export class Hud {
       // compressor: verde até ~1 bar (pleno), vermelho acima (sobrepressão)
       this.boostG = new RoundGauge(small, { title: "BOOST bar", min: 0, max: 1.4, labels: [0, 0.7, 1.4], minor: 0.1, bands: [{ from: 0.05, to: 1.1, c: "g" }, { from: 1.1, to: 1.2, c: "y" }, { from: 1.2, to: 1.4, c: "r" }] });
       const l = document.createElement("div");
-      l.id = "g-ibr";
-      l.innerHTML = `<span class="ibr-dot"></span><b>iBR</b><em>FRENTE</em>`;
+      l.id = "g-ibb";
+      l.innerHTML = `<span class="ibb-dot"></span><b>iBB</b><em>FRENTE</em>`;
       small.parentElement?.insertBefore(l, this.fuelAut);
-      this.ibrLamp = l;
+      this.ibbLamp = l;
     }
     this.fuelG = new RoundGauge(small, { title: "COMBUST.", min: 0, max: 1, labels: [0, 0.5, 1], minor: 0.125, redFrom: 0, redTo: 0.12, labelFmt: (v) => (v === 0 ? "E" : v === 1 ? "F" : "½") });
     // dois motores: um relógio de temperatura e um de bateria para cada (BB = bombordo, BE = boreste: bancos separados)
@@ -286,9 +286,9 @@ export class Hud {
     const amps = t.batteryA;
     this.ampG?.set(Math.max(-60, Math.min(30, amps)), `${amps > 0.5 ? "+" : ""}${amps.toFixed(0)} A`, amps > 0.5 ? "carga" : amps < -0.5 ? "consumo" : "", amps < -40);
     this.boostG?.set(Math.max(0, t.boostBar), `${t.boostBar.toFixed(2)}`, `${(t.boostBar * 14.5).toFixed(0)} psi`, t.boostBar > 1.2);
-    if (this.ibrLamp) {
-      const st = t.ibr, txt = st === "brake" ? "FREIO" : st === "reverse" ? "RÉ" : st === "neutral" ? "NEUTRO" : "FRENTE";
-      if (this.ibrLamp.dataset.s !== st) { this.ibrLamp.dataset.s = st; this.ibrLamp.querySelector("em")!.textContent = txt; }
+    if (this.ibbLamp) {
+      const st = t.ibb, txt = st === "brake" ? "FREIO" : st === "reverse" ? "RÉ" : st === "neutral" ? "NEUTRO" : "FRENTE";
+      if (this.ibbLamp.dataset.s !== st) { this.ibbLamp.dataset.s = st; this.ibbLamp.querySelector("em")!.textContent = txt; }
     }
     // porão: bomba jogando água fora / água alta (alerta luminoso piscando)
     const bilgeShow = t.bilgeAlarm || t.swamped || t.sunk;

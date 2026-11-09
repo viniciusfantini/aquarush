@@ -168,7 +168,7 @@ export interface SpeedboatParams {
   /**
    * JATO D'ÁGUA (moto aquática): no lugar da hélice exposta, um rotor dentro do duto. A água entra pela grade no fundo
    * (`intakePos`) e sai pelo bocal (`propPos`), que o guidão gira (`steer`) e o trim (VTS) inclina. Sem empuxo não há
-   * direção (o bocal é o leme). O motor é ligado direto ao rotor (sem embreagem): a marcha é a CAÇAMBA de ré (iBR) —
+   * direção (o bocal é o leme). O motor é ligado direto ao rotor (sem embreagem): a marcha é a CAÇAMBA de ré (iBB) —
    * N = caçamba no meio (o jato sai, mas o empuxo líquido é ~zero), R = caçamba baixada (ré / freio). Com a grade fora
    * d'água (pulando onda) o rotor suga ar: perde a carga e dispara.
    */
@@ -664,7 +664,7 @@ export const TURBINA: SpeedboatParams = {
 // ---------------------------------------------------------------------------------------------
 // Moto aquática AR-J (3,45 m, até 3 pessoas montadas em fila) — motor 4T de 3 cilindros 1,8 L com compressor
 // (supercharger), 300 hp, ligado DIRETO ao rotor de um jato d'água (sem hélice exposta, sem embreagem). O guidão
-// gira o bocal; o gatilho da direita acelera; a alavanca da esquerda (iBR) baixa a caçamba: neutro, ré e freio.
+// gira o bocal; o gatilho da direita acelera; a alavanca da esquerda (iBB) baixa a caçamba: neutro, ré e freio.
 // Trim elétrico do bocal (VTS) nos botões do guidão. Partida por botões START/STOP com cordão de segurança.
 // Casco selado (convés autodrenante, porão esvaziado pelo sifão do jato). Virada, o piloto a desvira na água.
 // Referência: motos de 300 hp de série (seca ~360 kg, ~108 km/h com o limitador, tanque ~70 L, ~70 L/h a pleno).
@@ -740,7 +740,7 @@ export const JETSKI: SpeedboatParams = {
   engineResponse: 0.16,
   idleRpm: 1700,
   maxRpm: 7900,
-  shiftTime: 0.35,             // caçamba elétrica (iBR)
+  shiftTime: 0.35,             // caçamba elétrica (iBB)
   idleThrustFraction: 0.08,    // na lenta engatada ela anda (o jato nunca para)
 
   maxSteerLow: 28 * DEG,       // giro do bocal

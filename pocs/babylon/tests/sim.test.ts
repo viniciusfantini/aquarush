@@ -1177,7 +1177,7 @@ for (const [label, thr] of [["baixa", 0.25], ["alta", 1]] as const) {
   check("turbina", "virou: a turbina apaga (spool-down)", c.units[0].turb!.burning ? 0 : 1, 1, 1, "", 0);
 }
 
-// ---------- Moto aquática AR-J: jato d'água 300 hp, iBR, VTS, START/STOP com cordão, ECO, casco selado, desvirar ----------
+// ---------- Moto aquática AR-J: jato d'água 300 hp, iBB, VTS, START/STOP com cordão, ECO, casco selado, desvirar ----------
 {
   const water = mkWater(0.35);
   const mk = (pax = 1) => {
@@ -1196,7 +1196,7 @@ for (const [label, thr] of [["baixa", 0.25], ["alta", 1]] as const) {
   check("moto aquática", "consumo a toda (L/h)", a.telemetry.fuelLph, 60, 85, "L/h", 0);
   check("moto aquática", "rotação a toda (rpm)", a.telemetry.rpm, 7500, 8100, "rpm", 0);
   check("moto aquática", "compressor a toda: pressão (bar)", a.telemetry.boostBar, 0.85, 1.15, "bar", 2);
-  check("moto aquática", "iBR em F: caçamba recolhida (luz apagada)", a.telemetry.ibr === "off" ? 1 : 0, 1, 1, "", 0);
+  check("moto aquática", "iBB em F: caçamba recolhida (luz apagada)", a.telemetry.ibb === "off" ? 1 : 0, 1, 1, "", 0);
   run(a, water, 6, { ...emptyInput(), gear: "F", throttle: 1, steering: 1 }, openWater);
   check("moto aquática", "curva a toda com o guidão todo: guinada (°/s)", a.angVel.y * 57.3, 15, 60, "°/s", 1);
   check("moto aquática", "curva a toda: não vira", a.capsized ? 1 : 0, 0, 0, "", 0);
@@ -1209,18 +1209,18 @@ for (const [label, thr] of [["baixa", 0.25], ["alta", 1]] as const) {
     check("moto aquática", `curva fechada (gatilho ${thr * 100} %): tempo com a grade do jato ventilando (s)`, ventT, 0, 0.3, "s", 2);
     check("moto aquática", `curva fechada (gatilho ${thr * 100} %): não vira`, cv.capsized ? 1 : 0, 0, 0, "", 0);
   }
-  // freio iBR: caçamba baixada com o gatilho apertado
+  // freio iBB: caçamba baixada com o gatilho apertado
   run(a, water, 6, { ...emptyInput(), gear: "F", throttle: 1 }, openWater);
-  const v0 = a.telemetry.speedKmh; let tStop = -1, ibrBrake = "";
-  run(a, water, 10, { ...emptyInput(), gear: "R", throttle: 1 }, openWater, (t) => { if (tStop < 0 && a.telemetry.speedKmh < 5) tStop = t; if (t > 0.8 && !ibrBrake) ibrBrake = a.telemetry.ibr; });
-  check("moto aquática", "iBR freando a toda: luz de FREIO", ibrBrake === "brake" ? 1 : 0, 1, 1, "", 0);
-  check("moto aquática", "iBR parada em R: luz de RÉ", a.telemetry.ibr === "reverse" ? 1 : 0, 1, 1, "", 0);
-  check("moto aquática", `iBR: freia de ${v0.toFixed(0)} km/h a < 5 km/h (s)`, tStop, 1, 6, "s", 1);
-  check("moto aquática", "iBR: depois de parar, dá ré", a.telemetry.gear === "R" && (a.vel.x * a.forward.x + a.vel.z * a.forward.z) < -0.3 ? 1 : 0, 1, 1, "", 0);
+  const v0 = a.telemetry.speedKmh; let tStop = -1, ibbBrake = "";
+  run(a, water, 10, { ...emptyInput(), gear: "R", throttle: 1 }, openWater, (t) => { if (tStop < 0 && a.telemetry.speedKmh < 5) tStop = t; if (t > 0.8 && !ibbBrake) ibbBrake = a.telemetry.ibb; });
+  check("moto aquática", "iBB freando a toda: luz de FREIO", ibbBrake === "brake" ? 1 : 0, 1, 1, "", 0);
+  check("moto aquática", "iBB parada em R: luz de RÉ", a.telemetry.ibb === "reverse" ? 1 : 0, 1, 1, "", 0);
+  check("moto aquática", `iBB: freia de ${v0.toFixed(0)} km/h a < 5 km/h (s)`, tStop, 1, 6, "s", 1);
+  check("moto aquática", "iBB: depois de parar, dá ré", a.telemetry.gear === "R" && (a.vel.x * a.forward.x + a.vel.z * a.forward.z) < -0.3 ? 1 : 0, 1, 1, "", 0);
   // sem empuxo não há direção (o bocal é o leme)
   const n = mk(); const y0 = Math.atan2(n.forward.x, n.forward.z);
   run(n, water, 6, { ...emptyInput(), gear: "N", steering: 1 });
-  check("moto aquática", "iBR em N: luz de NEUTRO", n.telemetry.ibr === "neutral" ? 1 : 0, 1, 1, "", 0);
+  check("moto aquática", "iBB em N: luz de NEUTRO", n.telemetry.ibb === "neutral" ? 1 : 0, 1, 1, "", 0);
   check("moto aquática", "compressor em lenta, em N (bar)", n.telemetry.boostBar, 0, 0.1, "bar", 3);
   check("moto aquática", "sem acelerar (N), guidão todo: quase não vira (°)", Math.abs(Math.atan2(n.forward.x, n.forward.z) - y0) * 57.3, 0, 3, "°", 1);
   run(n, water, 6, { ...emptyInput(), gear: "F", throttle: 0, steering: 1 });

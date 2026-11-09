@@ -129,26 +129,26 @@ A lancha é um **corpo rígido 6DOF** (massa seca de 1030 kg + gasolina, ocupant
   `__i18nMissing()` no console (lista os textos com cara de português que passaram sem tradução).
 - A arte do splash tem o subtítulo em inglês em `public/splash-en.svg`.
 
-## Moto aquática: caçamba do iBR e jato d'água no freio (v0.67.2)
+## Moto aquática: caçamba do iBB e jato d'água no freio (v0.67.2)
 
 - **Caçamba** (`jetskiMesh.ts`): concha em "C" (raio 0,115 m) articulada num eixo transversal acima da saída do
   bocal, com placas laterais, lábio de baixo, braços e pinos no bocal. O ângulo segue o estado REAL da caçamba
-  (`telemetry.ibr`, não a manete): **FRENTE = 100 % aberta** (levantada, 1,75 rad), **NEUTRO = parcial** (0,8 rad, metade
+  (`telemetry.ibb`, não a manete): **FRENTE = 100 % aberta** (levantada, 1,75 rad), **NEUTRO = parcial** (0,8 rad, metade
   da saída coberta), **RÉ e FREIO = fechada** (envolve a saída por trás e por baixo).
-- **Freando rápido** (`ibr = "brake"`, > 12 km/h, grade na água): o jato que bate na caçamba sobe numa **coluna d'água**
+- **Freando rápido** (`ibb = "brake"`, > 12 km/h, grade na água): o jato que bate na caçamba sobe numa **coluna d'água**
   atrás da popa (partículas próprias; taxa ∝ velocidade × giro, até ~1100/s; sobe a 5–11 m/s e herda metade da
   velocidade da moto). Verificado no navegador freando a ~90 km/h.
 
-## Moto aquática: BOOST, freio iBR no S e luz do iBR (v0.67.1)
+## Moto aquática: BOOST, freio iBB no S e luz do iBB (v0.67.1)
 
 - **Compressor** (`params.supercharger.maxBar` 1,05): pressão ∝ (giro/máx)² × carga, com 0,25 s de atraso
   (`telemetry.boostBar`). Manômetro **BOOST bar** (verde até 1,1, vermelho acima de 1,2, leitura em psi) no HUD e a
   pressão na leitura da partida do Y. Medido: 1,04 bar a toda, 0,007 bar na lenta em N.
-- **Freio iBR no teclado** (`InputManager.ibrMode`, só na moto): andando em F, **segurar S** puxa a alavanca do iBR —
+- **Freio iBB no teclado** (`InputManager.ibbMode`, só na moto): andando em F, **segurar S** puxa a alavanca do iBB —
   o comando vai para R com o giro subindo sozinho (até 85 % do S): a caçamba desce e freia; parada, dá ré. Soltar
   devolve a caçamba (F). **Toque curto** (< 0,25 s) = N, como o toque na alavanca real.
-- **Luz do iBR** (`telemetry.ibr`: off / neutral / brake / reverse, pelo estado REAL da caçamba e pela velocidade):
-  no HUD (`#g-ibr`) e ao lado da alavanca do iBR no Y (`LeverControls.setIbr`). Apagada = FRENTE, âmbar = NEUTRO ou
+- **Luz do iBB** (`telemetry.ibb`: off / neutral / brake / reverse, pelo estado REAL da caçamba e pela velocidade):
+  no HUD (`#g-ibb`) e ao lado da alavanca do iBB no Y (`LeverControls.setIbb`). Apagada = FRENTE, âmbar = NEUTRO ou
   RÉ, **vermelha piscando = FREIO**.
 
 ## Moto aquática AR-J — 300 hp com jato d'água (v0.67)
@@ -158,17 +158,17 @@ A lancha é um **corpo rígido 6DOF** (massa seca de 1030 kg + gasolina, ocupant
   compressor de 300 hp ligado direto ao **rotor de um jato d'água**, tanque de 70 L (começa com 8 L, temporário).
 - **Física do jato** (`params.waterjet` em `boat.ts`): sem hélice exposta; o empuxo sai do **bocal** (que o guidão
   gira e o trim VTS inclina) e só existe com a **grade de admissão** no fundo submersa — no ar o giro dispara e o
-  empuxo some. Sem empuxo não há direção. **iBR**: N = caçamba no meio (empuxo líquido zero, o rotor continua girando),
+  empuxo some. Sem empuxo não há direção. **iBB**: N = caçamba no meio (empuxo líquido zero, o rotor continua girando),
   R = ré e **freio** (de ~100 km/h a < 5 km/h em ~4 s com o gatilho apertado).
 - **Comandos** (painel Y, `systemsPanel.ts` com `startStop`): **START** (segurar) e **STOP** redondos, **clipe do
   cordão de segurança** (solto = não liga; puxado = desliga), **MODO ECO/SPORT** (ECO limita o gatilho a 55 %),
-  manete `handlebar` (`levers.ts`: **gatilho** do acelerador + alavanca do **iBR** F·N·R), **VTS** (trim do bocal) e
+  manete `handlebar` (`levers.ts`: **gatilho** do acelerador + alavanca do **iBB** F·N·R), **VTS** (trim do bocal) e
   buzina. Sem chave geral, sem registro de combustível, sem luzes (uso diurno). Display de avisos estilo vidro.
 - **Casco selado + sifão**: o convés autodrena (a água por cima não entra); o sifão do jato esvazia o porão com o
   motor rodando. **Virou?** O piloto nada até a moto e a **desvira** (`updateRighting`), depois todos sobem pela popa
   e ele prende o cordão de novo.
 - **Visual** (`presentation/jetskiMesh.ts`): casco em V com quina e verdugo, convés com estribos e tapete, capô com
-  adesivo **300**, banco com degrau do garupa, guidão que gira (gatilho e alavanca do iBR animados), botões START/STOP
+  adesivo **300**, banco com degrau do garupa, guidão que gira (gatilho e alavanca do iBB animados), botões START/STOP
   e o cordão laranja, painel digital que acende com a central acordada, retrovisores, plataforma de popa com alça,
   bocal com o rotor e a **caçamba de ré** que desce em N/R. Esguicho de refrigeração ("xixi") a boreste.
 - **Som**: o 3 cilindros procedural + o **assobio do compressor** (sobe com o giro e a carga). Carretinha leve de um
@@ -485,7 +485,7 @@ Limitação: é uma síntese aproximada, não uma gravação. Validar o timbre d
 | 5. Manete | de cruzeiro para N: empuxo 0 e < 1 km/h em 27 s; a hélice gira **solta** (~990 rpm 1,5 s depois do N) e para junto com a lancha. F em lenta: 5,0 km/h a 750 rpm. R em lenta: 2,8 km/h para trás. No navegador: 1 toque W = F a 4 km/h; segurar = 45 km/h; 1 toque S = N; 2º toque = R lenta; segurar S = ré acelerando |
 | 6. Ondas e correnteza | ondas fortes (×2,5): roll ≤ 30°, não emborca; deriva com correnteza de 1,6 m/s: 1,54 m/s |
 | Lago | flutua no spawn; a toda contra a margem, encalha e para sem atravessar o terreno |
-| Moto aquática AR-J (v0.67–0.67.1) | compressor 1,04 bar a toda, 0,007 bar na lenta; luz do iBR: apagada em F, FREIO freando a toda, RÉ parada em R, NEUTRO em N; navegador: S segurado a 107 km/h → FREIO, 53 km/h em 1,5 s; soltar → F; toque → N; parada: CG −0,03 m da água, borda 0,25 m; a toda 108,3 km/h a 7880 rpm, 0→60 2,7 s, 0→100 7,1 s, 72 L/h; curva a toda 29,2°/s sem virar; iBR de 102 km/h a < 5 km/h em 4,2 s e depois ré; N com o guidão todo: 0,2° em 6 s; lenta + guidão 10,6°/s; N acelerado: empuxo 0, rotor a 7478 rpm; no ar: empuxo 0, giro 7951 rpm; ECO 55 % / 89,9 km/h; lotada 101,5 km/h; cordão solto não liga, puxado desliga; START pega em 1,5 s (60 %); central dorme em 30 s; casco selado 40 s lotada em ondas fortes: 0,0 L; sifão 6,1 L em 30 s (= contrato); virada: desvira em 4,5 s, piloto a bordo com o cordão, liga de novo; carretinha 3,9 m no carro |
+| Moto aquática AR-J (v0.67–0.67.1) | compressor 1,04 bar a toda, 0,007 bar na lenta; luz do iBB: apagada em F, FREIO freando a toda, RÉ parada em R, NEUTRO em N; navegador: S segurado a 107 km/h → FREIO, 53 km/h em 1,5 s; soltar → F; toque → N; parada: CG −0,03 m da água, borda 0,25 m; a toda 108,3 km/h a 7880 rpm, 0→60 2,7 s, 0→100 7,1 s, 72 L/h; curva a toda 29,2°/s sem virar; iBB de 102 km/h a < 5 km/h em 4,2 s e depois ré; N com o guidão todo: 0,2° em 6 s; lenta + guidão 10,6°/s; N acelerado: empuxo 0, rotor a 7478 rpm; no ar: empuxo 0, giro 7951 rpm; ECO 55 % / 89,9 km/h; lotada 101,5 km/h; cordão solto não liga, puxado desliga; START pega em 1,5 s (60 %); central dorme em 30 s; casco selado 40 s lotada em ondas fortes: 0,0 L; sifão 6,1 L em 30 s (= contrato); virada: desvira em 4,5 s, piloto a bordo com o cordão, liga de novo; carretinha 3,9 m no carro |
 
 Resultado: **635/637 OK + 2 KNOWN** (v0.68.2). Na v0.10, o peso do piloto na posição real (boreste, acima do CG) aumentou o roll em curva com ondas fortes; o `bankCoef` foi para 1800 e o `rollDamping` para 15000, com 1 limitação conhecida (abaixo). Na v0.2 a hélice foi para 0,5 m atrás do espelho, como no modelo visual, e o esterço máximo em alta velocidade caiu de 13° para 11°.
 

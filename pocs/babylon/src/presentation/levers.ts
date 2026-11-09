@@ -6,7 +6,7 @@
 //  • "tiller"   — bote AR-3 (cana): punho giratório do acelerador (tartaruga ↔ lebre) + alavanca de câmbio F-N-R
 //    na lateral do motor;
 //  • "turbine"  — AR-10: manete de potência em T num trilho reto (LENTA → MÁX) + alavanca de marcha F-N-R separada;
-//  • "handlebar" — moto aquática AR-J: GATILHO do acelerador (manopla direita, SOLTO → TODO) + alavanca do iBR na
+//  • "handlebar" — moto aquática AR-J: GATILHO do acelerador (manopla direita, SOLTO → TODO) + alavanca do iBB na
 //    manopla esquerda (FRENTE · NEUTRO · RÉ/FREIO: baixa a caçamba do jato; pode puxar com o motor acelerado).
 // ACELERAR EM NEUTRO, como nos barcos reais: na manete de topo (AR-6/AR-9) o botão "N" no meio do quadrante (o
 // botão de neutro/aquecimento) só arma com a manete em N; armado, empurrar a manete só acelera, sem engatar, e ele
@@ -77,8 +77,8 @@ export class LeverControls {
       el.innerHTML = `<div class="pl pl-trig" title="gatilho do acelerador (manopla direita) · em N acelera em neutro"><div class="pl-track" data-pl="0"><span class="pl-slot"></span>
             <i class="pl-l max">TODO</i><i class="pl-l idle">SOLTO</i><span class="pl-handle"><span class="pl-t"></span></span></div>
           <em class="mt-rd">N · 0 %</em><b>GATILHO</b></div>
-        <div class="tl-shift" title="iBR (manopla esquerda): F = frente · N = caçamba no meio · R = ré e freio (baixa a caçamba, até acelerado)">${gearSel(0)}<b>iBR · FREIO/RÉ</b>
-          <div class="ibr-l" data-s="off"><span class="ibr-dot"></span><em>FRENTE</em></div></div>`;
+        <div class="tl-shift" title="iBB (manopla esquerda): F = frente · N = caçamba no meio · R = ré e freio (baixa a caçamba, até acelerado)">${gearSel(0)}<b>iBB · FREIO/RÉ</b>
+          <div class="ibb-l" data-s="off"><span class="ibb-dot"></span><em>FRENTE</em></div></div>`;
     } else {
       el.innerHTML = `<div class="pl" title="manete de potência em T (N1) · em N acelera em neutro"><div class="pl-track" data-pl="0"><span class="pl-slot"></span>
             <i class="pl-l max">MÁX</i><i class="pl-l idle">LENTA</i><span class="pl-handle"><span class="pl-t"></span></span></div>
@@ -230,9 +230,9 @@ export class LeverControls {
     rd.classList.toggle("warn", s.relay || s.blocked);
   }
 
-  /** Luz do iBR (moto aquática): estado REAL da caçamba, da telemetria (FRENTE / NEUTRO / FREIO / RÉ). */
-  setIbr(st: string): void {
-    const l = this.el.querySelector<HTMLElement>(".ibr-l");
+  /** Luz do iBB (moto aquática): estado REAL da caçamba, da telemetria (FRENTE / NEUTRO / FREIO / RÉ). */
+  setIbb(st: string): void {
+    const l = this.el.querySelector<HTMLElement>(".ibb-l");
     if (!l || l.dataset.s === st) return;
     l.dataset.s = st;
     l.querySelector("em")!.textContent = st === "brake" ? "FREIO" : st === "reverse" ? "RÉ" : st === "neutral" ? "NEUTRO" : "FRENTE";

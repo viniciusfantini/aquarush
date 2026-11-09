@@ -59,15 +59,15 @@ export class InputManager {
   /** chamado quando a marcha da manete muda (HUD/toast) */
   onGearChange: ((g: GearCommand) => void) | null = null;
   /**
-   * iBR (moto aquática): em F, SEGURAR S/↓ puxa a alavanca do freio — a caçamba desce (marcha R no comando) e o
+   * iBB (moto aquática): em F, SEGURAR S/↓ puxa a alavanca do freio — a caçamba desce (marcha R no comando) e o
    * gatilho do freio sobe sozinho; a moto freia e, parada, dá ré. Soltar devolve a caçamba (volta para F). Um toque
-   * curto (< 0,25 s) deixa em N, como o toque na alavanca do iBR real. O main liga isto só na moto aquática.
+   * curto (< 0,25 s) deixa em N, como o toque na alavanca do iBB real. O main liga isto só na moto aquática.
    */
-  ibrMode = false;
-  /** freio do iBR segurado agora (o main/painel leem para a luz) */
-  ibrBraking = false;
-  private ibrT = 0;
-  private ibrThrottle = 0;
+  ibbMode = false;
+  /** freio do iBB segurado agora (o main/painel leem para a luz) */
+  ibbBraking = false;
+  private ibbT = 0;
+  private ibbThrottle = 0;
 
   constructor(target: Window) {
     target.addEventListener("keydown", (e) => {
@@ -127,17 +127,17 @@ export class InputManager {
     // N segurado = botão de aceleração em neutro da manete: a manete fica em N e "para frente" só sobe o giro
     const nHeld = this.k("KeyN");
     if (nHeld && this.gear !== "N") { this.touchLever = null; this.panelLevers = []; this.setGear("N"); }
-    if (!nHeld && up && !this.prevUp) { this.ibrBraking = false; this.press("up"); }
+    if (!nHeld && up && !this.prevUp) { this.ibbBraking = false; this.press("up"); }
     if (!nHeld && down && !this.prevDown) {
-      if (this.ibrMode && this.gear === "F" && !this.touchLever && !this.panelLevers.length) { this.ibrBraking = true; this.ibrT = 0; this.ibrThrottle = 0; }
+      if (this.ibbMode && this.gear === "F" && !this.touchLever && !this.panelLevers.length) { this.ibbBraking = true; this.ibbT = 0; this.ibbThrottle = 0; }
       else this.press("down");
     }
-    if (this.ibrBraking) {
-      this.ibrT += dt;
+    if (this.ibbBraking) {
+      this.ibbT += dt;
       if (!down) {
         // soltou: toque curto = neutro; segurado = a caçamba sobe e volta para a frente
-        this.ibrBraking = false;
-        if (this.ibrT < 0.25) this.setGear("N");
+        this.ibbBraking = false;
+        if (this.ibbT < 0.25) this.setGear("N");
       }
     }
     if (!up && !down) { this.holdTime = 0; this.pressShifted = false; } else this.holdTime += dt;
@@ -161,10 +161,10 @@ export class InputManager {
       s.throttle = clamp(this.leverThrottle, 0, 1);
     }
     s.gear = this.gear;
-    if (this.ibrBraking) {
-      // freio do iBR: caçamba baixada e o giro subindo para o jato frear (até o quanto S está apertado)
-      this.ibrThrottle = approach(this.ibrThrottle, this.ibrT < 0.25 ? 0 : downAmt * 0.85, 2.5 * dt);
-      s.gear = "R"; s.throttle = this.ibrThrottle;
+    if (this.ibbBraking) {
+      // freio do iBB: caçamba baixada e o giro subindo para o jato frear (até o quanto S está apertado)
+      this.ibbThrottle = approach(this.ibbThrottle, this.ibbT < 0.25 ? 0 : downAmt * 0.85, 2.5 * dt);
+      s.gear = "R"; s.throttle = this.ibbThrottle;
     }
     s.brake = 0;
     s.reverse = this.gear === "R";

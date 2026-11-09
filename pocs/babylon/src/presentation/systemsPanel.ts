@@ -182,7 +182,7 @@ export class SystemsPanel {
       info(`key${i}`, eng === "running" ? `ligado · ${Math.round(rpm)} rpm` : eng === "cranking" ? `arranque · ${Math.round(rpm)} rpm` : t.keys[i] === "on" ? "ignição ligada" : "desligado", t.startFail !== "" && eng === "off" && t.keys[i] === "on");
     });
     if (c.startStop) {
-      this.levers?.setIbr(t.ibr);
+      this.levers?.setIbb(t.ibb);
       const awake = (t.keys[0] ?? "off") !== "off" || t.engine !== "off";
       const sb = el.querySelector<HTMLElement>("button[data-ss='start']");
       sb?.classList.toggle("lit", t.engine === "running" && hv > 9); sb?.classList.toggle("busy", t.engine === "cranking");

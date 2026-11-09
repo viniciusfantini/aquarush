@@ -1,4 +1,4 @@
-// Moto aquática AR-J (jato d'água, 300 hp): flutuação, velocidade final, 0→60/0→100, curva, freio (iBR), ré, grade
+// Moto aquática AR-J (jato d'água, 300 hp): flutuação, velocidade final, 0→60/0→100, curva, freio (iBB), ré, grade
 // fora d'água (pulo), ECO e o desvirar. node tests/debug-jetski.ts
 import { Speedboat } from "../src/sim/boat.ts";
 import { JETSKI } from "../src/sim/params.ts";
@@ -26,7 +26,7 @@ for (const pax of [1, 3]) {
   run(b, w, 6, { gear: "F", throttle: 1 });
   const v0 = b.telemetry.speedKmh; let tStop = -1;
   run(b, w, 8, { gear: "R", throttle: 0.4 }, (t) => { if (tStop < 0 && b.telemetry.speedKmh < 5) tStop = t; });
-  console.log(`  freio iBR de ${v0.toFixed(0)} km/h: < 5 km/h em ${tStop.toFixed(1)} s · depois ${b.telemetry.speedKmh.toFixed(1)} km/h (ré) · marcha ${b.telemetry.gear}`);
+  console.log(`  freio iBB de ${v0.toFixed(0)} km/h: < 5 km/h em ${tStop.toFixed(1)} s · depois ${b.telemetry.speedKmh.toFixed(1)} km/h (ré) · marcha ${b.telemetry.gear}`);
 }
 { const { w, b } = mk(); run(b, w, 3, { gear: "N" }); const y0 = Math.atan2(b.forward.x, b.forward.z);
   run(b, w, 6, { gear: "N", steering: 1 }); console.log(`sem acelerar (N) com o guidão todo: rumo ${((Math.atan2(b.forward.x, b.forward.z) - y0) * 57.3).toFixed(1)}° em 6 s (sem empuxo, sem direção)`);
