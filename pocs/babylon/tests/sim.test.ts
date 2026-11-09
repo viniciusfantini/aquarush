@@ -1200,6 +1200,15 @@ for (const [label, thr] of [["baixa", 0.25], ["alta", 1]] as const) {
   run(a, water, 6, { ...emptyInput(), gear: "F", throttle: 1, steering: 1 }, openWater);
   check("moto aquática", "curva a toda com o guidão todo: guinada (°/s)", a.angVel.y * 57.3, 15, 60, "°/s", 1);
   check("moto aquática", "curva a toda: não vira", a.capsized ? 1 : 0, 0, 0, "", 0);
+  // curva fechada a meia velocidade (o caso "devagar"): não deita demais, não vira e a grade do jato não ventila
+  for (const thr of [0.6, 1]) {
+    const cv = mk(); run(cv, water, 6, { ...emptyInput(), gear: "F", throttle: 0.5 }, openWater);
+    let rollMax = 0, ventT = 0;
+    run(cv, water, 6, { ...emptyInput(), gear: "F", throttle: thr, steering: 1 }, openWater, () => { rollMax = Math.max(rollMax, Math.abs(cv.telemetry.rollDeg)); if (cv.telemetry.ventilation < 0.75) ventT += 1 / 120; });
+    check("moto aquática", `curva fechada saindo de meia velocidade (gatilho ${thr * 100} %): roll máx (°)`, rollMax, 2, 30, "°", 1);
+    check("moto aquática", `curva fechada (gatilho ${thr * 100} %): tempo com a grade do jato ventilando (s)`, ventT, 0, 0.3, "s", 2);
+    check("moto aquática", `curva fechada (gatilho ${thr * 100} %): não vira`, cv.capsized ? 1 : 0, 0, 0, "", 0);
+  }
   // freio iBR: caçamba baixada com o gatilho apertado
   run(a, water, 6, { ...emptyInput(), gear: "F", throttle: 1 }, openWater);
   const v0 = a.telemetry.speedKmh; let tStop = -1, ibrBrake = "";

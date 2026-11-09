@@ -594,10 +594,12 @@ export class Speedboat {
       let immersion = clamp((propDepth + R) / (2 * R), 0, 1);
       let aeration = immersion * (1 - smoothstep(R, R + 0.3, propDepth));
       if (P.waterjet) {
-        // JATO: quem precisa de água é a GRADE de admissão no fundo (o bocal pode estar no ar). Grade rasa = o rotor
-        // suga ar (ventila): perde a carga e o empuxo e dispara o giro
+        // JATO: quem precisa de água é a GRADE de admissão no fundo (o bocal pode estar no ar). A grade é rente ao casco
+        // e a sucção puxa a água que corre colada no fundo: enquanto o fundo ali toca a água (até ~6 cm acima da
+        // superfície média, com o casco planando ou adernado numa curva) o rotor é alimentado. Só ventila de verdade com
+        // a popa no ar (pulando onda): aí perde a carga e o empuxo e dispara o giro
         const iDepth = water.getHeight(intakeW.x, intakeW.z) - intakeW.y;
-        immersion = smoothstep(-0.03, 0.06, iDepth);
+        immersion = smoothstep(-0.1, -0.02, iDepth);
         aeration = 1 - immersion;
       }
       const ventilation = 1 - aeration; // 1 = hélice limpa (telemetria/efeitos)

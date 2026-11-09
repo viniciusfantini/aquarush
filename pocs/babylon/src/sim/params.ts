@@ -773,7 +773,7 @@ export const JETSKI: SpeedboatParams = {
   waveDragPeakRatio: 0.12,
   sternTrough: 0.12,
   bowWave: 0.05,
-  bankCoef: 1000,               // deita bem para dentro da curva
+  bankCoef: 500,               // deita para dentro da curva (1000 virava numa curva fechada a meia velocidade)
   rollDamping: 1600,
   airDragCdA: 0.75,            // moto + piloto
   // bateria AGM pequena (~30 Ah), arranque com redução ~95 A (3 cilindros), estator (gerador do volante) ~30 A
