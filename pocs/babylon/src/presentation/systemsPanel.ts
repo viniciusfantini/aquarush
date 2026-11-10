@@ -6,6 +6,8 @@
 //  • registro do tanque de combustível (rotativo): FECHADO / ABERTO;
 //  • afogador (bote carburado): EMPURRADO / PUXADO;
 //  • bomba de porão: ON / OFF / AUTO; luzes de navegação;
+//  • motor de avião (airboat): chave dos MAGNETOS (OFF · R · L · BOTH · START com mola), PRIMER manual (cada clique =
+//    uma bombada) e a alavanca de MISTURA (RICA ↔ CORTE) ao lado do pedal;
 //  • moto aquática: botões START (segurar) e STOP redondos, clipe do CORDÃO de segurança e o MODO (ECO / SPORT) — sem
 //    chave de bateria, sem registro de combustível, sem bomba (o sifão do jato esvazia o porão).
 // As chaves elétricas ficam na posição escolhida mesmo sem bateria — só o LED delas depende da tensão.
@@ -33,6 +35,9 @@ export interface SystemsPanelActions {
   horn(on: boolean): void;                        // buzina (apito no bote e na moto aquática) segurada
   setLanyard(on: boolean): void;                  // moto aquática: prender/soltar o cordão de segurança
   setEco(on: boolean): void;                      // moto aquática: modo ECO
+  setMagnetos(pos: "off" | "r" | "l" | "both" | "start" | "release"): void; // motor de avião: chave dos magnetos
+  prime(): void;                                  // motor de avião: uma bombada do primer
+  setMixture(v: number): void;                    // motor de avião: alavanca de mistura (1 = rica, 0 = corte)
   close(): void;
 }
 
@@ -55,8 +60,10 @@ export interface SystemsPanelCaps {
   ecoMode?: boolean;
   /** buzina elétrica ou apito de bolinha (bote, moto aquática). Ausente = buzina com bateria, apito sem */
   horn?: "buzina" | "apito";
-  /** fileira de luzes de aviso (anunciadores, como na AR-10) com botão TESTE — motor a pistão */
+  /** fileira de luzes de aviso (anunciadores, como na AR-10) — motor a pistão */
   annunciators?: boolean;
+  /** motor de avião: magnetos + primer na partida e a alavanca de mistura no comando (no lugar da chave de ignição) */
+  aircraft?: boolean;
 }
 
 const plate = (inner: string, cls = "") => `<div class="sw-plate ${cls}"><span class="screw s1"></span><span class="screw s2"></span><span class="screw s3"></span><span class="screw s4"></span>${inner}</div>`;
@@ -95,6 +102,8 @@ export class SystemsPanel {
       else if (d.ss === "stop") this.act.setKey(0, "off");
       else if (d.lan) this.act.setLanyard(!b.classList.contains("on"));
       else if (d.eco) this.act.setEco(!b.classList.contains("on"));
+      else if (d.mag && d.mag !== "start") this.act.setMagnetos(d.mag as "off" | "r" | "l" | "both");
+      else if (d.prime) { this.act.prime(); b.classList.remove("push"); void b.offsetWidth; b.classList.add("push"); }
     });
     bindKeySpring(el, (i, pos) => this.act.setKey(i, pos));
     // START da moto aquática: segurar = arranque (acorda a central e gira); soltar em qualquer lugar = solta
@@ -106,6 +115,14 @@ export class SystemsPanel {
     });
     const ssUp = () => { if (!ssHeld) return; ssHeld = false; el.querySelector("button[data-ss='start']")?.classList.remove("down"); this.act.setKey(0, "on"); };
     addEventListener("pointerup", ssUp); addEventListener("pointercancel", ssUp); addEventListener("blur", ssUp);
+    // magnetos: START tem mola — segurar dá a partida; soltar volta para BOTH
+    let magHeld = false;
+    el.addEventListener("pointerdown", (e) => {
+      if (!(e.target as HTMLElement).closest("button[data-mag='start']")) return;
+      magHeld = true; this.act.setMagnetos("start"); e.preventDefault();
+    });
+    const magUp = () => { if (!magHeld) return; magHeld = false; this.act.setMagnetos("release"); };
+    addEventListener("pointerup", magUp); addEventListener("pointercancel", magUp); addEventListener("blur", magUp);
     document.body.appendChild(el);
     this.el = el;
     makeDraggable(el, el.querySelector<HTMLElement>(".tp-head")!, "aquarush.spanelPos");
@@ -118,7 +135,10 @@ export class SystemsPanel {
     const cell = (ctl: string, info: string) => `<div class="sw-cell">${ctl}<div class="rd" data-info="${info}"></div></div>`;
     this.el.dataset.disp = caps.display;
     // partida: chave(s) de ignição ou a corda
-    const start = caps.startStop
+    const start = caps.aircraft
+      ? cell(rotary("mag", "MAGNETOS", "OFF · R · L · BOTH · START", [{ v: "off", l: "OFF" }, { v: "r", l: "R" }, { v: "l", l: "L" }, { v: "both", l: "BOTH" }, { v: "start", l: "START" }], { cls: "mag" }), "mag")
+        + cell(`<div class="pr-w"><button class="pr" data-prime="1" title="primer manual: cada clique é uma bombada (frio: 2–4; demais afoga)"><span class="pr-body"></span><span class="pr-knob"></span></button><b>PRIMER</b><small>bomba manual</small></div>`, "prime")
+      : caps.startStop
       ? cell(`<div class="ss"><div class="rb-w"><button class="rb rb-start" data-ss="start" title="segure: acorda a central e dá a partida (em N, com o cordão preso)"><span>START</span></button></div>
           <div class="rb-w"><button class="rb rb-stop" data-ss="stop" title="desliga o motor"><span>STOP</span></button></div>
           <div class="ly-w"><button class="ly" data-lan="1" title="cordão de segurança: preso no botão de parada e no pulso do piloto"><span class="ly-coil"></span><span class="ly-clip"></span></button><b>CORDÃO</b><small>de segurança</small></div>
@@ -139,8 +159,7 @@ export class SystemsPanel {
     this.title.textContent = `⠿ SISTEMAS — ${caps.title}`;
     // anunciadores (como no painel da AR-10): apagado = normal ("cockpit escuro"); TESTE acende todos + alarme
     const ann = caps.annunciators
-      ? `<div class="sp-ann-row"><div class="tp-ann sp-ann">${SystemsPanel.ANN.map((k) => `<span data-a="${k}">${k}</span>`).join("")}</div>
-          <div class="tp-test" title="segure: testa todas as luzes e o alarme (precisa de bateria)"><button class="tb-test" data-test>TEST</button><b>TESTE</b></div></div>`
+      ? `<div class="sp-ann-row"><div class="tp-ann sp-ann">${SystemsPanel.ANN.map((k) => `<span data-a="${k}">${k}</span>`).join("")}</div></div>`
       : "";
     this.body.innerHTML = ann + `
       <div class="sp-top"><div><div class="sp-sec">PARTIDA</div>${plate(start, "sp-start")}</div>
@@ -150,19 +169,27 @@ export class SystemsPanel {
     this.levers = new LeverControls(caps.levers, (i, c) => this.act.setLever(i, c));
     this.body.querySelector<HTMLElement>(".sp-lev")!.appendChild(this.levers.el);
     this.levers.setTrim(caps.trim, (d) => this.act.setTrim(d));
-    this.levers.setHorn(caps.horn ?? (caps.banks === 0 ? "apito" : "buzina"), (on) => this.act.horn(on));
-    const tb = this.body.querySelector<HTMLElement>("[data-test]");
-    if (tb) {
-      tb.addEventListener("pointerdown", (e) => { this.lampTest = true; tb.classList.add("down"); e.preventDefault(); });
-      const up = () => { this.lampTest = false; tb.classList.remove("down"); };
-      addEventListener("pointerup", up); addEventListener("pointercancel", up); addEventListener("blur", up);
+    if (caps.aircraft) {
+      // alavanca de MISTURA (punho vermelho): em cima RICA, embaixo CORTE (é assim que se desliga um motor de avião)
+      const mx = document.createElement("div");
+      mx.className = "pl pl-mix";
+      mx.title = "mistura: RICA para a partida e a potência máxima; empobrecer economiza; em CORTE o motor apaga";
+      mx.innerHTML = `<div class="pl-track" data-mix><span class="pl-slot"></span><i class="pl-l max">RICA</i><i class="pl-l idle">CORTE</i><span class="pl-handle"><span class="pl-t"></span></span></div><em class="mt-rd">RICA</em><b>MISTURA</b>`;
+      const track = mx.querySelector<HTMLElement>(".pl-track")!;
+      let drag = false;
+      const at = (e: PointerEvent) => { const r = track.getBoundingClientRect(); this.act.setMixture(Math.max(0, Math.min(1, 1 - (e.clientY - r.top - 12) / (r.height - 24)))); };
+      track.addEventListener("pointerdown", (e) => { drag = true; try { track.setPointerCapture(e.pointerId); } catch { /* */ } e.preventDefault(); at(e); });
+      track.addEventListener("pointermove", (e) => { if (drag && e.buttons !== 0) at(e); });
+      const up = () => { drag = false; };
+      track.addEventListener("pointerup", up); track.addEventListener("pointercancel", up);
+      this.levers.el.insertBefore(mx, this.levers.el.querySelector(".hb-w"));
     }
+    this.levers.setHorn(caps.horn ?? (caps.banks === 0 ? "apito" : "buzina"), (on) => this.act.horn(on));
   }
 
   /** luzes de aviso do motor a pistão (ordem do painel) */
   static readonly ANN = ["IGNIÇÃO", "PARTIDA", "ALTERNADOR", "ÓLEO", "TEMP CAB.", "COMB. BAIXO"];
-  /** botão TESTE segurado / teste ativo (com bateria): todas as luzes acesas e o alarme (o main lê `lampTestOn`) */
-  private lampTest = false;
+  /** (sem botão TESTE no painel de sistemas — mantido para o main, sempre falso) */
   lampTestOn = false;
 
   get isOpen(): boolean { return this.open; }
@@ -195,10 +222,8 @@ export class SystemsPanel {
         "TEMP CAB.": lit && (t.protectMode ? blink : t.overheatWarn) ? "r" : "",
         "COMB. BAIXO": lit && t.lowFuel ? (t.fuelL <= 0.05 ? "r" : "a") : "",
       };
-      this.lampTestOn = this.lampTest && lit;
-      if (this.lampTestOn) for (const k of SystemsPanel.ANN) L[k] = k === "ÓLEO" || k === "TEMP CAB." ? "r" : "a";
       for (const s of this.el.querySelectorAll<HTMLElement>(".sp-ann [data-a]")) { const v = L[s.dataset.a ?? ""] ?? ""; if (s.className !== v) s.className = v; }
-    } else this.lampTestOn = false;
+    }
     setRotary(el, "bat", t.batterySel === "off" ? "off" : c.banks === 1 ? "ind" : t.batterySel);
     setRotary(el, "fuel", t.fuelValveOpen ? "open" : "closed");
     setPull(el, "choke", t.choke);
@@ -212,7 +237,7 @@ export class SystemsPanel {
       const key = t.keys[i] ?? "off";
       setKey(el, i, key, key !== "off" && bankV > 9);
     });
-    if (!c.keys.length && !c.startStop) setRope(el, t.engine === "running" ? "running" : t.engine === "cranking" ? "cranking" : "off");
+    if (!c.keys.length && !c.startStop && !c.aircraft) setRope(el, t.engine === "running" ? "running" : t.engine === "cranking" ? "cranking" : "off");
     const info = (k: string, s: string, warn = false) => {
       const e = el.querySelector<HTMLElement>(`[data-info="${k}"]`);
       if (!e) return;
@@ -234,7 +259,22 @@ export class SystemsPanel {
         : !t.lanyard ? "cordão SOLTO: não liga" : awake ? "central acordada" : "desligada"), !t.lanyard || (t.startFail !== "" && t.engine === "off" && awake));
 
     }
-    if (!c.keys.length && !c.startStop) info("rope", t.engine === "running" ? `${Math.round(t.rpm)} rpm` : t.startFail === "pull" ? "não pegou: puxe de novo" : "motor parado", t.startFail === "pull");
+    if (c.aircraft) {
+      setRotary(el, "mag", t.engine === "cranking" ? "start" : t.magnetos);
+      info("mag", t.engine === "running" ? `ligado · ${Math.round(t.rpm)} rpm${t.magnetos === "r" || t.magnetos === "l" ? ` · só ${t.magnetos.toUpperCase()}` : ""}` : t.engine === "cranking" ? `arranque · ${Math.round(t.rpm)} rpm` : t.magnetos === "off" ? "magnetos desligados" : "magnetos ligados");
+      const pr = Math.round(t.prime);
+      info("prime", t.engine === "running" ? "—" : pr > 6 || (t.coolantC >= 40 && pr > 3) ? `AFOGADO · ${pr} bombadas` : `${pr} bombada${pr === 1 ? "" : "s"} · motor ${t.coolantC < 40 ? "frio" : "quente"}`, pr > 6 || (t.coolantC >= 40 && pr > 3));
+      const mx = el.querySelector<HTMLElement>(".pl-mix");
+      if (mx) {
+        const b = `calc(${t.mixture * 100}% - ${t.mixture * 24}px)`;
+        const h = mx.querySelector<HTMLElement>(".pl-handle")!; if (h.style.bottom !== b) h.style.bottom = b;
+        const rd = mx.querySelector<HTMLElement>(".mt-rd")!;
+        const s = t.mixture < 0.15 ? "CORTE" : t.mixture > 0.95 ? "RICA" : `${Math.round(t.mixture * 100)} %`;
+        if (rd.textContent !== s) rd.textContent = s;
+        rd.classList.toggle("warn", t.mixture < 0.5);
+      }
+    }
+    if (!c.keys.length && !c.startStop && !c.aircraft) info("rope", t.engine === "running" ? `${Math.round(t.rpm)} rpm` : t.startFail === "pull" ? "não pegou: puxe de novo" : "motor parado", t.startFail === "pull");
     if (c.banks === 2) info("bat", `BB ${t.batteryVs[0]?.toFixed(1)} V · BE ${t.batteryVs[1]?.toFixed(1)} V`, sel === "off");
     else if (c.banks === 1) info("bat", `${t.batteryV.toFixed(1)} V · ${Math.round(t.batterySoc * 100)} %`, sel === "off");
     info("fuel", t.fuelValveOpen ? `${t.fuelL.toFixed(1)} L no tanque` : `linha ${Math.round(t.fuelLineFrac * 100)} %`, !t.fuelValveOpen);

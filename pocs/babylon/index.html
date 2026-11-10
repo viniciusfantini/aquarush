@@ -264,7 +264,20 @@
     .sp-ann-row { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
     .sp-ann-row .tp-ann { flex: 1; display: grid; grid-template-columns: repeat(6, 1fr); gap: 4px; margin: 0; }
     .sp-ann-row .tp-ann span { padding: 4px 3px; font-size: 9.5px; white-space: nowrap; }
-    .sp-ann-row .tp-test { position: static; width: auto; flex: 0 0 auto; }
+    /* motor de avião: alavanca de mistura (punho vermelho) e primer (êmbolo de puxar e empurrar) */
+    .pl-mix .pl-track { width: 70px; height: 116px; }
+    .pl-mix .pl-t { left: -15px; width: 30px; height: 20px; border-radius: 50% 50% 6px 6px; background: radial-gradient(circle at 40% 30%, #ff8a7a, #d62a20 55%, #7d120c); box-shadow: 0 3px 5px rgba(0,0,0,0.6); }
+    .pl-mix .pl-t::after { display: none; }
+    .pl-mix .mt-rd.warn { color: #ff8a4a; }
+    .pr-w { display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 0 6px; }
+    .pr-w b { font-size: 9.5px; letter-spacing: 0.08em; color: #e9eef2; font-weight: 800; }
+    .pr-w small { font-size: 8.5px; color: #9aa6b0; }
+    .pr { position: relative; width: 44px; height: 54px; border: none; padding: 0; background: none; cursor: pointer; }
+    .pr-body { position: absolute; left: 50%; bottom: 0; width: 26px; height: 22px; margin-left: -13px; border-radius: 4px; background: linear-gradient(90deg, #5d656c, #c9cfd4 50%, #5d656c); box-shadow: 0 2px 3px rgba(0,0,0,0.5); }
+    .pr-knob { position: absolute; left: 50%; bottom: 22px; width: 8px; height: 22px; margin-left: -4px; background: linear-gradient(90deg, #8d969e, #e9eef2 50%, #8d969e); }
+    .pr-knob::after { content: ""; position: absolute; left: -8px; top: -10px; width: 24px; height: 12px; border-radius: 6px; background: radial-gradient(circle at 40% 35%, #4a4f55, #15181b 70%); }
+    .pr.push .pr-knob { animation: primerPush 0.45s ease-in-out; }
+    @keyframes primerPush { 0% { transform: translateY(0); } 40% { transform: translateY(-12px); } 100% { transform: translateY(0); } }
     /* acelerador de pé do airboat (pedal de alumínio estriado) */
     .pl-pedal .pl-track { width: 96px; height: 116px; }
     .pl-pedal .pl-t { left: -22px; width: 44px; height: 20px; border-radius: 4px; background: linear-gradient(180deg, #e3e7ea, #9aa3ab 55%, #5d656c); box-shadow: 0 3px 5px rgba(0,0,0,0.6); }
@@ -699,7 +712,7 @@
     <div id="gauges" class="panel">
       <div id="g-bars">
         <div class="vbar"><div class="track"><div id="h-thr-bar"></div></div><b id="h-thr">0%</b>ACEL</div>
-        <div class="vbar"><div class="track trim"><div id="h-trim-mark"></div></div><b id="h-trim">0.0°</b>TRIM</div>
+        <div class="vbar" id="g-trim"><div class="track trim"><div id="h-trim-mark"></div></div><b id="h-trim">0.0°</b>TRIM</div>
         <div class="vbar" id="g-depth"><div class="track depth"><div id="h-depth-water"></div><div id="h-draft-mark"></div><div id="h-draft-hull"></div></div><b id="h-depth">0.0 m</b><span id="h-draft">calado 0.00</span>PROF</div>
         <div class="vbar" id="g-anchor"><div class="track anchor"><div id="h-anc-rope"></div><div id="h-anc-min"></div><div id="h-anc-icon">⚓</div></div><b id="h-anc">0.0 m</b><span id="h-anc-st">recolhida</span>ÂNCORA</div>
         <div id="g-gear"></div>

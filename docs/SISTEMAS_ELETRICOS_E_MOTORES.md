@@ -368,10 +368,15 @@ girando → `"busy"`.
 - **Elétrica 12 V** como a da AR-6: chave de ignição (OFF · ON com autoteste · START), chave geral de 1 banco, registro
   de combustível. Bateria 50 Ah, arranque com redução ~120 A, alternador de 60 A (30 % já na lenta). Sem bomba de
   porão, sem luzes, sem trim. Pega em ~2,2 s com a bateria a 60 % (largada).
+- **Magnetos, mistura e primer** (v0.69.2, `params.aircraft`): a ignição são os dois magnetos (não dependem da
+  bateria — com a chave geral em OFF o motor segue); chave OFF · R · L · BOTH · START (mola). Um magneto só = queda de
+  5,5 % no giro; OFF = o motor para. Mistura 1 = rica (partida e potência), ~0,8 = melhor força e −8 % de consumo,
+  pobre perde força, < 0,15 = CORTE (apaga; é o desligamento normal). Primer: motor frio (< 40 °C) precisa de 2–4
+  bombadas; > 6 (ou > 3 quente) afoga; girando o arranque o excesso sai; evapora em ~1,5 min. P = sequência automática.
 - **Luzes de aviso no Y** (v0.69.1): IGNIÇÃO (chave ligada), PARTIDA (arranque), ALTERNADOR (motor parado com a chave
   ligada, ou `chargeWarn`), ÓLEO (pressão baixa = motor parado com a chave ligada), TEMP CAB. (`overheatWarn`; pisca
-  em `protectMode`), COMB. BAIXO (`lowFuel`; vermelha sem combustível) + TESTE (todas + alarme). Acesas com a casa
-  acima de ~6 V (esmaecem no arranque).
+  em `protectMode`), COMB. BAIXO (`lowFuel`; vermelha sem combustível) (sem botão TESTE desde a v0.69.2). Acesas com a
+  casa acima de ~6 V (esmaecem no arranque).
 - **Partida sem neutro**: não há câmbio — a hélice gira assim que o motor pega (a lenta já empurra a ~4,5 km/h).
   `toggleIgnition`/`setKey` não exigem N quando `params.airProp`.
 - Gasolina de aviação (0,72 kg/L), tanque de 80 L, 8 L/h na lenta, 70 L/h a pleno.

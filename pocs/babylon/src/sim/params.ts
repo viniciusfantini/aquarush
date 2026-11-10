@@ -33,8 +33,8 @@ export interface SpeedboatParams {
   /** "remote" = volante + manete no console; "tiller" = cana do leme no próprio motor (bote); "handlebar" = guidão
    *  da moto aquática (o guidão gira o bocal do jato) */
   steering: "remote" | "tiller" | "handlebar" | "stick";
-  /** "power" = power trim elétrico (bomba); "manual" = pino de trim em furos + tilt à mão */
-  trimMode: "power" | "manual";
+  /** "power" = power trim elétrico (bomba); "manual" = pino de trim em furos + tilt à mão; "none" = não tem trim */
+  trimMode: "power" | "manual" | "none";
   /** ângulos do pino de trim manual (rad), do mais baixo ao mais alto */
   trimPins: number[];
   /** partida elétrica (chave + arranque + bateria) ou manual (corda) */
@@ -193,6 +193,14 @@ export interface SpeedboatParams {
    * não vira. O motor é refrigerado a ar (não depende de tomada d'água).
    */
   airProp?: { rudderWash: number; rudderCdA: number; rudderPos: Vec3 };
+  /**
+   * MOTOR DE AVIÃO carburado simples: dois MAGNETOS (ignição independente da bateria; um só = queda de giro
+   * `magDrop`, OFF = o motor para), alavanca de MISTURA (rica → corte; empobrecer economiza e, perto de 0,8, dá um pouco
+   * mais de força; pobre demais perde força; em CORTE o motor apaga — é assim que se desliga um motor de avião) e o
+   * PRIMER manual (injeta gasolina antes da partida: frio precisa de 2–4 bombadas; demais AFOGA — girando o arranque
+   * o excesso sai aos poucos).
+   */
+  aircraft?: { magDrop: number };
   /** atrito do fundo do casco no chão (padrão 0,45). Airboat: fundo de alumínio com polímero desliza em lama/capim */
   groundMu?: number;
   /** compressor mecânico (supercharger), acionado pelo virabrequim: pressão máxima de sobrealimentação (bar) a giro
@@ -807,7 +815,8 @@ export const AIRBOAT: SpeedboatParams = {
   kind: "airboat",
   name: "Lancha pantaneira AR-P",
   steering: "stick",
-  trimMode: "power",
+  trimMode: "none",
+  aircraft: { magDrop: 0.055 }, // um magneto só: ~100 rpm a menos (queda típica do teste de magneto)
   trimPins: [],
   electricStart: true,
   airProp: { rudderWash: 0.55, rudderCdA: 1.6, rudderPos: v3(0, 1.3, -2.35) }, // 2 lemes de ar

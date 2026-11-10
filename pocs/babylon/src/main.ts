@@ -52,7 +52,7 @@ import { Hud } from "./presentation/hud.ts";
 import { EngineAudio } from "./presentation/audio.ts";
 
 installI18n(); // inglês: traduz o DOM, as escritas futuras e os letreiros 3D (antes de montar a cena e o HUD)
-const BUILD = "poc-babylon 0.69.1";
+const BUILD = "poc-babylon 0.69.2";
 /** Escala visual da rotação da hélice (proporcional ao RPM, abaixo do limite estroboscópico). */
 const PROP_VISUAL_SCALE = 0.12;
 
@@ -580,17 +580,17 @@ const boot = async () => {
     input.fixedForward = kind === "airboat"; // airboat: sem câmbio — W só acelera
     hud.configure(isBote ? { speedMax: 60, temp: true, battery: false, trimPins: V.P.trimPins.length, gear: "dial" }
       : isJet ? { speedMax: 120, temp: true, battery: true, trimPins: 0, gear: "bar", rpmMax: 9000, rpmRed: 8000, jet: true }
-      : isAir ? { speedMax: 120, temp: true, battery: true, trimPins: 0, gear: "bar", rpmMax: 3000, rpmRed: 2700 }
+      : isAir ? { speedMax: 120, temp: true, battery: true, trimPins: 0, gear: "bar", rpmMax: 3000, rpmRed: 2700, hide: ["anchor", "gear", "draft", "trim"] }
       : turbine ? { speedMax: 180, temp: true, battery: true, trimPins: 0, gear: "bar", turbine }
       : { speedMax: twin ? 140 : 100, temp: true, battery: true, trimPins: 0, gear: "bar", twin });
     document.getElementById("help-twin")!.style.display = twin ? "" : "none";
     document.getElementById("help-trim")!.innerHTML = isBote
       ? "<kbd>E</kbd><kbd>Q</kbd> trim manual (pinos 1–3, depois tilt)"
-      : isJet ? "<kbd>E</kbd><kbd>Q</kbd> trim do bocal (VTS)" : isAir ? "sem trim · <kbd>A</kbd><kbd>D</kbd> lemes de ar (só viram com acelerador)" : "<kbd>E</kbd><kbd>Q</kbd> trim + / −";
+      : isJet ? "<kbd>E</kbd><kbd>Q</kbd> trim do bocal (VTS)" : isAir ? "<kbd>A</kbd><kbd>D</kbd> lemes de ar (só viram com acelerador) · sem trim" : "<kbd>E</kbd><kbd>Q</kbd> trim + / −";
     document.getElementById("help-occ")!.innerHTML = turbine ? "piloto único (habitáculo fechado)" : "<kbd>O</kbd> embarque (só na vaga do píer)";
     document.getElementById("help-ign")!.innerHTML = isBote ? "<kbd>P</kbd> corda (em N) · <kbd>Y</kbd> sistemas (afogador)"
       : isJet ? "<kbd>P</kbd> START/STOP (em N, cordão preso) · segure <kbd>S</kbd> andando: freio iBB (toque: N) · <kbd>Y</kbd> painel (cordão, ECO)"
-      : isAir ? "<kbd>P</kbd> liga/desliga (sem embreagem: já empurra) · <kbd>W</kbd> acelerador de pé · sem ré · <kbd>Y</kbd> painel"
+      : isAir ? "<kbd>P</kbd> partida automática (mistura rica, primer, magnetos) / desliga · <kbd>W</kbd> acelerador de pé · sem ré · <kbd>Y</kbd> magnetos, primer, mistura"
       : turbine ? "<kbd>P</kbd> partida FADEC / corte · <kbd>Y</kbd> painel de partida (manual) · <kbd>J</kbd> GPU (na doca)"
       : "<kbd>P</kbd> liga/desliga (em N) · <kbd>N</kbd>+<kbd>W</kbd> neutro · <kbd>J</kbd> jump start · <kbd>Y</kbd> sistemas";
     document.getElementById("help-lights")!.innerHTML = isBote ? "<kbd>L</kbd> lanterna" : isJet || isAir ? "sem luzes (uso diurno)" : "<kbd>L</kbd> luzes";
@@ -609,12 +609,12 @@ const boot = async () => {
     if (V.P.turbine) tpanel.configureTrim(trimOptsFor(V.P));
     document.getElementById("help-horn")!.textContent = isBote || isJet ? "apito" : "buzina"; // bote e moto aquática: apito de bolinha
     spanel.configure({ title: V.P.name, banks: !V.P.electricStart ? 0 : V.boat.systems2 ? 2 : 1,
-      keys: !V.P.electricStart || V.P.turbine || V.P.startStop ? [] : V.boat.units.length > 1 ? ["IGNIÇÃO BB", "IGNIÇÃO BE"] : ["IGNIÇÃO"],
+      keys: !V.P.electricStart || V.P.turbine || V.P.startStop || V.P.aircraft ? [] : V.boat.units.length > 1 ? ["IGNIÇÃO BB", "IGNIÇÃO BE"] : ["IGNIÇÃO"],
       levers: isBote ? "tiller" : isJet ? "handlebar" : isAir ? "pedal" : V.boat.units.length > 1 ? "twin" : "binnacle",
       display: isBote ? "grey" : isJet ? "glass" : isAir ? "grey" : V.boat.units.length > 1 ? "vfd" : "lcd",
       trim: isAir ? null : trimOptsFor(V.P), choke: !!V.P.carbureted, bilgePump: V.P.bilge.pumpLph > 0, lights: isBote ? "LANTERNA" : isJet || isAir ? "" : "LUZES",
       startStop: !!V.P.startStop, batterySwitch: !V.P.startStop, fuelValve: !V.P.startStop, ecoMode: !!V.P.ecoThrottle, horn: isBote || isJet ? "apito" : "buzina",
-      annunciators: isAir });
+      annunciators: isAir, aircraft: !!V.P.aircraft });
     lights = false; input.setLights(false);
     setNavLights(V.vis, false); V.dinghy?.setLantern(false);
     hud.setLights(false, isBote ? "LANTERNA" : "LUZES");
@@ -640,6 +640,7 @@ const boot = async () => {
     for (const x of b.units) { x.key = "off"; x.manualCrank = false; x.testT = 0; }
     b.batterySel = b.params.turbine ? "both" : "ind"; b.bilgeMode = "auto"; b.choke = false; b.systems.fuelValveOpen = true; b.driveMode = "normal";
     if (b.params.carbureted) b.systems.coolantC = 24; // bote carburado: motor frio, pede o afogador
+    if (b.params.aircraft) { b.systems.coolantC = 24; b.magnetos = "off"; b.mixture = 1; b.prime = 0; } // motor de avião frio: pede o primer
     b.coldEngines(); // (turbina parada e fria, N1 = 0)
     b.systems.fuelL = START_FUEL[V.kind];
     for (const bk of b.banks) bk.coolantC = Math.min(bk.coolantC, 60);
@@ -746,6 +747,35 @@ const boot = async () => {
     setTrim: (d) => { input.touchTrim = d; },
     horn: (on) => { input.panelHorn = on; },
     pullStart: () => { if (V.boat.engine !== "running") input.pushAction("ignition"); },
+    // motor de avião (airboat): magnetos, primer e mistura
+    setMagnetos: (pos) => {
+      const b = V.boat;
+      if (pos === "start") {
+        if (b.magnetos === "off") b.setMagnetos("both");
+        const r = b.setKey(0, "start");
+        if (r === "noPilot") sysToast("Ninguém no comando — o piloto está na água");
+        else if (r === "broken") sysToast("Motor avariado: não liga — R leva à oficina do píer");
+        return;
+      }
+      if (pos === "release") { b.setKey(0, "on"); if (b.magnetos === "off") b.setMagnetos("both"); return; }
+      const was = b.engine;
+      b.setMagnetos(pos);
+      sysToast(pos === "off" ? (was !== "off" ? "Magnetos em OFF: o motor parou" : "Magnetos desligados")
+        : pos === "both" ? "Magnetos em BOTH (os dois)" : `Só o magneto ${pos.toUpperCase()}: o giro cai um pouco (teste de magneto)`);
+    },
+    prime: () => {
+      const b = V.boat;
+      if (b.engine !== "off") { sysToast("O primer é só antes da partida (motor parado)"); return; }
+      b.primeStroke();
+      const n = Math.round(b.prime);
+      sysToast(b.flooded ? `Primer: ${n} bombadas — AFOGADO! Gire o arranque com a mistura em CORTE e o pedal todo para limpar, ou espere evaporar`
+        : `Primer: ${n} bombada${n === 1 ? "" : "s"}${b.systems.coolantC < 40 ? " (motor frio: 2 a 4)" : " (motor quente: no máximo 1–2)"}`);
+    },
+    setMixture: (v) => {
+      const b = V.boat, was = b.engine;
+      b.setMixture(v);
+      if (was === "running" && b.engine === "off") sysToast("Mistura em CORTE: o motor apagou (é assim que se desliga um motor de avião)");
+    },
     setLanyard: (on) => {
       if (!V.boat.occupants.some((o) => o.seat === "helm")) { sysToast("O cordão está no pulso do piloto — e ele está na água"); return; }
       const was = V.boat.engine !== "off";
@@ -935,6 +965,7 @@ const boot = async () => {
           noPower: "Sem energia no barramento: MAIN ligada e baterias em BOTH (ou BUS com a GPU da doca, J) — painel Y" };
         if (tm[r]) { sysToast(tm[r]); return; }
       }
+      if (boat.params.aircraft && r === "starting") { sysToast(`Partida: mistura RICA${boat.prime >= 2 && boat.systems.coolantC < 40 ? ", primer (3 bombadas)" : ""}, magnetos em BOTH — arranque…`); return; }
       const msg: Record<string, string> = { stopped: "Motor desligado", pulling: "Puxando a corda…", starting: boat.params.startStop ? "START: central acordada — autoteste…" : "Chave ligada — autoteste…", busy: "Dando partida…", needNeutral: "Coloque em N para dar partida", noFuel: "Sem combustível — R para voltar ao píer e abastecer", lowBattery: "Bateria descarregada: nem o relé de partida arma — J conecta o jump start", hot: "Motor quente demais — espere esfriar" };
       sysToast(msg[r]);
     }
@@ -1160,7 +1191,14 @@ const boot = async () => {
       };
       if (mode === "game" && tmsg[e]) sysToast(tmsg[e]!);
     }
-    if (T.startFail && T.startFail !== lastStartFail) sysToast(T.startFail === "fuel" ? "O motor gira mas não pega: sem combustível — abasteça no posto" : T.startFail === "pull" ? "Não pegou — puxe de novo (P)" : T.startFail === "dead" ? "Só estalou: bateria sem força para girar o arranque" : "Não pegou: o arranque girou fraco (bateria baixa)");
+    const AERO_FAIL: Record<string, string> = {
+      flooded: "Não pegou: motor AFOGADO pelo primer — gire o arranque com a mistura em CORTE e o pedal todo para limpar (ou espere evaporar)",
+      lean: "Não pegou: mistura pobre — ponha a mistura em RICA para a partida",
+      prime: "Não pegou: motor frio sem primer — dê 2 a 4 bombadas no primer (Y) e tente de novo",
+      magnetos: "Não pegou: magnetos em OFF",
+    };
+    if (T.startFail && T.startFail !== lastStartFail && AERO_FAIL[T.startFail]) sysToast(AERO_FAIL[T.startFail]);
+    else if (T.startFail && T.startFail !== lastStartFail) sysToast(T.startFail === "fuel" ? "O motor gira mas não pega: sem combustível — abasteça no posto" : T.startFail === "pull" ? "Não pegou — puxe de novo (P)" : T.startFail === "dead" ? "Só estalou: bateria sem força para girar o arranque" : "Não pegou: o arranque girou fraco (bateria baixa)");
     lastStartFail = T.startFail;
     // âncora: avisos nas mudanças de estado
     if (T.anchorState !== lastAnchorState && mode === "game") {
@@ -1227,7 +1265,8 @@ const boot = async () => {
     neutralRevWarned = T.neutralRev;
     if (T.lowFuel && !lowFuelWarned && T.engine === "running" && mode === "game") { sysToast(`Combustível na reserva: ${T.fuelL.toFixed(1)} L`); lowFuelWarned = true; }
     if (!T.lowFuel) lowFuelWarned = false;
-    if (T.stall && T.stall !== lastStall && T.stall !== "capsize" && T.stall !== "broken" && T.stall !== "lanyard") sysToast(T.stall === "fuel" ? (T.fuelValveOpen ? "O motor morreu: acabou o combustível" : "O motor morreu: registro do tanque FECHADO (Y abre)") : T.stall === "flooded" ? "O motor AFOGOU: afogador puxado com o motor quente — empurre o afogador (Y) e puxe a corda de novo" : "O motor desligou: superaquecimento");
+    if (T.stall && T.stall !== lastStall && (T.stall === "magnetos" || T.stall === "mixture")) sysToast(T.stall === "magnetos" ? "O motor parou: magnetos em OFF" : "O motor apagou: mistura em CORTE");
+    else if (T.stall && T.stall !== lastStall && T.stall !== "capsize" && T.stall !== "broken" && T.stall !== "lanyard") sysToast(T.stall === "fuel" ? (T.fuelValveOpen ? "O motor morreu: acabou o combustível" : "O motor morreu: registro do tanque FECHADO (Y abre)") : T.stall === "flooded" ? "O motor AFOGOU: afogador puxado com o motor quente — empurre o afogador (Y) e puxe a corda de novo" : "O motor desligou: superaquecimento");
     lastStall = T.stall;
     // partida pelo P com dois motores: um pegou, o outro espera ele estabilizar na lenta antes do arranque
     if (boat.units.length > 1) {

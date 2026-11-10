@@ -72,10 +72,10 @@ export interface BoatTelemetry {
   protectMode: boolean;  // superaquecido: rotação limitada
   lowFuel: boolean;
   chargeWarn: boolean;
-  stall: "" | "fuel" | "overheat" | "capsize" | "broken" | "sunk" | "flooded" | "lanyard"; // lanyard = corta-circuito (o piloto pulou) // último motivo de o motor ter morrido sozinho (flooded = afogado pelo afogador)
+  stall: "" | "fuel" | "overheat" | "capsize" | "broken" | "sunk" | "flooded" | "lanyard" | "magnetos" | "mixture"; // lanyard = corta-circuito (o piloto pulou) // último motivo de o motor ter morrido sozinho (flooded = afogado pelo afogador)
   buzzer: boolean;       // alarme do motor apitando (autoteste da chave)
   starterRpm: number;    // rotação do motor de arranque (0 = só o "clique" do solenoide)
-  startFail: "" | "weak" | "dead" | "pull" | "fuel" | "lanyard"; // última partida que não pegou (bateria fraca / sem força / corda / sem combustível)
+  startFail: "" | "weak" | "dead" | "pull" | "fuel" | "lanyard" | "flooded" | "lean" | "prime" | "magnetos"; // última partida que não pegou (bateria fraca / sem força / corda / sem combustível)
   batterySoc: number;    // estado de carga 0..1
   trimPin: number;       // trim manual: furo do pino 1..N, N+1 = tilt total; 0 = power trim
   /** cordão de segurança (lanyard) preso no botão de parada: sem ele o motor não liga (moto aquática) */
@@ -84,6 +84,10 @@ export interface BoatTelemetry {
   driveMode: "normal" | "eco";
   /** virada: o piloto na água está desvirando a embarcação */
   righting: boolean;
+  /** motor de avião (airboat): magnetos, mistura (1 = rica, 0 = corte) e bombadas do primer ainda no motor */
+  magnetos: "off" | "r" | "l" | "both";
+  mixture: number;
+  prime: number;
   /** pressão de sobrealimentação do compressor (bar, manométrica; 0 = sem compressor / sem carga) */
   boostBar: number;
   /** caçamba do jato (iBB): "off" = recolhida (frente), "neutral", "brake" (R andando para a frente), "reverse" */
@@ -359,6 +363,10 @@ export class Speedboat {
   righted = 0;
   /** cordão de segurança preso (lanyard): o clipe segura o botão de parada; puxado, o motor morre */
   lanyard = true;
+  /** motor de avião: magnetos (OFF / R / L / BOTH), mistura 0..1 (1 = rica, < 0,15 = corte) e primer (bombadas no motor) */
+  magnetos: "off" | "r" | "l" | "both" = "both";
+  mixture = 1;
+  prime = 0;
   /** modo de condução (moto aquática): "eco" limita o acelerador */
   driveMode: "normal" | "eco" = "normal";
   /** Ocupantes (posição = banco). Padrão: só o piloto. */
@@ -423,7 +431,7 @@ export class Speedboat {
       anchorOut: 0, anchorState: "recolhida", anchorDepth: 0, anchorScope: 0, anchorTension: 0, anchorRelay: false, windlassA: 0, apparentWind: 0, neutralRev: false, fuelLph: 0, buzzer: false, starterRpm: 0, startFail: "", batterySoc: 0.92, trimPin: 0, pullStart: !params.electricStart,
       distanceM: 0, collisions: 0, draftHull: 0, draftMotor: 0, capsized: false, swimmers: 0, hullDamage: 0, engineDamage: 0, damageEvent: "", damageCount: 0, lastImpact: 0, depth: 0, submergedPoints: params.buoyancyPoints.map(() => false),
       rpms: [params.idleRpm], gears: ["N"], throttles: [0], thrusts: [0], engines: ["running"], keys: ["on"], houseV: 12.6, propRpms: [0], coolants: [45], batteryVs: [12.6], batterySocs: [0.92], batteryAs: [0], turbine: null, nominalV: 12, gpu: false, gpuState: "off", gpuT: 0, gpuKw: 0, busBattery: true, busGen: false, extPwr: false, extPwrClosed: false, extPwrFault: false, gpuA: 0, coolingLps: 0, fuelValveOpen: true, fuelLineFrac: 1, bilgeMode: "auto", batterySel: "ind", choke: false,
-      lanyard: true, driveMode: "normal", righting: false, boostBar: 0, ibb: "off",
+      lanyard: true, driveMode: "normal", righting: false, magnetos: "both", mixture: 1, prime: 0, boostBar: 0, ibb: "off",
     };
   }
 
@@ -794,7 +802,7 @@ export class Speedboat {
       const target = engaged ? (un.gear === "R" && !P.waterjet ? -1 : 1) * un.rpm / (P.propGear ?? 2) : (un.axial / PROP_PITCH_M) * 60 * 0.55 * un.immersion;
       // solta no ar não há água freando: demora bem mais para parar
       un.propRpmState += (target - un.propRpmState) * (1 - Math.exp(-dt / (engaged ? 0.08 : un.immersion > 0.2 ? 0.6 : 3.5)));
-      un.fuelLph = un.turb ? un.turb.fuelLph : un.engine === "running" ? P.fuelIdleLph + (P.fuelMaxLph - P.fuelIdleLph) * Math.pow(un.throttleActual, 1.6) * (un.gear === "N" && !P.waterjet ? 0.3 : 1) : 0;
+      un.fuelLph = un.turb ? un.turb.fuelLph : un.engine === "running" ? P.fuelIdleLph + (P.fuelMaxLph - P.fuelIdleLph) * Math.pow(un.throttleActual, 1.6) * (un.gear === "N" && !P.waterjet ? 0.3 : 1) * (P.aircraft ? 0.55 + 0.45 * this.mixture : 1) : 0;
     });
     t.propRpm = un0.propRpmState;
     t.fuelLph = this.units.reduce((a, x) => a + x.fuelLph, 0);
@@ -826,6 +834,13 @@ export class Speedboat {
     this.updateCapsize(dt, water, world);
     t.capsized = this.capsized;
     t.lanyard = this.lanyard; t.driveMode = this.driveMode;
+    if (P.aircraft) {
+      // o primer evapora devagar (~1,5 min); magnetos em OFF ou mistura em corte com o motor ligado = ele para
+      if (this.engine === "off") this.prime *= Math.exp(-dt / 90);
+      if (this.engine === "running" && this.magnetos === "off") { this.engine = "off"; t.stall = "magnetos"; }
+      if (this.engine === "running" && this.mixture < 0.15) { this.engine = "off"; t.stall = "mixture"; }
+      t.magnetos = this.magnetos; t.mixture = this.mixture; t.prime = this.prime;
+    }
     // compressor: pressão ∝ (giro/máx)² × carga (a válvula de alívio abre sem carga), com o atraso do rotor/plenum
     if (P.supercharger) {
       const r = clamp(this.rpm / P.maxRpm, 0, 1.1);
@@ -1062,7 +1077,8 @@ export class Speedboat {
     const trimIn = clamp(input.trim, -1, 1);
     this.tiltBlocked = false;
     this.telemetry.trimRelay = false;
-    if (P.trimMode === "manual") { this.updateManualTrim(dt, trimIn, input.throttle); this.trimMotorA = 0; }
+    if (P.trimMode === "none") { this.trimMotorA = 0; this.trim = 0; this.tilt = 0; } // (airboat: não tem trim — o botão não faz nada)
+    else if (P.trimMode === "manual") { this.updateManualTrim(dt, trimIn, input.throttle); this.trimMotorA = 0; }
     else {
     // bomba elétrica do power trim: velocidade cai com a tensão da bateria (motor DC); com a bateria
     // zerada (abaixo de ~9 V sob a carga da bomba) o relé fecha mas a bomba não gira — só o estalo
@@ -1454,6 +1470,48 @@ export class Speedboat {
       this.reboarded++;
     }
   }
+  // ---------------- motor de avião (airboat): magnetos, mistura, primer ----------------
+  /** fator de força do motor de avião (1 = normal): magnetos (um só = queda) × mistura (pico ~0,8; pobre perde) */
+  private aeroPower(): number {
+    const A = this.params.aircraft;
+    if (!A) return 1;
+    const mag = this.magnetos === "both" ? 1 : this.magnetos === "off" ? 0 : 1 - A.magDrop;
+    const m = this.mixture;
+    const mix = m >= 0.6 ? 1 + 0.02 * (1 - Math.abs(m - 0.8) / 0.2) : m >= 0.15 ? 1 - 1.2 * Math.pow(0.6 - m, 1.3) : 0;
+    return mag * mix;
+  }
+  /** motor afogado pelo primer (frio: > 6 bombadas; quente: > 3) */
+  get flooded(): boolean { return !!this.params.aircraft && (this.prime > 6 || (this.systems.coolantC >= 40 && this.prime > 3)); }
+  /** o motor de avião consegue pegar? (magneto ligado, mistura rica, não afogado) */
+  private aeroCanCatch(): boolean {
+    if (!this.params.aircraft) return true;
+    return this.magnetos !== "off" && this.mixture >= 0.5 && !this.flooded;
+  }
+  /** frio e sem primer: pega, mas só depois de girar bem mais (gasolina só pelo carburador) */
+  private aeroExtraRevs(): number { return this.params.aircraft && this.systems.coolantC < 40 && this.prime < 2 ? 25 : 0; }
+  /** por que o motor de avião não pegou ("" = não é por isso) */
+  private aeroFail(): "" | "flooded" | "lean" | "prime" | "magnetos" {
+    if (!this.params.aircraft) return "";
+    if (this.magnetos === "off") return "magnetos";
+    if (this.flooded) return "flooded";
+    if (this.mixture < 0.5) return "lean";
+    if (this.systems.coolantC < 40 && this.prime < 2) return "prime";
+    return "";
+  }
+  /** chave dos MAGNETOS (OFF · R · L · BOTH; START é a chave de partida com mola). OFF com o motor ligado = ele para. */
+  setMagnetos(m: "off" | "r" | "l" | "both"): void {
+    this.magnetos = m;
+    if (m === "off") { for (const x of this.units) { x.key = "off"; x.manualCrank = false; } if (this.engine !== "off") { this.engine = "off"; this.telemetry.stall = "magnetos"; } }
+    else for (const x of this.units) if (x.key === "off") { x.key = "on"; if (this.bankFor(x.index).supplyV(2) > 9) x.testT = 1.1; }
+  }
+  /** alavanca de mistura (1 = rica, 0 = corte). Em corte (< 0,15) o motor apaga. */
+  setMixture(v: number): void {
+    this.mixture = clamp(v, 0, 1);
+    if (this.mixture < 0.15 && this.engine === "running") { this.engine = "off"; this.telemetry.stall = "mixture"; }
+  }
+  /** uma bombada do primer manual (só com o motor parado) */
+  primeStroke(): void { if (this.engine === "off") this.prime = Math.min(12, this.prime + 1); }
+
   /** Cordão de segurança (lanyard): solto, o botão de parada desliga o motor e ele não dá partida. */
   setLanyard(on: boolean): void {
     this.lanyard = on;
@@ -1496,7 +1554,12 @@ export class Speedboat {
     if (!this.occupants.some((o) => o.seat === "helm")) return "noPilot";
     if (!this.lanyard && this.engine === "off") { this.telemetry.startFail = "lanyard"; return "noLanyard"; }
     if (this.engine !== "running" && this.engineDamage >= 0.95) return "broken";
-    if (this.engine === "running") { this.engine = "off"; for (const x of this.units) { x.key = "off"; x.manualCrank = false; } return "stopped"; }
+    if (this.engine === "running") { this.engine = "off"; for (const x of this.units) { x.key = "off"; x.manualCrank = false; } if (this.params.aircraft) this.magnetos = "off"; return "stopped"; }
+    if (this.params.aircraft && this.engine === "off") {
+      // P = a sequência do piloto: mistura RICA, primer se o motor estiver frio (3 bombadas), magnetos em BOTH, partida
+      this.mixture = 1; this.magnetos = "both";
+      if (this.systems.coolantC < 40 && this.prime < 2) this.prime = 3;
+    }
     const tb = this.units[0].turb;
     if (tb) {
       // turbina: botão de partida do FADEC (arranque → ignição + combustível → acende → marcha lenta); de novo aborta.
@@ -1559,7 +1622,7 @@ export class Speedboat {
         if (x.manualCrank && x.engine === "cranking") {
           x.engine = "off";
           const fed = this.bankFor(i).fuelFeed;
-          this.telemetry.startFail = !fed && x.rpm >= 40 ? "fuel" : x.rpm < 40 ? "dead" : "weak";
+          this.telemetry.startFail = this.aeroFail() || (!fed && x.rpm >= 40 ? "fuel" : x.rpm < 40 ? "dead" : "weak");
         }
         x.manualCrank = false;
       }
@@ -1698,7 +1761,7 @@ export class Speedboat {
   private engineLoad(): number {
     if (this.u.turb) return Math.min(1.4, this.u.turb.torque / 100); // turbina: torque absorvido pela hélice
     const f = this.params.idleThrustFraction;
-    return f + (1 - f) * this.throttleActual;
+    return (f + (1 - f) * this.throttleActual) * this.aeroPower();
   }
 
   private updateRpm(dt: number, axial: number, ventilation: number): number {
@@ -1734,6 +1797,8 @@ export class Speedboat {
     const load = free ? 1 : lerp(1, waterLoad, this.immersion);
     const freeRev = 1 + (1 - ventilation) * 0.25 + this.cavitation * 0.12 + (free ? 0 : (1 - this.immersion) * 0.3);
     let target = P.idleRpm + (P.maxRpm - P.idleRpm) * Math.pow(thr, 0.85) * load * freeRev;
+    // motor de avião: um magneto só tira ~3,5 % do giro; mistura pobre perde força (o giro cai)
+    if (P.aircraft) target *= this.aeroPower();
     // limitador de giro: corta a ignição em pulsos quando passa do limite
     // modo de proteção (superaquecimento): a central limita a rotação; falta de combustível: engasga
     if (this.usys.protect) target = Math.min(target, this.usys.p.protectRpm);
@@ -1776,10 +1841,12 @@ export class Speedboat {
       this.rpm += (starterTarget - this.rpm) * (1 - Math.exp(-dt / 0.12));
       this.crankTimer += dt;
       this.crankRevs += (this.rpm / 60) * dt * clamp((this.rpm - 60) / 100, 0, 1);
-      if (this.crankRevs >= this.crankNeed && this.usys.fuelFeed) { this.engine = "running"; this.rpm = 1150; this.u.manualCrank = false; }
+      // motor de avião: girar o arranque com o motor afogado tira o excesso aos poucos
+      if (P.aircraft) this.prime = Math.max(0, this.prime - (this.rpm / 60) * dt * 0.08);
+      if (this.crankRevs >= this.crankNeed + this.aeroExtraRevs() && this.usys.fuelFeed && this.aeroCanCatch()) { this.engine = "running"; this.rpm = 1150; this.u.manualCrank = false; this.prime = 0; }
       else if (this.crankTimer > 4 && !this.u.manualCrank) { // o piloto solta a chave: não pegou
         this.engine = "off";
-        this.telemetry.startFail = !this.usys.fuelFeed && this.rpm >= 40 ? "fuel" : this.rpm < 40 ? "dead" : "weak";
+        this.telemetry.startFail = this.aeroFail() || (!this.usys.fuelFeed && this.rpm >= 40 ? "fuel" : this.rpm < 40 ? "dead" : "weak");
       }
       return this.rpm;
     }

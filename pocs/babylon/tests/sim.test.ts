@@ -1320,6 +1320,36 @@ for (const [label, thr] of [["baixa", 0.25], ["alta", 1]] as const) {
   st.toggleIgnition(); let tOn = -1;
   run(st, water, 8, { ...emptyInput() }, openWater, (t) => { if (tOn < 0 && st.engine === "running") tOn = t; });
   check("airboat", "largada (bateria a 60 %): pega em (s)", tOn, 1, 5, "s", 1);
+  // motor de avião: primer, magnetos e mistura (partida pela chave dos magnetos, segurando START)
+  const cold = (strokes: number, mix = 1) => {
+    const e = new Speedboat(AIRBOAT, v3(0, 0.1, 0)); e.systems.fuelL = 10; e.occupants = [{ seat: "helm", mass: PERSON_KG }];
+    e.engine = "off"; for (const x of e.units) { x.key = "off"; x.rpm = 0; } e.systems.batterySoc = 0.6; e.systems.coolantC = 24; e.magnetos = "off"; e.mixture = mix;
+    for (let i = 0; i < strokes; i++) e.primeStroke();
+    e.setMagnetos("both"); run(e, water, 1.5, { ...emptyInput() }); e.setKey(0, "start"); let on = -1;
+    run(e, water, 4, { ...emptyInput() }, openWater, (t) => { if (on < 0 && e.engine === "running") on = t; });
+    e.setKey(0, "on"); return { e, on };
+  };
+  const c0 = cold(0), c3 = cold(3), c9 = cold(9), cl = cold(3, 0);
+  check("airboat", "frio SEM primer: 4 s no arranque e não pega", c0.e.engine === "off" && c0.e.telemetry.startFail === "prime" ? 1 : 0, 1, 1, "", 0);
+  check("airboat", "frio com 3 bombadas de primer: pega em (s)", c3.on, 0.3, 3, "s", 1);
+  check("airboat", "9 bombadas: AFOGADO, não pega", c9.e.engine === "off" && c9.e.telemetry.startFail === "flooded" ? 1 : 0, 1, 1, "", 0);
+  check("airboat", "girando afogado o excesso sai (bombadas restantes)", c9.e.prime, 0, 8.5, "", 1);
+  check("airboat", "mistura em CORTE: não pega", cl.e.engine === "off" && cl.e.telemetry.startFail === "lean" ? 1 : 0, 1, 1, "", 0);
+  const m = c3.e; run(m, water, 10, { ...emptyInput(), throttle: 1 }, openWater);
+  const rBoth = m.telemetry.rpm; m.setMagnetos("l"); run(m, water, 3, { ...emptyInput(), throttle: 1 }, openWater);
+  check("airboat", "teste de magneto: um só (L) derruba o giro a pleno (rpm)", rBoth - m.telemetry.rpm, 60, 160, "rpm", 0);
+  m.setMagnetos("both"); run(m, water, 3, { ...emptyInput(), throttle: 1 }, openWater);
+  const fRich = m.telemetry.fuelLph; m.setMixture(0.8); run(m, water, 3, { ...emptyInput(), throttle: 1 }, openWater);
+  check("airboat", "mistura empobrecida (0,8) gasta menos (L/h)", fRich - m.telemetry.fuelLph, 3, 12, "L/h", 1);
+  m.setMixture(0); run(m, water, 0.5, { ...emptyInput() }, openWater);
+  check("airboat", "mistura em CORTE com o motor ligado: apaga", m.engine === "off" && m.telemetry.stall === "mixture" ? 1 : 0, 1, 1, "", 0);
+  m.mixture = 1; m.toggleIgnition(); run(m, water, 4, { ...emptyInput() }, openWater);
+  m.setMagnetos("off"); run(m, water, 0.5, { ...emptyInput() }, openWater);
+  check("airboat", "magnetos em OFF com o motor ligado: para", m.engine === "off" && m.telemetry.stall === "magnetos" ? 1 : 0, 1, 1, "", 0);
+  m.toggleIgnition(); run(m, water, 4, { ...emptyInput() }, openWater);
+  run(m, water, 2, { ...emptyInput(), trim: 1 }, openWater);
+  check("airboat", "não tem trim: o botão não mexe nada nem puxa corrente", Math.abs(m.telemetry.trimDeg) < 0.01 && m.trimMotorA === 0 ? 1 : 0, 1, 1, "", 0);
+  check("airboat", "P com o motor frio: sequência automática (rica, primer, BOTH) e pega", m.engine === "running" ? 1 : 0, 1, 1, "", 0);
   // motor refrigerado a ar: não depende de tomada d'água
   check("airboat", "refrigerado a ar: 'tomada d'água' sempre ok", n.telemetry.intakeSubmerged ? 1 : 0, 1, 1, "", 0);
   // fundo chato que desliza: sobe num barranco de lama/capim embalado, sem avaria séria; no seco plano anda pouco

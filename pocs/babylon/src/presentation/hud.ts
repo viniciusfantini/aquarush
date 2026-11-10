@@ -91,7 +91,7 @@ export class RoundGauge {
   }
 }
 
-export interface HudOpts { speedMax: number; temp: boolean; battery: boolean; trimPins: number; gear?: "bar" | "dial"; /** dois motores: um conta-giros por motor (BB / BE) */ twin?: boolean; /** turbina: N1, EGT, torque, N2, óleo e luzes da partida */ turbine?: boolean; /** fundo de escala do conta-giros (padrão 7000; moto aquática 9000) e início do vermelho */ rpmMax?: number; rpmRed?: number; /** moto aquática: manômetro do compressor (BOOST) e luz do iBB */ jet?: boolean }
+export interface HudOpts { speedMax: number; temp: boolean; battery: boolean; trimPins: number; gear?: "bar" | "dial"; /** dois motores: um conta-giros por motor (BB / BE) */ twin?: boolean; /** turbina: N1, EGT, torque, N2, óleo e luzes da partida */ turbine?: boolean; /** fundo de escala do conta-giros (padrão 7000; moto aquática 9000) e início do vermelho */ rpmMax?: number; rpmRed?: number; /** moto aquática: manômetro do compressor (BOOST) e luz do iBB */ jet?: boolean; /** barras que o barco não tem (airboat: sem âncora no HUD, sem marcha, sem calado, sem trim) */ hide?: ("anchor" | "gear" | "draft" | "trim")[] }
 
 export class Hud {
   private speedG!: RoundGauge;
@@ -111,6 +111,8 @@ export class Hud {
   /** moto aquática: pressão do compressor e a luz do iBB (caçamba: NEUTRO / FREIO / RÉ) */
   private boostG: RoundGauge | null = null;
   private ibbLamp: HTMLElement | null = null;
+  /** barco sem câmbio (airboat): o velocímetro não mostra a marcha */
+  private noGear = false;
   /** 2º motor (AR-9): temperatura e banco de bateria próprios */
   private tempG2: RoundGauge | null = null;
   /** escala do voltímetro (1 = 12 V, 2 = 24 V) */
@@ -165,6 +167,12 @@ export class Hud {
   /** (Re)monta os relógios para o barco escolhido. */
   configure(opts: HudOpts = { speedMax: 100, temp: true, battery: true, trimPins: 0, gear: "bar" }): void {
     const big = $("g-big"), small = $("g-small");
+    const hide = new Set(opts.hide ?? []);
+    this.noGear = hide.has("gear");
+    $("g-anchor").style.display = hide.has("anchor") ? "none" : "";
+    $("g-gear").style.display = hide.has("gear") ? "none" : "";
+    $("g-trim").style.display = hide.has("trim") ? "none" : "";
+    for (const id of ["h-draft", "h-draft-mark", "h-draft-hull"]) $(id).style.display = hide.has("draft") ? "none" : "";
     // marcha: lancha = barra da manete (F em cima, N, R embaixo); bote = alavanca de câmbio do motor (mostrador redondo)
     const gearBox = $("g-gear");
     if ((opts.gear ?? "bar") === "bar") {
@@ -242,7 +250,7 @@ export class Hud {
   }
 
   update(t: BoatTelemetry, fps: number, extra: Record<string, string>): void {
-    this.speedG.set(t.speedKmh, `${Math.round(t.speedKmh)}`, `marcha ${t.gear}`);
+    this.speedG.set(t.speedKmh, `${Math.round(t.speedKmh)}`, this.noGear ? "km/h" : `marcha ${t.gear}`);
     if (this.rpmG2 && t.rpms && t.rpms.length > 1) {
       const r0 = t.rpms[0], r1 = t.rpms[1], g = t.gears ?? [];
       this.rpmG.set(r0, `${Math.round(r0 / 10) * 10}`, `${g[0] ?? t.gear} · ${t.engineHours.toFixed(1).padStart(6, "0")} h`, t.revLimiter);

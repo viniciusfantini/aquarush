@@ -96,6 +96,23 @@ A lancha é um **corpo rígido 6DOF** (massa seca de 1030 kg + gasolina, ocupant
 
 > Referência completa da lógica elétrica e dos motores: [`docs/SISTEMAS_ELETRICOS_E_MOTORES.md`](../../docs/SISTEMAS_ELETRICOS_E_MOTORES.md).
 
+## Lancha pantaneira AR-P: motor de avião completo (v0.69.2)
+
+- **`params.aircraft`** (`boat.ts`): **magnetos** (`setMagnetos` OFF/R/L/BOTH; ignição independente da bateria; um só
+  = `magDrop` 5,5 % — 103 rpm a menos a pleno no teste; OFF com o motor ligado = para, `stall "magnetos"`); **mistura**
+  (`setMixture` 0..1: força × [pico +2 % em 0,8; pobre perde, 0,3 ≈ −25 %], consumo × (0,55 + 0,45·m), < 0,15 = CORTE
+  apaga, `stall "mixture"`; só pega com ≥ 0,5); **primer** (`primeStroke`: frio < 40 °C sem 2 bombadas precisa de +25
+  voltas no arranque — com a partida automática de 4 s não pega; > 6 bombadas, ou > 3 quente = AFOGADO, não pega; girando
+  o arranque sai 0,08 bombada por volta; evapora em ~1,5 min). `startFail` novos: "prime", "flooded", "lean", "magnetos".
+- **P** faz a sequência do piloto: mistura RICA, primer (3) se frio, magnetos BOTH e arranque; desligar = magnetos OFF.
+  A largada (`resetBoat`) é com o motor frio (24 °C), magnetos OFF, mistura rica, sem primer.
+- **Painel Y** (`SystemsPanelCaps.aircraft`): chave rotativa dos MAGNETOS (OFF · R · L · BOTH · START com mola) e o
+  PRIMER (êmbolo, cada clique = uma bombada) na PARTIDA; alavanca de MISTURA (punho vermelho, RICA ↔ CORTE) ao lado do
+  pedal; sem botão TESTE (as 6 luzes de aviso ficam).
+- **Sem trim** (`trimMode: "none"`: E/Q e o botão não fazem nada nem puxam corrente). **HUD** sem âncora, marcha (nem no
+  velocímetro), calado e trim (`HudOpts.hide`).
+- Conferido no navegador: HUD só com ACEL e PROF; partida pelo painel com 3 bombadas, BOTH e START segurado → pegou.
+
 ## Lancha pantaneira AR-P: lemes, piso e luzes de aviso (v0.69.1)
 
 - **2 lemes de ar** (eram 3), um pouco maiores; a física dos lemes não muda (a força total vem do `airProp`).
@@ -538,10 +555,10 @@ Limitação: é uma síntese aproximada, não uma gravação. Validar o timbre d
 | 5. Manete | de cruzeiro para N: empuxo 0 e < 1 km/h em 27 s; a hélice gira **solta** (~990 rpm 1,5 s depois do N) e para junto com a lancha. F em lenta: 5,0 km/h a 750 rpm. R em lenta: 2,8 km/h para trás. No navegador: 1 toque W = F a 4 km/h; segurar = 45 km/h; 1 toque S = N; 2º toque = R lenta; segurar S = ré acelerando |
 | 6. Ondas e correnteza | ondas fortes (×2,5): roll ≤ 30°, não emborca; deriva com correnteza de 1,6 m/s: 1,54 m/s |
 | Lago | flutua no spawn; a toda contra a margem, encalha e para sem atravessar o terreno |
-| Lancha pantaneira AR-P (v0.69–0.69.1) | largada a 60 % pega em 2,2 s; lenta empurrando 4,5 km/h, sempre em F, borda 0,38 m; a toda 88,4 km/h a 2434 rpm, 0→40 4,4 s; sem cavitação/ventilação; pedindo R segue a 89 km/h para a frente; curva a toda derrapando 3,6 m/s, 11,1°/s, roll 3,2°, não vira; motor desligado com os lemes todos: 0,0°; partida sem N; 50 % + lemes quase parado: 20,2°/s; refrigerado a ar; barranco de lama/capim: 12,6 s no seco, avaria 2 %, 30 km/h; carretinha da caminhonete |
+| Lancha pantaneira AR-P (v0.69–0.69.2) | frio sem primer não pega (falha "prime"); 3 bombadas pega em 1,2 s; 9 bombadas afoga; mistura em corte não pega e apaga o motor ligado; um magneto: −103 rpm a pleno; mistura 0,8: −5,6 L/h; magnetos OFF param; trim sem ação (0°, 0 A); P frio pega; largada a 60 % pega em 2,2 s; lenta empurrando 4,5 km/h, sempre em F, borda 0,38 m; a toda 88,4 km/h a 2434 rpm, 0→40 4,4 s; sem cavitação/ventilação; pedindo R segue a 89 km/h para a frente; curva a toda derrapando 3,6 m/s, 11,1°/s, roll 3,2°, não vira; motor desligado com os lemes todos: 0,0°; partida sem N; 50 % + lemes quase parado: 20,2°/s; refrigerado a ar; barranco de lama/capim: 12,6 s no seco, avaria 2 %, 30 km/h; carretinha da caminhonete |
 | Moto aquática AR-J (v0.67–0.67.1) | compressor 1,04 bar a toda, 0,007 bar na lenta; luz do iBB: apagada em F, FREIO freando a toda, RÉ parada em R, NEUTRO em N; navegador: S segurado a 107 km/h → FREIO, 53 km/h em 1,5 s; soltar → F; toque → N; parada: CG −0,03 m da água, borda 0,25 m; a toda 108,3 km/h a 7880 rpm, 0→60 2,7 s, 0→100 7,1 s, 72 L/h; curva a toda 29,2°/s sem virar; iBB de 102 km/h a < 5 km/h em 4,2 s e depois ré; N com o guidão todo: 0,2° em 6 s; lenta + guidão 10,6°/s; N acelerado: empuxo 0, rotor a 7478 rpm; no ar: empuxo 0, giro 7951 rpm; ECO 55 % / 89,9 km/h; lotada 101,5 km/h; cordão solto não liga, puxado desliga; START pega em 1,5 s (60 %); central dorme em 30 s; casco selado 40 s lotada em ondas fortes: 0,0 L; sifão 6,1 L em 30 s (= contrato); virada: desvira em 4,5 s, piloto a bordo com o cordão, liga de novo; carretinha 3,9 m no carro |
 
-Resultado: **656/658 OK + 2 KNOWN** (v0.69.1). Na v0.10, o peso do piloto na posição real (boreste, acima do CG) aumentou o roll em curva com ondas fortes; o `bankCoef` foi para 1800 e o `rollDamping` para 15000, com 1 limitação conhecida (abaixo). Na v0.2 a hélice foi para 0,5 m atrás do espelho, como no modelo visual, e o esterço máximo em alta velocidade caiu de 13° para 11°.
+Resultado: **667/669 OK + 2 KNOWN** (v0.69.2). Na v0.10, o peso do piloto na posição real (boreste, acima do CG) aumentou o roll em curva com ondas fortes; o `bankCoef` foi para 1800 e o `rollDamping` para 15000, com 1 limitação conhecida (abaixo). Na v0.2 a hélice foi para 0,5 m atrás do espelho, como no modelo visual, e o esterço máximo em alta velocidade caiu de 13° para 11°.
 
 ### Navegador (Chrome, Windows 11, WebGL2, `q=med`, ~1370×896)
 
