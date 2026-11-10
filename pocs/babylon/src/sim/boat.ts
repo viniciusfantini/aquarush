@@ -741,7 +741,7 @@ export class Speedboat {
     {
       const A = P.anchor;
       const voltsOk = !this.systems.p.hasBattery || A.motorA === 0 || this.systems.supplyV(A.motorA) >= 9;
-      this.anchor.step(dt, input.anchor, this.toWorld(A.roller), (x, z) => world.groundHeight(x, z), voltsOk, !!this.winchStrap || this.capsized);
+      this.anchor.step(dt, P.noAnchor ? 0 : input.anchor, this.toWorld(A.roller), (x, z) => world.groundHeight(x, z), voltsOk, !!this.winchStrap || this.capsized);
     }
     // ---------------- colisões (fundo, rochas, píer) ----------------
     const impact = this.collide(world);

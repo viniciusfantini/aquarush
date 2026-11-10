@@ -206,7 +206,8 @@ export class SystemsPanel {
     // tensão da casa (equivalente 12 V): os LEDs das chaves elétricas só acendem com ela
     const hv = (t.houseV * 12) / t.nominalV, powered = c.banks > 0 && hv > 9;
     if (c.annunciators) {
-      // IGNIÇÃO = chave ligada · PARTIDA = arranque girando · ALTERNADOR = sem carga (chave ligada e motor parado, ou falha)
+      // IGNIÇÃO = ignição ligada com o motor PARADO (atenção: magnetos "quentes") — apaga com o motor funcionando
+      // ("cockpit escuro": luz acesa = algo pede atenção) · PARTIDA = arranque girando · ALTERNADOR = sem carga (chave ligada e motor parado, ou falha)
       // ÓLEO = pressão baixa (motor parado com a chave ligada) · TEMP CAB. = cabeçote quente (pisca na proteção)
       // COMB. BAIXO = reserva (vermelha sem combustível). Tudo só com energia na casa.
       const keyOn = (t.keys[0] ?? "off") !== "off" || t.engine !== "off";
@@ -215,7 +216,7 @@ export class SystemsPanel {
       const lit = c.banks > 0 && hv > 6;
       const on = lit && keyOn;
       const L: Record<string, string> = {
-        "IGNIÇÃO": on ? "a" : "",
+        "IGNIÇÃO": on && t.engine !== "running" ? "a" : "",
         PARTIDA: lit && t.engine === "cranking" ? "a" : "",
         ALTERNADOR: on && (t.engine !== "running" || t.chargeWarn) ? "a" : "",
         "ÓLEO": on && t.engine !== "running" ? "r" : "",

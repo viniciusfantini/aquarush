@@ -373,7 +373,7 @@ girando → `"busy"`.
   5,5 % no giro; OFF = o motor para. Mistura 1 = rica (partida e potência), ~0,8 = melhor força e −8 % de consumo,
   pobre perde força, < 0,15 = CORTE (apaga; é o desligamento normal). Primer: motor frio (< 40 °C) precisa de 2–4
   bombadas; > 6 (ou > 3 quente) afoga; girando o arranque o excesso sai; evapora em ~1,5 min. P = sequência automática.
-- **Luzes de aviso no Y** (v0.69.1): IGNIÇÃO (chave ligada), PARTIDA (arranque), ALTERNADOR (motor parado com a chave
+- **Luzes de aviso no Y** (v0.69.1): IGNIÇÃO (ignição ligada com o motor parado; apaga funcionando — v0.69.3), PARTIDA (arranque), ALTERNADOR (motor parado com a chave
   ligada, ou `chargeWarn`), ÓLEO (pressão baixa = motor parado com a chave ligada), TEMP CAB. (`overheatWarn`; pisca
   em `protectMode`), COMB. BAIXO (`lowFuel`; vermelha sem combustível) (sem botão TESTE desde a v0.69.2). Acesas com a
   casa acima de ~6 V (esmaecem no arranque).

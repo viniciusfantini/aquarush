@@ -201,6 +201,8 @@ export interface SpeedboatParams {
    * o excesso sai aos poucos).
    */
   aircraft?: { magDrop: number };
+  /** o barco não leva âncora (airboat de pantanal): + / − não fazem nada e não há âncora no visual */
+  noAnchor?: boolean;
   /** atrito do fundo do casco no chão (padrão 0,45). Airboat: fundo de alumínio com polímero desliza em lama/capim */
   groundMu?: number;
   /** compressor mecânico (supercharger), acionado pelo virabrequim: pressão máxima de sobrealimentação (bar) a giro
@@ -821,6 +823,7 @@ export const AIRBOAT: SpeedboatParams = {
   electricStart: true,
   airProp: { rudderWash: 0.55, rudderCdA: 1.6, rudderPos: v3(0, 1.3, -2.35) }, // 2 lemes de ar
   groundMu: 0.38,
+  noAnchor: true,               // lancha pantaneira não leva âncora
   tankLiters: 80,
   fuelIdleLph: 8,
   fuelMaxLph: 70,
@@ -861,7 +864,7 @@ export const AIRBOAT: SpeedboatParams = {
   // casco aberto de alumínio, sem bomba de porão; a água que entra fica no fundo (o casco chato tem flutuadores de espuma)
   bilge: { pos: v3(0, -0.28, -0.3), maxL: 3000, pumpLph: 0, pumpA: 0, outlet: v3(1.15, 0.05, -1.8), areaM2: 9.0, holeMaxM2: 0.003, bowRise: 0.2, transomY: 0.15, transomW: 0.01,
     sumpL: 60, floorY: -0.12, floodCenter: v3(0, 0, 0), floodLen: 4.2, floodHalfW: 1.05, scupperM2: 0, scupperFromStern: 0.3, shutoffHeadM: 2, outletAreaM2: 3.8e-4, capsizeAirFrac: 0.45, ventM2: 1e-5 },
-  // âncora pequena (~4 kg) com 25 m de cabo, à mão
+  // (não leva âncora: `noAnchor`; os valores abaixo só cumprem o contrato do tipo)
   anchor: { roller: v3(0, 0.2, 2.4), rodeMax: 25, rateOut: 0.7, rateIn: 0.35, motorA: 0, holdN: 1500 },
 
   enginePowerHp: 260,

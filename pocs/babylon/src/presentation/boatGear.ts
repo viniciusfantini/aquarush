@@ -56,6 +56,7 @@ export class BoatGearVis {
     this.rope.isPickable = false;
     this.rope.setEnabled(false);
     this.stowAnchor();
+    if (P.noAnchor) a.setEnabled(false); // (airboat: não leva âncora)
 
     // ---- água de resfriamento da turbina (trocador de calor do óleo): saída no espelho ----
     if (P.cooling) {

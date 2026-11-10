@@ -1350,6 +1350,9 @@ for (const [label, thr] of [["baixa", 0.25], ["alta", 1]] as const) {
   run(m, water, 2, { ...emptyInput(), trim: 1 }, openWater);
   check("airboat", "não tem trim: o botão não mexe nada nem puxa corrente", Math.abs(m.telemetry.trimDeg) < 0.01 && m.trimMotorA === 0 ? 1 : 0, 1, 1, "", 0);
   check("airboat", "P com o motor frio: sequência automática (rica, primer, BOTH) e pega", m.engine === "running" ? 1 : 0, 1, 1, "", 0);
+  // lancha pantaneira não leva âncora: "+" não lança nada
+  run(m, water, 3, { ...emptyInput(), anchor: 1 }, openWater);
+  check("airboat", "sem âncora: segurar + não lança cabo (m)", m.telemetry.anchorOut, 0, 0, "m", 1);
   // motor refrigerado a ar: não depende de tomada d'água
   check("airboat", "refrigerado a ar: 'tomada d'água' sempre ok", n.telemetry.intakeSubmerged ? 1 : 0, 1, 1, "", 0);
   // fundo chato que desliza: sobe num barranco de lama/capim embalado, sem avaria séria; no seco plano anda pouco

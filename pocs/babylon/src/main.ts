@@ -52,7 +52,7 @@ import { Hud } from "./presentation/hud.ts";
 import { EngineAudio } from "./presentation/audio.ts";
 
 installI18n(); // inglês: traduz o DOM, as escritas futuras e os letreiros 3D (antes de montar a cena e o HUD)
-const BUILD = "poc-babylon 0.69.2";
+const BUILD = "poc-babylon 0.69.3";
 /** Escala visual da rotação da hélice (proporcional ao RPM, abaixo do limite estroboscópico). */
 const PROP_VISUAL_SCALE = 0.12;
 
@@ -607,6 +607,7 @@ const boot = async () => {
     audio.cylinders = V.P.cylinders;
     tpanel.setOpen(false); spanel.setOpen(false);
     if (V.P.turbine) tpanel.configureTrim(trimOptsFor(V.P));
+    document.getElementById("help-anchor")!.style.display = V.P.noAnchor ? "none" : ""; // (airboat: sem âncora)
     document.getElementById("help-horn")!.textContent = isBote || isJet ? "apito" : "buzina"; // bote e moto aquática: apito de bolinha
     spanel.configure({ title: V.P.name, banks: !V.P.electricStart ? 0 : V.boat.systems2 ? 2 : 1,
       keys: !V.P.electricStart || V.P.turbine || V.P.startStop || V.P.aircraft ? [] : V.boat.units.length > 1 ? ["IGNIÇÃO BB", "IGNIÇÃO BE"] : ["IGNIÇÃO"],
@@ -1148,8 +1149,8 @@ const boot = async () => {
       else if (boat.mooringLines.length) K.push(["M", "SOLTAR as amarras", "moor"], ...(moorWhere === "píer" ? [["O", "embarque", "occupants"] as [string, string, Action]] : []), ["K", "ir para o carro", "car"], ["P", T.engine === "running" ? "desligar motor" : V.kind === "bote" ? "corda" : "ligar motor", "ignition"], ["C", "câmera", "camera"]);
       else if (boat.winchStrap) K.push(["U", trailerInWater() ? "SOLTAR a cinta" : "comando ao carro", "unhitch"], ["P", T.engine === "running" ? "desligar motor" : V.kind === "bote" ? "corda" : "ligar motor", "ignition"], ["E Q", "motor (tilt)", null]);
       else if (ld.near) K.push(["E", V.kind !== "bote" ? "levantar o motor" : "pino / tilt", null], ["W S", "marcha / acelerar", null], ["A D", "direção", null], ["T", `vento: ${wind.def.key}`, "wind"]);
-      else if (T.anchorOut > 0) K.push(["+", "pagar cabo", null], ["−", "recolher âncora", null], ["P", T.engine === "running" ? "desligar motor" : V.kind === "bote" ? "corda" : "ligar motor", "ignition"], ["C", "câmera", "camera"]);
-      else K.push(["T", `vento: ${wind.def.key}`, "wind"], ["P", V.kind === "bote" ? "corda (partida)" : "liga/desliga", "ignition"], ["+ −", "âncora", null], ["C", "câmera", "camera"], ["H", "ajuda", "help"]);
+      else if (T.anchorOut > 0 && !V.P.noAnchor) K.push(["+", "pagar cabo", null], ["−", "recolher âncora", null], ["P", T.engine === "running" ? "desligar motor" : V.kind === "bote" ? "corda" : "ligar motor", "ignition"], ["C", "câmera", "camera"]);
+      else K.push(["T", `vento: ${wind.def.key}`, "wind"], ["P", V.kind === "bote" ? "corda (partida)" : "liga/desliga", "ignition"], ...(V.P.noAnchor ? [] : [["+ −", "âncora", null] as [string, string, Action | null]]), ["C", "câmera", "camera"], ["H", "ajuda", "help"]);
       // bateria zerada (lancha): botão para conectar o booster de partida
       if (mode === "game" && !T.capsized && !driving && !carOnly) K.unshift(["Y", boat.params.turbine ? (tpanel.isOpen ? "fechar painel" : "painel de partida") : spanel.isOpen ? "fechar sistemas" : "sistemas", "turbinePanel"]);
       if (mode === "game" && boat.params.turbine && !T.capsized && !driving && !carOnly && (T.gpu || (docked() && T.engine !== "running")))

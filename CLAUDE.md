@@ -74,7 +74,7 @@ npm run dev            # abrir http://localhost:5173, F3 mostra a telemetria; wi
 
 AR-10 (turbina): 10 m, seca 2900 kg, ~1100 shp, 24 V (~19 V no arranque, ~28 V com o gerador), GPU da doca (28 V) no lugar do jump start, 150 km/h, marcha lenta N1 62 % / EGT ~480 °C, partida ~21 s (pico de EGT ~660 °C a 60 % de bateria; 780 °C = partida quente), 85–430 L/h, começa com 120 L (temporário).
 
-AR-P (lancha pantaneira / airboat): 4,9 × 2,4 m, seca 650 kg, motor de avião ~260 hp (800–2700 rpm, refrigerado a ar), hélice pusher de 2 pás ~1,9 m (empuxo estático 3,3 kN, `propPitchSpeed` 58), lemes de ar, sem ré; ~88 km/h, 0→40 em 4,4 s, 70 L/h; `groundMu` 0,38; bateria 50 Ah / arranque com redução 120 A / alternador 60 A (com 35 Ah / 150 A não pegava a 60 %); piso a −0,12 (acima da linha d'água); 2 lemes; motor de avião com magnetos (queda 5,5 %), mistura e primer; sem trim; começa com 10 L (temporário).
+AR-P (lancha pantaneira / airboat): 4,9 × 2,4 m, seca 650 kg, motor de avião ~260 hp (800–2700 rpm, refrigerado a ar), hélice pusher de 2 pás ~1,9 m (empuxo estático 3,3 kN, `propPitchSpeed` 58), lemes de ar, sem ré; ~88 km/h, 0→40 em 4,4 s, 70 L/h; `groundMu` 0,38; bateria 50 Ah / arranque com redução 120 A / alternador 60 A (com 35 Ah / 150 A não pegava a 60 %); piso a −0,12 (acima da linha d'água); 2 lemes; motor de avião com magnetos (queda 5,5 %), mistura e primer; sem trim; sem âncora (`noAnchor`); começa com 10 L (temporário).
 
 AR-J (moto aquática): 3,45 m, seca 360 kg, 300 hp, jato d'água (empuxo estático 5,8 kN, `propGear` 1), ~108 km/h a ~7900 rpm, 0→100 ~7 s, 72 L/h a pleno (ECO 55 %: ~90 km/h), bateria 30 Ah / arranque 95 A / estator 30 A, sem chave geral nem registro, sifão 0,3 L/s, começa com 8 L (temporário).
 
