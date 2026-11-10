@@ -260,6 +260,11 @@
     .pl-t { position: absolute; left: -26px; top: 4px; width: 52px; height: 16px; border-radius: 6px; background: linear-gradient(180deg, #f2f4f6, #9aa3ab 55%, #5a6168);
       box-shadow: 0 3px 5px rgba(0,0,0,0.6); }
     .pl-t::after { content: ""; position: absolute; left: 50%; top: 4px; width: 30px; height: 4px; margin-left: -15px; border-radius: 2px; background: rgba(0,0,0,0.35); }
+    /* luzes de aviso no painel de sistemas (como as da AR-10) + botão TESTE */
+    .sp-ann-row { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+    .sp-ann-row .tp-ann { flex: 1; display: grid; grid-template-columns: repeat(6, 1fr); gap: 4px; margin: 0; }
+    .sp-ann-row .tp-ann span { padding: 4px 3px; font-size: 9.5px; white-space: nowrap; }
+    .sp-ann-row .tp-test { position: static; width: auto; flex: 0 0 auto; }
     /* acelerador de pé do airboat (pedal de alumínio estriado) */
     .pl-pedal .pl-track { width: 96px; height: 116px; }
     .pl-pedal .pl-t { left: -22px; width: 44px; height: 20px; border-radius: 4px; background: linear-gradient(180deg, #e3e7ea, #9aa3ab 55%, #5d656c); box-shadow: 0 3px 5px rgba(0,0,0,0.6); }

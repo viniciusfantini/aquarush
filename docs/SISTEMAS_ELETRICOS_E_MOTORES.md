@@ -366,8 +366,12 @@ girando → `"busy"`.
 - **Motor de avião** de 6 cilindros opostos, ~260 hp, **refrigerado a ar** (a "tomada d'água" é sempre considerada ok:
   não esquenta fora d'água), 800–2700 rpm, ligado direto à hélice (`propGear` 1, **sem embreagem**).
 - **Elétrica 12 V** como a da AR-6: chave de ignição (OFF · ON com autoteste · START), chave geral de 1 banco, registro
-  de combustível. Bateria 35 Ah, arranque ~150 A, alternador de 60 A (30 % já na lenta). Sem bomba de porão, sem luzes,
-  sem trim.
+  de combustível. Bateria 50 Ah, arranque com redução ~120 A, alternador de 60 A (30 % já na lenta). Sem bomba de
+  porão, sem luzes, sem trim. Pega em ~2,2 s com a bateria a 60 % (largada).
+- **Luzes de aviso no Y** (v0.69.1): IGNIÇÃO (chave ligada), PARTIDA (arranque), ALTERNADOR (motor parado com a chave
+  ligada, ou `chargeWarn`), ÓLEO (pressão baixa = motor parado com a chave ligada), TEMP CAB. (`overheatWarn`; pisca
+  em `protectMode`), COMB. BAIXO (`lowFuel`; vermelha sem combustível) + TESTE (todas + alarme). Acesas com a casa
+  acima de ~6 V (esmaecem no arranque).
 - **Partida sem neutro**: não há câmbio — a hélice gira assim que o motor pega (a lenta já empurra a ~4,5 km/h).
   `toggleIgnition`/`setKey` não exigem N quando `params.airProp`.
 - Gasolina de aviação (0,72 kg/L), tanque de 80 L, 8 L/h na lenta, 70 L/h a pleno.

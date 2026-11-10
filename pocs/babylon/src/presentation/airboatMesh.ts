@@ -1,7 +1,9 @@
 // Lancha pantaneira AR-P (airboat, 4,9 m). Origem = CG do barco seco (params AIRBOAT). X boreste, Y cima, Z proa.
 // Casco chato de alumínio com a proa levantada (rampa), banco dos passageiros na frente, banco ALTO do piloto no meio
 // (com apoio de pés e o bastão dos lemes à esquerda), motor de avião de 6 cilindros opostos atrás dele, hélice pusher
-// de 2 pás (~1,9 m) numa gaiola redonda e 3 lemes de ar atrás da gaiola, ligados ao bastão.
+// de 2 pás (~1,9 m) numa gaiola redonda e 2 lemes de ar atrás da gaiola, ligados ao bastão.
+// O PISO fica sobre longarinas, ACIMA da linha d'água (parado e lotado a água fica em y ≈ −0,23): a "tampa" só de
+// profundidade logo acima do piso esconde a superfície da água dentro do casco — com o piso abaixo dela, parecia alagado.
 // Nós do BoatVisual: `engine` = pivô dos lemes (o main gira pela direção real), `propeller` = hélice (gira pelo rpm).
 
 import { type Scene, Mesh, MeshBuilder, StandardMaterial, PBRMaterial, Color3, TransformNode, Vector3 } from "@babylonjs/core";
@@ -12,7 +14,7 @@ import { type BoatVisual, pbr, roundedBox, colorize, hpDecalMaterial } from "./b
 
 /** apoio dos pés do piloto (banco alto) e piso do casco */
 export const AIR_FOOT = 0.78;
-export const AIR_FLOOR = -0.27;
+export const AIR_FLOOR = -0.12;
 const Z_STERN = -2.45, Z_BOW = 2.45, HB = 1.18; // meia-boca
 const BOTTOM = -0.36, SIDE_TOP = 0.15;
 
@@ -65,6 +67,7 @@ export const buildAirboat = (scene: Scene): BoatVisual & { controls: AirboatCont
   add(MeshBuilder.CreateRibbon("airTransom", { pathArray: [sternS, sternS.map((p) => new Vector3(0, Math.max(p.y, BOTTOM), Z_STERN))], sideOrientation: Mesh.DOUBLESIDE }, scene), alu);
   // piso, borda (corrimão de alumínio) e "skeg" (placa de desgaste do fundo, para as gotas)
   add(MeshBuilder.CreateBox("airFloor", { width: 2 * HB - 0.1, height: 0.02, depth: 4.3 }, scene), floorMat).position.set(0, AIR_FLOOR, -0.2);
+  for (const x of [-0.8, -0.27, 0.27, 0.8]) add(MeshBuilder.CreateBox("airStringer", { width: 0.05, height: AIR_FLOOR - BOTTOM, depth: 4.2 }, scene), alu).position.set(x, (AIR_FLOOR + BOTTOM) / 2, -0.25);
   for (const s of [-1, 1]) {
     const rail = add(MeshBuilder.CreateCylinder("airRail", { height: Z_BOW - Z_STERN - 0.2, diameter: 0.05, tessellation: 10 }, scene), alu);
     rail.rotation.x = Math.PI / 2; rail.position.set(s * (HB - 0.02), SIDE_TOP + 0.02, 0);
@@ -171,20 +174,20 @@ export const buildAirboat = (scene: Scene): BoatVisual & { controls: AirboatCont
     st.position.set(s * 0.75, (pp.y - 0.6 + AIR_FLOOR) / 2 + 0.2, cz - 0.1); st.rotation.z = -s * 0.28;
   }
 
-  // ---------- lemes de ar (3 placas atrás da gaiola) — pivô = "engine" (o main gira pela direção real) ----------
+  // ---------- lemes de ar (2 placas atrás da gaiola) — pivô = "engine" (o main gira pela direção real) ----------
   const rp = AIRBOAT.airProp!.rudderPos;
   const engine = new TransformNode("enginePivot", scene);
   engine.parent = root; engine.position.set(rp.x, rp.y, rp.z);
   const rudders: TransformNode[] = [];
-  for (const x of [-0.6, 0, 0.6]) {
+  for (const x of [-0.42, 0.42]) {
     const pv = new TransformNode("airRudderPivot", scene); pv.parent = root; pv.position.set(rp.x + x, rp.y, rp.z);
-    const plate = add(MeshBuilder.CreateBox("airRudder", { width: 0.02, height: 1.45, depth: 0.5 }, scene), rudderMat, pv);
+    const plate = add(MeshBuilder.CreateBox("airRudder", { width: 0.02, height: 1.5, depth: 0.58 }, scene), rudderMat, pv);
     plate.position.z = -0.22;
     colorize(plate, (_x, y) => (y > 0.5 ? new Color3(0.95, 0.42, 0.05) : new Color3(0.95, 0.96, 0.97)));
     rudders.push(pv);
   }
   // barra de ligação dos lemes + haste até o bastão
-  add(MeshBuilder.CreateBox("airRudderLink", { width: 1.3, height: 0.025, depth: 0.025 }, scene), frame).position.set(rp.x, rp.y - 0.62, rp.z - 0.15);
+  add(MeshBuilder.CreateBox("airRudderLink", { width: 0.95, height: 0.025, depth: 0.025 }, scene), frame).position.set(rp.x, rp.y - 0.65, rp.z - 0.15);
   const pushrod = add(MeshBuilder.CreateCylinder("airPushrod", { height: Math.abs(rp.z - hs.z) - 0.2, diameter: 0.02, tessellation: 6 }, scene), steel);
   pushrod.rotation.x = Math.PI / 2; pushrod.position.set(-0.6, AIR_FOOT + 0.25, (rp.z + hs.z) / 2);
 

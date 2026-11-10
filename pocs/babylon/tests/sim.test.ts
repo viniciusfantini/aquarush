@@ -1314,6 +1314,12 @@ for (const [label, thr] of [["baixa", 0.25], ["alta", 1]] as const) {
   run(n, water, 4, { ...emptyInput() });
   run(n, water, 4, { ...emptyInput(), throttle: 0.5, steering: 1 });
   check("airboat", "acelerador a 50 % + lemes, quase parado: gira (°/s)", Math.abs(n.angVel.y) * 57.3, 8, 60, "°/s", 1);
+  // largada do jogo: motor frio e parado, bateria a 60 % — tem de pegar (o arranque não pode afundar a tensão demais)
+  const st = new Speedboat(AIRBOAT, v3(0, 0.1, 0)); st.systems.fuelL = 10; st.occupants = [{ seat: "helm", mass: PERSON_KG }];
+  st.engine = "off"; for (const x of st.units) { x.key = "off"; x.rpm = 0; } st.systems.batterySoc = 0.6;
+  st.toggleIgnition(); let tOn = -1;
+  run(st, water, 8, { ...emptyInput() }, openWater, (t) => { if (tOn < 0 && st.engine === "running") tOn = t; });
+  check("airboat", "largada (bateria a 60 %): pega em (s)", tOn, 1, 5, "s", 1);
   // motor refrigerado a ar: não depende de tomada d'água
   check("airboat", "refrigerado a ar: 'tomada d'água' sempre ok", n.telemetry.intakeSubmerged ? 1 : 0, 1, 1, "", 0);
   // fundo chato que desliza: sobe num barranco de lama/capim embalado, sem avaria séria; no seco plano anda pouco

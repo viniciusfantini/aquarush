@@ -55,6 +55,8 @@ export interface SystemsPanelCaps {
   ecoMode?: boolean;
   /** buzina elétrica ou apito de bolinha (bote, moto aquática). Ausente = buzina com bateria, apito sem */
   horn?: "buzina" | "apito";
+  /** fileira de luzes de aviso (anunciadores, como na AR-10) com botão TESTE — motor a pistão */
+  annunciators?: boolean;
 }
 
 const plate = (inner: string, cls = "") => `<div class="sw-plate ${cls}"><span class="screw s1"></span><span class="screw s2"></span><span class="screw s3"></span><span class="screw s4"></span>${inner}</div>`;
@@ -135,7 +137,12 @@ export class SystemsPanel {
     // bote: lanterna de mão a pilha (manual) — não é chave de painel
     if (caps.lights) cells.push(cell(caps.banks ? toggle({ attr: "lights", val: "1", label: caps.lights, sub: "navegação" }) : lantern("lights", caps.lights, "de mão, a pilha"), "lights"));
     this.title.textContent = `⠿ SISTEMAS — ${caps.title}`;
-    this.body.innerHTML = `
+    // anunciadores (como no painel da AR-10): apagado = normal ("cockpit escuro"); TESTE acende todos + alarme
+    const ann = caps.annunciators
+      ? `<div class="sp-ann-row"><div class="tp-ann sp-ann">${SystemsPanel.ANN.map((k) => `<span data-a="${k}">${k}</span>`).join("")}</div>
+          <div class="tp-test" title="segure: testa todas as luzes e o alarme (precisa de bateria)"><button class="tb-test" data-test>TEST</button><b>TESTE</b></div></div>`
+      : "";
+    this.body.innerHTML = ann + `
       <div class="sp-top"><div><div class="sp-sec">PARTIDA</div>${plate(start, "sp-start")}</div>
         <div class="sp-grow"><div class="sp-sec">COMANDO</div>${plate("", "sp-lev")}</div></div>
       ${cells.length ? `<div class="sp-sec">SISTEMAS</div>${plate(cells.join(""))}` : ""}
@@ -144,7 +151,19 @@ export class SystemsPanel {
     this.body.querySelector<HTMLElement>(".sp-lev")!.appendChild(this.levers.el);
     this.levers.setTrim(caps.trim, (d) => this.act.setTrim(d));
     this.levers.setHorn(caps.horn ?? (caps.banks === 0 ? "apito" : "buzina"), (on) => this.act.horn(on));
+    const tb = this.body.querySelector<HTMLElement>("[data-test]");
+    if (tb) {
+      tb.addEventListener("pointerdown", (e) => { this.lampTest = true; tb.classList.add("down"); e.preventDefault(); });
+      const up = () => { this.lampTest = false; tb.classList.remove("down"); };
+      addEventListener("pointerup", up); addEventListener("pointercancel", up); addEventListener("blur", up);
+    }
   }
+
+  /** luzes de aviso do motor a pistão (ordem do painel) */
+  static readonly ANN = ["IGNIÇÃO", "PARTIDA", "ALTERNADOR", "ÓLEO", "TEMP CAB.", "COMB. BAIXO"];
+  /** botão TESTE segurado / teste ativo (com bateria): todas as luzes acesas e o alarme (o main lê `lampTestOn`) */
+  private lampTest = false;
+  lampTestOn = false;
 
   get isOpen(): boolean { return this.open; }
   setOpen(on: boolean): void { this.open = on; this.el.classList.toggle("open", on); }
@@ -159,6 +178,27 @@ export class SystemsPanel {
     const el = this.el, c = this.caps;
     // tensão da casa (equivalente 12 V): os LEDs das chaves elétricas só acendem com ela
     const hv = (t.houseV * 12) / t.nominalV, powered = c.banks > 0 && hv > 9;
+    if (c.annunciators) {
+      // IGNIÇÃO = chave ligada · PARTIDA = arranque girando · ALTERNADOR = sem carga (chave ligada e motor parado, ou falha)
+      // ÓLEO = pressão baixa (motor parado com a chave ligada) · TEMP CAB. = cabeçote quente (pisca na proteção)
+      // COMB. BAIXO = reserva (vermelha sem combustível). Tudo só com energia na casa.
+      const keyOn = (t.keys[0] ?? "off") !== "off" || t.engine !== "off";
+      const blink = Math.floor(performance.now() / 350) % 2 === 0;
+      // as lâmpadas seguem acesas (mais fracas) até ~6 V: no arranque a tensão cai, mas o painel não apaga
+      const lit = c.banks > 0 && hv > 6;
+      const on = lit && keyOn;
+      const L: Record<string, string> = {
+        "IGNIÇÃO": on ? "a" : "",
+        PARTIDA: lit && t.engine === "cranking" ? "a" : "",
+        ALTERNADOR: on && (t.engine !== "running" || t.chargeWarn) ? "a" : "",
+        "ÓLEO": on && t.engine !== "running" ? "r" : "",
+        "TEMP CAB.": lit && (t.protectMode ? blink : t.overheatWarn) ? "r" : "",
+        "COMB. BAIXO": lit && t.lowFuel ? (t.fuelL <= 0.05 ? "r" : "a") : "",
+      };
+      this.lampTestOn = this.lampTest && lit;
+      if (this.lampTestOn) for (const k of SystemsPanel.ANN) L[k] = k === "ÓLEO" || k === "TEMP CAB." ? "r" : "a";
+      for (const s of this.el.querySelectorAll<HTMLElement>(".sp-ann [data-a]")) { const v = L[s.dataset.a ?? ""] ?? ""; if (s.className !== v) s.className = v; }
+    } else this.lampTestOn = false;
     setRotary(el, "bat", t.batterySel === "off" ? "off" : c.banks === 1 ? "ind" : t.batterySel);
     setRotary(el, "fuel", t.fuelValveOpen ? "open" : "closed");
     setPull(el, "choke", t.choke);

@@ -52,7 +52,7 @@ import { Hud } from "./presentation/hud.ts";
 import { EngineAudio } from "./presentation/audio.ts";
 
 installI18n(); // inglês: traduz o DOM, as escritas futuras e os letreiros 3D (antes de montar a cena e o HUD)
-const BUILD = "poc-babylon 0.69.0";
+const BUILD = "poc-babylon 0.69.1";
 /** Escala visual da rotação da hélice (proporcional ao RPM, abaixo do limite estroboscópico). */
 const PROP_VISUAL_SCALE = 0.12;
 
@@ -613,7 +613,8 @@ const boot = async () => {
       levers: isBote ? "tiller" : isJet ? "handlebar" : isAir ? "pedal" : V.boat.units.length > 1 ? "twin" : "binnacle",
       display: isBote ? "grey" : isJet ? "glass" : isAir ? "grey" : V.boat.units.length > 1 ? "vfd" : "lcd",
       trim: isAir ? null : trimOptsFor(V.P), choke: !!V.P.carbureted, bilgePump: V.P.bilge.pumpLph > 0, lights: isBote ? "LANTERNA" : isJet || isAir ? "" : "LUZES",
-      startStop: !!V.P.startStop, batterySwitch: !V.P.startStop, fuelValve: !V.P.startStop, ecoMode: !!V.P.ecoThrottle, horn: isBote || isJet ? "apito" : "buzina" });
+      startStop: !!V.P.startStop, batterySwitch: !V.P.startStop, fuelValve: !V.P.startStop, ecoMode: !!V.P.ecoThrottle, horn: isBote || isJet ? "apito" : "buzina",
+      annunciators: isAir });
     lights = false; input.setLights(false);
     setNavLights(V.vis, false); V.dinghy?.setLantern(false);
     hud.setLights(false, isBote ? "LANTERNA" : "LUZES");
@@ -1308,7 +1309,7 @@ const boot = async () => {
       inGear: T.gear !== "N", propInWater: T.propImmersion > 0.5, revLimiter: T.revLimiter, cockpit: cam.mode === "cockpit", engine: T.engine, trimMotorA: T.trimMotorA, trimRelay: T.trimRelay, bilgeAlarm: mode === "game" && T.bilgeAlarm && !T.capsized && !T.sunk, bilgeFlowLps: T.bilgeFlowLps, bilgePumpOn: T.bilgePump && !T.sunk, bilgeWaterL: T.bilgeL, windlassA: T.windlassA, apparentWind: T.apparentWind, anchorRelay: T.anchorRelay, buzzer: T.buzzer, starterRpm: T.starterRpm, pullStart: T.pullStart,
       supercharger: V.kind === "jetski",
       airProp: V.kind === "airboat",
-      oilAlarm: mode === "game" && (!!T.turbine?.oilHot || T.extPwrFault || (tpanel.isOpen && tpanel.lampTestOn)) && !T.sunk, // + TESTE do painel // "master caution": óleo quente ou falha do EXT PWR
+      oilAlarm: mode === "game" && (!!T.turbine?.oilHot || T.extPwrFault || (tpanel.isOpen && tpanel.lampTestOn) || (spanel.isOpen && spanel.lampTestOn)) && !T.sunk, // + TESTE do painel // "master caution": óleo quente ou falha do EXT PWR
       // AR-9: o 2º V8 tem voz própria (rotação/carga/estado dele)
       ...(boat.units.length > 1 ? { rpm: T.rpms[0], throttle: T.throttles[0], rpm2: T.rpms[1], throttle2: T.throttles[1], engine2: T.engines[1], engine: T.engines[0] } : {}),
       // turbina: N1/N2, EGT (chama), arranque e velas de ignição — síntese própria (apito do compressor, rugido da combustão)

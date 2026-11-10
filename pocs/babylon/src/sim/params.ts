@@ -796,7 +796,7 @@ export const JETSKI: SpeedboatParams = {
 // ---------------------------------------------------------------------------------------------
 // Lancha pantaneira AR-P (airboat, 4,9 m, até 3 pessoas) — casco chato de alumínio (fundo com polímero que desliza
 // em lama, capim e banco de areia), motor de avião de 6 cilindros opostos refrigerado a ar (~260 hp) ligado direto a
-// uma hélice pusher de 2 pás (~1,9 m) dentro de uma gaiola, e 3 lemes de ar atrás dela comandados por um bastão
+// uma hélice pusher de 2 pás (~1,9 m) dentro de uma gaiola, e 2 lemes de ar atrás dela comandados por um bastão
 // (stick) à esquerda do piloto. Acelerador de PÉ. Sem embreagem, sem ré, sem leme na água. O piloto vai num banco
 // alto (para ver por cima do capim), os 2 passageiros num banco na frente. Origem = CG do barco seco. X boreste,
 // Y cima, Z proa. Valores de referência de airboats de 15–16 pés com motor de avião de 6 cilindros.
@@ -810,7 +810,7 @@ export const AIRBOAT: SpeedboatParams = {
   trimMode: "power",
   trimPins: [],
   electricStart: true,
-  airProp: { rudderWash: 0.55, rudderCdA: 1.6, rudderPos: v3(0, 1.3, -2.35) },
+  airProp: { rudderWash: 0.55, rudderCdA: 1.6, rudderPos: v3(0, 1.3, -2.35) }, // 2 lemes de ar
   groundMu: 0.38,
   tankLiters: 80,
   fuelIdleLph: 8,
@@ -851,7 +851,7 @@ export const AIRBOAT: SpeedboatParams = {
   gunwaleY: 0.15,
   // casco aberto de alumínio, sem bomba de porão; a água que entra fica no fundo (o casco chato tem flutuadores de espuma)
   bilge: { pos: v3(0, -0.28, -0.3), maxL: 3000, pumpLph: 0, pumpA: 0, outlet: v3(1.15, 0.05, -1.8), areaM2: 9.0, holeMaxM2: 0.003, bowRise: 0.2, transomY: 0.15, transomW: 0.01,
-    sumpL: 60, floorY: -0.28, floodCenter: v3(0, 0, 0), floodLen: 4.2, floodHalfW: 1.05, scupperM2: 0, scupperFromStern: 0.3, shutoffHeadM: 2, outletAreaM2: 3.8e-4, capsizeAirFrac: 0.45, ventM2: 1e-5 },
+    sumpL: 60, floorY: -0.12, floodCenter: v3(0, 0, 0), floodLen: 4.2, floodHalfW: 1.05, scupperM2: 0, scupperFromStern: 0.3, shutoffHeadM: 2, outletAreaM2: 3.8e-4, capsizeAirFrac: 0.45, ventM2: 1e-5 },
   // âncora pequena (~4 kg) com 25 m de cabo, à mão
   anchor: { roller: v3(0, 0.2, 2.4), rodeMax: 25, rateOut: 0.7, rateIn: 0.35, motorA: 0, holdN: 1500 },
 
@@ -895,8 +895,8 @@ export const AIRBOAT: SpeedboatParams = {
   bankCoef: 250,               // casco chato: quase não deita para dentro da curva
   rollDamping: 3000,
   airDragCdA: 2.6,             // gaiola + hélice + motor + piloto alto
-  // bateria 12 V 35 Ah, arranque ~150 A, alternador de motor de avião 60 A
-  systems: { batteryAh: 35, starterA: 150, altMaxA: 60, altIdleFrac: 0.3, lineL: 0.15 },
+  // bateria 12 V 50 Ah, arranque com redução ~120 A, alternador de motor de avião 60 A
+  systems: { batteryAh: 50, starterA: 120, altMaxA: 60, altIdleFrac: 0.3, lineL: 0.15 },
   windage: { sideCdA: 3.8, center: v3(0, 1.1, -0.9) }, // a gaiola e os lemes pegam muito vento
 };
 

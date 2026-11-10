@@ -96,6 +96,23 @@ A lancha é um **corpo rígido 6DOF** (massa seca de 1030 kg + gasolina, ocupant
 
 > Referência completa da lógica elétrica e dos motores: [`docs/SISTEMAS_ELETRICOS_E_MOTORES.md`](../../docs/SISTEMAS_ELETRICOS_E_MOTORES.md).
 
+## Lancha pantaneira AR-P: lemes, piso e luzes de aviso (v0.69.1)
+
+- **2 lemes de ar** (eram 3), um pouco maiores; a física dos lemes não muda (a força total vem do `airProp`).
+- **"Água dentro do casco o tempo todo"**: o porão estava seco (0 L medidos parado, a toda, em curva e na lenta) —
+  era visual: o piso (`AIR_FLOOR` −0,27) ficava ABAIXO da linha d'água (−0,23 parado e lotado), então a superfície
+  da água aparecia por cima dele. O piso agora fica sobre 4 longarinas a −0,12 e a tampa só de profundidade logo acima
+  dele esconde a água dentro do casco. Conferido no navegador andando: casco seco.
+- **Luzes de aviso no Y** (`SystemsPanelCaps.annunciators`, como as da AR-10; "cockpit escuro"): IGNIÇÃO (chave
+  ligada), PARTIDA (arranque), ALTERNADOR (sem carga: motor parado com a chave ligada, ou falha), ÓLEO (pressão baixa:
+  motor parado com a chave ligada), TEMP CAB. (cabeçote quente; pisca na proteção), COMB. BAIXO (reserva; vermelha
+  sem combustível) + botão **TESTE** (todas acesas e o alarme). As lâmpadas ficam acesas até ~6 V (esmaecem no
+  arranque, não apagam). Conferido no navegador: desligado = apagadas; autoteste = IGNIÇÃO + ALTERNADOR + ÓLEO;
+  arranque = + PARTIDA; ligado = só IGNIÇÃO; TESTE = todas.
+- **Bateria 50 Ah e arranque com redução de 120 A** (eram 35 Ah / 150 A): na largada (bateria a 60 %) o arranque
+  girava fraco e o motor não pegava. Agora pega em 2,2 s a 60 % e em 2,8 s a 40 %; a 25 % fica fraca, como nos outros.
+  Critério novo "largada (bateria a 60 %)".
+
 ## Lancha pantaneira AR-P — airboat (v0.69)
 
 - **Sexta embarcação** (`AIRBOAT` em `sim/params.ts`, `?barco=airboat`, no menu entre a AR-6 e a AR-J pela potência):
@@ -124,8 +141,7 @@ A lancha é um **corpo rígido 6DOF** (massa seca de 1030 kg + gasolina, ocupant
   (5 conjuntos estacionados, a vaga 1 livre).
 - **Calibração** (`node tests/debug-airboat.ts`): 88 km/h a toda (2434 rpm), 0→40 em 4,4 s, 70 L/h; lotada 83 km/h;
   curva a toda 11–16°/s derrapando, roll ≤ 3°; motor desligado não vira; a 50 % + lemes gira 20°/s quase parado.
-- **Não verificado no navegador nesta versão** (a extensão do Chrome estava desconectada): typecheck, `test:sim` e
-  build passaram; a aparência e os comandos na tela precisam de conferência.
+- Na v0.69.0 não foi verificado no navegador (extensão desconectada); conferido na v0.69.1 (ver acima).
 
 ## Nado ainda mais rápido (v0.68.5)
 
@@ -522,10 +538,10 @@ Limitação: é uma síntese aproximada, não uma gravação. Validar o timbre d
 | 5. Manete | de cruzeiro para N: empuxo 0 e < 1 km/h em 27 s; a hélice gira **solta** (~990 rpm 1,5 s depois do N) e para junto com a lancha. F em lenta: 5,0 km/h a 750 rpm. R em lenta: 2,8 km/h para trás. No navegador: 1 toque W = F a 4 km/h; segurar = 45 km/h; 1 toque S = N; 2º toque = R lenta; segurar S = ré acelerando |
 | 6. Ondas e correnteza | ondas fortes (×2,5): roll ≤ 30°, não emborca; deriva com correnteza de 1,6 m/s: 1,54 m/s |
 | Lago | flutua no spawn; a toda contra a margem, encalha e para sem atravessar o terreno |
-| Lancha pantaneira AR-P (v0.69) | lenta empurrando 4,5 km/h, sempre em F, borda 0,38 m; a toda 88,4 km/h a 2434 rpm, 0→40 4,4 s; sem cavitação/ventilação; pedindo R segue a 89 km/h para a frente; curva a toda derrapando 3,6 m/s, 11,1°/s, roll 3,2°, não vira; motor desligado com os lemes todos: 0,0°; partida sem N; 50 % + lemes quase parado: 20,2°/s; refrigerado a ar; barranco de lama/capim: 12,6 s no seco, avaria 2 %, 30 km/h; carretinha da caminhonete |
+| Lancha pantaneira AR-P (v0.69–0.69.1) | largada a 60 % pega em 2,2 s; lenta empurrando 4,5 km/h, sempre em F, borda 0,38 m; a toda 88,4 km/h a 2434 rpm, 0→40 4,4 s; sem cavitação/ventilação; pedindo R segue a 89 km/h para a frente; curva a toda derrapando 3,6 m/s, 11,1°/s, roll 3,2°, não vira; motor desligado com os lemes todos: 0,0°; partida sem N; 50 % + lemes quase parado: 20,2°/s; refrigerado a ar; barranco de lama/capim: 12,6 s no seco, avaria 2 %, 30 km/h; carretinha da caminhonete |
 | Moto aquática AR-J (v0.67–0.67.1) | compressor 1,04 bar a toda, 0,007 bar na lenta; luz do iBB: apagada em F, FREIO freando a toda, RÉ parada em R, NEUTRO em N; navegador: S segurado a 107 km/h → FREIO, 53 km/h em 1,5 s; soltar → F; toque → N; parada: CG −0,03 m da água, borda 0,25 m; a toda 108,3 km/h a 7880 rpm, 0→60 2,7 s, 0→100 7,1 s, 72 L/h; curva a toda 29,2°/s sem virar; iBB de 102 km/h a < 5 km/h em 4,2 s e depois ré; N com o guidão todo: 0,2° em 6 s; lenta + guidão 10,6°/s; N acelerado: empuxo 0, rotor a 7478 rpm; no ar: empuxo 0, giro 7951 rpm; ECO 55 % / 89,9 km/h; lotada 101,5 km/h; cordão solto não liga, puxado desliga; START pega em 1,5 s (60 %); central dorme em 30 s; casco selado 40 s lotada em ondas fortes: 0,0 L; sifão 6,1 L em 30 s (= contrato); virada: desvira em 4,5 s, piloto a bordo com o cordão, liga de novo; carretinha 3,9 m no carro |
 
-Resultado: **655/657 OK + 2 KNOWN** (v0.69.0). Na v0.10, o peso do piloto na posição real (boreste, acima do CG) aumentou o roll em curva com ondas fortes; o `bankCoef` foi para 1800 e o `rollDamping` para 15000, com 1 limitação conhecida (abaixo). Na v0.2 a hélice foi para 0,5 m atrás do espelho, como no modelo visual, e o esterço máximo em alta velocidade caiu de 13° para 11°.
+Resultado: **656/658 OK + 2 KNOWN** (v0.69.1). Na v0.10, o peso do piloto na posição real (boreste, acima do CG) aumentou o roll em curva com ondas fortes; o `bankCoef` foi para 1800 e o `rollDamping` para 15000, com 1 limitação conhecida (abaixo). Na v0.2 a hélice foi para 0,5 m atrás do espelho, como no modelo visual, e o esterço máximo em alta velocidade caiu de 13° para 11°.
 
 ### Navegador (Chrome, Windows 11, WebGL2, `q=med`, ~1370×896)
 
