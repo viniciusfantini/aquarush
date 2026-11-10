@@ -1,6 +1,7 @@
-// Parâmetros físicos documentados das 5 embarcações da POC: lancha AR-6 (SPEEDBOAT), bote AR-3 (DINGHY),
-// lancha rápida AR-9 (RAPIDA, dois V8), lancha de turbina AR-10 (TURBINA; a turbina em turbine.ts) e a moto
-// aquática AR-J (JETSKI, 300 hp com jato d'água).
+// Parâmetros físicos documentados das 6 embarcações da POC: lancha AR-6 (SPEEDBOAT), bote AR-3 (DINGHY),
+// lancha rápida AR-9 (RAPIDA, dois V8), lancha de turbina AR-10 (TURBINA; a turbina em turbine.ts), a moto
+// aquática AR-J (JETSKI, 300 hp com jato d'água) e a lancha pantaneira AR-P (AIRBOAT, motor de avião com hélice
+// pusher no ar).
 // Estes valores são o "contrato" entre as POCs (Babylon, Unity, Unreal):
 // a mesma massa, dimensões, potência e coeficientes devem ser usados nas três.
 
@@ -24,14 +25,14 @@ export interface BuoyancyPoint {
   incidence: number;
 }
 
-export type VesselKind = "lancha" | "bote" | "rapida" | "turbina" | "jetski";
+export type VesselKind = "lancha" | "bote" | "rapida" | "turbina" | "jetski" | "airboat";
 
 export interface SpeedboatParams {
   kind: VesselKind;
   name: string;
   /** "remote" = volante + manete no console; "tiller" = cana do leme no próprio motor (bote); "handlebar" = guidão
    *  da moto aquática (o guidão gira o bocal do jato) */
-  steering: "remote" | "tiller" | "handlebar";
+  steering: "remote" | "tiller" | "handlebar" | "stick";
   /** "power" = power trim elétrico (bomba); "manual" = pino de trim em furos + tilt à mão */
   trimMode: "power" | "manual";
   /** ângulos do pino de trim manual (rad), do mais baixo ao mais alto */
@@ -183,6 +184,17 @@ export interface SpeedboatParams {
   startStop?: boolean;
   /** modo ECO: fração máxima do acelerador (o gatilho pleno só abre até aqui). Ausente = sem modos */
   ecoThrottle?: number;
+  /**
+   * HÉLICE NO AR (airboat / lancha pantaneira): hélice pusher de avião numa gaiola atrás do motor, bem acima da
+   * água. O empuxo não depende de imersão (funciona até no seco — em lama, capim ou banco de areia), sai sempre para
+   * a frente (a hélice não gira) e é aplicado na altura do eixo (`propPos`, alto: puxa a proa para baixo). Não há
+   * embreagem nem ré: o motor ligado sempre empurra (na lenta, devagar). A direção são os LEMES DE AR atrás da hélice
+   * (`steer`): desviam o vento da hélice (`rudderWash` × empuxo) e o vento relativo (`rudderCdA`); sem acelerar, quase
+   * não vira. O motor é refrigerado a ar (não depende de tomada d'água).
+   */
+  airProp?: { rudderWash: number; rudderCdA: number; rudderPos: Vec3 };
+  /** atrito do fundo do casco no chão (padrão 0,45). Airboat: fundo de alumínio com polímero desliza em lama/capim */
+  groundMu?: number;
   /** compressor mecânico (supercharger), acionado pelo virabrequim: pressão máxima de sobrealimentação (bar) a giro
    *  máximo e acelerador todo; a pressão cresce ~com o quadrado do giro e abre a válvula de alívio sem carga */
   supercharger?: { maxBar: number };
@@ -781,7 +793,114 @@ export const JETSKI: SpeedboatParams = {
   windage: { sideCdA: 1.4, center: v3(0, 0.55, 0) },
 };
 
+// ---------------------------------------------------------------------------------------------
+// Lancha pantaneira AR-P (airboat, 4,9 m, até 3 pessoas) — casco chato de alumínio (fundo com polímero que desliza
+// em lama, capim e banco de areia), motor de avião de 6 cilindros opostos refrigerado a ar (~260 hp) ligado direto a
+// uma hélice pusher de 2 pás (~1,9 m) dentro de uma gaiola, e 3 lemes de ar atrás dela comandados por um bastão
+// (stick) à esquerda do piloto. Acelerador de PÉ. Sem embreagem, sem ré, sem leme na água. O piloto vai num banco
+// alto (para ver por cima do capim), os 2 passageiros num banco na frente. Origem = CG do barco seco. X boreste,
+// Y cima, Z proa. Valores de referência de airboats de 15–16 pés com motor de avião de 6 cilindros.
+// ---------------------------------------------------------------------------------------------
+const al = 0.95; // meia-distância transversal dos pontos de flutuação (fundo chato e largo)
+
+export const AIRBOAT: SpeedboatParams = {
+  kind: "airboat",
+  name: "Lancha pantaneira AR-P",
+  steering: "stick",
+  trimMode: "power",
+  trimPins: [],
+  electricStart: true,
+  airProp: { rudderWash: 0.55, rudderCdA: 1.6, rudderPos: v3(0, 1.3, -2.35) },
+  groundMu: 0.38,
+  tankLiters: 80,
+  fuelIdleLph: 8,
+  fuelMaxLph: 70,
+  cylinders: 6,
+  maxPeople: 3,
+  length: 4.9,
+  beam: 2.4,
+  mass: 650,
+  fuelTankPos: v3(0, -0.15, -0.9),
+  fuelDensity: 0.72, // gasolina de aviação
+  seats: {
+    helm: v3(0, 1.45, -0.55),          // piloto no banco alto, no centro (vê por cima do capim)
+    passenger: v3(-0.42, 0.42, 0.75),  // banco da frente, bombordo
+    rearLeft: v3(0.42, 0.42, 0.75),    // banco da frente, boreste
+    rearRight: v3(0.42, 0.42, 0.75),   // (não usado: lotação máxima 3)
+  },
+  inertia: v3(1400, 1650, 420),
+  waterplaneArea: 10.0,
+  pointMaxDepth: 0.5,
+  wetDepth: 0.05,
+  buoyancyPoints: [
+    { p: v3(-al * 0.85, -0.33, 1.7), areaWeight: 0.7, liftWeight: 0.9, incidence: 8 * DEG },
+    { p: v3(al * 0.85, -0.33, 1.7), areaWeight: 0.7, liftWeight: 0.9, incidence: 8 * DEG },
+    { p: v3(-al, -0.33, 0.05), areaWeight: 1.1, liftWeight: 1.0, incidence: 2 * DEG },
+    { p: v3(al, -0.33, 0.05), areaWeight: 1.1, liftWeight: 1.0, incidence: 2 * DEG },
+    { p: v3(-al, -0.33, -1.7), areaWeight: 1.2, liftWeight: 0.5, incidence: 1 * DEG },
+    { p: v3(al, -0.33, -1.7), areaWeight: 1.2, liftWeight: 0.5, incidence: 1 * DEG },
+  ],
+  contactPoints: [
+    v3(0, 0.05, 2.45), v3(-0.9, -0.2, 2.0), v3(0.9, -0.2, 2.0),
+    v3(-1.1, -0.36, 1.0), v3(1.1, -0.36, 1.0), v3(-1.15, -0.36, -1.0), v3(1.15, -0.36, -1.0),
+    v3(-1.1, -0.36, -2.4), v3(1.1, -0.36, -2.4), v3(0, -0.36, 0),
+    v3(-1.15, 0.15, 0.5), v3(1.15, 0.15, 0.5), v3(-1.15, 0.15, -2.0), v3(1.15, 0.15, -2.0),
+    v3(0, 2.45, -2.05), v3(-1.0, 1.45, -2.05), v3(1.0, 1.45, -2.05), v3(0, 1.9, -0.55), // gaiola e banco alto (virado)
+  ],
+  bunkPoints: [-2.0, -0.7, 0.6, 1.6].flatMap((z) => [v3(0, -0.36, z), v3(-0.6, -0.36, z), v3(0.6, -0.36, z)]),
+  gunwaleY: 0.15,
+  // casco aberto de alumínio, sem bomba de porão; a água que entra fica no fundo (o casco chato tem flutuadores de espuma)
+  bilge: { pos: v3(0, -0.28, -0.3), maxL: 3000, pumpLph: 0, pumpA: 0, outlet: v3(1.15, 0.05, -1.8), areaM2: 9.0, holeMaxM2: 0.003, bowRise: 0.2, transomY: 0.15, transomW: 0.01,
+    sumpL: 60, floorY: -0.28, floodCenter: v3(0, 0, 0), floodLen: 4.2, floodHalfW: 1.05, scupperM2: 0, scupperFromStern: 0.3, shutoffHeadM: 2, outletAreaM2: 3.8e-4, capsizeAirFrac: 0.45, ventM2: 1e-5 },
+  // âncora pequena (~4 kg) com 25 m de cabo, à mão
+  anchor: { roller: v3(0, 0.2, 2.4), rodeMax: 25, rateOut: 0.7, rateIn: 0.35, motorA: 0, holdN: 1500 },
+
+  enginePowerHp: 260,
+  maxThrust: 3300,             // empuxo estático da hélice de 2 pás (~1,9 m) a ~2700 rpm
+  reverseThrustFactor: 0,      // não há ré
+  propPitchSpeed: 58,          // a hélice de avião descarrega pouco com a velocidade
+  propPos: v3(0, 1.45, -1.95), // eixo da hélice: ALTO (puxa a proa para baixo ao acelerar)
+  propRadius: 0.95,
+  propGear: 1,                 // hélice direto no virabrequim
+  revLimitRpm: 2800,
+  engineResponse: 0.45,        // volante de motor de avião + hélice grande: sobe devagar
+  idleRpm: 800,
+  maxRpm: 2700,
+  shiftTime: 0,
+  idleThrustFraction: 0.1,     // na lenta a hélice já empurra (não há embreagem)
+
+  maxSteerLow: 30 * DEG,       // lemes de ar
+  maxSteerHigh: 22 * DEG,
+  steerRate: 3.0,
+  gearcaseRudder: 0,           // nada na água
+
+  trimUp: 0, trimDown: 0, tiltMax: 0, tiltRate: 0, tiltMaxThrust: 1e9, tiltMaxSpeed: 1e9, tiltMaxRpm: 1e9, trimRate: 0, // sem trim/tilt
+  drivePivot: v3(0, 1.3, -2.35),
+  intakePos: v3(0, -0.3, -1.5), // (sem tomada d'água: refrigerado a ar)
+  driveLiftArea: 0,
+
+  planingLiftCoef: 0.75,       // fundo chato: planeia cedo
+  maxAoa: 12 * DEG,
+  dragFrictionQuad: 5,
+  dragLinear: 30,
+  lateralQuad: 520,            // fundo chato: derrapa nas curvas (característica do airboat)
+  lateralLinear: 420,
+  keelLift: 320,
+  yawDamping: 3200,
+  yawDampingLowSpeed: 0.25,
+  heaveDamping: 900,
+  waveDragPeakRatio: 0.1,
+  sternTrough: 0.12,
+  bowWave: 0.06,
+  bankCoef: 250,               // casco chato: quase não deita para dentro da curva
+  rollDamping: 3000,
+  airDragCdA: 2.6,             // gaiola + hélice + motor + piloto alto
+  // bateria 12 V 35 Ah, arranque ~150 A, alternador de motor de avião 60 A
+  systems: { batteryAh: 35, starterA: 150, altMaxA: 60, altIdleFrac: 0.3, lineL: 0.15 },
+  windage: { sideCdA: 3.8, center: v3(0, 1.1, -0.9) }, // a gaiola e os lemes pegam muito vento
+};
+
 /** embarcação pequena (bote, moto aquática): carretinha leve puxada por um carro comum (as outras: caminhonete) */
 export const smallTow = (k: VesselKind): boolean => k === "bote" || k === "jetski";
 
-export const VESSELS: Record<VesselKind, SpeedboatParams> = { lancha: SPEEDBOAT, bote: DINGHY, rapida: RAPIDA, turbina: TURBINA, jetski: JETSKI };
+export const VESSELS: Record<VesselKind, SpeedboatParams> = { lancha: SPEEDBOAT, bote: DINGHY, rapida: RAPIDA, turbina: TURBINA, jetski: JETSKI, airboat: AIRBOAT };

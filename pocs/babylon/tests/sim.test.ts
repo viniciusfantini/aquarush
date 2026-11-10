@@ -8,7 +8,7 @@ import { Speedboat } from "../src/sim/boat.ts";
 import { JUMP_AH } from "../src/sim/engineSystems.ts";
 import { Wind, WIND_LEVELS } from "../src/sim/wind.ts";
 import { jetStreakLocal } from "../src/sim/bilgeJet.ts";
-import { SPEEDBOAT, DINGHY, RAPIDA, TURBINA, JETSKI, PERSON_KG, smallTow, type Occupant } from "../src/sim/params.ts";
+import { SPEEDBOAT, DINGHY, RAPIDA, TURBINA, JETSKI, AIRBOAT, PERSON_KG, smallTow, type Occupant } from "../src/sim/params.ts";
 import { Turbine } from "../src/sim/turbine.ts";
 import { GerstnerWater, WAVE_PRESETS, type CurrentZone } from "../src/sim/water.ts";
 import type { PhysicsWorld } from "../src/sim/world.ts";
@@ -1276,6 +1276,58 @@ for (const [label, thr] of [["baixa", 0.25], ["alta", 1]] as const) {
   // carretinha leve no carro
   const tr = buildTrailer(JETSKI);
   check("moto aquática", "carretinha leve, puxada pelo carro (comprimento, m)", smallTow("jetski") ? tr.length : -1, 3.6, 4.2, "m", 2);
+}
+
+// ---------- Lancha pantaneira AR-P (airboat): hélice pusher no ar, lemes de ar, sem embreagem nem ré, fundo chato ----------
+{
+  const water = mkWater(0.35);
+  const mk = (pax = 1) => {
+    const b = new Speedboat(AIRBOAT, v3(0, 0.1, 0)); b.systems.fuelL = 60;
+    b.occupants = [{ seat: "helm", mass: PERSON_KG }, ...(pax > 1 ? [{ seat: "passenger" as const, mass: PERSON_KG }] : []), ...(pax > 2 ? [{ seat: "rearLeft" as const, mass: PERSON_KG }] : [])];
+    run(b, water, 4, { ...emptyInput(), gear: "N" }); return b;
+  };
+  const a = mk();
+  check("airboat", "lenta: a hélice já empurra (sem embreagem) (km/h)", a.telemetry.speedKmh, 2, 9, "km/h", 1);
+  check("airboat", "sem câmbio: a marcha fica em F mesmo pedindo N", a.telemetry.gear === "F" ? 1 : 0, 1, 1, "", 0);
+  check("airboat", "parado: borda livre do casco chato (m)", a.telemetry.freeboard, 0.25, 0.5, "m", 2);
+  let t40 = -1;
+  run(a, water, 40, { ...emptyInput(), gear: "F", throttle: 1 }, openWater, (t) => { if (t40 < 0 && a.telemetry.speedKmh >= 40) t40 = t; });
+  check("airboat", "velocidade final a toda (km/h)", a.telemetry.speedKmh, 75, 100, "km/h", 1);
+  check("airboat", "0→40 km/h (s)", t40, 2.5, 8, "s", 1);
+  check("airboat", "rotação a toda (motor de avião, rpm)", a.telemetry.rpm, 2200, 2800, "rpm", 0);
+  check("airboat", "hélice no ar: sem cavitação nem ventilação", a.telemetry.cavitation < 0.01 && a.telemetry.ventilation > 0.99 ? 1 : 0, 1, 1, "", 0);
+  // pedir ré não faz nada: segue para a frente
+  run(a, water, 3, { ...emptyInput(), gear: "R", throttle: 1 }, openWater);
+  check("airboat", "não tem ré: pedindo R segue para a frente (km/h)", (a.vel.x * a.forward.x + a.vel.z * a.forward.z) * 3.6, 30, 110, "km/h", 0);
+  run(a, water, 6, { ...emptyInput(), gear: "F", throttle: 1, steering: 1 }, openWater);
+  const vLat = Math.abs(a.vel.x * a.right.x + a.vel.z * a.right.z);
+  check("airboat", "curva a toda: derrapa de lado (fundo chato, m/s)", vLat, 1.5, 8, "m/s", 1);
+  check("airboat", "curva a toda: guinada (°/s)", Math.abs(a.angVel.y) * 57.3, 6, 40, "°/s", 1);
+  check("airboat", "curva a toda: casco chato quase não deita (roll, °)", Math.abs(a.telemetry.rollDeg), 0, 12, "°", 1);
+  check("airboat", "curva a toda: não vira", a.capsized ? 1 : 0, 0, 0, "", 0);
+  // lemes de ar: sem empuxo não viram o barco; com acelerador, viram quase parado
+  const n = mk(); n.engine = "off"; run(n, water, 8, { ...emptyInput() });
+  const y0 = Math.atan2(n.forward.x, n.forward.z);
+  run(n, water, 6, { ...emptyInput(), steering: 1 });
+  check("airboat", "motor desligado, lemes todos: não vira (°)", Math.abs(Math.atan2(n.forward.x, n.forward.z) - y0) * 57.3, 0, 3, "°", 1);
+  check("airboat", "partida sem neutro (hélice ligada direto)", n.toggleIgnition() === "starting" ? 1 : 0, 1, 1, "", 0);
+  run(n, water, 4, { ...emptyInput() });
+  run(n, water, 4, { ...emptyInput(), throttle: 0.5, steering: 1 });
+  check("airboat", "acelerador a 50 % + lemes, quase parado: gira (°/s)", Math.abs(n.angVel.y) * 57.3, 8, 60, "°/s", 1);
+  // motor refrigerado a ar: não depende de tomada d'água
+  check("airboat", "refrigerado a ar: 'tomada d'água' sempre ok", n.telemetry.intakeSubmerged ? 1 : 0, 1, 1, "", 0);
+  // fundo chato que desliza: sobe num barranco de lama/capim embalado, sem avaria séria; no seco plano anda pouco
+  const bankWorld: PhysicsWorld = { groundHeight: (_x: number, z: number) => (z < 40 ? -3 : Math.min(0.5, -3 + (z - 40) * 0.12)), spheres: [], boxes: [] };
+  const calm = mkWater(0);
+  const l = new Speedboat(AIRBOAT, v3(0, 0.1, 0)); l.systems.fuelL = 60; l.occupants = [{ seat: "helm", mass: PERSON_KG }];
+  run(l, calm, 3, { ...emptyInput() }, bankWorld);
+  let onLand = 0;
+  run(l, calm, 20, { ...emptyInput(), throttle: 1 }, bankWorld, () => { if (l.pos.z > 70) onLand += 1 / 120; });
+  check("airboat", "sobe no barranco de lama/capim embalado (s no seco)", onLand, 3, 20, "s", 1);
+  check("airboat", "no seco: avaria do casco pequena (%)", l.hullDamage * 100, 0, 10, "%", 0);
+  check("airboat", "no seco a toda: bem mais devagar que na água (km/h)", l.telemetry.speedKmh, 0, 45, "km/h", 0);
+  // carretinha da caminhonete
+  check("airboat", "vai na carretinha grande da caminhonete", smallTow("airboat") ? 0 : 1, 1, 1, "", 0);
 }
 
 // ---------- Painel de sistemas (Y): registro de combustível, bomba de porão, afogador, chave de baterias ----------

@@ -1,7 +1,7 @@
 # AQUA RUSH — Sistemas elétricos e de motores (referência para qualquer IA ou dev)
 
 Este documento descreve **toda a lógica** dos sistemas elétricos, de combustível, de arrefecimento, de partida e
-dos motores das 5 embarcações da POC 1 (Babylon.js, `pocs/babylon`), como estão no código na **v0.67.0**. Serve
+dos motores das 6 embarcações da POC 1 (Babylon.js, `pocs/babylon`), como estão no código na **v0.67.0**. Serve
 para continuar o trabalho em outra IA/ferramenta ou portar para Unity/Unreal sem precisar redescobrir as regras.
 
 > Fonte da verdade = o código. Se divergir, vale o código e este arquivo deve ser corrigido.
@@ -32,7 +32,7 @@ para continuar o trabalho em outra IA/ferramenta ou portar para Unity/Unreal sem
 
 ---
 
-## 2. As 5 embarcações (o que muda nos sistemas)
+## 2. As 6 embarcações (o que muda nos sistemas)
 
 | | AR-6 lancha (`lancha`) | AR-3 bote (`bote`) | AR-J moto aquática (`jetski`) | AR-9 rápida (`rapida`) | AR-10 turbina (`turbina`) |
 |---|---|---|---|---|---|
@@ -48,7 +48,7 @@ para continuar o trabalho em outra IA/ferramenta ou portar para Unity/Unreal sem
 | Temperatura | água (termostato 58 °C) | água | água (pressão do jato) | água por motor | **óleo da turbina** (sem corte automático) |
 
 Largada (todos): atracada na vaga do píer, motor desligado (turbina fria), chaves em OFF, bateria 60 %, combustível
-temporário (`START_FUEL` em `main.ts`: 5 L lancha/bote, 8 L AR-J, 20 L AR-9, 120 L AR-10). O bote sai com o motor frio (24 °C).
+temporário (`START_FUEL` em `main.ts`: 5 L lancha/bote, 10 L AR-P, 8 L AR-J, 20 L AR-9, 120 L AR-10). O bote sai com o motor frio (24 °C).
 
 ---
 
@@ -360,6 +360,17 @@ girando → `"busy"`.
   barco (segura o cabo de mão); longe, a pessoa fica parada na água e avança só o que nada.
 - **Volta a bordo** sozinha (`occupants`, contador `reboarded`) a ~0,45 m do lugar, depois de 2,5 s na água, com o
   barco **de pé, não afundado e a até 3 km/h**. Barco virado ou afundado: ninguém volta (R recomeça).
+
+## 10d. Lancha pantaneira AR-P (airboat, v0.69)
+
+- **Motor de avião** de 6 cilindros opostos, ~260 hp, **refrigerado a ar** (a "tomada d'água" é sempre considerada ok:
+  não esquenta fora d'água), 800–2700 rpm, ligado direto à hélice (`propGear` 1, **sem embreagem**).
+- **Elétrica 12 V** como a da AR-6: chave de ignição (OFF · ON com autoteste · START), chave geral de 1 banco, registro
+  de combustível. Bateria 35 Ah, arranque ~150 A, alternador de 60 A (30 % já na lenta). Sem bomba de porão, sem luzes,
+  sem trim.
+- **Partida sem neutro**: não há câmbio — a hélice gira assim que o motor pega (a lenta já empurra a ~4,5 km/h).
+  `toggleIgnition`/`setKey` não exigem N quando `params.airProp`.
+- Gasolina de aviação (0,72 kg/L), tanque de 80 L, 8 L/h na lenta, 70 L/h a pleno.
 
 ## 10c. Moto aquática AR-J: START/STOP, cordão, jato, ECO e desvirar (v0.67)
 

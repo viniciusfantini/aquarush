@@ -260,6 +260,10 @@
     .pl-t { position: absolute; left: -26px; top: 4px; width: 52px; height: 16px; border-radius: 6px; background: linear-gradient(180deg, #f2f4f6, #9aa3ab 55%, #5a6168);
       box-shadow: 0 3px 5px rgba(0,0,0,0.6); }
     .pl-t::after { content: ""; position: absolute; left: 50%; top: 4px; width: 30px; height: 4px; margin-left: -15px; border-radius: 2px; background: rgba(0,0,0,0.35); }
+    /* acelerador de pé do airboat (pedal de alumínio estriado) */
+    .pl-pedal .pl-track { width: 96px; height: 116px; }
+    .pl-pedal .pl-t { left: -22px; width: 44px; height: 20px; border-radius: 4px; background: linear-gradient(180deg, #e3e7ea, #9aa3ab 55%, #5d656c); box-shadow: 0 3px 5px rgba(0,0,0,0.6); }
+    .pl-pedal .pl-t::after { width: 30px; margin-left: -15px; background: repeating-linear-gradient(90deg, rgba(0,0,0,0.35) 0 2px, transparent 2px 5px); }
     /* gatilho do acelerador da moto aquática (borracha preta, curvo) */
     .pl-trig .pl-track { width: 96px; height: 116px; }
     .pl-trig .pl-t { left: -20px; width: 40px; height: 18px; border-radius: 4px 12px 12px 4px; background: linear-gradient(180deg, #3a3f45, #15181b 60%, #08090a); box-shadow: 0 3px 5px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.15); }
@@ -637,6 +641,7 @@
       <div class="pick-row">
         <button class="pick-b" data-kind="bote"><b>Bote de apoio AR-3</b><span>3,1 m · 15 hp · até 3 pessoas · tanque 10 L (começa com 5 L)</span><span>cana do leme no motor, partida na corda, trim manual (3 furos + tilt), lanterna de mão</span></button>
         <button class="pick-b" data-kind="lancha"><b>Lancha AR-6</b><span>6 m · 150 hp · até 4 pessoas · tanque 120 L (começa com 5 L)</span><span>volante, manete, power trim elétrico, partida na chave, luzes de navegação</span></button>
+        <button class="pick-b" data-kind="airboat"><b>Lancha pantaneira AR-P</b><span>4,9 m · airboat com motor de avião de 260 hp · até 3 pessoas · tanque 80 L (começa com 10 L)</span><span>hélice pusher no ar numa gaiola, lemes de ar no bastão, acelerador de pé, sem embreagem nem ré, fundo chato que derrapa nas curvas e passa por cima de lama e capim; banco alto do piloto</span></button>
         <button class="pick-b" data-kind="jetski"><b>Moto aquática AR-J</b><span>3,45 m · 300 hp com compressor · até 3 pessoas montadas · tanque 70 L (começa com 8 L)</span><span>jato d'água (sem hélice): guidão gira o bocal, gatilho, freio/ré iBB, trim VTS, START/STOP com cordão de segurança, modo ECO; virou, o piloto desvira</span></button>
         <button class="pick-b" data-kind="rapida"><b>Lancha rápida AR-9</b><span>8,6 m · 2 × V8 300 hp · 2 pessoas · tanque 380 L (começa com 20 L)</span><span>dois motores de centro com rabeta, um conta-giros por motor, empuxo diferencial (Z/X) para girar no lugar</span></button>
         <button class="pick-b" data-kind="turbina"><b>Lancha de turbina AR-10</b><span>10 m · turbina a gás de 1100 shp · piloto único no habitáculo fechado · 900 L (começa com 120 L)</span><span>hélice de superfície, partida de turbina (arranque → ignição → acende), N1, N2, EGT, torque e óleo no painel, 24 V e GPU na doca</span></button>

@@ -96,6 +96,37 @@ A lancha é um **corpo rígido 6DOF** (massa seca de 1030 kg + gasolina, ocupant
 
 > Referência completa da lógica elétrica e dos motores: [`docs/SISTEMAS_ELETRICOS_E_MOTORES.md`](../../docs/SISTEMAS_ELETRICOS_E_MOTORES.md).
 
+## Lancha pantaneira AR-P — airboat (v0.69)
+
+- **Sexta embarcação** (`AIRBOAT` em `sim/params.ts`, `?barco=airboat`, no menu entre a AR-6 e a AR-J pela potência):
+  casco chato de alumínio de 4,9 × 2,4 m, seca 650 kg, até 3 pessoas (piloto num **banco alto** no centro, 2
+  passageiros no banco da frente), motor de avião de 6 cilindros opostos (~260 hp, **refrigerado a ar**, 800–2700 rpm)
+  ligado direto a uma **hélice pusher de 2 pás (~1,9 m)** numa gaiola, e **3 lemes de ar** comandados por um bastão.
+  Tanque de 80 L de gasolina de aviação (começa com 10 L, temporário).
+- **Física `params.airProp`** (`boat.ts`): o empuxo da hélice no ar não depende de imersão (sem cavitação nem
+  ventilação, funciona até no seco), sai **sempre para a frente** e é aplicado na altura do eixo (alto: a proa baixa
+  ao acelerar). Os **lemes de ar** desviam o vento da hélice (`rudderWash` = 55 % do empuxo) mais o vento relativo
+  (`rudderCdA`): sem acelerar quase não viram. **Sem embreagem nem ré**: a "marcha" fica sempre em F, a lenta já
+  empurra (~4,5 km/h) e a partida não exige N. A tomada d'água não importa (refrigerado a ar).
+- **Fundo chato**: pouca aderência lateral (derrapa nas curvas, ~3,6 m/s de lado a toda) e quase não deita; atrito do
+  fundo no chão `groundMu` 0,38 (padrão 0,45): embalado, **passa por cima de barrancos de lama e capim** (12,6 s no
+  seco no teste, avaria 2 %); no seco plano a toda anda ~30 km/h e para nas subidas.
+- **Comandos**: W segurado = acelerador de pé (`InputManager.fixedForward`: sem F/N/R; S não faz nada); A/D = lemes.
+  No Y: manete `pedal` (`levers.ts`), chave de ignição, bateria, registro e buzina; sem trim, sem bomba de porão, sem
+  luzes (uso diurno).
+- **Visual** (`presentation/airboatMesh.ts`): casco verde/camuflado com fundo de alumínio e proa em rampa, banco dos
+  passageiros, banco alto com apoio de pés, bastão dos lemes e pedal animados, motor boxer de 6 cilindros com
+  aletas, escapes e filtro, redução por correia até a hélice de madeira com pontas amarelas e disco de borrão, gaiola
+  com anéis, longarinas e grade, 3 lemes que giram com a direção real.
+- **Som**: o 6 cilindros procedural + o bater grave das pás (rpm/30 Hz) e o vento da hélice (`audio.airProp`).
+- **Carretinha** grande na caminhonete (`smallTow` = não). O piloto automático de teste só encaixa com ~70 % de
+  acelerador (hélice no ar empurra menos e o fundo chato arrasta na rampa). Pátio do posto com **6 vagas** de 3,6 m
+  (5 conjuntos estacionados, a vaga 1 livre).
+- **Calibração** (`node tests/debug-airboat.ts`): 88 km/h a toda (2434 rpm), 0→40 em 4,4 s, 70 L/h; lotada 83 km/h;
+  curva a toda 11–16°/s derrapando, roll ≤ 3°; motor desligado não vira; a 50 % + lemes gira 20°/s quase parado.
+- **Não verificado no navegador nesta versão** (a extensão do Chrome estava desconectada): typecheck, `test:sim` e
+  build passaram; a aparência e os comandos na tela precisam de conferência.
+
 ## Nado ainda mais rápido (v0.68.5)
 
 - `Speedboat.SWIM_MS` = **1,1 m/s** (era 0,8) e a aproximação do lugar junto do casco a 1,0 × a distância. Medido:
@@ -491,9 +522,10 @@ Limitação: é uma síntese aproximada, não uma gravação. Validar o timbre d
 | 5. Manete | de cruzeiro para N: empuxo 0 e < 1 km/h em 27 s; a hélice gira **solta** (~990 rpm 1,5 s depois do N) e para junto com a lancha. F em lenta: 5,0 km/h a 750 rpm. R em lenta: 2,8 km/h para trás. No navegador: 1 toque W = F a 4 km/h; segurar = 45 km/h; 1 toque S = N; 2º toque = R lenta; segurar S = ré acelerando |
 | 6. Ondas e correnteza | ondas fortes (×2,5): roll ≤ 30°, não emborca; deriva com correnteza de 1,6 m/s: 1,54 m/s |
 | Lago | flutua no spawn; a toda contra a margem, encalha e para sem atravessar o terreno |
+| Lancha pantaneira AR-P (v0.69) | lenta empurrando 4,5 km/h, sempre em F, borda 0,38 m; a toda 88,4 km/h a 2434 rpm, 0→40 4,4 s; sem cavitação/ventilação; pedindo R segue a 89 km/h para a frente; curva a toda derrapando 3,6 m/s, 11,1°/s, roll 3,2°, não vira; motor desligado com os lemes todos: 0,0°; partida sem N; 50 % + lemes quase parado: 20,2°/s; refrigerado a ar; barranco de lama/capim: 12,6 s no seco, avaria 2 %, 30 km/h; carretinha da caminhonete |
 | Moto aquática AR-J (v0.67–0.67.1) | compressor 1,04 bar a toda, 0,007 bar na lenta; luz do iBB: apagada em F, FREIO freando a toda, RÉ parada em R, NEUTRO em N; navegador: S segurado a 107 km/h → FREIO, 53 km/h em 1,5 s; soltar → F; toque → N; parada: CG −0,03 m da água, borda 0,25 m; a toda 108,3 km/h a 7880 rpm, 0→60 2,7 s, 0→100 7,1 s, 72 L/h; curva a toda 29,2°/s sem virar; iBB de 102 km/h a < 5 km/h em 4,2 s e depois ré; N com o guidão todo: 0,2° em 6 s; lenta + guidão 10,6°/s; N acelerado: empuxo 0, rotor a 7478 rpm; no ar: empuxo 0, giro 7951 rpm; ECO 55 % / 89,9 km/h; lotada 101,5 km/h; cordão solto não liga, puxado desliga; START pega em 1,5 s (60 %); central dorme em 30 s; casco selado 40 s lotada em ondas fortes: 0,0 L; sifão 6,1 L em 30 s (= contrato); virada: desvira em 4,5 s, piloto a bordo com o cordão, liga de novo; carretinha 3,9 m no carro |
 
-Resultado: **635/637 OK + 2 KNOWN** (v0.68.5). Na v0.10, o peso do piloto na posição real (boreste, acima do CG) aumentou o roll em curva com ondas fortes; o `bankCoef` foi para 1800 e o `rollDamping` para 15000, com 1 limitação conhecida (abaixo). Na v0.2 a hélice foi para 0,5 m atrás do espelho, como no modelo visual, e o esterço máximo em alta velocidade caiu de 13° para 11°.
+Resultado: **655/657 OK + 2 KNOWN** (v0.69.0). Na v0.10, o peso do piloto na posição real (boreste, acima do CG) aumentou o roll em curva com ondas fortes; o `bankCoef` foi para 1800 e o `rollDamping` para 15000, com 1 limitação conhecida (abaixo). Na v0.2 a hélice foi para 0,5 m atrás do espelho, como no modelo visual, e o esterço máximo em alta velocidade caiu de 13° para 11°.
 
 ### Navegador (Chrome, Windows 11, WebGL2, `q=med`, ~1370×896)
 

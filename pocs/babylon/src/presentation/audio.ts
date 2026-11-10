@@ -79,6 +79,8 @@ export interface AudioState {
   anchorRelay?: boolean;  // molinete sem força: só o relé
   /** motor com compressor mecânico (moto aquática de 300 hp): o assobio agudo do rotor, que sobe com o giro e a carga */
   supercharger?: boolean;
+  /** hélice de avião no ar (airboat): o "bater" grave das pás (2 pás: rpm/30 Hz) e o rugido do vento — domina o som */
+  airProp?: boolean;
   oilAlarm?: boolean;     // turbina: óleo quente — alarme de dois tons ("master caution") até alguém resolver
   /** 2º motor (AR-9, dois V8): rotação, carga e estado próprios — uma segunda voz de síntese */
   rpm2?: number;
@@ -129,6 +131,10 @@ export class EngineAudio {
   private scOsc: OscillatorNode | null = null;
   private scGain: GainNode | null = null;
   private scBP: BiquadFilterNode | null = null;
+  private apOsc: OscillatorNode | null = null;
+  private apGain: GainNode | null = null;
+  private apNoiseBP: BiquadFilterNode | null = null;
+  private apNoiseG: GainNode | null = null;
   private cavGain!: GainNode;
   private cavLfo!: OscillatorNode;
   private noise!: AudioBuffer;
@@ -358,6 +364,20 @@ export class EngineAudio {
     this.telltaleGain = ctx.createGain(); this.telltaleGain.gain.value = 0;
     noiseSrc().connect(ttBP).connect(this.telltaleGain).connect(this.master);
 
+    // ---- hélice de avião (airboat): passagem das pás (dente de serra grave, filtrado) + vento da hélice (ruído) ----
+    {
+      const o = ctx.createOscillator(); o.type = "sawtooth"; o.frequency.value = 40;
+      const lp = ctx.createBiquadFilter(); lp.type = "lowpass"; lp.frequency.value = 420; lp.Q.value = 0.8;
+      const g = ctx.createGain(); g.gain.value = 0;
+      o.connect(lp).connect(g).connect(this.master); o.start();
+      const nb = ctx.createBufferSource(); const buf = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate); const d = buf.getChannelData(0);
+      for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+      nb.buffer = buf; nb.loop = true;
+      const bp = ctx.createBiquadFilter(); bp.type = "bandpass"; bp.frequency.value = 500; bp.Q.value = 0.7;
+      const ng = ctx.createGain(); ng.gain.value = 0;
+      nb.connect(bp).connect(ng).connect(this.master); nb.start();
+      this.apOsc = o; this.apGain = g; this.apNoiseBP = bp; this.apNoiseG = ng;
+    }
     // ---- compressor mecânico (supercharger): assobio do rotor (~6× o giro do motor) ----
     {
       const o = ctx.createOscillator(); o.type = "triangle"; o.frequency.value = 900;
@@ -603,6 +623,16 @@ export class EngineAudio {
     this.telltaleGain.gain.setTargetAtTime(running && !st.turbine ? m * (0.004 + 0.009 * r) * (st.cockpit ? 0.5 : 1) : 0, t, 0.2);
     this.cavGain.gain.setTargetAtTime(m * Math.min(st.boil, 1) * 0.14 * (0.3 + load), t, 0.05);
     this.cavLfo.frequency.setTargetAtTime(20 + rpm / 120, t, 0.1);
+    // hélice de avião: as pás batem a rpm/30 Hz (2 pás); o vento da hélice cresce com o giro e a carga
+    if (this.apOsc && this.apGain && this.apNoiseBP && this.apNoiseG) {
+      const on = !!st.airProp && running;
+      const bpf = Math.max(10, st.rpm / 30);
+      const k = Math.min(1, Math.max(0, st.rpm - 500) / 2200);
+      this.apOsc.frequency.setTargetAtTime(bpf, t, 0.06);
+      this.apGain.gain.setTargetAtTime(on ? m * dist * (0.05 + 0.13 * k) * (0.6 + 0.4 * load) : 0, t, 0.08);
+      this.apNoiseBP.frequency.setTargetAtTime(300 + 900 * k, t, 0.1);
+      this.apNoiseG.gain.setTargetAtTime(on ? m * dist * (0.02 + 0.09 * k * k) : 0, t, 0.1);
+    }
     // assobio do compressor: frequência pelo giro, volume pela carga (quase some na lenta)
     if (this.scOsc && this.scGain && this.scBP) {
       const f = 380 + Math.max(0, st.rpm) * 0.56;

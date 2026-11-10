@@ -64,6 +64,8 @@ export class InputManager {
    * curto (< 0,25 s) deixa em N, como o toque na alavanca do iBB real. O main liga isto só na moto aquática.
    */
   ibbMode = false;
+  /** sem câmbio (airboat): a "marcha" fica sempre em F — W acelera, S não troca de marcha (não há neutro nem ré) */
+  fixedForward = false;
   /** freio do iBB segurado agora (o main/painel leem para a luz) */
   ibbBraking = false;
   private ibbT = 0;
@@ -125,6 +127,7 @@ export class InputManager {
     const downAmt = Math.max(this.k("KeyS", "ArrowDown") ? 1 : 0, gpDown);
     const up = upAmt > 0.3, down = downAmt > 0.3;
     // N segurado = botão de aceleração em neutro da manete: a manete fica em N e "para frente" só sobe o giro
+    if (this.fixedForward && this.gear !== "F") { this.gear = "F"; this.leverThrottle = 0; }
     const nHeld = this.k("KeyN");
     if (nHeld && this.gear !== "N") { this.touchLever = null; this.panelLevers = []; this.setGear("N"); }
     if (!nHeld && up && !this.prevUp) { this.ibbBraking = false; this.press("up"); }
@@ -191,6 +194,7 @@ export class InputManager {
   }
 
   private press(dir: "up" | "down"): void {
+    if (this.fixedForward) { this.touchLever = null; this.panelLevers = []; this.pressShifted = false; this.holdTime = 0; return; } // sem câmbio
     this.touchLever = null; this.panelLevers = []; // teclado/gamepad assumem a manete
     const next = GEAR_STEP[this.gear][dir];
     this.pressShifted = next !== this.gear;

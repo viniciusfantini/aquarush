@@ -582,7 +582,8 @@ export class Speedboat {
       const off = v3(this.u.offsetX, 0, 0); // rabeta deste motor (deslocada em X)
       const propW = this.toWorld(add(add(P.drivePivot, off), rotate(tiltRot, sub(P.propPos, P.drivePivot))));
       const intakeW = this.toWorld(add(add(P.drivePivot, off), rotate(tiltRot, sub(P.intakePos, P.drivePivot))));
-      const intakeSubmerged = water.getHeight(intakeW.x, intakeW.z) - intakeW.y > 0.02;
+      // (airboat: motor de avião refrigerado a AR — não depende de tomada d'água)
+      const intakeSubmerged = !!P.airProp || water.getHeight(intakeW.x, intakeW.z) - intakeW.y > 0.02;
       if (this.u.index === 0) this.propWorld = propW;
       this.u.propW = propW;
       const propDepth = water.getHeight(propW.x, propW.z) - propW.y;
@@ -602,11 +603,12 @@ export class Speedboat {
         immersion = smoothstep(-0.1, -0.02, iDepth);
         aeration = 1 - immersion;
       }
+      if (P.airProp) { immersion = 1; aeration = 0; } // hélice no AR: a carga é do ar, igual dentro ou fora d'água
       const ventilation = 1 - aeration; // 1 = hélice limpa (telemetria/efeitos)
       this.immersion = immersion;
       // Direção do empuxo: esterçar à direita gira a rabeta e empurra a popa para a esquerda.
       // Trim positivo inclina o empuxo para baixo (eleva a proa); negativo, para cima.
-      const tDirLocal = rotate(driveRot, v3(0, 0, 1)); // = (−sen δ, −cos δ·sen θ, cos δ·cos θ)
+      const tDirLocal = P.airProp ? v3(0, 0, 1) : rotate(driveRot, v3(0, 0, 1)); // = (−sen δ, −cos δ·sen θ, cos δ·cos θ); airboat: sempre para a frente
       const tDir = rotate(this.rot, tDirLocal);
       const vProp = rotateInv(this.rot, sub(this.pointVelocity(propW), water.getCurrent(propW.x, propW.z)));
       const axial = dot(vProp, tDirLocal);
@@ -634,6 +636,11 @@ export class Speedboat {
         thrust *= lerp(0.62, 1, smoothstep(6, 22, u)) * (1 - 0.7 * this.engineDamage);
         // "prop walk": a hélice de superfície empurra a popa para o lado da rotação (o piloto corrige no volante)
         if (thrust !== 0 && P.propWalk) this.addForceAt(scale(right, P.propWalk * Math.abs(thrust) * immersion), propW, "thrust");
+      } else if (P.airProp) {
+        // HÉLICE NO AR: sem cavitação nem ventilação; o empuxo só cai com a velocidade (passo) e a avaria
+        this.u.propLoad = 1;
+        this.cavitation = 0;
+        thrust *= 1 - 0.7 * this.engineDamage;
       } else if (P.waterjet) {
         // JATO D'ÁGUA: o rotor fica no duto (rendimento quase igual devagar e rápido); só cavita um pouco na arrancada a
         // pleno parado. Em N/R a caçamba desvia o jato: em N o empuxo líquido é ~zero (já é 0 acima), em R vira ré/freio
@@ -652,8 +659,17 @@ export class Speedboat {
       // (hélice de superfície: trabalhar ventilada é o normal dela — não conta como "ventilação" na telemetria)
       this.u.axial = axial; this.u.ventilation = P.surfacePiercing ? 1 : ventilation; this.u.slip = slip; this.u.intakeSubmerged = intakeSubmerged;
 
+      // LEMES DE AR (airboat): desviam o vento da hélice (fração `rudderWash` do empuxo) e o vento relativo
+      // (½·ρar·u²·CdA). Esterçar à direita empurra a popa para a esquerda, como uma rabeta. Sem empuxo, quase nada.
+      if (P.airProp) {
+        const ap = P.airProp;
+        const wash = Math.max(0, thrust) * ap.rudderWash;
+        const ram = 0.5 * 1.2 * u * Math.abs(u) * ap.rudderCdA;
+        const side = -(wash + ram) * Math.sin(this.steer);
+        if (side !== 0) this.addForceAt(scale(right, side), this.toWorld(ap.rudderPos), "lift");
+      }
       // rabeta como "flap": trim gera sustentação/afundamento de popa proporcional a u²
-      if (propDepth > 0 && u > 0) {
+      if (propDepth > 0 && u > 0 && !P.airProp) {
         const q = 0.5 * RHO * u * u;
         this.addForceAt(scale(up, -q * P.driveLiftArea * trimAngle * immersion), propW, "lift");
         // rabeta como leme: força lateral na popa
@@ -1081,7 +1097,8 @@ export class Speedboat {
     // Engrenado com acelerador 0 = marcha lenta engrenada (a lancha anda devagar).
     this.eachUnit(() => {
       const ec = input.engineCmd?.[this.u.index];
-      const desired: Gear = ec ? ec.gear : input.gear;
+      // (airboat: sem embreagem nem ré — a hélice está sempre acoplada e empurra para a frente)
+      const desired: Gear = P.airProp ? "F" : ec ? ec.gear : input.gear;
       // modo ECO (moto aquática): o gatilho pleno só abre até ecoThrottle
       const cmd = clamp(ec ? ec.throttle : input.throttle, 0, 1) * (this.driveMode === "eco" && P.ecoThrottle ? P.ecoThrottle : 1);
       if (desired !== this.wantGear) {
@@ -1239,8 +1256,8 @@ export class Speedboat {
     const intakeW = this.toWorld(add(P.drivePivot, rotate(q, sub(P.intakePos, P.drivePivot))));
     this.propWorld = propW;
     const propDepth = water.getHeight(propW.x, propW.z) - propW.y;
-    this.immersion = clamp((propDepth + P.propRadius) / (2 * P.propRadius), 0, 1);
-    const intakeSubmerged = water.getHeight(intakeW.x, intakeW.z) - intakeW.y > 0.02;
+    this.immersion = P.airProp ? 1 : clamp((propDepth + P.propRadius) / (2 * P.propRadius), 0, 1);
+    const intakeSubmerged = !!P.airProp || water.getHeight(intakeW.x, intakeW.z) - intakeW.y > 0.02;
     this.eachUnit((un) => {
       un.intakeSubmerged = intakeSubmerged; // na carretinha a tomada d'água fica fora da água
       un.rpm = this.updateRpm(dt, 0, 1); // lenta
@@ -1497,7 +1514,7 @@ export class Speedboat {
       return "starting";
     }
     if (this.engine === "cranking") return "busy";
-    if (this.gear !== "N") return "needNeutral";
+    if (this.gear !== "N" && !this.params.airProp) return "needNeutral"; // (airboat: não há neutro — a hélice já gira na partida)
     // cada motor parte pelo banco que o alimenta (na AR-9 em BE é o de boreste: o BB está isolado);
     // sem combustível a partida é permitida (o arranque gira / a corda é puxada), mas o motor não pega
     const whys = this.units.map((x) => this.bankFor(x.index).canStart());
@@ -1552,7 +1569,7 @@ export class Speedboat {
     if (!this.occupants.some((o) => o.seat === "helm")) return "noPilot";
     if (x.engine === "running" || x.engine === "cranking") { if (x.key !== "off") x.key = "start"; return ""; }
     if (this.engineDamage >= 0.95) return "broken";
-    if (x.gear !== "N") return "needNeutral";
+    if (x.gear !== "N" && !this.params.airProp) return "needNeutral";
     if (!this.lanyard) { this.telemetry.startFail = "lanyard"; return "noLanyard"; }
     x.key = "start"; x.testT = 0;
     x.engine = "cranking"; x.manualCrank = true; x.crankTimer = 0; x.crankRevs = 0; x.crankNeed = 3 + Math.random() * 2; x.crankWait = 0;
@@ -1776,7 +1793,7 @@ export class Speedboat {
     // rigidez/amortecimento dos contatos proporcionais à massa (calibrados para a lancha de ~1300 kg):
     // o bote de ~200 kg com as mesmas molas ficaria numericamente instável no passo de 1/120 s
     const mk = clamp(this.totalMass / 1300, 0.12, 1.5);
-    const kG = 260000 * mk, cG = 26000 * mk, muG = 0.45;   // fundo
+    const kG = 260000 * mk, cG = 26000 * mk, muG = P.groundMu ?? 0.45;   // fundo (airboat: desliza em lama/capim)
     const kC = 450000 * mk, cC = 32000 * mk, muC = 0.25;   // rochas / píer
     let maxImpact = 0;
     let contact = false;

@@ -6,6 +6,8 @@
 //  • "tiller"   — bote AR-3 (cana): punho giratório do acelerador (tartaruga ↔ lebre) + alavanca de câmbio F-N-R
 //    na lateral do motor;
 //  • "turbine"  — AR-10: manete de potência em T num trilho reto (LENTA → MÁX) + alavanca de marcha F-N-R separada;
+//  • "pedal"     — lancha pantaneira AR-P (airboat): ACELERADOR DE PÉ (solto = lenta, todo = pleno). Sem câmbio: a
+//    hélice no ar é ligada direto no motor (sem embreagem, sem ré). A direção é o bastão dos lemes (A/D);
 //  • "handlebar" — moto aquática AR-J: GATILHO do acelerador (manopla direita, SOLTO → TODO) + alavanca do iBB na
 //    manopla esquerda (FRENTE · NEUTRO · RÉ/FREIO: baixa a caçamba do jato; pode puxar com o motor acelerado).
 // ACELERAR EM NEUTRO, como nos barcos reais: na manete de topo (AR-6/AR-9) o botão "N" no meio do quadrante (o
@@ -16,7 +18,7 @@
 
 export type Gear = "F" | "N" | "R";
 export interface LeverCmd { gear: Gear; throttle: number; neutral?: boolean }
-export type LeverKind = "binnacle" | "twin" | "tiller" | "turbine" | "handlebar";
+export type LeverKind = "binnacle" | "twin" | "tiller" | "turbine" | "handlebar" | "pedal";
 /**
  * Trim no painel: "power" = botão basculante UP/DN (power trim/tilt da AR-6, das rabetas da AR-9 e da transmissão de
  * superfície da AR-10) com a posição do pé desenhada e uma barra (faixa de trim + faixa de tilt); "pin" = bote: não
@@ -73,6 +75,10 @@ export class LeverControls {
       el.innerHTML = `<div class="tl" title="gire o punho (arraste para os lados) · em N acelera em neutro"><div class="tl-grip" data-grip="0"><span class="tl-ridges"></span><span class="tl-mark"></span></div>
           <div class="tl-scale"><span>🐢 LENTO</span><span>RÁPIDO 🐇</span></div><em class="mt-rd">N · 0 %</em><b>PUNHO</b></div>
         <div class="tl-shift">${gearSel(0)}<b>CÂMBIO</b></div>`;
+    } else if (kind === "pedal") {
+      el.innerHTML = `<div class="pl pl-pedal" title="acelerador de pé · sem embreagem nem ré: com o motor ligado a hélice já empurra"><div class="pl-track" data-pl="0"><span class="pl-slot"></span>
+            <i class="pl-l max">TODO</i><i class="pl-l idle">SOLTO</i><span class="pl-handle"><span class="pl-t"></span></span></div>
+          <em class="mt-rd">0 %</em><b>PEDAL</b></div>`;
     } else if (kind === "handlebar") {
       el.innerHTML = `<div class="pl pl-trig" title="gatilho do acelerador (manopla direita) · em N acelera em neutro"><div class="pl-track" data-pl="0"><span class="pl-slot"></span>
             <i class="pl-l max">TODO</i><i class="pl-l idle">SOLTO</i><span class="pl-handle"><span class="pl-t"></span></span></div>
@@ -92,8 +98,8 @@ export class LeverControls {
 
   private send(i: number, c: LeverCmd): void { this.drag[i] = c; this.onChange(i, c); this.paint(i, c); }
 
-  /** punho da cana / potência da turbina: em N o acelerador vira aceleração em neutro */
-  private withGear(gear: Gear, throttle: number): LeverCmd { return gear === "N" ? { gear, throttle, neutral: throttle > 0 } : { gear, throttle }; }
+  /** punho da cana / potência da turbina: em N o acelerador vira aceleração em neutro (airboat: sempre "F") */
+  private withGear(gear: Gear, throttle: number): LeverCmd { return this.kind === "pedal" ? { gear: "F", throttle } : gear === "N" ? { gear, throttle, neutral: throttle > 0 } : { gear, throttle }; }
 
   private bind(): void {
     const el = this.el;
@@ -267,8 +273,9 @@ export class LeverControls {
     } else {
       el.querySelector<HTMLElement>(".pl-handle")!.style.bottom = `calc(${c.throttle * 100}% - ${c.throttle * 24}px)`;
     }
-    el.querySelector<HTMLElement>(".mt-rd")!.textContent = txt;
-    const gs = el.querySelector<HTMLElement>(".gs")!;
+    el.querySelector<HTMLElement>(".mt-rd")!.textContent = this.kind === "pedal" ? pct : txt;
+    const gs = el.querySelector<HTMLElement>(".gs");
+    if (!gs) return; // (pedal: sem câmbio)
     gs.dataset.pos = c.gear;
     for (const b of gs.querySelectorAll<HTMLElement>("button")) b.classList.toggle("on", b.dataset.gear === c.gear);
   }
