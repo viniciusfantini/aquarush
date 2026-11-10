@@ -12,6 +12,10 @@ para continuar o trabalho em outra IA/ferramenta ou portar para Unity/Unreal sem
 
 ---
 
+> **Diagrama elétrico da AR-10 (PDF, 3 folhas A3):** [`docs/diagramas/AR-10_diagrama_eletrico.pdf`](diagramas/AR-10_diagrama_eletrico.pdf) —
+> fontes, barramento 24 V, cargas, FADEC, sensores, atuadores, anunciadores e limites. Regerar com
+> `python docs/diagramas/gerar_ar10_eletrico.py` (precisa de `pip install reportlab`) ao mudar a lógica.
+
 ## 1. Regras gerais (valem para tudo)
 
 1. `src/sim/**` não importa Babylon: roda no Node (testes). A física roda a **120 Hz** em passo fixo.

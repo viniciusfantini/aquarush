@@ -20,7 +20,7 @@ The GDD (section 10) calls for the **same playable slice** to be built in three 
 
 The comparison between POCs, using the weights of the GDD §11 matrix, is recorded in [`docs/POC_COMPARATIVO.md`](docs/POC_COMPARATIVO.md).
 
-All electrical and engine-system logic (batteries, master switch, alternator, GPU, fuel, cooling, ignition keys, electric and pull starts, choke, turbine with FADEC and manual start, oil, bilge, windlass, telemetry and test criteria) is documented in [`docs/SISTEMAS_ELETRICOS_E_MOTORES.md`](docs/SISTEMAS_ELETRICOS_E_MOTORES.md) (in Portuguese), so the work can continue in another AI tool or be ported to Unity/Unreal.
+All electrical and engine-system logic (batteries, master switch, alternator, GPU, fuel, cooling, ignition keys, electric and pull starts, choke, turbine with FADEC and manual start, oil, bilge, windlass, telemetry and test criteria) is documented in [`docs/SISTEMAS_ELETRICOS_E_MOTORES.md`](docs/SISTEMAS_ELETRICOS_E_MOTORES.md) (in Portuguese), so the work can continue in another AI tool or be ported to Unity/Unreal. The **AR-10 electrical diagram** (sources, 24 V bus, loads, FADEC, sensors and annunciators) is a PDF (in Portuguese): [`docs/diagramas/AR-10_diagrama_eletrico.pdf`](docs/diagramas/AR-10_diagrama_eletrico.pdf).
 
 ## Running POC 1 (Babylon.js)
 

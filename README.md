@@ -20,7 +20,7 @@ O GDD (seção 10) pede a **mesma fatia jogável** em três tecnologias antes de
 
 A comparação entre as POCs, com os pesos da matriz do GDD §11, é registrada em [`docs/POC_COMPARATIVO.md`](docs/POC_COMPARATIVO.md).
 
-Toda a lógica elétrica e de sistemas dos motores (baterias, chave geral, alternador, GPU, combustível, arrefecimento, chaves de ignição, partida elétrica e na corda, afogador, turbina com FADEC e partida manual, óleo, porão, molinete, telemetria e critérios de teste) está documentada em [`docs/SISTEMAS_ELETRICOS_E_MOTORES.md`](docs/SISTEMAS_ELETRICOS_E_MOTORES.md), para continuar o trabalho em outra IA ou portar para Unity/Unreal.
+Toda a lógica elétrica e de sistemas dos motores (baterias, chave geral, alternador, GPU, combustível, arrefecimento, chaves de ignição, partida elétrica e na corda, afogador, turbina com FADEC e partida manual, óleo, porão, molinete, telemetria e critérios de teste) está documentada em [`docs/SISTEMAS_ELETRICOS_E_MOTORES.md`](docs/SISTEMAS_ELETRICOS_E_MOTORES.md), para continuar o trabalho em outra IA ou portar para Unity/Unreal. O **diagrama elétrico da AR-10** (fontes, barramento 24 V, cargas, FADEC, sensores e anunciadores) está em PDF: [`docs/diagramas/AR-10_diagrama_eletrico.pdf`](docs/diagramas/AR-10_diagrama_eletrico.pdf).
 
 ## Rodar a POC 1 (Babylon.js)
 
