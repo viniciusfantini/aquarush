@@ -555,6 +555,15 @@
     #g-aut { font-size: 11px; color: #8fe3d8; text-align: center; margin-top: 2px; min-height: 0; font-variant-numeric: tabular-nums; }
     #g-aut:empty { display: none; }
     /* moto aquática: luz do iBB (caçamba do jato) — apagada em FRENTE, âmbar em NEUTRO/RÉ, vermelha piscando no FREIO */
+    #g-wig { display: flex; align-items: center; justify-content: center; gap: 6px; margin-top: 4px; font: 700 10px/1 system-ui, sans-serif; letter-spacing: 0.06em; color: rgba(255,255,255,0.45); }
+    #g-wig b { color: #e9eef2; }
+    #g-wig em { font-style: normal; min-width: 84px; text-align: left; }
+    #g-wig[data-s=ge] .ibb-dot { background: radial-gradient(circle at 40% 35%, #d8ffd8, #2ee06a 55%, #0b6a2a); box-shadow: 0 0 10px 2px rgba(46,224,106,0.7); }
+    #g-wig[data-s=ge] em { color: #7dffa8; }
+    #g-wig[data-s=high] .ibb-dot { background: radial-gradient(circle at 40% 35%, #fff1b8, #ffb020 55%, #9a5f00); box-shadow: 0 0 10px 2px rgba(255,176,32,0.7); }
+    #g-wig[data-s=high] em { color: #ffc24d; }
+    #g-wig[data-s=stall] .ibb-dot { background: radial-gradient(circle at 40% 35%, #ffd0c8, #ff3b2a 55%, #8a0f06); box-shadow: 0 0 14px 4px rgba(255,59,42,0.85); animation: ibbBlink 0.35s steps(2) infinite; }
+    #g-wig[data-s=stall] em { color: #ff7a6a; }
     #g-ibb, .ibb-l { display: flex; align-items: center; justify-content: center; gap: 6px; font: 700 10px/1 system-ui, sans-serif; letter-spacing: 0.06em; color: rgba(255,255,255,0.45); }
     #g-ibb { margin-top: 4px; }
     #g-ibb b, .ibb-l b { color: #e9eef2; }
@@ -658,6 +667,7 @@
     <div class="menu-bottom">
       <div class="pick-row">
         <button class="pick-b" data-kind="bote"><b>Bote de apoio AR-3</b><span>3,1 m · 15 hp · até 3 pessoas · tanque 10 L (começa com 5 L)</span><span>cana do leme no motor, partida na corda, trim manual (3 furos + tilt), lanterna de mão</span></button>
+        <button class="pick-b" data-kind="wig"><b>Ekranoplano AR-W</b><span>7 m · asa com efeito solo · 141 hp turbo injetado · 2 pessoas em tandem · tanque 80 L (começa com 30 L)</span><span>decola da água a ~85 km/h e voa a 0,5–3 m da água no colchão de ar (longe dela a asa não segura); profundor no E/Q, manche com leme e ailerons, hélice pusher, duas centrais de injeção (LANE A/B) e duas bombas</span></button>
         <button class="pick-b" data-kind="lancha"><b>Lancha AR-6</b><span>6 m · 150 hp · até 4 pessoas · tanque 120 L (começa com 5 L)</span><span>volante, manete, power trim elétrico, partida na chave, luzes de navegação</span></button>
         <button class="pick-b" data-kind="airboat"><b>Lancha pantaneira AR-P</b><span>4,9 m · airboat com motor de avião de 260 hp · até 3 pessoas · tanque 80 L (começa com 10 L)</span><span>hélice pusher no ar numa gaiola, lemes de ar no bastão, acelerador de pé, sem embreagem nem ré, fundo chato que derrapa nas curvas e passa por cima de lama e capim; banco alto do piloto</span></button>
         <button class="pick-b" data-kind="jetski"><b>Moto aquática AR-J</b><span>3,45 m · 300 hp com compressor · até 3 pessoas montadas · tanque 70 L (começa com 8 L)</span><span>jato d'água (sem hélice): guidão gira o bocal, gatilho, freio/ré iBB, trim VTS, START/STOP com cordão de segurança, modo ECO; virou, o piloto desvira</span></button>

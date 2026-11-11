@@ -26,16 +26,19 @@ const bowEye = (b: Speedboat): Vec3 => b.params.contactPoints.reduce((a, c) => (
 
 export interface BerthState { near: boolean; ok: boolean; why: string; side: number }
 
+/** meia-largura que encosta no píer: o costado — ou, no ekranoplano, a ponta da asa (o flutuador encosta na defensa) */
+export const halfWidth = (P: SpeedboatParams): number => (P.wing ? P.wing.span / 2 : P.beam / 2);
+
 /** Barco na posição certa da vaga do píer: paralelo, encostado (folga ≤ ~0,8 m), centralizado e devagar. */
 export const pierBerthState = (b: Speedboat, pier: PierLayout): BerthState => {
   const B = pierBerth(pier), P = b.params;
   const f = b.forward, fl = Math.hypot(f.x, f.z) || 1;
   const parallel = Math.abs(f.z / fl);                      // 1 = paralelo ao píer (rumo N ou S)
-  const gap = b.pos.x - B.edgeX - P.beam / 2;               // folga entre o costado e o píer
+  const gap = b.pos.x - B.edgeX - halfWidth(P);             // folga entre o costado (ekranoplano: a ponta da asa) e o píer
   const along = b.pos.z - B.z;
   const speed = Math.hypot(b.vel.x, b.vel.z);
   const near = gap > -0.5 && gap < 6 && Math.abs(along) < B.len;
-  const why = parallel < Math.cos(12 * Math.PI / 180) ? "fique paralelo ao píer" : gap > 0.8 ? "encoste mais no píer" : Math.abs(along) > 2.5 ? (along * f.z < 0 ? "avance um pouco" : "recue um pouco") : speed > 0.9 ? "devagar…" : ""; // atracação real: ≤ ~3 km/h
+  const why = parallel < Math.cos(12 * Math.PI / 180) ? "fique paralelo ao píer" : gap > (P.wing ? 1.5 : 0.8) ? "encoste mais no píer" : Math.abs(along) > 2.5 ? (along * f.z < 0 ? "avance um pouco" : "recue um pouco") : speed > 0.9 ? "devagar…" : ""; // atracação real: ≤ ~3 km/h
   // lado do barco que encosta no píer (o píer fica a −X do barco no mundo)
   const r = b.right;
   const side = r.x < 0 ? 1 : -1;  // +1: o píer está do lado de boreste do barco
@@ -43,12 +46,13 @@ export const pierBerthState = (b: Speedboat, pier: PierLayout): BerthState => {
 };
 
 /**
- * Largada na vaga do píer: proa para o norte, costado de bombordo a ~25 cm do píer (o píer fica a −X).
+ * Largada na vaga do píer: proa para o norte (para o lago), costado de bombordo a ~25 cm do píer (o píer fica a −X).
  * É ali que os passageiros esperam para embarcar (a lotação só muda com o barco atracado na vaga).
  */
 export const berthStartPose = (pier: PierLayout, P: SpeedboatParams): { pos: Vec3; heading: number; side: number } => {
   const B = pierBerth(pier);
-  return { pos: { x: B.edgeX + P.beam / 2 + 0.25, y: 0.25, z: B.z }, heading: 0, side: -1 };
+  // (ekranoplano: o flutuador da ponta fica ~0,8 m longe dos pilares — encostado, a asa raspa neles e gira o barco)
+  return { pos: { x: B.edgeX + halfWidth(P) + (P.wing ? 0.8 : 0.25), y: 0.25, z: B.z }, heading: 0, side: -1 };
 };
 
 /** Pontos do píer onde os passageiros esperam em pé (mundo), ao lado da vaga, virados para o barco. */
@@ -62,7 +66,8 @@ export const tieToPier = (b: Speedboat, pier: PierLayout, side: number): void =>
   const B = pierBerth(pier), P = b.params;
   const lines: MooringLine[] = [];
   for (const zl of [P.length * 0.32, -P.length * 0.36]) {
-    const local = { x: side * P.beam * 0.46, y: P.kind === "lancha" ? 0.42 : 0.3, z: zl };
+    // (ekranoplano: o cabo vai da ponta da asa, no flutuador)
+    const local = P.wing ? { x: side * (P.wing.span / 2 - 0.05), y: -0.05, z: P.wing.floats[0].pos.z + (zl > 0 ? 0.7 : -0.7) } : { x: side * P.beam * 0.46, y: P.kind === "lancha" ? 0.42 : 0.3, z: zl };
     const w = b.toWorld(local);
     const anchor = { x: B.edgeX, y: B.deckY, z: w.z };
     lines.push({ anchor, local, length: Math.hypot(w.x - anchor.x, w.y - anchor.y, w.z - anchor.z) + 0.1 });

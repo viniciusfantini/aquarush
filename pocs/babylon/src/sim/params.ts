@@ -1,7 +1,7 @@
 // Parâmetros físicos documentados das 6 embarcações da POC: lancha AR-6 (SPEEDBOAT), bote AR-3 (DINGHY),
 // lancha rápida AR-9 (RAPIDA, dois V8), lancha de turbina AR-10 (TURBINA; a turbina em turbine.ts), a moto
-// aquática AR-J (JETSKI, 300 hp com jato d'água) e a lancha pantaneira AR-P (AIRBOAT, motor de avião com hélice
-// pusher no ar).
+// aquática AR-J (JETSKI, 300 hp com jato d'água), a lancha pantaneira AR-P (AIRBOAT, motor de avião com hélice
+// pusher no ar) e o ekranoplano AR-W (WIG, asa com efeito solo e motor de avião turbo injetado).
 // Estes valores são o "contrato" entre as POCs (Babylon, Unity, Unreal):
 // a mesma massa, dimensões, potência e coeficientes devem ser usados nas três.
 
@@ -9,6 +9,7 @@ import { type Vec3, v3, DEG } from "./math.ts";
 import { floodTable } from "./hullShape.ts";
 import type { EngineSystemsParams } from "./engineSystems.ts";
 import type { TurbineParams } from "./turbine.ts";
+import type { WingParams } from "./wing.ts";
 
 export type SeatId = "helm" | "passenger" | "rearLeft" | "rearRight";
 export interface Occupant { seat: SeatId; mass: number }
@@ -25,7 +26,7 @@ export interface BuoyancyPoint {
   incidence: number;
 }
 
-export type VesselKind = "lancha" | "bote" | "rapida" | "turbina" | "jetski" | "airboat";
+export type VesselKind = "lancha" | "bote" | "rapida" | "turbina" | "jetski" | "airboat" | "wig";
 
 export interface SpeedboatParams {
   kind: VesselKind;
@@ -201,6 +202,18 @@ export interface SpeedboatParams {
    * o excesso sai aos poucos).
    */
   aircraft?: { magDrop: number };
+  /**
+   * MOTOR DE AVIÃO MODERNO com INJEÇÃO ELETRÔNICA (ekranoplano): duas centrais redundantes (LANE A / LANE B, cada uma
+   * injeta e acende sozinha; com uma só a força cai `laneDrop`; as duas desligadas = o motor para) e duas bombas
+   * elétricas de combustível (uma basta; sem nenhuma a pressão cai e o motor apaga em ~2 s). Precisa de energia na
+   * casa para dar partida. Sem magnetos, mistura nem primer.
+   */
+  efi?: { laneDrop: number };
+  /**
+   * ASA COM EFEITO SOLO (ekranoplano): placas aerodinâmicas (meias-asas, estabilizador com profundor, deriva, costado)
+   * em sim/wing.ts. O profundor é comandado pela compensação (E/Q, `wing.elevatorRate`).
+   */
+  wing?: WingParams;
   /** o barco não leva âncora (airboat de pantanal): + / − não fazem nada e não há âncora no visual */
   noAnchor?: boolean;
   /** atrito do fundo do casco no chão (padrão 0,45). Airboat: fundo de alumínio com polímero desliza em lama/capim */
@@ -912,7 +925,146 @@ export const AIRBOAT: SpeedboatParams = {
   windage: { sideCdA: 3.8, center: v3(0, 1.1, -0.9) }, // a gaiola e os lemes pegam muito vento
 };
 
+// ---------------------------------------------------------------------------------------------
+// Ekranoplano AR-W (WIG, "wing in ground effect", 7 m, 2 pessoas em tandem) — casco de planeio de fibra com uma ASA
+// BAIXA de delta invertido (7 m de envergadura, flutuadores nas pontas), cauda em T alta (estabilizador + profundor
+// fora do efeito solo, deriva + leme no vento da hélice) e hélice pusher de 3 pás num pilone atrás da cabine.
+// Motor moderno de avião leve: 4 cilindros opostos, TURBO e INJEÇÃO ELETRÔNICA (~141 hp a 5800 rpm, redução de 2,43
+// para a hélice), cabeçotes arrefecidos a líquido, duas centrais de injeção/ignição redundantes (LANE A e LANE B) e
+// duas bombas elétricas de combustível. Sem magnetos, sem mistura e sem primer: a central faz tudo.
+// Decola da água planando (~95 km/h) e voa a 0,5–3 m da água no colchão de ar do efeito solo; longe da água a asa
+// pequena não segura o peso e ele desce sozinho (ver sim/wing.ts). Origem = CG do barco seco. X boreste, Y cima, Z proa.
+// ---------------------------------------------------------------------------------------------
+const wl = 0.6; // meia-distância transversal dos pontos de flutuação (casco estreito)
+const WIG_WING_Y = -0.05; // asa baixa: ~0,3 m acima da água parado
+
+export const WIG: SpeedboatParams = {
+  kind: "wig",
+  name: "Ekranoplano AR-W",
+  steering: "stick",
+  trimMode: "none",            // não tem trim de motor: E/Q mexem na compensação do PROFUNDOR (`wing.elevatorRate`)
+  efi: { laneDrop: 0.02 },     // uma lane só: ~2 % de força a menos (avanço de ignição menos ótimo)
+  trimPins: [],
+  electricStart: true,
+  airProp: { rudderWash: 0.4, rudderCdA: 1.6, rudderPos: v3(0, 1.25, -3.45) }, // leme da deriva no vento da hélice
+  noAnchor: true,              // não leva âncora (amarra no píer/poita)
+  tankLiters: 80,
+  fuelIdleLph: 6,
+  fuelMaxLph: 38,              // pleno (141 hp com injeção)
+  cylinders: 4,
+  maxPeople: 2,
+  length: 7.0,
+  beam: 1.6,                   // casco (a asa tem 7 m)
+  mass: 520,
+  fuelTankPos: v3(0, -0.2, -0.3),
+  fuelDensity: 0.72,
+  seats: {
+    helm: v3(0, -0.05, 1.25),           // piloto na frente (tandem)
+    passenger: v3(0, 0.0, 0.3),         // passageiro atrás
+    rearLeft: v3(0, 0.0, 0.3),          // (não usados: lotação 2)
+    rearRight: v3(0, 0.0, 0.3),
+  },
+  inertia: v3(1900, 2600, 1100),        // asa larga: rolagem e guinada bem maiores que as de um casco de 7 m
+  waterplaneArea: 8.0,
+  pointMaxDepth: 0.55,
+  wetDepth: 0.08,
+  buoyancyPoints: [
+    { p: v3(-wl * 0.8, -0.42, 2.3), areaWeight: 0.6, liftWeight: 0.8, incidence: 6 * DEG },
+    { p: v3(wl * 0.8, -0.42, 2.3), areaWeight: 0.6, liftWeight: 0.8, incidence: 6 * DEG },
+    { p: v3(-wl, -0.45, 0.3), areaWeight: 1.1, liftWeight: 1.0, incidence: 3 * DEG },
+    { p: v3(wl, -0.45, 0.3), areaWeight: 1.1, liftWeight: 1.0, incidence: 3 * DEG },
+    { p: v3(-wl, -0.45, -1.8), areaWeight: 1.3, liftWeight: 0.3, incidence: 1.5 * DEG },
+    { p: v3(wl, -0.45, -1.8), areaWeight: 1.3, liftWeight: 0.3, incidence: 1.5 * DEG },
+  ],
+  contactPoints: [
+    v3(0, 0.0, 3.4), v3(-0.6, -0.3, 2.4), v3(0.6, -0.3, 2.4),
+    v3(-0.8, -0.45, 0.8), v3(0.8, -0.45, 0.8), v3(-0.8, -0.45, -1.2), v3(0.8, -0.45, -1.2),
+    v3(-0.7, -0.4, -3.3), v3(0.7, -0.4, -3.3), v3(0, -0.48, 0),
+    v3(-3.45, -0.3, -0.9), v3(3.45, -0.3, -0.9),       // flutuadores das pontas
+    v3(-2.0, WIG_WING_Y, 0.5), v3(2.0, WIG_WING_Y, 0.5), // bordo de ataque da asa
+    v3(0, 2.25, -3.5), v3(-1.4, 2.0, -3.6), v3(1.4, 2.0, -3.6), v3(0, 0.75, 1.0), // cauda em T e cabine (virado)
+  ],
+  bunkPoints: [-2.4, -1.0, 0.4, 1.8].flatMap((z) => [v3(0, -0.48, z), v3(-0.5, -0.42, z), v3(0.5, -0.42, z)]),
+  gunwaleY: 0.3,
+  // casco fechado de fibra com cabine aberta; bomba de porão pequena
+  bilge: { pos: v3(0, -0.35, -0.2), maxL: 2500, pumpLph: 2000, pumpA: 3, outlet: v3(0.8, 0.0, -1.5), areaM2: 4.5, holeMaxM2: 0.003, bowRise: 0.25, transomY: 0.25, transomW: 0.01,
+    sumpL: 40, floorY: -0.3, floodCenter: v3(0, 0, 0), floodLen: 5.0, floodHalfW: 0.7, scupperM2: 0, scupperFromStern: 0.3, shutoffHeadM: 2, outletAreaM2: 2e-4, capsizeAirFrac: 0.5, ventM2: 1e-5 },
+  anchor: { roller: v3(0, 0.2, 3.3), rodeMax: 20, rateOut: 0.7, rateIn: 0.35, motorA: 0, holdN: 1200 },
+
+  enginePowerHp: 141,
+  maxThrust: 2900,             // empuxo estático da hélice de 3 pás (~1,7 m) com o turbo a pleno
+  reverseThrustFactor: 0,      // passo fixo: não há ré
+  propPitchSpeed: 78,          // hélice de passo longo (avião): segura empuxo a 150 km/h
+  propPos: v3(0, 1.25, -1.75), // pilone atrás da cabine: eixo ALTO (acelerar abaixa a proa)
+  propRadius: 0.85,
+  propGear: 2.43,              // caixa de redução: 5800 rpm do motor = ~2390 na hélice
+  revLimitRpm: 5900,
+  engineResponse: 0.35,        // turbo: um pouco de atraso para encher
+  idleRpm: 1700,
+  maxRpm: 5800,
+  shiftTime: 0,
+  idleThrustFraction: 0.08,
+
+  maxSteerLow: 28 * DEG,       // leme de ar
+  maxSteerHigh: 14 * DEG,
+  steerRate: 2.5,
+  gearcaseRudder: 0,
+
+  trimUp: 0, trimDown: 0, tiltMax: 0, tiltRate: 0, tiltMaxThrust: 1e9, tiltMaxSpeed: 1e9, tiltMaxRpm: 1e9, trimRate: 0,
+  drivePivot: v3(0, 1.25, -3.45),
+  intakePos: v3(0, -0.3, -1.5), // (radiador no pilone: arrefecido pelo ar)
+  driveLiftArea: 0,
+
+  planingLiftCoef: 0.6,
+  maxAoa: 12 * DEG,
+  dragFrictionQuad: 9,
+  dragLinear: 40,
+  lateralQuad: 900,
+  lateralLinear: 700,
+  keelLift: 900,
+  yawDamping: 6000,
+  yawDampingLowSpeed: 0.3,
+  heaveDamping: 1100,
+  waveDragPeakRatio: 0.14,
+  sternTrough: 0.25,
+  bowWave: 0.1,
+  bankCoef: 300,               // a asa larga quase não deixa o casco deitar na curva
+  rollDamping: 9000,
+  airDragCdA: 0.55,            // casco + cabine + pilone (a asa e a cauda têm o arrasto delas em `wing`)
+  supercharger: { maxBar: 0.7 }, // TURBO: até ~0,7 bar de sobrealimentação a pleno (o relógio é o mesmo do compressor)
+  // 12 V, bateria 30 Ah, arranque 110 A; dois geradores no motor (~30 A para a casa e as centrais)
+  systems: { batteryAh: 30, starterA: 110, altMaxA: 30, altIdleFrac: 0.4, lineL: 0.1 },
+  windage: { sideCdA: 1.8, center: v3(0, 0.9, -1.5) },
+  wing: {
+    span: 7.0,
+    groundGain: 2.2,           // rente à água a asa sustenta até ~3× (colchão dinâmico + vórtices achatados)
+    groundScale: 0.55,         // decai em ~½ corda de altura
+    dynGain: 10,               // efeito solo dinâmico (amortece a altura)
+    elevatorRate: 0.5,
+    stallWarn: 12 * DEG,
+    floats: [
+      { pos: v3(-3.45, -0.2, -0.9), volume: 0.09, radius: 0.16 },
+      { pos: v3(3.45, -0.2, -0.9), volume: 0.09, radius: 0.16 },
+    ],
+    panels: [
+      // meias-asas (delta invertido de alongamento baixo): incidência de 6°; ailerons no MESMO comando da direção
+      // (bastão: virar inclina um pouco para dentro — o efeito solo da asa de baixo limita a inclinação)
+      { name: "asaBE", pos: v3(-2.0, WIG_WING_Y, 0.05), normal: v3(0, 1, 0), area: 4.0, chord: 1.9, span: 2.7, cla: 3.6, incidence: 6 * DEG, stall: 12 * DEG, cd0: 0.012, arEff: 3.2, ground: true,
+        control: { kind: "aileron", maxRad: 5 * DEG, tau: 0.45, sign: 1 } }, // aileron (sobe ao virar à direita)
+      { name: "asaBB", pos: v3(2.0, WIG_WING_Y, 0.05), normal: v3(0, 1, 0), area: 4.0, chord: 1.9, span: 2.7, cla: 3.6, incidence: 6 * DEG, stall: 12 * DEG, cd0: 0.012, arEff: 3.2, ground: true,
+        control: { kind: "aileron", maxRad: 5 * DEG, tau: 0.45, sign: -1 } }, // aileron (desce a asa ao virar à direita)
+      // estabilizador alto (cauda em T, fora do efeito solo) com o profundor
+      { name: "estab", pos: v3(0, 2.05, -3.55), normal: v3(0, 1, 0), area: 3.4, chord: 1.1, span: 3.1, cla: 3.8, incidence: -6 * DEG, stall: 16 * DEG, cd0: 0.012, arEff: 2.6,
+        control: { kind: "elevator", maxRad: 16 * DEG, tau: 0.55, sign: -1 } },
+      // deriva (o leme está em `airProp`)
+      { name: "deriva", pos: v3(0, 1.15, -3.35), normal: v3(1, 0, 0), area: 1.3, chord: 1.1, span: 1.3, cla: 2.8, incidence: 0, stall: 18 * DEG, cd0: 0.012, arEff: 1.6 },
+      // costado da fuselagem/cabine (força lateral na derrapagem; à frente do CG)
+      { name: "costado", pos: v3(0, 0.15, 0.9), normal: v3(1, 0, 0), area: 2.4, chord: 4.0, span: 0.6, cla: 0.9, incidence: 0, stall: 25 * DEG, cd0: 0.03, arEff: 0.4 },
+    ],
+  },
+};
+
 /** embarcação pequena (bote, moto aquática): carretinha leve puxada por um carro comum (as outras: caminhonete) */
 export const smallTow = (k: VesselKind): boolean => k === "bote" || k === "jetski";
 
-export const VESSELS: Record<VesselKind, SpeedboatParams> = { lancha: SPEEDBOAT, bote: DINGHY, rapida: RAPIDA, turbina: TURBINA, jetski: JETSKI, airboat: AIRBOAT };
+export const VESSELS: Record<VesselKind, SpeedboatParams> = { lancha: SPEEDBOAT, bote: DINGHY, rapida: RAPIDA, turbina: TURBINA, jetski: JETSKI, airboat: AIRBOAT, wig: WIG };

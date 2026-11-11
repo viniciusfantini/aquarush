@@ -91,7 +91,7 @@ export class RoundGauge {
   }
 }
 
-export interface HudOpts { speedMax: number; temp: boolean; battery: boolean; trimPins: number; gear?: "bar" | "dial"; /** dois motores: um conta-giros por motor (BB / BE) */ twin?: boolean; /** turbina: N1, EGT, torque, N2, óleo e luzes da partida */ turbine?: boolean; /** fundo de escala do conta-giros (padrão 7000; moto aquática 9000) e início do vermelho */ rpmMax?: number; rpmRed?: number; /** moto aquática: manômetro do compressor (BOOST) e luz do iBB */ jet?: boolean; /** barras que o barco não tem (airboat: sem âncora no HUD, sem marcha, sem calado, sem trim) */ hide?: ("anchor" | "gear" | "draft" | "trim")[] }
+export interface HudOpts { speedMax: number; temp: boolean; battery: boolean; trimPins: number; gear?: "bar" | "dial"; /** dois motores: um conta-giros por motor (BB / BE) */ twin?: boolean; /** turbina: N1, EGT, torque, N2, óleo e luzes da partida */ turbine?: boolean; /** fundo de escala do conta-giros (padrão 7000; moto aquática 9000) e início do vermelho */ rpmMax?: number; rpmRed?: number; /** moto aquática: manômetro do compressor (BOOST) e luz do iBB */ jet?: boolean; /** ekranoplano: TURBO, ALTURA da asa sobre a água, luz de voo/estol */ wig?: boolean; /** barras que o barco não tem (airboat: sem âncora no HUD, sem marcha, sem calado, sem trim) */ hide?: ("anchor" | "gear" | "draft" | "trim")[] }
 
 export class Hud {
   private speedG!: RoundGauge;
@@ -110,6 +110,8 @@ export class Hud {
   private ampG: RoundGauge | null = null;
   /** moto aquática: pressão do compressor e a luz do iBB (caçamba: NEUTRO / FREIO / RÉ) */
   private boostG: RoundGauge | null = null;
+  private altG: RoundGauge | null = null;
+  private wigLamp: HTMLElement | null = null;
   private ibbLamp: HTMLElement | null = null;
   /** barco sem câmbio (airboat): o velocímetro não mostra a marcha */
   private noGear = false;
@@ -193,6 +195,7 @@ export class Hud {
     this.egtG = this.tqG = this.n2G = this.oilG = this.oilTG = null;
     this.annun?.remove(); this.annun = null;
     this.boostG = null; this.ibbLamp?.remove(); this.ibbLamp = null;
+    this.altG = null; this.wigLamp?.remove(); this.wigLamp = null;
     if (opts.turbine) {
       // turbina: N1 (gerador de gás, %) e EGT (gases de escape, °C) grandes; vermelho no limite de partida/operação
       this.rpmG = new RoundGauge(big, { title: "N1 %", min: 0, max: 110, labels: [0, 20, 40, 60, 80, 100], minor: 5, big: true, bands: [{ from: 60, to: 101, c: "g" }, { from: 102, to: 110, c: "r" }] });
@@ -230,6 +233,16 @@ export class Hud {
       l.innerHTML = `<span class="ibb-dot"></span><b>iBB</b><em>FRENTE</em>`;
       small.parentElement?.insertBefore(l, this.fuelAut);
       this.ibbLamp = l;
+    }
+    if (opts.wig) {
+      // turbo: verde até ~0,7 bar (pleno); altura da asa: verde no efeito solo (até ~3 m), amarelo acima (a asa perde a força)
+      this.boostG = new RoundGauge(small, { title: "TURBO bar", min: 0, max: 1, labels: [0, 0.5, 1], minor: 0.1, bands: [{ from: 0.05, to: 0.75, c: "g" }, { from: 0.75, to: 0.85, c: "y" }, { from: 0.85, to: 1, c: "r" }] });
+      this.altG = new RoundGauge(small, { title: "ALTURA m", min: 0, max: 6, labels: [0, 3, 6], minor: 0.5, bands: [{ from: 0.4, to: 3, c: "g" }, { from: 3, to: 6, c: "y" }] });
+      const l = document.createElement("div");
+      l.id = "g-wig";
+      l.innerHTML = `<span class="ibb-dot"></span><b>VOO</b><em>NA ÁGUA</em>`;
+      small.parentElement?.insertBefore(l, this.fuelAut);
+      this.wigLamp = l;
     }
     this.fuelG = new RoundGauge(small, { title: "COMBUST.", min: 0, max: 1, labels: [0, 0.5, 1], minor: 0.125, redFrom: 0, redTo: 0.12, labelFmt: (v) => (v === 0 ? "E" : v === 1 ? "F" : "½") });
     // dois motores: um relógio de temperatura e um de bateria para cada (BB = bombordo, BE = boreste: bancos separados)
@@ -294,6 +307,12 @@ export class Hud {
     const amps = t.batteryA;
     this.ampG?.set(Math.max(-60, Math.min(30, amps)), `${amps > 0.5 ? "+" : ""}${amps.toFixed(0)} A`, amps > 0.5 ? "carga" : amps < -0.5 ? "consumo" : "", amps < -40);
     this.boostG?.set(Math.max(0, t.boostBar), `${t.boostBar.toFixed(2)}`, `${(t.boostBar * 14.5).toFixed(0)} psi`, t.boostBar > 1.2);
+    if (this.altG) this.altG.set(Math.max(0, Math.min(6, t.wingH)), t.airborne ? `${t.wingH.toFixed(1)} m` : "—", `prof. ${t.elevator > 0 ? "+" : ""}${Math.round(t.elevator * 100)}%`, t.wingH > 3);
+    if (this.wigLamp) {
+      const st = t.stallWarn ? "stall" : t.airborne ? (t.wingH > 3 ? "high" : "ge") : "water";
+      const txt = st === "stall" ? "ESTOL" : st === "high" ? "FORA DO SOLO" : st === "ge" ? "EFEITO SOLO" : "NA ÁGUA";
+      if (this.wigLamp.dataset.s !== st) { this.wigLamp.dataset.s = st; this.wigLamp.querySelector("em")!.textContent = txt; }
+    }
     if (this.ibbLamp) {
       const st = t.ibb, txt = st === "brake" ? "FREIO" : st === "reverse" ? "RÉ" : st === "neutral" ? "NEUTRO" : "FRENTE";
       if (this.ibbLamp.dataset.s !== st) { this.ibbLamp.dataset.s = st; this.ibbLamp.querySelector("em")!.textContent = txt; }

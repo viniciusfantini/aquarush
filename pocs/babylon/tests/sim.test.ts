@@ -8,7 +8,9 @@ import { Speedboat } from "../src/sim/boat.ts";
 import { JUMP_AH } from "../src/sim/engineSystems.ts";
 import { Wind, WIND_LEVELS } from "../src/sim/wind.ts";
 import { jetStreakLocal } from "../src/sim/bilgeJet.ts";
-import { SPEEDBOAT, DINGHY, RAPIDA, TURBINA, JETSKI, AIRBOAT, PERSON_KG, smallTow, type Occupant } from "../src/sim/params.ts";
+import { SPEEDBOAT, DINGHY, RAPIDA, TURBINA, JETSKI, AIRBOAT, WIG, PERSON_KG, smallTow, type Occupant } from "../src/sim/params.ts";
+import { groundLift, groundInduced } from "../src/sim/wing.ts";
+import { halfWidth } from "../src/sim/mooring.ts";
 import { Turbine } from "../src/sim/turbine.ts";
 import { GerstnerWater, WAVE_PRESETS, type CurrentZone } from "../src/sim/water.ts";
 import type { PhysicsWorld } from "../src/sim/world.ts";
@@ -1367,6 +1369,104 @@ for (const [label, thr] of [["baixa", 0.25], ["alta", 1]] as const) {
   check("airboat", "no seco a toda: bem mais devagar que na água (km/h)", l.telemetry.speedKmh, 0, 45, "km/h", 0);
   // carretinha da caminhonete
   check("airboat", "vai na carretinha grande da caminhonete", smallTow("airboat") ? 0 : 1, 1, 1, "", 0);
+}
+
+// ---------- Ekranoplano AR-W: asa com efeito solo, cauda em T, motor turbo com injeção eletrônica ----------
+{
+  const water = mkWater(0.35);
+  const mk = (pax = 1) => {
+    const b = new Speedboat(WIG, v3(0, 0.1, 0)); b.systems.fuelL = 60;
+    b.occupants = [{ seat: "helm", mass: PERSON_KG }, ...(pax > 1 ? [{ seat: "passenger" as const, mass: PERSON_KG }] : [])];
+    run(b, water, 5, { ...emptyInput() }); return b;
+  };
+  // efeito solo (fórmulas): rente à água a asa sustenta bem mais; longe dela (> 1 envergadura) é uma asa comum
+  check("ekranoplano", "efeito solo: sustentação a 0,3 m / longe da água (×)", groundLift(0.3, 1.9, WIG.wing!.groundGain, WIG.wing!.groundScale), 2.2, 3.2, "×", 2);
+  check("ekranoplano", "efeito solo: sustentação a 6 m (×)", groundLift(6, 1.9, WIG.wing!.groundGain, WIG.wing!.groundScale), 1, 1.02, "×", 3);
+  check("ekranoplano", "efeito solo: arrasto induzido a 0,5 m (fração)", groundInduced(0.5, WIG.wing!.span), 0.3, 0.75, "", 2);
+  const a = mk();
+  check("ekranoplano", "parado: flutua com os flutuadores (roll, °)", Math.abs(a.telemetry.rollDeg), 0, 3, "°", 1);
+  check("ekranoplano", "parado: asa acima da água (m)", a.telemetry.wingH, 0.15, 0.5, "m", 2);
+  check("ekranoplano", "parado: não está voando", a.telemetry.airborne ? 1 : 0, 0, 0, "", 0);
+  let tOff = -1, vOff = 0, hMax = 0, hMin = 99, pMin = 99, pMax = -99;
+  run(a, water, 50, { ...emptyInput(), throttle: 1 }, openWater, (t) => {
+    const T = a.telemetry;
+    if (tOff < 0 && T.airborne) { tOff = t; vOff = T.speedKmh; }
+    if (t > 35) { hMax = Math.max(hMax, T.wingH); hMin = Math.min(hMin, T.wingH); pMin = Math.min(pMin, T.pitchDeg); pMax = Math.max(pMax, T.pitchDeg); }
+  });
+  check("ekranoplano", "decola da água (s a pleno)", tOff, 4, 18, "s", 1);
+  check("ekranoplano", "velocidade na decolagem (km/h)", vOff, 60, 110, "km/h", 0);
+  check("ekranoplano", "voo a pleno, profundor neutro: velocidade (km/h)", a.telemetry.speedKmh, 125, 165, "km/h", 0);
+  check("ekranoplano", "voo a pleno: voando (casco fora d'água)", a.telemetry.airborne ? 1 : 0, 1, 1, "", 0);
+  check("ekranoplano", "voo a pleno: altura mínima da asa (m)", hMin, 0.4, 3, "m", 2);
+  check("ekranoplano", "voo a pleno: altura máxima da asa (m)", hMax, 0.5, 3, "m", 2);
+  check("ekranoplano", "voo estável: variação de pitch nos últimos 15 s (°)", pMax - pMin, 0, 4, "°", 1);
+  check("ekranoplano", "rotação a pleno (redução 2,43, rpm)", a.telemetry.rpm, 5000, 5900, "rpm", 0);
+  check("ekranoplano", "turbo a pleno (bar)", a.telemetry.boostBar, 0.4, 0.8, "bar", 2);
+  check("ekranoplano", "consumo a pleno (L/h)", a.telemetry.fuelLph, 30, 42, "L/h", 0);
+  // curva no ar: leme + ailerons inclinam um pouco para dentro (o efeito solo da asa de baixo limita)
+  run(a, water, 8, { ...emptyInput(), throttle: 1, steering: 1 });
+  check("ekranoplano", "curva no ar: guinada (°/s)", Math.abs(a.angVel.y) * 57.3, 2, 20, "°/s", 1);
+  check("ekranoplano", "curva no ar: inclina para dentro (roll, °)", Math.abs(a.telemetry.rollDeg), 3, 25, "°", 1);
+  check("ekranoplano", "curva no ar: não vira", a.capsized ? 1 : 0, 0, 0, "", 0);
+  // profundor todo para cima: sobe, mas longe da água a asa pequena não segura — não passa de poucos metros
+  {
+    const u = mk(); u.elevator = 1; let top = 0;
+    run(u, water, 60, { ...emptyInput(), throttle: 1 }, openWater, () => { top = Math.max(top, u.telemetry.wingH); });
+    check("ekranoplano", "profundor todo puxado: altura máxima (m) — sem teto artificial", top, 0.5, 6, "m", 2);
+    check("ekranoplano", "profundor todo puxado: aviso de estol aceso", u.telemetry.stallWarn ? 1 : 0, 1, 1, "", 0);
+  }
+  // fora do efeito solo: o mesmo barco solto a 12 m de altura desce sozinho
+  {
+    const h = mk(); run(h, water, 30, { ...emptyInput(), throttle: 1 });
+    h.pos = { ...h.pos, y: h.pos.y + 12 }; let maxSink = 0; const y0 = h.pos.y;
+    run(h, water, 8, { ...emptyInput(), throttle: 1 }, openWater, () => { maxSink = Math.max(maxSink, y0 - h.pos.y); });
+    check("ekranoplano", "solto a 12 m: perde altura sozinho (m em 8 s)", maxSink, 3, 20, "m", 1);
+  }
+  // motor cortado em voo: plana e pousa sem avaria
+  {
+    const c = mk(); run(c, water, 35, { ...emptyInput(), throttle: 1 });
+    c.engine = "off"; let tDown = -1;
+    run(c, water, 15, { ...emptyInput() }, openWater, (t) => { if (tDown < 0 && c.telemetry.wetFraction > 0.05) tDown = t; });
+    check("ekranoplano", "motor cortado em voo: pousa planando (s)", tDown, 1, 12, "s", 1);
+    check("ekranoplano", "motor cortado em voo: sem avaria do casco (%)", c.hullDamage * 100, 0, 2, "%", 0);
+    check("ekranoplano", "motor cortado em voo: não vira", c.capsized ? 1 : 0, 0, 0, "", 0);
+  }
+  // asa dobrada: sem sustentação (na carretinha / se cair na água assim, é só um barco)
+  {
+    const f = mk(); f.wingFolded = true;
+    run(f, water, 30, { ...emptyInput(), throttle: 1 });
+    check("ekranoplano", "asa dobrada: não decola", f.telemetry.airborne ? 1 : 0, 0, 0, "", 0);
+  }
+  // injeção eletrônica: duas lanes, duas bombas, pressão; sem magnetos/mistura/primer
+  {
+    const e = new Speedboat(WIG, v3(0, 0.1, 0)); const eng = (): string => e.engine; e.systems.fuelL = 20; e.occupants = [{ seat: "helm", mass: PERSON_KG }];
+    e.engine = "off" as typeof e.engine; e.ecuA = e.ecuB = e.pump1 = e.pump2 = false; e.fuelPress = 0; e.systems.coolantC = 24;
+    for (const bk of e.banks) bk.batterySoc = 0.6;
+    run(e, water, 2, { ...emptyInput() });
+    e.toggleIgnition(); run(e, water, 8, { ...emptyInput() });
+    check("ekranoplano", "P: partida a frio a 60 % de bateria (lanes, bombas, START)", eng() === "running" ? 1 : 0, 1, 1, "", 0);
+    check("ekranoplano", "pressão de combustível com as bombas (bar)", e.telemetry.fuelPressBar, 2.7, 3.1, "bar", 1);
+    run(e, water, 4, { ...emptyInput(), throttle: 1 }); const th2 = e.telemetry.thrustN;
+    e.setEcu("a", false); run(e, water, 1 / 120, { ...emptyInput(), throttle: 1 });
+    check("ekranoplano", "uma LANE: um pouco menos de força (empuxo, fração)", e.telemetry.thrustN / th2, 0.95, 0.995, "", 3);
+    run(e, water, 4, { ...emptyInput(), throttle: 1 });
+    check("ekranoplano", "uma LANE desligada: segue funcionando", eng() === "running" ? 1 : 0, 1, 1, "", 0);
+    e.setEcu("b", false); run(e, water, 0.5, { ...emptyInput() });
+    check("ekranoplano", "as duas LANES desligadas: o motor para", eng() === "off" && e.telemetry.stall === "ecu" ? 1 : 0, 1, 1, "", 0);
+    e.setEcu("a", true); e.setEcu("b", true); e.toggleIgnition(); run(e, water, 6, { ...emptyInput() });
+    e.setFuelPump(1, false); run(e, water, 2, { ...emptyInput() });
+    check("ekranoplano", "uma bomba só segura a pressão (motor ligado)", eng() === "running" ? 1 : 0, 1, 1, "", 0);
+    e.setFuelPump(2, false); run(e, water, 4, { ...emptyInput() });
+    check("ekranoplano", "sem bomba nenhuma: a pressão cai e o motor apaga", eng() === "off" && e.telemetry.stall === "fuelpress" ? 1 : 0, 1, 1, "", 0);
+    e.ecuA = e.ecuB = false; e.pump1 = e.pump2 = false; e.setKey(0, "on"); e.setKey(0, "start"); run(e, water, 5, { ...emptyInput() }); e.setKey(0, "on");
+    check("ekranoplano", "START sem LANE: gira e não pega", eng() !== "running" && e.telemetry.startFail === "ecu" ? 1 : 0, 1, 1, "", 0);
+    run(e, water, 2, { ...emptyInput(), trim: 1 });
+    check("ekranoplano", "E/Q mexem no profundor (não há trim de motor)", e.telemetry.elevator > 0.5 && Math.abs(e.telemetry.trimDeg) < 0.01 ? 1 : 0, 1, 1, "", 0);
+  }
+  // píer: a vaga deixa a ponta da asa longe dos pilares; carretinha grande da caminhonete
+  check("ekranoplano", "vaga do píer: largura considerada = meia-envergadura (m)", halfWidth(WIG), 3.4, 3.6, "m", 2);
+  check("ekranoplano", "vaga do píer: proa para o lago (rumo 0)", berthStartPose({ shoreX: 0, shoreZ: 0, width: 2.4, length: 20, deckY: 0.6 } as never, WIG).heading, 0, 0, "rad", 0);
+  check("ekranoplano", "vai na carretinha grande da caminhonete", smallTow("wig") ? 0 : 1, 1, 1, "", 0);
 }
 
 // ---------- Painel de sistemas (Y): registro de combustível, bomba de porão, afogador, chave de baterias ----------

@@ -38,6 +38,8 @@ export interface SystemsPanelActions {
   setMagnetos(pos: "off" | "r" | "l" | "both" | "start" | "release"): void; // motor de avião: chave dos magnetos
   prime(): void;                                  // motor de avião: uma bombada do primer
   setMixture(v: number): void;                    // motor de avião: alavanca de mistura (1 = rica, 0 = corte)
+  setEcu(lane: "a" | "b", on: boolean): void;     // injeção eletrônica: central LANE A / LANE B
+  setFuelPump(i: 1 | 2, on: boolean): void;       // injeção eletrônica: bomba elétrica de combustível 1 / 2
   close(): void;
 }
 
@@ -60,8 +62,10 @@ export interface SystemsPanelCaps {
   ecoMode?: boolean;
   /** buzina elétrica ou apito de bolinha (bote, moto aquática). Ausente = buzina com bateria, apito sem */
   horn?: "buzina" | "apito";
-  /** fileira de luzes de aviso (anunciadores, como na AR-10) — motor a pistão */
-  annunciators?: boolean;
+  /** fileira de luzes de aviso (anunciadores, como na AR-10) — motor a pistão; "efi" = as da injeção eletrônica */
+  annunciators?: boolean | "efi";
+  /** motor de avião com INJEÇÃO ELETRÔNICA: LANE A/B + START na partida, bombas de combustível 1/2 nos sistemas */
+  efi?: boolean;
   /** motor de avião: magnetos + primer na partida e a alavanca de mistura no comando (no lugar da chave de ignição) */
   aircraft?: boolean;
 }
@@ -103,6 +107,8 @@ export class SystemsPanel {
       else if (d.lan) this.act.setLanyard(!b.classList.contains("on"));
       else if (d.eco) this.act.setEco(!b.classList.contains("on"));
       else if (d.mag && d.mag !== "start") this.act.setMagnetos(d.mag as "off" | "r" | "l" | "both");
+      else if (d.ecu) this.act.setEcu(d.ecu as "a" | "b", !b.classList.contains("on"));
+      else if (d.pump) this.act.setFuelPump(d.pump === "2" ? 2 : 1, !b.classList.contains("on"));
       else if (d.prime) { this.act.prime(); b.classList.remove("push"); void b.offsetWidth; b.classList.add("push"); }
     });
     bindKeySpring(el, (i, pos) => this.act.setKey(i, pos));
@@ -135,7 +141,10 @@ export class SystemsPanel {
     const cell = (ctl: string, info: string) => `<div class="sw-cell">${ctl}<div class="rd" data-info="${info}"></div></div>`;
     this.el.dataset.disp = caps.display;
     // partida: chave(s) de ignição ou a corda
-    const start = caps.aircraft
+    const start = caps.efi
+      ? cell(`<div class="ss">${toggle({ attr: "ecu", val: "a", label: "LANE A", sub: "central de injeção" })}${toggle({ attr: "ecu", val: "b", label: "LANE B", sub: "reserva" })}
+          <div class="rb-w"><button class="rb rb-start" data-ss="start" title="segure: dá a partida (com uma LANE ligada e pressão de combustível)"><span>START</span></button></div></div>`, "efi")
+      : caps.aircraft
       ? cell(rotary("mag", "MAGNETOS", "OFF · R · L · BOTH · START", [{ v: "off", l: "OFF" }, { v: "r", l: "R" }, { v: "l", l: "L" }, { v: "both", l: "BOTH" }, { v: "start", l: "START" }], { cls: "mag" }), "mag")
         + cell(`<div class="pr-w"><button class="pr" data-prime="1" title="primer manual: cada clique é uma bombada (frio: 2–4; demais afoga)"><span class="pr-body"></span><span class="pr-knob"></span></button><b>PRIMER</b><small>bomba manual</small></div>`, "prime")
       : caps.startStop
@@ -150,6 +159,10 @@ export class SystemsPanel {
     if (caps.batterySwitch === false) { /* (sem chave geral: a bateria fica sempre ligada) */ }
     else if (caps.banks === 2) cells.push(cell(rotary("bat", "BATERIAS", "chave geral · 2 bancos", [{ v: "off", l: "OFF" }, { v: "ind", l: "IND" }, { v: "bb", l: "BB" }, { v: "be", l: "BE" }, { v: "both", l: "AMBAS" }]), "bat"));
     else if (caps.banks === 1) cells.push(cell(rotary("bat", "BATERIA", "chave geral", [{ v: "off", l: "OFF" }, { v: "ind", l: "ON" }]), "bat"));
+    if (caps.efi) {
+      cells.push(cell(toggle({ attr: "pump", val: "1", label: "BOMBA 1", sub: "combustível (principal)" }), "pump1"));
+      cells.push(cell(toggle({ attr: "pump", val: "2", label: "BOMBA 2", sub: "reserva (decolagem)" }), "pump2"));
+    }
     if (caps.fuelValve !== false) cells.push(cell(rotary("fuel", "COMBUSTÍVEL", "registro do tanque", [{ v: "closed", l: "FECHADO" }, { v: "open", l: "ABERTO" }], { cls: "fuel" }), "fuel"));
     if (caps.ecoMode && !caps.startStop) cells.push(cell(toggle({ attr: "eco", val: "1", label: "MODO", sub: "ECO limita o gatilho", on: "ECO", off: "SPORT" }), "eco"));
     if (caps.choke) cells.push(cell(pull("choke", "1", "AFOGADOR", "partida a frio"), "choke"));
@@ -159,7 +172,7 @@ export class SystemsPanel {
     this.title.textContent = `⠿ SISTEMAS — ${caps.title}`;
     // anunciadores (como no painel da AR-10): apagado = normal ("cockpit escuro"); TESTE acende todos + alarme
     const ann = caps.annunciators
-      ? `<div class="sp-ann-row"><div class="tp-ann sp-ann">${SystemsPanel.ANN.map((k) => `<span data-a="${k}">${k}</span>`).join("")}</div></div>`
+      ? `<div class="sp-ann-row"><div class="tp-ann sp-ann">${(caps.annunciators === "efi" ? SystemsPanel.ANN_EFI : SystemsPanel.ANN).map((k) => `<span data-a="${k}">${k}</span>`).join("")}</div></div>`
       : "";
     this.body.innerHTML = ann + `
       <div class="sp-top"><div><div class="sp-sec">PARTIDA</div>${plate(start, "sp-start")}</div>
@@ -189,6 +202,8 @@ export class SystemsPanel {
 
   /** luzes de aviso do motor a pistão (ordem do painel) */
   static readonly ANN = ["IGNIÇÃO", "PARTIDA", "ALTERNADOR", "ÓLEO", "TEMP CAB.", "COMB. BAIXO"];
+  /** luzes da injeção eletrônica (ekranoplano) */
+  static readonly ANN_EFI = ["LANE A", "LANE B", "PRESS. COMB.", "ALTERNADOR", "ÓLEO", "COMB. BAIXO"];
   /** (sem botão TESTE no painel de sistemas — mantido para o main, sempre falso) */
   lampTestOn = false;
 
@@ -222,7 +237,12 @@ export class SystemsPanel {
         "ÓLEO": on && t.engine !== "running" ? "r" : "",
         "TEMP CAB.": lit && (t.protectMode ? blink : t.overheatWarn) ? "r" : "",
         "COMB. BAIXO": lit && t.lowFuel ? (t.fuelL <= 0.05 ? "r" : "a") : "",
+        // injeção: LANE apagada com o motor ligado = âmbar (perdeu a redundância); pressão baixa = vermelha
+        "LANE A": lit && (keyOn || t.ecuA || t.ecuB) && !t.ecuA ? "a" : "",
+        "LANE B": lit && (keyOn || t.ecuA || t.ecuB) && !t.ecuB ? "a" : "",
+        "PRESS. COMB.": lit && (keyOn || t.ecuA || t.ecuB) && t.fuelPressBar < 2 ? "r" : "",
       };
+      if (c.annunciators === "efi") L["ÓLEO"] = lit && (keyOn || t.ecuA || t.ecuB) && t.engine !== "running" ? "r" : "";
       for (const s of this.el.querySelectorAll<HTMLElement>(".sp-ann [data-a]")) { const v = L[s.dataset.a ?? ""] ?? ""; if (s.className !== v) s.className = v; }
     }
     setRotary(el, "bat", t.batterySel === "off" ? "off" : c.banks === 1 ? "ind" : t.batterySel);
@@ -238,7 +258,7 @@ export class SystemsPanel {
       const key = t.keys[i] ?? "off";
       setKey(el, i, key, key !== "off" && bankV > 9);
     });
-    if (!c.keys.length && !c.startStop && !c.aircraft) setRope(el, t.engine === "running" ? "running" : t.engine === "cranking" ? "cranking" : "off");
+    if (!c.keys.length && !c.startStop && !c.aircraft && !c.efi) setRope(el, t.engine === "running" ? "running" : t.engine === "cranking" ? "cranking" : "off");
     const info = (k: string, s: string, warn = false) => {
       const e = el.querySelector<HTMLElement>(`[data-info="${k}"]`);
       if (!e) return;
@@ -260,6 +280,18 @@ export class SystemsPanel {
         : !t.lanyard ? "cordão SOLTO: não liga" : awake ? "central acordada" : "desligada"), !t.lanyard || (t.startFail !== "" && t.engine === "off" && awake));
 
     }
+    if (c.efi) {
+      setToggle(el, "ecu", "a", t.ecuA, t.ecuA && hv > 6);
+      setToggle(el, "ecu", "b", t.ecuB, t.ecuB && hv > 6);
+      setToggle(el, "pump", "1", t.pump1, t.pump1 && hv > 6);
+      setToggle(el, "pump", "2", t.pump2, t.pump2 && hv > 6);
+      const sb = el.querySelector<HTMLElement>("button[data-ss='start']");
+      sb?.classList.toggle("lit", t.engine === "running" && hv > 9); sb?.classList.toggle("busy", t.engine === "cranking");
+      info("efi", t.engine === "running" ? `ligado · ${Math.round(t.rpm)} rpm · turbo ${t.boostBar.toFixed(2)} bar${t.ecuA && t.ecuB ? "" : " · UMA LANE"}` : t.engine === "cranking" ? `arranque · ${Math.round(t.rpm)} rpm`
+        : !t.ecuA && !t.ecuB ? "centrais desligadas" : "centrais ligadas", t.engine === "running" && !(t.ecuA && t.ecuB));
+      info("pump1", `${t.fuelPressBar.toFixed(1)} bar`, (t.ecuA || t.ecuB) && t.fuelPressBar < 2);
+      info("pump2", t.pump1 && t.pump2 ? "as duas ligadas" : t.pump2 ? "só a reserva" : "desligada");
+    }
     if (c.aircraft) {
       setRotary(el, "mag", t.engine === "cranking" ? "start" : t.magnetos);
       info("mag", t.engine === "running" ? `ligado · ${Math.round(t.rpm)} rpm${t.magnetos === "r" || t.magnetos === "l" ? ` · só ${t.magnetos.toUpperCase()}` : ""}` : t.engine === "cranking" ? `arranque · ${Math.round(t.rpm)} rpm` : t.magnetos === "off" ? "magnetos desligados" : "magnetos ligados");
@@ -275,7 +307,7 @@ export class SystemsPanel {
         rd.classList.toggle("warn", t.mixture < 0.5);
       }
     }
-    if (!c.keys.length && !c.startStop && !c.aircraft) info("rope", t.engine === "running" ? `${Math.round(t.rpm)} rpm` : t.startFail === "pull" ? "não pegou: puxe de novo" : "motor parado", t.startFail === "pull");
+    if (!c.keys.length && !c.startStop && !c.aircraft && !c.efi) info("rope", t.engine === "running" ? `${Math.round(t.rpm)} rpm` : t.startFail === "pull" ? "não pegou: puxe de novo" : "motor parado", t.startFail === "pull");
     if (c.banks === 2) info("bat", `BB ${t.batteryVs[0]?.toFixed(1)} V · BE ${t.batteryVs[1]?.toFixed(1)} V`, sel === "off");
     else if (c.banks === 1) info("bat", `${t.batteryV.toFixed(1)} V · ${Math.round(t.batterySoc * 100)} %`, sel === "off");
     info("fuel", t.fuelValveOpen ? `${t.fuelL.toFixed(1)} L no tanque` : `linha ${Math.round(t.fuelLineFrac * 100)} %`, !t.fuelValveOpen);
@@ -290,6 +322,8 @@ export class SystemsPanel {
       : sel === "off" && c.banks > 0 ? "Chave de baterias em OFF: sem partida, sem bomba de porão, sem luzes (as chaves ficam onde estão, só os LEDs apagam)."
       : c.startStop && !t.lanyard ? "Cordão de segurança SOLTO: prenda o clipe no botão de parada para dar partida (ele fica no pulso do piloto)."
       : c.startStop && (t.keys[0] ?? "off") === "on" && t.engine === "off" ? "Central acordada: segure START até o motor pegar (em N); ela dorme 30 s depois de parada."
+      : c.efi && !t.ecuA && !t.ecuB && t.engine !== "running" ? "Injeção eletrônica: ligue a LANE A e a B, as bombas de combustível (a pressão sobe a ~3 bar) e segure START. P faz tudo sozinho."
+      : c.efi && t.engine === "running" && !(t.ecuA && t.ecuB) ? "Uma LANE desligada: o motor segue com a outra central (um pouco menos de força), mas sem redundância."
       : c.keys.length && t.keys.some((k) => k === "on") && t.engine !== "running" ? "Chave em ON: segure START até o motor pegar (só em N)." : "";
     // display de avisos: caixa fixa no pé do painel, o texto rola; um aviso novo de sistemas/motor fica ~6 s
     const flashing = performance.now() - this.flashT < 6000;

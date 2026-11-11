@@ -24,6 +24,9 @@ export interface BoatVisual {
   drives?: { engine: TransformNode; propeller: TransformNode; propBlur: PBRMaterial }[];
   /** bocais do escape da turbina (−Z local = para onde o gás sai): fumaça e fogo em presentation/exhaustFx.ts */
   exhausts?: TransformNode[];
+  /** ekranoplano: dobrar as partes externas da asa (anima) / na hora */
+  setFolded?: (on: boolean) => void;
+  snapFold?: (on: boolean) => void;
 }
 
 // ---------------- forma do casco ----------------

@@ -19,6 +19,7 @@ import { type VehicleInput, emptyInput } from "../gameplay/vehicleInput.ts";
 const NO_PILOT: VehicleInput = emptyInput();
 import { EngineSystems } from "./engineSystems.ts";
 import { AnchorGear, type AnchorState } from "./anchor.ts";
+import { panelForce } from "./wing.ts";
 
 const RHO = 1000;     // água doce, kg/m³
 /** Rotação máxima em neutro (a central do motor limita o giro sem carga na hélice). */
@@ -72,10 +73,10 @@ export interface BoatTelemetry {
   protectMode: boolean;  // superaquecido: rotação limitada
   lowFuel: boolean;
   chargeWarn: boolean;
-  stall: "" | "fuel" | "overheat" | "capsize" | "broken" | "sunk" | "flooded" | "lanyard" | "magnetos" | "mixture"; // lanyard = corta-circuito (o piloto pulou) // último motivo de o motor ter morrido sozinho (flooded = afogado pelo afogador)
+  stall: "" | "fuel" | "overheat" | "capsize" | "broken" | "sunk" | "flooded" | "lanyard" | "magnetos" | "mixture" | "ecu" | "fuelpress"; // lanyard = corta-circuito (o piloto pulou) // último motivo de o motor ter morrido sozinho (flooded = afogado pelo afogador)
   buzzer: boolean;       // alarme do motor apitando (autoteste da chave)
   starterRpm: number;    // rotação do motor de arranque (0 = só o "clique" do solenoide)
-  startFail: "" | "weak" | "dead" | "pull" | "fuel" | "lanyard" | "flooded" | "lean" | "prime" | "magnetos"; // última partida que não pegou (bateria fraca / sem força / corda / sem combustível)
+  startFail: "" | "weak" | "dead" | "pull" | "fuel" | "lanyard" | "flooded" | "lean" | "prime" | "magnetos" | "ecu" | "pumps"; // última partida que não pegou (bateria fraca / sem força / corda / sem combustível)
   batterySoc: number;    // estado de carga 0..1
   trimPin: number;       // trim manual: furo do pino 1..N, N+1 = tilt total; 0 = power trim
   /** cordão de segurança (lanyard) preso no botão de parada: sem ele o motor não liga (moto aquática) */
@@ -88,6 +89,23 @@ export interface BoatTelemetry {
   magnetos: "off" | "r" | "l" | "both";
   mixture: number;
   prime: number;
+  /** injeção eletrônica (ekranoplano): centrais LANE A/B, bombas de combustível 1/2 e pressão da linha (bar) */
+  ecuA: boolean;
+  ecuB: boolean;
+  pump1: boolean;
+  pump2: boolean;
+  fuelPressBar: number;
+  /** ASA (ekranoplano): altura da asa sobre a água (m; bordo de fuga mais baixo), velocidade do ar (m/s), ângulo de
+   *  ataque médio da asa (°), multiplicador do efeito solo, sustentação da asa / peso, profundor (−1..1), aviso de
+   *  estol e "voando" (nenhum ponto do casco na água) */
+  wingH: number;
+  airspeed: number;
+  aoaDeg: number;
+  groundEffect: number;
+  wingLoad: number;
+  elevator: number;
+  stallWarn: boolean;
+  airborne: boolean;
   /** pressão de sobrealimentação do compressor (bar, manométrica; 0 = sem compressor / sem carga) */
   boostBar: number;
   /** caçamba do jato (iBB): "off" = recolhida (frente), "neutral", "brake" (R andando para a frente), "reverse" */
@@ -363,6 +381,16 @@ export class Speedboat {
   righted = 0;
   /** cordão de segurança preso (lanyard): o clipe segura o botão de parada; puxado, o motor morre */
   lanyard = true;
+  /** injeção eletrônica: centrais (lanes) A/B, bombas 1/2 e pressão da linha de combustível (bar) */
+  ecuA = true;   // (o jogo começa com tudo desligado: resetBoat no main)
+  ecuB = true;
+  pump1 = true;
+  pump2 = false;
+  fuelPress = 3;
+  /** profundor (compensação, −1 = nariz para baixo, +1 = nariz para cima): fica onde o piloto deixou */
+  elevator = 0;
+  /** ekranoplano com as partes externas da asa DOBRADAS (carretinha/pátio): sem sustentação nem flutuadores */
+  wingFolded = false;
   /** motor de avião: magnetos (OFF / R / L / BOTH), mistura 0..1 (1 = rica, < 0,15 = corte) e primer (bombadas no motor) */
   magnetos: "off" | "r" | "l" | "both" = "both";
   mixture = 1;
@@ -432,6 +460,7 @@ export class Speedboat {
       distanceM: 0, collisions: 0, draftHull: 0, draftMotor: 0, capsized: false, swimmers: 0, hullDamage: 0, engineDamage: 0, damageEvent: "", damageCount: 0, lastImpact: 0, depth: 0, submergedPoints: params.buoyancyPoints.map(() => false),
       rpms: [params.idleRpm], gears: ["N"], throttles: [0], thrusts: [0], engines: ["running"], keys: ["on"], houseV: 12.6, propRpms: [0], coolants: [45], batteryVs: [12.6], batterySocs: [0.92], batteryAs: [0], turbine: null, nominalV: 12, gpu: false, gpuState: "off", gpuT: 0, gpuKw: 0, busBattery: true, busGen: false, extPwr: false, extPwrClosed: false, extPwrFault: false, gpuA: 0, coolingLps: 0, fuelValveOpen: true, fuelLineFrac: 1, bilgeMode: "auto", batterySel: "ind", choke: false,
       lanyard: true, driveMode: "normal", righting: false, magnetos: "both", mixture: 1, prime: 0, boostBar: 0, ibb: "off",
+      ecuA: false, ecuB: false, pump1: false, pump2: false, fuelPressBar: 0, wingH: 0, airspeed: 0, aoaDeg: 0, groundEffect: 1, wingLoad: 0, elevator: 0, stallWarn: false, airborne: false,
     };
   }
 
@@ -445,6 +474,7 @@ export class Speedboat {
     this.steer = 0;
     this.trim = 0;
     this.tilt = 0;
+    this.elevator = 0;
     this.tiltWanted = false;
     this.capsized = false; this.capsizeT = 0; this.rightT = 0; this.lanyard = true; this.swimmers = []; this.winchStrap = null; this.mooringLines = [];
     this.anchor.reset(); this.bilgeL = 0; this.bilgeAuto = false; this.bilgePumpA = 0; this.sunk = false; this.airL = -1; this.sinkSpot = null; this.sloshDeck = v3(); this.sloshUnder = v3();
@@ -736,6 +766,8 @@ export class Speedboat {
       }
       this.telemetry.apparentWind = sp;
     }
+    // ---------------- ASA COM EFEITO SOLO (ekranoplano) ----------------
+    if (P.wing) this.applyWing(dt, water, world, wetFraction);
 
     // ---------------- âncora (o cabo entra como mola em collide) ----------------
     {
@@ -834,6 +866,7 @@ export class Speedboat {
     this.updateCapsize(dt, water, world);
     t.capsized = this.capsized;
     t.lanyard = this.lanyard; t.driveMode = this.driveMode;
+    if (P.efi) this.updateEfi(dt);
     if (P.aircraft) {
       // o primer evapora devagar (~1,5 min); magnetos em OFF ou mistura em corte com o motor ligado = ele para
       if (this.engine === "off") this.prime *= Math.exp(-dt / 90);
@@ -1077,6 +1110,8 @@ export class Speedboat {
     const trimIn = clamp(input.trim, -1, 1);
     this.tiltBlocked = false;
     this.telemetry.trimRelay = false;
+    // ekranoplano: o "trim" é a roda de compensação do PROFUNDOR (fica onde o piloto deixa)
+    if (P.wing) this.elevator = clamp(this.elevator + trimIn * P.wing.elevatorRate * dt, -1, 1);
     if (P.trimMode === "none") { this.trimMotorA = 0; this.trim = 0; this.tilt = 0; } // (airboat: não tem trim — o botão não faz nada)
     else if (P.trimMode === "manual") { this.updateManualTrim(dt, trimIn, input.throttle); this.trimMotorA = 0; }
     else {
@@ -1470,9 +1505,92 @@ export class Speedboat {
       this.reboarded++;
     }
   }
+  // ---------------- ekranoplano: asa, cauda e flutuadores das pontas ----------------
+  /**
+   * Forças aerodinâmicas de cada placa (sim/wing.ts) no seu ponto — o vento relativo usa a velocidade DO PONTO
+   * (ω×r: a cauda amortece a arfagem e a guinada, as pontas a rolagem) — e os flutuadores das pontas das asas
+   * (empuxo + arrasto quando tocam a água: seguram o casco estreito de pé parado).
+   */
+  private applyWing(dt: number, water: IWaterSurface, world: PhysicsWorld, wetFraction: number): void {
+    const W = this.params.wing!;
+    const t = this.telemetry;
+    t.elevator = this.elevator;
+    if (this.wingFolded) { t.wingH = 0; t.airspeed = 0; t.aoaDeg = 0; t.groundEffect = 1; t.wingLoad = 0; t.stallWarn = false; t.airborne = false; return; }
+    const wv = world.wind ?? v3();
+    let hMin = 99, aoa = 0, kSum = 0, nG = 0, liftUp = 0;
+    for (const pn of W.panels) {
+      const wp = this.toWorld(pn.pos);
+      const pv = this.pointVelocity(wp);
+      const vAir = rotateInv(this.rot, v3(wv.x - pv.x, -pv.y, wv.z - pv.z));
+      let h = 0, hDot = 0;
+      if (pn.ground) {
+        // altura do bordo de fuga (¾ da corda atrás do centro aerodinâmico) sobre a água ou o chão
+        const te = this.toWorld(add(pn.pos, v3(0, 0, -0.75 * pn.chord)));
+        h = te.y - Math.max(water.getHeight(te.x, te.z), world.groundHeight(te.x, te.z));
+        hDot = this.pointVelocity(te).y;
+        hMin = Math.min(hMin, h);
+      }
+      const ck = pn.control?.kind;
+      const cmd = ck === "elevator" ? this.elevator : ck === "aileron" ? this.steer / Math.max(1e-3, this.params.maxSteerLow) : 0;
+      const r = panelForce(pn, W, vAir, h, cmd, hDot);
+      const f = rotate(this.rot, r.force);
+      if (pn.ground) { aoa += r.alpha; kSum += r.kGround; nG++; liftUp += f.y; }
+      this.addForceAt(f, wp, "lift");
+    }
+    // flutuadores das pontas: esfera com empuxo pela fração submersa, arrasto e amortecimento vertical
+    for (const fl of W.floats) {
+      const p = this.toWorld(fl.pos);
+      const d = water.getHeight(p.x, p.z) - (p.y - fl.radius);
+      if (d <= 0) continue;
+      const frac = clamp(d / (2 * fl.radius), 0, 1.3);
+      const rv = sub(this.pointVelocity(p), water.getCurrent(p.x, p.z));
+      const area = Math.PI * fl.radius * fl.radius * Math.min(1, frac);
+      const sp = len(rv);
+      const f = add(v3(0, RHO * G * fl.volume * Math.min(1, frac) - 600 * frac * rv.y, 0), scale(rv, -0.5 * RHO * 0.6 * area * sp));
+      this.addForceAt(f, p, "buoy");
+    }
+    const vc = rotateInv(this.rot, v3(wv.x - this.vel.x, -this.vel.y, wv.z - this.vel.z));
+    t.wingH = hMin < 90 ? hMin : 0;
+    t.airspeed = Math.max(0, -vc.z);
+    t.aoaDeg = nG ? aoa / nG / (Math.PI / 180) : 0;
+    t.groundEffect = nG ? kSum / nG : 1;
+    t.wingLoad = liftUp / (this.totalMass * G);
+    t.elevator = this.elevator;
+    t.stallWarn = nG > 0 && aoa / nG > W.stallWarn && t.airspeed > 12;
+    t.airborne = wetFraction <= 0 && t.wingH > 0.05 && this.impactN < 1; // (nem na água nem arrastando no chão)
+    void dt;
+  }
+
+  // ---------------- injeção eletrônica (ekranoplano): centrais A/B e bombas de combustível ----------------
+  /** central LANE A ou B (cada uma injeta e acende sozinha) */
+  setEcu(lane: "a" | "b", on: boolean): void {
+    if (lane === "a") this.ecuA = on; else this.ecuB = on;
+    if (on) for (const x of this.units) if (x.key === "off") { x.key = "on"; if (this.bankFor(x.index).supplyV(2) > 9) x.testT = 1.1; }
+    if (!this.ecuA && !this.ecuB) { for (const x of this.units) { x.key = "off"; x.manualCrank = false; } if (this.engine !== "off") { this.engine = "off"; this.telemetry.stall = "ecu"; } }
+  }
+  /** bomba elétrica de combustível 1 (principal) ou 2 (reserva) */
+  setFuelPump(i: 1 | 2, on: boolean): void { if (i === 1) this.pump1 = on; else this.pump2 = on; }
+  /** pressão da linha e cortes da injeção (a cada passo) */
+  private updateEfi(dt: number): void {
+    const t = this.telemetry;
+    // as bombas e as centrais precisam de energia: da bateria ou, com o motor girando, dos geradores dele
+    const powered = this.engine === "running" || this.systems.supplyV(4) > 9;
+    const target = powered && (this.pump1 || this.pump2) ? 3.0 : 0;
+    this.fuelPress += (target - this.fuelPress) * (1 - Math.exp(-dt / (target > this.fuelPress ? 0.5 : 0.7)));
+    if (this.engine === "running" && !this.ecuA && !this.ecuB) { this.engine = "off"; t.stall = "ecu"; }
+    if (this.engine === "running" && this.fuelPress < 1.0) { this.engine = "off"; t.stall = "fuelpress"; }
+    t.ecuA = this.ecuA; t.ecuB = this.ecuB; t.pump1 = this.pump1; t.pump2 = this.pump2; t.fuelPressBar = this.fuelPress;
+  }
+
   // ---------------- motor de avião (airboat): magnetos, mistura, primer ----------------
   /** fator de força do motor de avião (1 = normal): magnetos (um só = queda) × mistura (pico ~0,8; pobre perde) */
   private aeroPower(): number {
+    const E = this.params.efi;
+    if (E) {
+      // injeção: uma lane só perde um pouco; pressão baixa empobrece (perde força) antes de apagar
+      const lanes = (this.ecuA ? 1 : 0) + (this.ecuB ? 1 : 0);
+      return (lanes === 2 ? 1 : lanes === 1 ? 1 - E.laneDrop : 0) * smoothstep(1.0, 2.5, this.fuelPress);
+    }
     const A = this.params.aircraft;
     if (!A) return 1;
     const mag = this.magnetos === "both" ? 1 : this.magnetos === "off" ? 0 : 1 - A.magDrop;
@@ -1484,13 +1602,15 @@ export class Speedboat {
   get flooded(): boolean { return !!this.params.aircraft && (this.prime > 6 || (this.systems.coolantC >= 40 && this.prime > 3)); }
   /** o motor de avião consegue pegar? (magneto ligado, mistura rica, não afogado) */
   private aeroCanCatch(): boolean {
+    if (this.params.efi) return (this.ecuA || this.ecuB) && this.fuelPress > 2;
     if (!this.params.aircraft) return true;
     return this.magnetos !== "off" && this.mixture >= 0.5 && !this.flooded;
   }
   /** frio e sem primer: pega, mas só depois de girar bem mais (gasolina só pelo carburador) */
   private aeroExtraRevs(): number { return this.params.aircraft && this.systems.coolantC < 40 && this.prime < 2 ? 25 : 0; }
   /** por que o motor de avião não pegou ("" = não é por isso) */
-  private aeroFail(): "" | "flooded" | "lean" | "prime" | "magnetos" {
+  private aeroFail(): "" | "flooded" | "lean" | "prime" | "magnetos" | "ecu" | "pumps" {
+    if (this.params.efi) return !this.ecuA && !this.ecuB ? "ecu" : this.fuelPress <= 2 ? "pumps" : "";
     if (!this.params.aircraft) return "";
     if (this.magnetos === "off") return "magnetos";
     if (this.flooded) return "flooded";
@@ -1554,7 +1674,12 @@ export class Speedboat {
     if (!this.occupants.some((o) => o.seat === "helm")) return "noPilot";
     if (!this.lanyard && this.engine === "off") { this.telemetry.startFail = "lanyard"; return "noLanyard"; }
     if (this.engine !== "running" && this.engineDamage >= 0.95) return "broken";
-    if (this.engine === "running") { this.engine = "off"; for (const x of this.units) { x.key = "off"; x.manualCrank = false; } if (this.params.aircraft) this.magnetos = "off"; return "stopped"; }
+    if (this.engine === "running") { this.engine = "off"; for (const x of this.units) { x.key = "off"; x.manualCrank = false; } if (this.params.aircraft) this.magnetos = "off"; if (this.params.efi) { this.ecuA = this.ecuB = false; this.pump1 = this.pump2 = false; } return "stopped"; }
+    if (this.params.efi && this.engine === "off") {
+      // P = a sequência do piloto: LANE A e B ligadas, as duas bombas (decolagem), autoteste e partida (a pressão
+      // sobe durante o autoteste)
+      this.ecuA = this.ecuB = true; this.pump1 = this.pump2 = true;
+    }
     if (this.params.aircraft && this.engine === "off") {
       // P = a sequência do piloto: mistura RICA, primer se o motor estiver frio (3 bombadas), magnetos em BOTH, partida
       this.mixture = 1; this.magnetos = "both";

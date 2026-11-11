@@ -32,7 +32,9 @@ para continuar o trabalho em outra IA/ferramenta ou portar para Unity/Unreal sem
 
 ---
 
-## 2. As 6 embarcações (o que muda nos sistemas)
+## 2. As 7 embarcações (o que muda nos sistemas)
+
+(O ekranoplano AR-W — 7ª, v0.70 — está na seção 10e; a tabela abaixo cobre as outras.)
 
 | | AR-6 lancha (`lancha`) | AR-3 bote (`bote`) | AR-J moto aquática (`jetski`) | AR-9 rápida (`rapida`) | AR-10 turbina (`turbina`) |
 |---|---|---|---|---|---|
@@ -48,7 +50,7 @@ para continuar o trabalho em outra IA/ferramenta ou portar para Unity/Unreal sem
 | Temperatura | água (termostato 58 °C) | água | água (pressão do jato) | água por motor | **óleo da turbina** (sem corte automático) |
 
 Largada (todos): atracada na vaga do píer, motor desligado (turbina fria), chaves em OFF, bateria 60 %, combustível
-temporário (`START_FUEL` em `main.ts`: 5 L lancha/bote, 10 L AR-P, 8 L AR-J, 20 L AR-9, 120 L AR-10). O bote sai com o motor frio (24 °C).
+temporário (`START_FUEL` em `main.ts`: 5 L lancha/bote, 30 L AR-W, 10 L AR-P, 8 L AR-J, 20 L AR-9, 120 L AR-10). O bote sai com o motor frio (24 °C).
 
 ---
 
@@ -381,6 +383,29 @@ girando → `"busy"`.
   `toggleIgnition`/`setKey` não exigem N quando `params.airProp`.
 - Gasolina de aviação (0,72 kg/L), tanque de 80 L, 8 L/h na lenta, 70 L/h a pleno.
 
+## 10e. Ekranoplano AR-W: motor turbo com injeção eletrônica (v0.70)
+
+- **Motor**: boxer 4 cilindros, turbo, **injeção eletrônica**, 141 hp a 5800 rpm (lenta 1700), redução de 2,43 para a
+  hélice de 3 pás, cabeçotes arrefecidos a líquido com o radiador no pilone (a "tomada d'água" é sempre considerada ok,
+  como no airboat: `airProp`). Sem magnetos, mistura nem primer (`params.efi` no lugar de `params.aircraft`).
+- **Centrais LANE A / LANE B** (`Speedboat.ecuA/ecuB`, `setEcu`): cada uma injeta e acende sozinha. As duas = força
+  normal; uma só = `1 − laneDrop` (2 %); nenhuma = o motor para (`stall "ecu"`) e não pega (`startFail "ecu"`).
+- **Bombas de combustível 1 e 2** (`pump1/pump2`, `setFuelPump`) e **pressão da linha** (`fuelPress`, telemetria
+  `fuelPressBar`): com energia (bateria acima de ~9 V sob carga, ou o motor girando — os geradores dele) e uma bomba
+  ligada, a pressão sobe a 3,0 bar (τ 0,5 s); sem bomba ou sem energia cai (τ 0,7 s). A força é × smoothstep(1,0;
+  2,5 bar) da pressão; abaixo de 1 bar o motor apaga (`stall "fuelpress"`); a partida exige > 2 bar
+  (`startFail "pumps"`).
+- **Partida**: chave de ignição sem chave física — o START do Y gira o arranque (mola) com a mesma lógica do
+  `setKey`; não exige N (`airProp`). P = LANE A e B, bombas 1 e 2, autoteste (a pressão sobe durante ele) e arranque;
+  P com o motor ligado = desliga as centrais e as bombas.
+- **Elétrico 12 V**: bateria 30 Ah, arranque 110 A, geradores 30 A (40 % na lenta), chave geral de 1 banco e registro
+  de combustível. Sem luzes, sem trim de motor (E/Q = profundor), com bomba de porão pequena (2000 L/h, 3 A).
+- **Luzes de aviso no Y** (`SystemsPanelCaps.annunciators = "efi"`): LANE A e LANE B (âmbar = a central desligada com
+  o sistema ativo), PRESS. COMB. (vermelha abaixo de 2 bar), ALTERNADOR, ÓLEO (motor parado com o sistema ativo) e
+  COMB. BAIXO.
+- Turbo: 0,7 bar no fundo (`supercharger.maxBar` — o mesmo relógio do compressor da moto). Gasolina 0,72 kg/L, tanque
+  de 80 L, 6 L/h na lenta, 38 L/h a pleno. Largada fria (24 °C) com tudo desligado.
+
 ## 10c. Moto aquática AR-J: START/STOP, cordão, jato, ECO e desvirar (v0.67)
 
 - **Partida por botões** (`params.startStop`): não há chave de ignição, chave geral nem registro de combustível. No
@@ -430,7 +455,9 @@ starterLock }`, `lanyard`, `driveMode` ("normal"/"eco"), `righting`, `boostBar`,
 
 ## 12. Critérios de teste ligados a estes sistemas (`tests/sim.test.ts`)
 
-Grupos "sistemas", "bateria", "amperímetro", "neutro", "porão", "rápida", "turbina". Exemplos (v0.58):
+Grupos "sistemas", "bateria", "amperímetro", "neutro", "porão", "rápida", "turbina", "airboat", "ekranoplano". Exemplos (v0.58):
+- Ekranoplano (v0.70): P parte a frio a 60 % com 3,0 bar; uma LANE = 98 % do empuxo e segue; sem LANE para; uma
+  bomba basta; sem bomba a pressão cai e o motor apaga; START sem LANE gira e não pega.
 - AR-9 BE zerado: IND 1 motor, BB 2, BE 0, AMBAS iguala e 2, OFF 0; BB zerado em BE: 2.
 - Chave: ON apita e não gira; START segurada pega em ~1,2 s; soltar → ON e ligado; OFF para; engatado recusa;
   bateria zerada 8 s não pega; AR-9 só BB → só BB.

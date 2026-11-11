@@ -96,6 +96,45 @@ A lancha é um **corpo rígido 6DOF** (massa seca de 1030 kg + gasolina, ocupant
 
 > Referência completa da lógica elétrica e dos motores: [`docs/SISTEMAS_ELETRICOS_E_MOTORES.md`](../../docs/SISTEMAS_ELETRICOS_E_MOTORES.md).
 
+## Ekranoplano AR-W — asa com efeito solo (v0.70)
+
+- **Sétima embarcação** (`WIG` em `sim/params.ts`, `VesselKind` "wig", `?barco=wig`, no menu entre o bote e a AR-6
+  pela potência): casco de planeio de 7 m (fibra, fundo em V com degrau), 2 pessoas em tandem sob a capota, asa baixa
+  de **delta invertido** de 7 m com **flutuadores** nas pontas e ailerons, **cauda em T** (estabilizador + profundor no
+  alto, fora do efeito solo; deriva + leme no vento da hélice), hélice pusher de 3 pás (~1,7 m) num pilone, com redução
+  de 2,43. Massa seca 520 kg.
+- **Aerodinâmica** (`sim/wing.ts`, sem Babylon): cada superfície é uma placa (`WingPanel`: área, corda, CLα,
+  incidência, estol, cd0, alongamento) e a força vem do **vento relativo no ponto da placa** (velocidade do ponto com
+  ω×r, menos o vento) — o amortecimento de arfagem, rolagem e guinada sai da física. **Efeito solo** nas meias-asas
+  (cada uma pela altura do SEU bordo de fuga): sustentação × `1 + 2,2·exp(−h / (0,55·corda))`, arrasto induzido ×
+  φ(h) de McCormick. **Efeito solo dinâmico**: ΔCL = −10·(ḣ/V)·(kL − 1) — aproximando-se da água o ar preso sustenta
+  mais; sem esse termo a altura "golfinhava" (oscilação de ~4 s que crescia até 6 m). **Estol** suave para a placa
+  plana. Ailerons no mesmo comando da direção (5°); profundor pela compensação (E/Q, ±16°, fica onde o piloto deixa).
+  Flutuadores: esfera com empuxo pela fração submersa, arrasto e amortecimento vertical. Com a asa **dobrada**
+  (`wingFolded`: carretinha/pátio) não há sustentação nem flutuadores.
+- **Por que não voa alto**: a asa é pequena (8 m²) e de alongamento baixo. Longe da água (kL → 1) o ângulo de ataque
+  que o profundor alcança não sustenta o peso — o barco desce sozinho. Não existe teto artificial.
+- **Motor** (`params.efi`): boxer 4 cilindros **turbo com injeção eletrônica** (141 hp a 5800 rpm, lenta 1700),
+  cabeçotes a líquido, duas centrais **LANE A/B** (cada uma injeta e acende; uma só = −2 % de força; nenhuma = o
+  motor para), **duas bombas elétricas** (a pressão sobe a 3 bar em ~1 s; uma basta; sem nenhuma cai e o motor apaga
+  abaixo de 1 bar). Precisa de energia para dar partida (os geradores do motor seguram depois). P = LANE A e B,
+  bombas 1 e 2, autoteste e arranque; P de novo = desliga tudo. Turbo no relógio do compressor (0,7 bar).
+- **Visual** (`presentation/wigMesh.ts`): casco branco com faixa azul, capota de acrílico, asa com perfil, flutuadores,
+  ailerons, profundor e leme pela telemetria, nacele com os cilindros, radiador e o escape do turbo, hélice de 3 pás. As
+  partes externas da asa **dobram para cima** nas dobradiças (`setFolded`/`snapFold`) ao prender na carretinha e no
+  pátio; desdobram ao soltar a cinta na água.
+- **Jogo**: HUD com TURBO, ALTURA (altura da asa e o profundor em %) e a luz VOO (NA ÁGUA / EFEITO SOLO / FORA DO SOLO /
+  ESTOL); painel Y com LANE A/B + START, BOMBA 1/2, chave geral, registro e luzes LANE A, LANE B, PRESS. COMB.,
+  ALTERNADOR, ÓLEO, COMB. BAIXO; manete de mão (`LeverKind` "throttle"); som da hélice de 3 pás pela redução
+  (`propBladeHz`) e o assobio do turbo. **Pátio com 7 vagas de 3,1 m** (vaga 6 = o AR-W). **Vaga do píer** pela
+  meia-envergadura (`halfWidth` em `sim/mooring.ts`; o flutuador fica a 0,8 m dos pilares — encostado, a asa raspava
+  neles e girava o barco, conferido no navegador).
+- **Calibração** (`node tests/debug-wig.ts [profundor]`): só o piloto, decola em 9,7 s a 83 km/h; a pleno com o
+  profundor neutro 148 km/h, asa a 1,4–1,9 m, pitch 3,6° (variação 0,3°); 5400 rpm, turbo 0,61 bar, 38 L/h; curva no
+  ar 5°/s inclinando 14°; motor cortado em voo pousa em ~6,5 s sem avaria. Com 2 pessoas decola em ~12 s.
+- **Navegador** (Chrome, `?barco=wig`): visual conferido no píer e no pátio (asa dobrada); P liga (3,0 bar); solto,
+  sai reto e decola a ~104 km/h com a asa a ~0,4 m; painel Y e HUD conferidos; inglês sem textos faltando.
+
 ## Lancha pantaneira AR-P: sem âncora e luz de IGNIÇÃO (v0.69.3)
 
 - **`params.noAnchor`**: a lancha pantaneira não leva âncora — a sim ignora `input.anchor` (+ / − não fazem nada), o
@@ -564,10 +603,11 @@ Limitação: é uma síntese aproximada, não uma gravação. Validar o timbre d
 | 5. Manete | de cruzeiro para N: empuxo 0 e < 1 km/h em 27 s; a hélice gira **solta** (~990 rpm 1,5 s depois do N) e para junto com a lancha. F em lenta: 5,0 km/h a 750 rpm. R em lenta: 2,8 km/h para trás. No navegador: 1 toque W = F a 4 km/h; segurar = 45 km/h; 1 toque S = N; 2º toque = R lenta; segurar S = ré acelerando |
 | 6. Ondas e correnteza | ondas fortes (×2,5): roll ≤ 30°, não emborca; deriva com correnteza de 1,6 m/s: 1,54 m/s |
 | Lago | flutua no spawn; a toda contra a margem, encalha e para sem atravessar o terreno |
+| Ekranoplano AR-W (v0.70) | efeito solo: ×2,65 a 0,3 m, ×1,007 a 6 m; induzido ×0,57 a 0,5 m. Parado: roll 0,3°, asa a 0,29 m. Decola em 9,7 s a 83 km/h; voo a pleno 148 km/h, asa 1,36–1,91 m, pitch ±0,3°, 5409 rpm, turbo 0,61 bar, 38 L/h; curva 5,2°/s com 13,9° de roll; profundor todo puxado: máx. 1,46 m e ESTOL aceso; solto a 12 m perde 12,9 m em 8 s; motor cortado pousa em 6,5 s sem avaria; asa dobrada não decola. Injeção: partida a frio a 60 %, 3,0 bar; uma LANE = 98 % do empuxo; sem LANE para ("ecu"); uma bomba basta; sem bomba apaga ("fuelpress"); START sem LANE não pega; E/Q = profundor. Vaga do píer pela meia-envergadura (3,5 m) |
 | Lancha pantaneira AR-P (v0.69–0.69.2) | frio sem primer não pega (falha "prime"); 3 bombadas pega em 1,2 s; 9 bombadas afoga; mistura em corte não pega e apaga o motor ligado; um magneto: −103 rpm a pleno; mistura 0,8: −5,6 L/h; magnetos OFF param; trim sem ação (0°, 0 A); P frio pega; largada a 60 % pega em 2,2 s; lenta empurrando 4,5 km/h, sempre em F, borda 0,38 m; a toda 88,4 km/h a 2434 rpm, 0→40 4,4 s; sem cavitação/ventilação; pedindo R segue a 89 km/h para a frente; curva a toda derrapando 3,6 m/s, 11,1°/s, roll 3,2°, não vira; motor desligado com os lemes todos: 0,0°; partida sem N; 50 % + lemes quase parado: 20,2°/s; refrigerado a ar; barranco de lama/capim: 12,6 s no seco, avaria 2 %, 30 km/h; carretinha da caminhonete |
 | Moto aquática AR-J (v0.67–0.67.1) | compressor 1,04 bar a toda, 0,007 bar na lenta; luz do iBB: apagada em F, FREIO freando a toda, RÉ parada em R, NEUTRO em N; navegador: S segurado a 107 km/h → FREIO, 53 km/h em 1,5 s; soltar → F; toque → N; parada: CG −0,03 m da água, borda 0,25 m; a toda 108,3 km/h a 7880 rpm, 0→60 2,7 s, 0→100 7,1 s, 72 L/h; curva a toda 29,2°/s sem virar; iBB de 102 km/h a < 5 km/h em 4,2 s e depois ré; N com o guidão todo: 0,2° em 6 s; lenta + guidão 10,6°/s; N acelerado: empuxo 0, rotor a 7478 rpm; no ar: empuxo 0, giro 7951 rpm; ECO 55 % / 89,9 km/h; lotada 101,5 km/h; cordão solto não liga, puxado desliga; START pega em 1,5 s (60 %); central dorme em 30 s; casco selado 40 s lotada em ondas fortes: 0,0 L; sifão 6,1 L em 30 s (= contrato); virada: desvira em 4,5 s, piloto a bordo com o cordão, liga de novo; carretinha 3,9 m no carro |
 
-Resultado: **668/670 OK + 2 KNOWN** (v0.69.3). Na v0.10, o peso do piloto na posição real (boreste, acima do CG) aumentou o roll em curva com ondas fortes; o `bankCoef` foi para 1800 e o `rollDamping` para 15000, com 1 limitação conhecida (abaixo). Na v0.2 a hélice foi para 0,5 m atrás do espelho, como no modelo visual, e o esterço máximo em alta velocidade caiu de 13° para 11°.
+Resultado: **706/708 OK + 2 KNOWN** (v0.70.0). Na v0.10, o peso do piloto na posição real (boreste, acima do CG) aumentou o roll em curva com ondas fortes; o `bankCoef` foi para 1800 e o `rollDamping` para 15000, com 1 limitação conhecida (abaixo). Na v0.2 a hélice foi para 0,5 m atrás do espelho, como no modelo visual, e o esterço máximo em alta velocidade caiu de 13° para 11°.
 
 ### Navegador (Chrome, Windows 11, WebGL2, `q=med`, ~1370×896)
 

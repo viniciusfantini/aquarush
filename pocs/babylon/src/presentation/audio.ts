@@ -81,6 +81,8 @@ export interface AudioState {
   supercharger?: boolean;
   /** hélice de avião no ar (airboat): o "bater" grave das pás (2 pás: rpm/30 Hz) e o rugido do vento — domina o som */
   airProp?: boolean;
+  /** frequência de passagem das pás (Hz) quando não é 2 pás direto no virabrequim (ekranoplano: 3 pás com redução) */
+  propBladeHz?: number;
   oilAlarm?: boolean;     // turbina: óleo quente — alarme de dois tons ("master caution") até alguém resolver
   /** 2º motor (AR-9, dois V8): rotação, carga e estado próprios — uma segunda voz de síntese */
   rpm2?: number;
@@ -626,8 +628,9 @@ export class EngineAudio {
     // hélice de avião: as pás batem a rpm/30 Hz (2 pás); o vento da hélice cresce com o giro e a carga
     if (this.apOsc && this.apGain && this.apNoiseBP && this.apNoiseG) {
       const on = !!st.airProp && running;
-      const bpf = Math.max(10, st.rpm / 30);
-      const k = Math.min(1, Math.max(0, st.rpm - 500) / 2200);
+      const pr = st.propBladeHz ? st.propBladeHz * 30 : st.rpm; // giro equivalente de uma hélice de 2 pás direta
+      const bpf = Math.max(10, pr / 30);
+      const k = Math.min(1, Math.max(0, pr - 500) / 2200);
       this.apOsc.frequency.setTargetAtTime(bpf, t, 0.06);
       this.apGain.gain.setTargetAtTime(on ? m * dist * (0.05 + 0.13 * k) * (0.6 + 0.4 * load) : 0, t, 0.08);
       this.apNoiseBP.frequency.setTargetAtTime(300 + 900 * k, t, 0.1);
