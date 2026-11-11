@@ -32,7 +32,7 @@ export const EN: Record<string, string> = {
   "manche: W nariz para baixo, S para cima ·": "control stick: W nose down, S nose up ·", "manete (fica onde parar)": "throttle (stays where you leave it)",
   "ailerons ·": "ailerons ·", "leme": "rudder", "compensação do profundor (fica onde deixar)": "elevator trim (stays where you leave it)",
   "manete à frente: a ~85 km/h decola · sem ré ·": "throttle forward: lifts off at ~85 km/h · no reverse ·",
-  "comp. {}%": "trim {}%", "comp. +{}%": "trim +{}%",
+  "COMPENS.": "ELEV TRIM", "{}%": "{}%", "+{}%": "+{}%",
   "profundor (nariz + / −: fica onde deixar) ·": "elevator (nose + / −: stays where you leave it) ·", "leme + ailerons": "rudder + ailerons",
   "partida (LANE A/B, bombas, START) / desliga ·": "start (LANE A/B, pumps, START) / stop ·", "manete: a ~85 km/h decola · sem ré ·": "throttle: lifts off at ~85 km/h · no reverse ·",
   "sem ré ·": "no reverse ·", "centrais e bombas": "ECUs and pumps",

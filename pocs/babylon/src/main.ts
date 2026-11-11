@@ -53,7 +53,7 @@ import { Hud } from "./presentation/hud.ts";
 import { EngineAudio } from "./presentation/audio.ts";
 
 installI18n(); // inglês: traduz o DOM, as escritas futuras e os letreiros 3D (antes de montar a cena e o HUD)
-const BUILD = "poc-babylon 0.70.1";
+const BUILD = "poc-babylon 0.70.2";
 /** Escala visual da rotação da hélice (proporcional ao RPM, abaixo do limite estroboscópico). */
 const PROP_VISUAL_SCALE = 0.12;
 
@@ -600,7 +600,7 @@ const boot = async () => {
     hud.configure(isBote ? { speedMax: 60, temp: true, battery: false, trimPins: V.P.trimPins.length, gear: "dial" }
       : isJet ? { speedMax: 120, temp: true, battery: true, trimPins: 0, gear: "bar", rpmMax: 9000, rpmRed: 8000, jet: true }
       : isAir ? { speedMax: 120, temp: true, battery: true, trimPins: 0, gear: "bar", rpmMax: 3000, rpmRed: 2700, hide: ["anchor", "gear", "draft", "trim"] }
-      : isWig ? { speedMax: 180, temp: true, battery: true, trimPins: 0, gear: "bar", rpmMax: 6000, rpmRed: 5800, hide: ["anchor", "gear", "draft", "trim"], wig: true }
+      : isWig ? { speedMax: 180, temp: true, battery: true, trimPins: 0, gear: "bar", rpmMax: 6000, rpmRed: 5800, hide: ["anchor", "gear", "draft"], wig: true }
       : turbine ? { speedMax: 180, temp: true, battery: true, trimPins: 0, gear: "bar", turbine }
       : { speedMax: twin ? 140 : 100, temp: true, battery: true, trimPins: 0, gear: "bar", twin });
     document.getElementById("help-twin")!.style.display = twin ? "" : "none";

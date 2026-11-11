@@ -137,6 +137,9 @@ export class Hud {
   private thrTxt = $("h-thr");
   private trimMark = $("h-trim-mark");
   private trimTxt = $("h-trim");
+  private trimLbl = $("h-trim-lbl");
+  /** ekranoplano: a barra de trim mostra a COMPENSAÇÃO do profundor (−100…+100 %) */
+  private elevTrimBar = false;
   private planing = $("h-planing");
   private engineChip = $("h-engine");
   private hotChip = $("h-hot");
@@ -174,6 +177,8 @@ export class Hud {
     $("g-anchor").style.display = hide.has("anchor") ? "none" : "";
     $("g-gear").style.display = hide.has("gear") ? "none" : "";
     $("g-trim").style.display = hide.has("trim") ? "none" : "";
+    this.elevTrimBar = !!opts.wig;
+    this.trimLbl.textContent = opts.wig ? "COMPENS." : "TRIM";
     for (const id of ["h-draft", "h-draft-mark", "h-draft-hull"]) $(id).style.display = hide.has("draft") ? "none" : "";
     // marcha: lancha = barra da manete (F em cima, N, R embaixo); bote = alavanca de câmbio do motor (mostrador redondo)
     const gearBox = $("g-gear");
@@ -307,7 +312,7 @@ export class Hud {
     const amps = t.batteryA;
     this.ampG?.set(Math.max(-60, Math.min(30, amps)), `${amps > 0.5 ? "+" : ""}${amps.toFixed(0)} A`, amps > 0.5 ? "carga" : amps < -0.5 ? "consumo" : "", amps < -40);
     this.boostG?.set(Math.max(0, t.boostBar), `${t.boostBar.toFixed(2)}`, `${(t.boostBar * 14.5).toFixed(0)} psi`, t.boostBar > 1.2);
-    if (this.altG) this.altG.set(Math.max(0, Math.min(6, t.wingH)), t.airborne ? `${t.wingH.toFixed(1)} m` : "—", `comp. ${t.elevTrim > 0 ? "+" : ""}${Math.round(t.elevTrim * 100)}%`, t.wingH > 3);
+    if (this.altG) this.altG.set(Math.max(0, Math.min(6, t.wingH)), t.airborne ? `${t.wingH.toFixed(1)} m` : "—", `prof. ${t.elevator > 0.005 ? "+" : ""}${Math.round(t.elevator * 100)}%`, t.wingH > 3);
     if (this.wigLamp) {
       const st = t.stallWarn ? "stall" : t.airborne ? (t.wingH > 3 ? "high" : "ge") : "water";
       const txt = st === "stall" ? "ESTOL" : st === "high" ? "FORA DO SOLO" : st === "ge" ? "EFEITO SOLO" : "NA ÁGUA";
@@ -365,10 +370,16 @@ export class Hud {
         lev.style.transform = `rotate(${t.gear === "F" ? 40 : t.gear === "R" ? -40 : 0}deg)`;
       }
     }
+    if (this.elevTrimBar) {
+      // compensador do profundor: em cima = nariz para cima; o traço do meio = neutro
+      this.trimMark.style.bottom = `${((t.elevTrim + 1) / 2) * 100}%`; this.trimMark.style.background = "";
+      this.trimTxt.textContent = `${t.elevTrim > 0.005 ? "+" : ""}${Math.round(t.elevTrim * 100)}%`;
+    } else {
     this.trimMark.style.bottom = t.tiltDeg > 0.5 ? "100%" : `${((t.trim + 1) / 2) * 100}%`;
     this.trimMark.style.background = t.tiltDeg > 0.5 ? "#ff9d3d" : "";
     this.trimTxt.textContent = t.trimPin > this.pins ? `TILT ${t.tiltDeg.toFixed(0)}°` : t.tiltDeg > 0.5 ? `TILT ${t.tiltDeg.toFixed(0)}°`
       : this.pins > 0 ? `PINO ${t.trimPin}/${this.pins}` : `${t.trimDeg >= 0 ? "+" : ""}${t.trimDeg.toFixed(1)}°`;
+    }
 
     this.planing.classList.toggle("on", t.planing);
     this.engineChip.textContent = t.engine === "running" ? "MOTOR LIGADO" : t.engine === "cranking" ? "DANDO PARTIDA…" : "MOTOR DESLIGADO";

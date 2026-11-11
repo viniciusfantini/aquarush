@@ -227,7 +227,7 @@ export const buildWig = (scene: Scene): BoatVisual & { controls: WigControls; se
       rudder.rotation.y = -a;
       const ail = t.aileron * 0.25;
       for (const x of ailerons) x.node.rotation.x = x.s * ail; // direita: asa de boreste com o aileron para cima
-      elevator.rotation.x = -t.elevator * 0.3;                  // puxar (+) = bordo de fuga para cima
+      elevator.rotation.x = t.elevator * 0.3;                   // puxar (+) = bordo de fuga para cima (conferido no navegador)
       stickX += (t.aileron - stickX) * Math.min(1, dt * 12);
       stickY += (t.elevator - stickY) * Math.min(1, dt * 12);
       stickPivot.rotation.z = -stickX * 0.3; stickPivot.rotation.x = -stickY * 0.25;

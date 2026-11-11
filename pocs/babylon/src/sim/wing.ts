@@ -106,13 +106,16 @@ export const panelForce = (pn: WingPanel, W: WingParams, vAirLocal: Vec3, h: num
   if (V < 0.5) return zero;
   const vh = scale(va, 1 / V);
   // ângulo de ataque: ar vindo de baixo (va·n > 0) com o barco andando para a frente (ar indo para −Z)
-  let alpha = Math.atan2(dot(va, n), -va.z) + pn.incidence;
-  if (pn.control) alpha += (pn.control.sign ?? 1) * cmd * pn.control.maxRad * pn.control.tau;
-  const kG = pn.ground ? groundLift(h, pn.chord, W.groundGain, W.groundScale) : 1;
-  const phi = pn.ground ? groundInduced(h, W.span) : 1;
-  const cl = liftCoef(alpha, pn.cla, pn.stall) * kG - (pn.ground ? W.dynGain * (hDot / V) * (kG - 1) : 0);
+  const alpha = Math.atan2(dot(va, n), -va.z) + pn.incidence;
   const a = Math.abs(alpha);
   const stalled = a > pn.stall ? Math.min(1, (a - pn.stall) / 0.25) : 0;
+  // superfície de comando = mudança de CURVATURA (como um flap): soma ΔCL = CLα·τ·δ à curva da placa, em vez de mexer
+  // no ângulo de ataque. Assim, com a asa perto/além do estol, o aileron continua comandando (perde ~40 % da eficácia)
+  // em vez de inverter — mexendo no ângulo, o aileron que desce estolava a sua meia-asa e o barco inclinava ao contrário
+  const dCl = pn.control ? pn.cla * pn.control.tau * (pn.control.sign ?? 1) * cmd * pn.control.maxRad * (1 - 0.4 * stalled) : 0;
+  const kG = pn.ground ? groundLift(h, pn.chord, W.groundGain, W.groundScale) : 1;
+  const phi = pn.ground ? groundInduced(h, W.span) : 1;
+  const cl = (liftCoef(alpha, pn.cla, pn.stall) + dCl) * kG - (pn.ground ? W.dynGain * (hDot / V) * (kG - 1) : 0);
   const cd = pn.cd0 + (phi * cl * cl) / (Math.PI * pn.arEff) + 1.2 * stalled * Math.sin(a) ** 2;
   const q = 0.5 * RHO_AIR * V * V;
   // direção da sustentação: ⟂ ao escoamento, no plano (normal, escoamento)

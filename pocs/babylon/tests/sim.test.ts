@@ -1418,6 +1418,12 @@ for (const [label, thr] of [["baixa", 0.25], ["alta", 1]] as const) {
     run(r, water, 3, { ...emptyInput(), throttle: 1, roll: 1 });
     check("ekranoplano", "ailerons sem leme (A/D): inclina para o lado (roll, °)", Math.abs(r.telemetry.rollDeg), 3, 25, "°", 1);
     check("ekranoplano", "ailerons sem leme: o leme fica no centro (°)", Math.abs(r.telemetry.steerDeg), 0, 0.5, "°", 1);
+    // mais alto, com o manche puxado (asa além do estol): o aileron NÃO inverte (D continua inclinando para a direita)
+    const hi = mk(); run(hi, water, 35, { ...emptyInput(), throttle: 1, pitch: 0.8 });
+    const aHi = hi.telemetry.aoaDeg;
+    run(hi, water, 2, { ...emptyInput(), throttle: 1, pitch: 0.8, roll: 1 });
+    check("ekranoplano", "asa além do estol (α, °) — cenário do aileron", aHi, 12.5, 25, "°", 1);
+    check("ekranoplano", "aileron com a asa estolada: D inclina para a direita (roll, °)", hi.telemetry.rollDeg, 3, 40, "°", 1);
   }
   // esteira: voando o casco quase não faz onda; rente à água o colchão de ar risca a superfície
   {
