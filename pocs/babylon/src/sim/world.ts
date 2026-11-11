@@ -111,8 +111,18 @@ const baseGround = (x: number, z: number): number => {
     const target = bed + (h - bed) * (1 - carve * along);
     h = Math.min(h, target);
   }
-  return h;
+  // costa do "continente": perto da borda da malha do terreno a terra desce até o fundo do mar — fora dela o MAR
+  // continua infinito, com a mesma física (água de Gerstner e fundo a `OCEAN.floor`), igual à água visual
+  const dEdge = Math.min(x - OCEAN.x0, OCEAN.x1 - x, z - OCEAN.z0, OCEAN.z1 - z);
+  const land = smoothstep(OCEAN.coast0, OCEAN.coast1, dEdge);
+  return OCEAN.floor + (h - OCEAN.floor) * land;
 };
+/**
+ * Oceano em volta do mundo (v0.71.1): a malha do terreno cobre x ∈ [−1800, 1800], z ∈ [−1600, 2000] (presentation/
+ * environment.ts: 3,6 km centrados em z = +200). A água visual é infinita (segue a câmera); para a física bater com
+ * ela, o relevo desce até `floor` entre `coast1` e `coast0` metros da borda e continua no fundo do mar fora dela.
+ */
+export const OCEAN = { x0: -1800, x1: 1800, z0: -1600, z1: 2000, coast0: 60, coast1: 420, floor: -30 };
 
 // ---------- rampa de concreto (descida de barcos) ----------
 /**

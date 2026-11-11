@@ -87,7 +87,7 @@ const buildRiverStrip = (scene: Scene, mat: StandardMaterial): Mesh => {
 
 export const buildTerrain = (scene: Scene, q: EnvQuality): Mesh => {
   // (v0.66: 3,6 km para cobrir o lago ampliado; as subdivisões crescem junto — a malha mantém ~10 m por célula)
-  const size = 3600;
+  const size = 3600; // (= a área do `OCEAN` em sim/world.ts: perto da borda o relevo desce até o fundo do mar)
   const ground = MeshBuilder.CreateGround("terrain", { width: size, height: size, subdivisions: Math.round(q.terrainSubdiv * size / 2600), updatable: true }, scene);
   const pos = ground.getVerticesData(VertexBuffer.PositionKind)!;
   const colors: number[] = [];

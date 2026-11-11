@@ -1495,6 +1495,25 @@ for (const [label, thr] of [["baixa", 0.25], ["alta", 1]] as const) {
   check("ekranoplano", "vai na carretinha grande da caminhonete", smallTow("wig") ? 0 : 1, 1, 1, "", 0);
 }
 
+// ---------- Oceano em volta do mundo: fora da malha do terreno o mar continua, com a mesma física ----------
+{
+  check("oceano", "fundo do mar longe do mundo (x = 5 km, m)", groundHeight(5000, 300), -30.01, -29.99, "m", 2);
+  check("oceano", "fundo do mar em diagonal (−4 km, 6 km, m)", groundHeight(-4000, 6000), -30.01, -29.99, "m", 2);
+  check("oceano", "na borda da malha do terreno já é mar (m)", groundHeight(1800, 300), -30.01, -25, "m", 2);
+  check("oceano", "lago e margens não mudam: píer/lago central (m)", groundHeight(0, 0), -8, -5, "m", 2);
+  // um barco solto em mar aberto bem fora do mundo: flutua como no lago e anda a toda
+  const worldSea: PhysicsWorld = { groundHeight, spheres: [], boxes: [] };
+  const water = new GerstnerWater({ waves: WAVE_PRESETS.lago, groundHeight });
+  water.intensity = 0;
+  const lake = new Speedboat(SPEEDBOAT, v3(0, 0.25, 0)); lake.systems.fuelL = 50; lake.occupants = [{ seat: "helm", mass: PERSON_KG }];
+  const sea = new Speedboat(SPEEDBOAT, v3(2600, 0.25, 300)); sea.systems.fuelL = 50; sea.occupants = [{ seat: "helm", mass: PERSON_KG }];
+  run(lake, water, 6, emptyInput()); run(sea, water, 6, emptyInput(), worldSea);
+  check("oceano", "parado no mar fora do mundo: mesma altura que no lago (Δ m)", Math.abs(sea.pos.y - lake.pos.y), 0, 0.01, "m", 3);
+  check("oceano", "no mar: não está apoiado no fundo (profundidade, m)", sea.telemetry.depth, 20, 40, "m", 1);
+  run(sea, water, 25, { ...emptyInput(), gear: "F", throttle: 1 }, worldSea);
+  check("oceano", "no mar: anda a toda (km/h)", sea.telemetry.speedKmh, 70, 90, "km/h", 0);
+}
+
 // ---------- Modo de teste "força ×4" (tecla *): empuxo de todas as embarcações e tração dos veículos ----------
 {
   const water = mkWater(0);
