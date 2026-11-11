@@ -66,6 +66,16 @@ export class InputManager {
   ibbMode = false;
   /** sem câmbio (airboat): a "marcha" fica sempre em F — W acelera, S não troca de marcha (não há neutro nem ré) */
   fixedForward = false;
+  /**
+   * Modo de VOO (ekranoplano): W/S = manche (W nariz para baixo, S nariz para cima, como num avião), A/D = ailerons,
+   * < > (vírgula/ponto) ou ← → = leme, ↑/↓ = manete de potência (fica onde parar), E/Q = compensação do profundor.
+   * Gamepad: analógico esquerdo = manche (X ailerons, Y profundor), analógico direito X = leme, RT/LT = manete.
+   */
+  flightMode = false;
+  private flThrottle = 0;
+  private flPitch = 0;
+  private flRoll = 0;
+  private flRudder = 0;
   /** freio do iBB segurado agora (o main/painel leem para a luz) */
   ibbBraking = false;
   private ibbT = 0;
@@ -100,6 +110,7 @@ export class InputManager {
   private k(...codes: string[]): boolean { return codes.some((c) => this.keys.has(c)); }
 
   update(dt: number): VehicleInput {
+    if (this.flightMode) return this.updateFlight(dt);
     // ---- gamepad (mapeamento "standard") ----
     let gpUp = 0, gpDown = 0, gpSteer = 0, gpTrim = 0;
     const pads = typeof navigator !== "undefined" && navigator.getGamepads ? navigator.getGamepads() : [];
@@ -192,6 +203,52 @@ export class InputManager {
     }
     return s;
   }
+
+  /** Comandos de voo (ekranoplano): manche, leme e manete de potência que fica onde o piloto parar. */
+  private updateFlight(dt: number): VehicleInput {
+    let gpPitch = 0, gpRoll = 0, gpRudder = 0, gpThr = 0;
+    const dz = (v: number) => (Math.abs(v) > 0.12 ? (v - Math.sign(v) * 0.12) / 0.88 : 0);
+    const pads = typeof navigator !== "undefined" && navigator.getGamepads ? navigator.getGamepads() : [];
+    for (const gp of pads) {
+      if (!gp || gp.mapping !== "standard") continue;
+      const pressed = (i: number) => gp.buttons[i]?.pressed ?? false;
+      gpRoll = dz(gp.axes[0] ?? 0); gpPitch = dz(gp.axes[1] ?? 0); gpRudder = dz(gp.axes[2] ?? 0);
+      gpThr = (gp.buttons[7]?.value ?? 0) - (gp.buttons[6]?.value ?? 0);
+      const edges: [number, Action][] = [[3, "camera"], [2, "lights"], [8, "reset"], [9, "pause"], [1, "ignition"]];
+      for (const [i, a] of edges) { const now = pressed(i); if (now && !this.gpPrev[i]) this.actions.push(a); this.gpPrev[i] = now; }
+      if (Math.abs(gpPitch) + Math.abs(gpRoll) + Math.abs(gpThr) > 0.05) this.lastDevice = "gamepad";
+      break;
+    }
+    // manete de potência: ↑ avança, ↓ recua — fica onde parar (o painel do Y ou o touch também a movem)
+    const thrIn = (this.k("ArrowUp") ? 1 : 0) - (this.k("ArrowDown") ? 1 : 0) + gpThr;
+    if (Math.abs(thrIn) > 0.05) {
+      if (this.touchLever) { this.flThrottle = this.touchLever.throttle; this.touchLever = null; }
+      this.flThrottle = clamp(this.flThrottle + thrIn * (thrIn > 0 ? 0.55 : 0.8) * dt, 0, 1);
+    }
+    // manche: as teclas levam o manche até o batente e ele volta ao centro ao soltar
+    const pT = (this.k("KeyS") ? 1 : 0) - (this.k("KeyW") ? 1 : 0);
+    const rT = (this.k("KeyD") ? 1 : 0) - (this.k("KeyA") ? 1 : 0);
+    const yT = (this.k("Period", "ArrowRight") ? 1 : 0) - (this.k("Comma", "ArrowLeft") ? 1 : 0);
+    this.flPitch = approach(this.flPitch, pT, (pT === 0 ? 3 : 1.6) * dt);
+    this.flRoll = approach(this.flRoll, rT, (rT === 0 ? 4 : 2.2) * dt);
+    this.flRudder = approach(this.flRudder, yT, (yT === 0 ? 4 : 2.8) * dt);
+    const s = this.state;
+    this.gear = "F";
+    s.gear = "F";
+    s.throttle = this.touchLever ? this.touchLever.throttle : this.flThrottle;
+    s.brake = 0; s.reverse = false;
+    s.pitch = clamp(this.flPitch + gpPitch, -1, 1);
+    s.roll = clamp(this.flRoll + gpRoll + this.touchSteer, -1, 1);
+    s.steering = clamp(this.flRudder + gpRudder, -1, 1);
+    s.trim = clamp((this.k("KeyE") ? 1 : 0) - (this.k("KeyQ") ? 1 : 0) + this.touchTrim, -1, 1);
+    s.navigationLights = this.lights;
+    s.neutralThrottle = false;
+    s.anchor = 0;
+    s.engineCmd = undefined;
+    return s;
+  }
+  /** Zera a manete de voo (reset no píer). */
+  resetFlight(): void { this.flThrottle = 0; this.flPitch = this.flRoll = this.flRudder = 0; this.state.pitch = this.state.roll = 0; }
 
   private press(dir: "up" | "down"): void {
     if (this.fixedForward) { this.touchLever = null; this.panelLevers = []; this.pressShifted = false; this.holdTime = 0; return; } // sem câmbio

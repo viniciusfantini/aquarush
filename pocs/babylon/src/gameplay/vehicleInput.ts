@@ -26,6 +26,10 @@ export interface VehicleInput {
   navigationLights: boolean;
   /** Botão de aceleração em neutro segurado: com a marcha em N o acelerador sobe o giro sem engatar. */
   neutralThrottle: boolean;
+  /** Manche para a frente/para trás (ekranoplano): −1 = nariz para baixo .. +1 = nariz para cima. Soma ao trim do profundor. */
+  pitch?: number;
+  /** Manche para os lados (ekranoplano, ailerons): −1 = inclina para a esquerda .. +1 = para a direita. Ausente = segue a direção. */
+  roll?: number;
 }
 
 export const emptyInput = (): VehicleInput => ({

@@ -29,6 +29,10 @@ export const EN: Record<string, string> = {
   "decola da água a ~85 km/h e voa a 0,5–3 m da água no colchão de ar (longe dela a asa não segura); profundor no E/Q, manche com leme e ailerons, hélice pusher, duas centrais de injeção (LANE A/B) e duas bombas":
     "takes off from the water at ~85 km/h and flies 0.5–3 m above it on the air cushion (away from the surface the wing can't hold it up); elevator on E/Q, control stick with rudder and ailerons, pusher propeller, two injection ECUs (LANE A/B) and two fuel pumps",
   "piloto + passageiro (tandem)": "pilot + passenger (tandem)",
+  "manche: W nariz para baixo, S para cima ·": "control stick: W nose down, S nose up ·", "manete (fica onde parar)": "throttle (stays where you leave it)",
+  "ailerons ·": "ailerons ·", "leme": "rudder", "compensação do profundor (fica onde deixar)": "elevator trim (stays where you leave it)",
+  "manete à frente: a ~85 km/h decola · sem ré ·": "throttle forward: lifts off at ~85 km/h · no reverse ·",
+  "comp. {}%": "trim {}%", "comp. +{}%": "trim +{}%",
   "profundor (nariz + / −: fica onde deixar) ·": "elevator (nose + / −: stays where you leave it) ·", "leme + ailerons": "rudder + ailerons",
   "partida (LANE A/B, bombas, START) / desliga ·": "start (LANE A/B, pumps, START) / stop ·", "manete: a ~85 km/h decola · sem ré ·": "throttle: lifts off at ~85 km/h · no reverse ·",
   "sem ré ·": "no reverse ·", "centrais e bombas": "ECUs and pumps",

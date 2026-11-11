@@ -307,7 +307,7 @@ export class Hud {
     const amps = t.batteryA;
     this.ampG?.set(Math.max(-60, Math.min(30, amps)), `${amps > 0.5 ? "+" : ""}${amps.toFixed(0)} A`, amps > 0.5 ? "carga" : amps < -0.5 ? "consumo" : "", amps < -40);
     this.boostG?.set(Math.max(0, t.boostBar), `${t.boostBar.toFixed(2)}`, `${(t.boostBar * 14.5).toFixed(0)} psi`, t.boostBar > 1.2);
-    if (this.altG) this.altG.set(Math.max(0, Math.min(6, t.wingH)), t.airborne ? `${t.wingH.toFixed(1)} m` : "—", `prof. ${t.elevator > 0 ? "+" : ""}${Math.round(t.elevator * 100)}%`, t.wingH > 3);
+    if (this.altG) this.altG.set(Math.max(0, Math.min(6, t.wingH)), t.airborne ? `${t.wingH.toFixed(1)} m` : "—", `comp. ${t.elevTrim > 0 ? "+" : ""}${Math.round(t.elevTrim * 100)}%`, t.wingH > 3);
     if (this.wigLamp) {
       const st = t.stallWarn ? "stall" : t.airborne ? (t.wingH > 3 ? "high" : "ge") : "water";
       const txt = st === "stall" ? "ESTOL" : st === "high" ? "FORA DO SOLO" : st === "ge" ? "EFEITO SOLO" : "NA ÁGUA";

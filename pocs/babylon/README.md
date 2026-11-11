@@ -96,6 +96,25 @@ A lancha é um **corpo rígido 6DOF** (massa seca de 1030 kg + gasolina, ocupant
 
 > Referência completa da lógica elétrica e dos motores: [`docs/SISTEMAS_ELETRICOS_E_MOTORES.md`](../../docs/SISTEMAS_ELETRICOS_E_MOTORES.md).
 
+## Ekranoplano AR-W: comandos de avião e a água sob a asa (v0.70.1)
+
+- **Comandos** (`InputManager.flightMode`, só no AR-W): **↑/↓** = manete de potência que fica onde parar (o painel do Y
+  e o touch também a movem); **W/S** = manche (W nariz para baixo, S para cima; volta ao centro ao soltar) →
+  `VehicleInput.pitch`, somado à compensação do profundor (**E/Q**, `elevTrim`); **A/D** = ailerons →
+  `VehicleInput.roll`; **&lt; &gt;** (vírgula/ponto) ou **← →** = leme → `steering`. Gamepad: analógico esquerdo =
+  manche, direito X = leme, RT/LT = manete. Na sim as superfícies andam até o comando em ~0,15 s; sem `roll` (testes
+  antigos, touch) os ailerons seguem a direção. Telemetria `elevator` (efetivo), `elevTrim`, `aileron`.
+- **Esteira** (`sim/wake.ts`): cada amostra guarda `wet` = contato do casco com a água (fração de pontos molhados × 6,
+  suavizada: sobe em 0,08 s, cai em 0,3 s). A onda (`armEnvelope`) é × max(wet; 0,12·air) — também na física — e a
+  espuma do casco, da hélice e da crista é × wet. Voando, a onda cai para ~9 % da que o casco faria.
+- **Colchão de ar** (`air` 0..1 = asa abaixo de ~3,5 m, acima de ~12 m/s): no mapa da esteira uma faixa encrespada
+  da largura da asa e duas linhas de espuma fina com ondinhas alternadas nas pontas (os vórtices riscando a água,
+  que se abrem com a idade); nas partículas, névoa arrancada da água ao longo do bordo de fuga (`airSpray`, com
+  `startPositionFunction` na linha da asa). O vento da hélice no ar só levanta água com ela a menos de ~1,4–2,6 m da
+  superfície (`nearSurf`).
+- Conferido no navegador (lobo leste do lago): decolando, os rastros das pontas e a névoa aparecem sem a espuma do
+  casco; a 125 km/h a asa a ~0,4 m.
+
 ## Ekranoplano AR-W — asa com efeito solo (v0.70)
 
 - **Sétima embarcação** (`WIG` em `sim/params.ts`, `VesselKind` "wig", `?barco=wig`, no menu entre o bote e a AR-6
@@ -603,11 +622,12 @@ Limitação: é uma síntese aproximada, não uma gravação. Validar o timbre d
 | 5. Manete | de cruzeiro para N: empuxo 0 e < 1 km/h em 27 s; a hélice gira **solta** (~990 rpm 1,5 s depois do N) e para junto com a lancha. F em lenta: 5,0 km/h a 750 rpm. R em lenta: 2,8 km/h para trás. No navegador: 1 toque W = F a 4 km/h; segurar = 45 km/h; 1 toque S = N; 2º toque = R lenta; segurar S = ré acelerando |
 | 6. Ondas e correnteza | ondas fortes (×2,5): roll ≤ 30°, não emborca; deriva com correnteza de 1,6 m/s: 1,54 m/s |
 | Lago | flutua no spawn; a toda contra a margem, encalha e para sem atravessar o terreno |
+| Ekranoplano AR-W: comandos e água (v0.70.1) | manche puxado 1,2 s: nariz +10°; ailerons sem leme: roll 8,4° com o leme a 0°; voando: `wet` 0,00, colchão de ar 0,73, onda da esteira 9 % da do casco na água |
 | Ekranoplano AR-W (v0.70) | efeito solo: ×2,65 a 0,3 m, ×1,007 a 6 m; induzido ×0,57 a 0,5 m. Parado: roll 0,3°, asa a 0,29 m. Decola em 9,7 s a 83 km/h; voo a pleno 148 km/h, asa 1,36–1,91 m, pitch ±0,3°, 5409 rpm, turbo 0,61 bar, 38 L/h; curva 5,2°/s com 13,9° de roll; profundor todo puxado: máx. 1,46 m e ESTOL aceso; solto a 12 m perde 12,9 m em 8 s; motor cortado pousa em 6,5 s sem avaria; asa dobrada não decola. Injeção: partida a frio a 60 %, 3,0 bar; uma LANE = 98 % do empuxo; sem LANE para ("ecu"); uma bomba basta; sem bomba apaga ("fuelpress"); START sem LANE não pega; E/Q = profundor. Vaga do píer pela meia-envergadura (3,5 m) |
 | Lancha pantaneira AR-P (v0.69–0.69.2) | frio sem primer não pega (falha "prime"); 3 bombadas pega em 1,2 s; 9 bombadas afoga; mistura em corte não pega e apaga o motor ligado; um magneto: −103 rpm a pleno; mistura 0,8: −5,6 L/h; magnetos OFF param; trim sem ação (0°, 0 A); P frio pega; largada a 60 % pega em 2,2 s; lenta empurrando 4,5 km/h, sempre em F, borda 0,38 m; a toda 88,4 km/h a 2434 rpm, 0→40 4,4 s; sem cavitação/ventilação; pedindo R segue a 89 km/h para a frente; curva a toda derrapando 3,6 m/s, 11,1°/s, roll 3,2°, não vira; motor desligado com os lemes todos: 0,0°; partida sem N; 50 % + lemes quase parado: 20,2°/s; refrigerado a ar; barranco de lama/capim: 12,6 s no seco, avaria 2 %, 30 km/h; carretinha da caminhonete |
 | Moto aquática AR-J (v0.67–0.67.1) | compressor 1,04 bar a toda, 0,007 bar na lenta; luz do iBB: apagada em F, FREIO freando a toda, RÉ parada em R, NEUTRO em N; navegador: S segurado a 107 km/h → FREIO, 53 km/h em 1,5 s; soltar → F; toque → N; parada: CG −0,03 m da água, borda 0,25 m; a toda 108,3 km/h a 7880 rpm, 0→60 2,7 s, 0→100 7,1 s, 72 L/h; curva a toda 29,2°/s sem virar; iBB de 102 km/h a < 5 km/h em 4,2 s e depois ré; N com o guidão todo: 0,2° em 6 s; lenta + guidão 10,6°/s; N acelerado: empuxo 0, rotor a 7478 rpm; no ar: empuxo 0, giro 7951 rpm; ECO 55 % / 89,9 km/h; lotada 101,5 km/h; cordão solto não liga, puxado desliga; START pega em 1,5 s (60 %); central dorme em 30 s; casco selado 40 s lotada em ondas fortes: 0,0 L; sifão 6,1 L em 30 s (= contrato); virada: desvira em 4,5 s, piloto a bordo com o cordão, liga de novo; carretinha 3,9 m no carro |
 
-Resultado: **706/708 OK + 2 KNOWN** (v0.70.0). Na v0.10, o peso do piloto na posição real (boreste, acima do CG) aumentou o roll em curva com ondas fortes; o `bankCoef` foi para 1800 e o `rollDamping` para 15000, com 1 limitação conhecida (abaixo). Na v0.2 a hélice foi para 0,5 m atrás do espelho, como no modelo visual, e o esterço máximo em alta velocidade caiu de 13° para 11°.
+Resultado: **712/714 OK + 2 KNOWN** (v0.70.1). Na v0.10, o peso do piloto na posição real (boreste, acima do CG) aumentou o roll em curva com ondas fortes; o `bankCoef` foi para 1800 e o `rollDamping` para 15000, com 1 limitação conhecida (abaixo). Na v0.2 a hélice foi para 0,5 m atrás do espelho, como no modelo visual, e o esterço máximo em alta velocidade caiu de 13° para 11°.
 
 ### Navegador (Chrome, Windows 11, WebGL2, `q=med`, ~1370×896)
 

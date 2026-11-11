@@ -95,7 +95,7 @@ export class WakeMap {
       WAKE_RIDGES.forEach((r, k) => {
         strokeChain((s) => armPoint(s, side, r.inward), (s) => {
           const a = (armEnvelope(s) * r.amp) / H;
-          const foam = k === 0 ? smoothstep(5, 14, s.v) * Math.exp(-s.age / 1.4) * 0.75 : 0;
+          const foam = k === 0 ? smoothstep(5, 14, s.v) * s.wet * Math.exp(-s.age / 1.4) * 0.75 : 0;
           return { r: foam, g: r.sign > 0 ? a : 0, b: r.sign < 0 ? a : 0, w: 2 * ridgeHalfWidth(s.age, r.width) * 0.85 };
         });
       });
@@ -105,20 +105,38 @@ export class WakeMap {
     strokeChain((s) => ({ x: s.sx, z: s.sz }), (s) => {
       const lam = (2 * Math.PI * s.v * s.v) / 9.81;
       const phase = Math.sin((2 * Math.PI * s.v * s.age) / Math.max(lam, 0.5));
-      const a = waveAmp(s.v) * 0.35 * Math.exp(-s.age / 8) * (1 - smoothstep(6, 10, s.v));
+      const a = waveAmp(s.v) * s.wet * 0.35 * Math.exp(-s.age / 8) * (1 - smoothstep(6, 10, s.v));
       return { r: 0, g: phase > 0 ? (a * phase) / H : 0, b: phase < 0 ? (-a * phase) / H : 0, w: 2 + 0.6 * s.age };
     });
 
     // ---- água revolvida da hélice: espuma central que se abre e some devagar ----
     strokeChain((s) => ({ x: s.sx, z: s.sz }), (s) => {
-      const f = (0.25 + 0.75 * s.thr) * smoothstep(0.3, 3, s.v + s.thr * 3) * Math.exp(-s.age / 6);
+      const f = (0.25 + 0.75 * s.thr) * smoothstep(0.3, 3, s.v + s.thr * 3) * s.wet * Math.exp(-s.age / 6);
       return { r: f * 0.95, g: 0.02 * f, b: 0, w: 0.8 + 0.4 * s.age };
     });
     // rastro de água "lisa"/aerada que fica muito tempo visível (como na vida real)
     strokeChain((s) => ({ x: s.sx, z: s.sz }), (s) => {
-      const f = smoothstep(0.5, 6, s.v) * Math.exp(-s.age / 25) * 0.3;
+      const f = smoothstep(0.5, 6, s.v) * Math.max(s.wet, 0.25 * s.air) * Math.exp(-s.age / 25) * 0.3;
       return { r: f, g: 0, b: 0, w: Math.min(2.2 + 0.45 * s.age, 14) };
     });
+
+    // ---- colchão de ar da asa (ekranoplano rente à água): o ar empurrado sob a asa "corta" a água ----
+    // faixa de água encrespada/aerada da largura da asa + os vórtices das pontas riscando a superfície (duas linhas
+    // de espuma fina com ondinhas alternadas), que se abrem e somem em poucos segundos
+    if (pts.some((s) => s.air > 0.03)) {
+      const along = (s: WakeSample, k: number) => ({ x: s.sx + s.rx * k, z: s.sz + s.rz * k });
+      strokeChain((s) => along(s, 0), (s) => {
+        const a = s.air * Math.exp(-s.age / 1.6);
+        return { r: 0.14 * a, g: 0.008 * a / H, b: 0, w: Math.max(0.5, s.span * 1.1 + 0.6 * s.age) };
+      });
+      for (const side of [-1, 1]) {
+        strokeChain((s) => along(s, side * (s.span * 0.92 + 0.35 * s.age)), (s) => {
+          const a = s.air * Math.exp(-s.age / 3.5);
+          const ph = Math.sin(s.age * 9);
+          return { r: 0.6 * a, g: ph > 0 ? 0.025 * a * ph / H : 0, b: ph < 0 ? -0.025 * a * ph / H : 0, w: 0.35 + 0.5 * s.age };
+        });
+      }
+    }
 
     // ---- cavitação / ventilação: "fervura" branca na popa ----
     for (const s of pts) {
@@ -156,7 +174,7 @@ export class WakeMap {
     }
 
     // ---- borda do casco: espuma/"bigode" na proa e ao longo do costado ----
-    const hullFoam = smoothstep(1.5, 9, live.v) * 0.7;
+    const hullFoam = smoothstep(1.5, 9, live.v) * live.wet * 0.7;
     if (hullFoam > 0.02) {
       const fx = -live.rz, fz = live.rx; // frente no plano
       const outline: [number, number][] = [[0, 3.0], [0.75, 2.2], [1.12, 0.6], [1.12, -1.6], [1.0, -2.95]];

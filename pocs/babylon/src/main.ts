@@ -53,7 +53,7 @@ import { Hud } from "./presentation/hud.ts";
 import { EngineAudio } from "./presentation/audio.ts";
 
 installI18n(); // inglês: traduz o DOM, as escritas futuras e os letreiros 3D (antes de montar a cena e o HUD)
-const BUILD = "poc-babylon 0.70.0";
+const BUILD = "poc-babylon 0.70.1";
 /** Escala visual da rotação da hélice (proporcional ao RPM, abaixo do limite estroboscópico). */
 const PROP_VISUAL_SCALE = 0.12;
 
@@ -591,6 +591,12 @@ const boot = async () => {
     const isWig = kind === "wig";
     input.ibbMode = isJet; input.ibbBraking = false; // S segurado em F = freio do iBB
     input.fixedForward = isAir || isWig; // airboat / ekranoplano: hélice de passo fixo sem câmbio — W só acelera
+    input.flightMode = isWig; input.resetFlight(); // ekranoplano: W/S manche, A/D ailerons, < > leme, ↑/↓ manete
+    {
+      const ws = document.getElementById("help-ws")!, ad = document.getElementById("help-ad")!;
+      ws.innerHTML = isWig ? "<kbd>W</kbd><kbd>S</kbd> manche: W nariz para baixo, S para cima · <kbd>↑</kbd><kbd>↓</kbd> manete (fica onde parar)" : "<kbd>W</kbd><kbd>S</kbd> manete: toque F/N/R, segure acelera";
+      ad.innerHTML = isWig ? "<kbd>A</kbd><kbd>D</kbd> ailerons · <kbd>&lt;</kbd><kbd>&gt;</kbd> leme" : "<kbd>A</kbd><kbd>D</kbd> direção";
+    }
     hud.configure(isBote ? { speedMax: 60, temp: true, battery: false, trimPins: V.P.trimPins.length, gear: "dial" }
       : isJet ? { speedMax: 120, temp: true, battery: true, trimPins: 0, gear: "bar", rpmMax: 9000, rpmRed: 8000, jet: true }
       : isAir ? { speedMax: 120, temp: true, battery: true, trimPins: 0, gear: "bar", rpmMax: 3000, rpmRed: 2700, hide: ["anchor", "gear", "draft", "trim"] }
@@ -601,12 +607,12 @@ const boot = async () => {
     document.getElementById("help-trim")!.innerHTML = isBote
       ? "<kbd>E</kbd><kbd>Q</kbd> trim manual (pinos 1–3, depois tilt)"
       : isJet ? "<kbd>E</kbd><kbd>Q</kbd> trim do bocal (VTS)" : isAir ? "<kbd>A</kbd><kbd>D</kbd> lemes de ar (só viram com acelerador) · sem trim"
-      : isWig ? "<kbd>E</kbd><kbd>Q</kbd> profundor (nariz + / −: fica onde deixar) · <kbd>A</kbd><kbd>D</kbd> leme + ailerons" : "<kbd>E</kbd><kbd>Q</kbd> trim + / −";
+      : isWig ? "<kbd>E</kbd><kbd>Q</kbd> compensação do profundor (fica onde deixar)" : "<kbd>E</kbd><kbd>Q</kbd> trim + / −";
     document.getElementById("help-occ")!.innerHTML = turbine ? "piloto único (habitáculo fechado)" : "<kbd>O</kbd> embarque (só na vaga do píer)";
     document.getElementById("help-ign")!.innerHTML = isBote ? "<kbd>P</kbd> corda (em N) · <kbd>Y</kbd> sistemas (afogador)"
       : isJet ? "<kbd>P</kbd> START/STOP (em N, cordão preso) · segure <kbd>S</kbd> andando: freio iBB (toque: N) · <kbd>Y</kbd> painel (cordão, ECO)"
       : isAir ? "<kbd>P</kbd> partida automática (mistura rica, primer, magnetos) / desliga · <kbd>W</kbd> acelerador de pé · sem ré · <kbd>Y</kbd> magnetos, primer, mistura"
-      : isWig ? "<kbd>P</kbd> partida (LANE A/B, bombas, START) / desliga · <kbd>W</kbd> manete: a ~85 km/h decola · sem ré · <kbd>Y</kbd> centrais e bombas"
+      : isWig ? "<kbd>P</kbd> partida (LANE A/B, bombas, START) / desliga · <kbd>↑</kbd> manete à frente: a ~85 km/h decola · sem ré · <kbd>Y</kbd> centrais e bombas"
       : turbine ? "<kbd>P</kbd> partida FADEC / corte · <kbd>Y</kbd> painel de partida (manual) · <kbd>J</kbd> GPU (na doca)"
       : "<kbd>P</kbd> liga/desliga (em N) · <kbd>N</kbd>+<kbd>W</kbd> neutro · <kbd>J</kbd> jump start · <kbd>Y</kbd> sistemas";
     document.getElementById("help-lights")!.innerHTML = isBote ? "<kbd>L</kbd> lanterna" : isJet || isAir || isWig ? "sem luzes (uso diurno)" : "<kbd>L</kbd> luzes";
@@ -660,7 +666,7 @@ const boot = async () => {
     if (b.params.carbureted) b.systems.coolantC = 24; // bote carburado: motor frio, pede o afogador
     if (b.params.aircraft) { b.systems.coolantC = 24; b.magnetos = "off"; b.mixture = 1; b.prime = 0; } // motor de avião frio: pede o primer
     if (b.params.efi) { b.systems.coolantC = 24; b.ecuA = b.ecuB = false; b.pump1 = b.pump2 = false; b.fuelPress = 0; } // injeção: tudo desligado
-    if (b.params.wing) { b.wingFolded = false; V.vis.snapFold?.(false); b.elevator = 0; }
+    if (b.params.wing) { b.wingFolded = false; V.vis.snapFold?.(false); b.elevator = 0; input.resetFlight(); }
     b.coldEngines(); // (turbina parada e fria, N1 = 0)
     b.systems.fuelL = START_FUEL[V.kind];
     for (const bk of b.banks) bk.coolantC = Math.min(bk.coolantC, 60);

@@ -4,7 +4,7 @@
 // hélice pusher de 3 pás, cauda em T (deriva + leme, estabilizador + profundor no alto).
 // As partes externas da asa DOBRAM para cima (`setFolded`) para caber na carretinha e na vaga do pátio.
 // Nós do BoatVisual: `engine` = pivô vazio (o leme é girado aqui pela direção real), `propeller` = hélice (rpm real).
-// As superfícies de comando leem a telemetria: leme = `steerDeg`, ailerons = `steerDeg`, profundor = `elevator`.
+// As superfícies de comando leem a telemetria: leme = `steerDeg`, ailerons = `aileron`, profundor = `elevator`.
 
 import { type Scene, Mesh, MeshBuilder, StandardMaterial, PBRMaterial, Color3, TransformNode, Vector3 } from "@babylonjs/core";
 import { WIG } from "../sim/params.ts";
@@ -225,10 +225,10 @@ export const buildWig = (scene: Scene): BoatVisual & { controls: WigControls; se
     update(dt, t, _input, maxSteerDeg) {
       const a = (t.steerDeg * Math.PI) / 180;
       rudder.rotation.y = -a;
-      const ail = (t.steerDeg / Math.max(1, maxSteerDeg)) * 0.25;
+      const ail = t.aileron * 0.25;
       for (const x of ailerons) x.node.rotation.x = x.s * ail; // direita: asa de boreste com o aileron para cima
       elevator.rotation.x = -t.elevator * 0.3;                  // puxar (+) = bordo de fuga para cima
-      stickX += (t.steerDeg / Math.max(1, maxSteerDeg) - stickX) * Math.min(1, dt * 12);
+      stickX += (t.aileron - stickX) * Math.min(1, dt * 12);
       stickY += (t.elevator - stickY) * Math.min(1, dt * 12);
       stickPivot.rotation.z = -stickX * 0.3; stickPivot.rotation.x = -stickY * 0.25;
       thr += (t.throttle - thr) * Math.min(1, dt * 12);

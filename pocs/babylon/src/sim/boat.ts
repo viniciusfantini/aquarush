@@ -103,7 +103,10 @@ export interface BoatTelemetry {
   aoaDeg: number;
   groundEffect: number;
   wingLoad: number;
+  /** profundor efetivo (compensação + manche), só a compensação e os ailerons (−1..1) */
   elevator: number;
+  elevTrim: number;
+  aileron: number;
   stallWarn: boolean;
   airborne: boolean;
   /** pressão de sobrealimentação do compressor (bar, manométrica; 0 = sem compressor / sem carga) */
@@ -389,6 +392,9 @@ export class Speedboat {
   fuelPress = 3;
   /** profundor (compensação, −1 = nariz para baixo, +1 = nariz para cima): fica onde o piloto deixou */
   elevator = 0;
+  /** manche (ekranoplano): profundor −1..1 somado à compensação, ailerons −1..1 (do último comando) */
+  private pitchIn = 0;
+  private rollIn: number | null = null;
   /** ekranoplano com as partes externas da asa DOBRADAS (carretinha/pátio): sem sustentação nem flutuadores */
   wingFolded = false;
   /** motor de avião: magnetos (OFF / R / L / BOTH), mistura 0..1 (1 = rica, < 0,15 = corte) e primer (bombadas no motor) */
@@ -460,7 +466,7 @@ export class Speedboat {
       distanceM: 0, collisions: 0, draftHull: 0, draftMotor: 0, capsized: false, swimmers: 0, hullDamage: 0, engineDamage: 0, damageEvent: "", damageCount: 0, lastImpact: 0, depth: 0, submergedPoints: params.buoyancyPoints.map(() => false),
       rpms: [params.idleRpm], gears: ["N"], throttles: [0], thrusts: [0], engines: ["running"], keys: ["on"], houseV: 12.6, propRpms: [0], coolants: [45], batteryVs: [12.6], batterySocs: [0.92], batteryAs: [0], turbine: null, nominalV: 12, gpu: false, gpuState: "off", gpuT: 0, gpuKw: 0, busBattery: true, busGen: false, extPwr: false, extPwrClosed: false, extPwrFault: false, gpuA: 0, coolingLps: 0, fuelValveOpen: true, fuelLineFrac: 1, bilgeMode: "auto", batterySel: "ind", choke: false,
       lanyard: true, driveMode: "normal", righting: false, magnetos: "both", mixture: 1, prime: 0, boostBar: 0, ibb: "off",
-      ecuA: false, ecuB: false, pump1: false, pump2: false, fuelPressBar: 0, wingH: 0, airspeed: 0, aoaDeg: 0, groundEffect: 1, wingLoad: 0, elevator: 0, stallWarn: false, airborne: false,
+      ecuA: false, ecuB: false, pump1: false, pump2: false, fuelPressBar: 0, wingH: 0, airspeed: 0, aoaDeg: 0, groundEffect: 1, wingLoad: 0, elevator: 0, elevTrim: 0, aileron: 0, stallWarn: false, airborne: false,
     };
   }
 
@@ -474,7 +480,7 @@ export class Speedboat {
     this.steer = 0;
     this.trim = 0;
     this.tilt = 0;
-    this.elevator = 0;
+    this.elevator = 0; this.pitchIn = 0; this.rollIn = null;
     this.tiltWanted = false;
     this.capsized = false; this.capsizeT = 0; this.rightT = 0; this.lanyard = true; this.swimmers = []; this.winchStrap = null; this.mooringLines = [];
     this.anchor.reset(); this.bilgeL = 0; this.bilgeAuto = false; this.bilgePumpA = 0; this.sunk = false; this.airL = -1; this.sinkSpot = null; this.sloshDeck = v3(); this.sloshUnder = v3();
@@ -1111,7 +1117,12 @@ export class Speedboat {
     this.tiltBlocked = false;
     this.telemetry.trimRelay = false;
     // ekranoplano: o "trim" é a roda de compensação do PROFUNDOR (fica onde o piloto deixa)
-    if (P.wing) this.elevator = clamp(this.elevator + trimIn * P.wing.elevatorRate * dt, -1, 1);
+    if (P.wing) {
+      this.elevator = clamp(this.elevator + trimIn * P.wing.elevatorRate * dt, -1, 1);
+      // manche: a superfície anda até o comando (servo de ~0,15 s); sem `roll` os ailerons seguem a direção
+      this.pitchIn = approach(this.pitchIn, clamp(input.pitch ?? 0, -1, 1), 7 * dt);
+      this.rollIn = input.roll === undefined ? null : approach(this.rollIn ?? 0, clamp(input.roll, -1, 1), 7 * dt);
+    }
     if (P.trimMode === "none") { this.trimMotorA = 0; this.trim = 0; this.tilt = 0; } // (airboat: não tem trim — o botão não faz nada)
     else if (P.trimMode === "manual") { this.updateManualTrim(dt, trimIn, input.throttle); this.trimMotorA = 0; }
     else {
@@ -1514,7 +1525,7 @@ export class Speedboat {
   private applyWing(dt: number, water: IWaterSurface, world: PhysicsWorld, wetFraction: number): void {
     const W = this.params.wing!;
     const t = this.telemetry;
-    t.elevator = this.elevator;
+    t.elevator = this.elevatorCmd; t.elevTrim = this.elevator; t.aileron = this.aileronCmd;
     if (this.wingFolded) { t.wingH = 0; t.airspeed = 0; t.aoaDeg = 0; t.groundEffect = 1; t.wingLoad = 0; t.stallWarn = false; t.airborne = false; return; }
     const wv = world.wind ?? v3();
     let hMin = 99, aoa = 0, kSum = 0, nG = 0, liftUp = 0;
@@ -1531,7 +1542,7 @@ export class Speedboat {
         hMin = Math.min(hMin, h);
       }
       const ck = pn.control?.kind;
-      const cmd = ck === "elevator" ? this.elevator : ck === "aileron" ? this.steer / Math.max(1e-3, this.params.maxSteerLow) : 0;
+      const cmd = ck === "elevator" ? this.elevatorCmd : ck === "aileron" ? this.aileronCmd : 0;
       const r = panelForce(pn, W, vAir, h, cmd, hDot);
       const f = rotate(this.rot, r.force);
       if (pn.ground) { aoa += r.alpha; kSum += r.kGround; nG++; liftUp += f.y; }
@@ -1555,11 +1566,15 @@ export class Speedboat {
     t.aoaDeg = nG ? aoa / nG / (Math.PI / 180) : 0;
     t.groundEffect = nG ? kSum / nG : 1;
     t.wingLoad = liftUp / (this.totalMass * G);
-    t.elevator = this.elevator;
     t.stallWarn = nG > 0 && aoa / nG > W.stallWarn && t.airspeed > 12;
     t.airborne = wetFraction <= 0 && t.wingH > 0.05 && this.impactN < 1; // (nem na água nem arrastando no chão)
     void dt;
   }
+
+  /** profundor efetivo: compensação (E/Q) + manche (W/S) */
+  get elevatorCmd(): number { return clamp(this.elevator + this.pitchIn, -1, 1); }
+  /** ailerons: manche lateral (A/D) — ou, sem ele, a direção */
+  get aileronCmd(): number { return this.rollIn ?? this.steer / Math.max(1e-3, this.params.maxSteerLow); }
 
   // ---------------- injeção eletrônica (ekranoplano): centrais A/B e bombas de combustível ----------------
   /** central LANE A ou B (cada uma injeta e acende sozinha) */

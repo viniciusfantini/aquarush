@@ -52,7 +52,9 @@ const dropletTex = (scene: Scene): DynamicTexture => {
 };
 
 interface PropFx { rooster: ParticleSystem; chop: ParticleSystem; mist: ParticleSystem; bubbles: ParticleSystem }
-interface PropState { prop: Vec3; imm: number; cavitation: number; ventilation: number; throttle: number; thrustN: number; propRpm: number; running: boolean }
+interface PropState { prop: Vec3; imm: number; cavitation: number; ventilation: number; throttle: number; thrustN: number; propRpm: number; running: boolean   /** hélice no ar (airboat, ekranoplano) */
+  airProp?: boolean;
+}
 
 export class WaterInteraction {
   readonly wake: WakeMap;
@@ -63,6 +65,9 @@ export class WaterInteraction {
   private readonly splash: ParticleSystem;
   private readonly telltale: ParticleSystem;
   private readonly drips: ParticleSystem;
+  /** névoa/spray arrancado da água pelo colchão de ar da asa (ekranoplano rente à água) */
+  private readonly airSpray: ParticleSystem;
+  private airLine = { ax: 0, az: 0, bx: 0, bz: 0, vx: 0, vz: 0, fx: 0, fz: 0 };
   private dryTime = 99;
   /** superfície da água (física, com a esteira) para as partículas pararem nela */
   water: IWaterSurface | null = null;
@@ -97,6 +102,25 @@ export class WaterInteraction {
     this.splash = mk("splash", p * 0.1, drops);
     this.telltale = mk("telltale", 600, dot);
     this.drips = mk("drips", 120, dot);
+    this.airSpray = mk("airSpray", Math.max(300, p * 0.3), dot);
+    {
+      const ps = this.airSpray;
+      ps.minSize = 0.25; ps.maxSize = 1.1; ps.minLifeTime = 0.35; ps.maxLifeTime = 1.0;
+      ps.gravity = new Vector3(0, -2.5, 0);
+      ps.color1 = new Color4(1, 1, 1, 0.42); ps.color2 = new Color4(0.9, 0.95, 1, 0.3); ps.colorDead = new Color4(0.95, 0.97, 1, 0);
+      // nasce num ponto qualquer da linha do bordo de fuga, rente à água, e sai para trás, para cima e para fora
+      const L = this.airLine;
+      ps.startPositionFunction = (_m, pos) => {
+        const u = Math.random();
+        const x = L.ax + (L.bx - L.ax) * u, z = L.az + (L.bz - L.az) * u;
+        pos.set(x, (this.water?.getHeight(x, z) ?? 0) + 0.03, z);
+      };
+      ps.startDirectionFunction = (_m, dir) => {
+        const side = (Math.random() - 0.5) * 2;
+        dir.set(L.vx * 0.55 - L.fx * (1 + Math.random() * 2) + L.fz * side * 1.5, 0.6 + Math.random() * 1.6, L.vz * 0.55 - L.fz * (1 + Math.random() * 2) - L.fx * side * 1.5);
+      };
+      ps.minEmitPower = ps.maxEmitPower = 1;
+    }
     // dois conjuntos de efeitos de hélice (o 2º só emite nos barcos de dois motores)
     for (let i = 0; i < 2; i++) {
       const sfx = i === 0 ? "" : String(i + 1);
@@ -225,8 +249,23 @@ export class WaterInteraction {
         thrustN: one ? T.thrustN : (T.thrusts?.[i] ?? 0),
         propRpm: one ? T.propRpm : un.propRpmState,
         running: (one ? T.engine : un.engine) === "running",
+        airProp: !!boat.params.airProp,
       });
     });
+
+    // ---------------- colchão de ar da asa (ekranoplano) ----------------
+    {
+      const W = boat.params.wing;
+      const live = this.field.sampleBoat(boat);
+      if (W && live.air > 0.02) {
+        const hs = W.span / 2;
+        const a = boat.toWorld(v3(-hs * 0.9, -0.05, -1.4)), b = boat.toWorld(v3(hs * 0.9, -0.05, -1.4));
+        const L = this.airLine;
+        L.ax = a.x; L.az = a.z; L.bx = b.x; L.bz = b.z; L.vx = boat.vel.x; L.vz = boat.vel.z;
+        const fl = Math.hypot(fwd.x, fwd.z) || 1; L.fx = fwd.x / fl; L.fz = fwd.z / fl;
+        this.airSpray.emitRate = live.air * 420;
+      } else this.airSpray.emitRate = 0;
+    }
 
     // ---------------- impactos ----------------
     const slam = Math.max(0, -boat.vel.y) * (T.wetFraction > 0 ? 1 : 0);
@@ -251,7 +290,9 @@ export class WaterInteraction {
     const rv = clamp(waterSpeed * 0.3, 0, 7) + boil * 3;
     fx.rooster.direction1 = new Vector3(-fwd.x * 0.8 + right.x * 0.3, 1.1, -fwd.z * 0.8 + right.z * 0.3).scale(rv);
     fx.rooster.direction2 = new Vector3(-fwd.x * 1.2 - right.x * 0.3, 1.7, -fwd.z * 1.2 - right.z * 0.3).scale(rv);
-    fx.rooster.emitRate = hasWater * smoothstep(0.5, 0.9, imm) * (h.thrustN > 500 ? smoothstep(6, 20, waterSpeed) * 600 * h.throttle + boil * 500 : boil * 300);
+    // (hélice no ar: o vento dela só levanta água com a hélice perto da superfície — o ekranoplano voando, não)
+    const nearSurf = h.airProp ? 1 - smoothstep(1.4, 2.6, prop.y - surf) : 1;
+    fx.rooster.emitRate = nearSurf * hasWater * smoothstep(0.5, 0.9, imm) * (h.thrustN > 500 ? smoothstep(6, 20, waterSpeed) * 600 * h.throttle + boil * 500 : boil * 300);
 
     // leque das pás "picando" a água: máximo com o disco pela metade (4·i·(1−i)), cresce com a rotação
     const spin = Math.min(Math.abs(h.propRpm) / 1500, 2);

@@ -18,6 +18,12 @@ export interface WakeSample {
   thr: number;              // acelerador efetivo
   boil: number;             // cavitação/ventilação 0..1
   exh: number;              // gases de escape borbulhando (motor ligado, lancha devagar) 0..1
+  /** contato do casco com a água 0..1 (ekranoplano voando ≈ 0: quase não faz onda nem espuma) */
+  wet: number;
+  /** colchão de ar da asa rente à água 0..1 (ekranoplano): o ar "corta" a água sob a asa */
+  air: number;
+  /** meia-envergadura (m) de quem gera o colchão de ar */
+  span: number;
   age: number;              // s
 }
 
@@ -40,7 +46,7 @@ export const kelvinTan = (v: number): number => {
 
 /** Envelope da onda de um braço: cresce logo atrás do casco, decai devagar e se espalha. */
 export const armEnvelope = (s: WakeSample): number =>
-  (waveAmp(s.v) * Math.exp(-s.age / 45)) / Math.sqrt(1 + s.age / 6) * (1 - Math.exp(-s.age * 6 - 0.15));
+  (waveAmp(s.v) * Math.max(s.wet, 0.12 * s.air) * Math.exp(-s.age / 45)) / Math.sqrt(1 + s.age / 6) * (1 - Math.exp(-s.age * 6 - 0.15));
 
 /** Cristas/cavados de cada braço (a partir da linha externa do V, para dentro). */
 export const WAKE_RIDGES = [
@@ -69,6 +75,8 @@ export class WakeField {
   private emitTimer = 0;
   private chunks: Chunk[] = [];
   private static readonly CH = 10;
+  /** contato do casco com a água, suavizado (o casco planando toca e solta a água o tempo todo) */
+  private wetS = 1;
 
   /** Amostra do estado atual da lancha (também usada como "ponta viva" pelo visual). */
   sampleBoat(boat: Speedboat): WakeSample {
@@ -89,6 +97,9 @@ export class WakeField {
         4 * T.propImmersion * (1 - T.propImmersion) * Math.min(Math.abs(T.propRpm) / 1500, 1),
       ), 0, 1) * (T.depth > 0.4 ? 1 : 0),
       exh: T.engine === "running" && T.depth > 0.4 ? 1 - smoothstep(1.5, 5, Math.abs(T.waterSpeed)) : 0,
+      wet: this.wetS,
+      air: boat.params.wing && !boat.wingFolded ? (1 - smoothstep(0.4, 3.5, T.wingH)) * smoothstep(12, 30, Math.abs(T.waterSpeed)) * (1 - 0.6 * this.wetS) : 0,
+      span: boat.params.wing ? boat.params.wing.span / 2 : 0,
       age: 0,
     };
   }
@@ -96,6 +107,9 @@ export class WakeField {
   /** Avança a esteira (chamar no passo de física). */
   update(dt: number, boat: Speedboat): void {
     for (const s of this.samples) s.age += dt;
+    // planando, só 1–3 pontos tocam a água: qualquer contato conta como "molhado"; no ar cai para 0 em ~0,3 s
+    const wetT = clamp(boat.telemetry.wetFraction * 6, 0, 1);
+    this.wetS += (wetT - this.wetS) * (1 - Math.exp(-dt / (wetT > this.wetS ? 0.08 : 0.3)));
     let drop = 0;
     while (drop < this.samples.length && this.samples[drop].age > WAKE_MAX_AGE) drop++;
     if (drop) this.samples.splice(0, drop);
@@ -109,7 +123,7 @@ export class WakeField {
     this.rebuildChunks();
   }
 
-  reset(): void { this.samples = []; this.chunks = []; }
+  reset(): void { this.samples = []; this.chunks = []; this.wetS = 1; }
 
   /** Caixas envolventes por trecho (aceleram a consulta da física). */
   private rebuildChunks(): void {

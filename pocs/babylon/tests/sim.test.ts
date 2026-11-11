@@ -21,7 +21,7 @@ import { buildTrailer, trailerLoadState, attachWinch } from "../src/sim/trailer.
 import { TowRig, TOW_SPECS } from "../src/sim/towVehicle.ts";
 import { emptyInput, type VehicleInput } from "../src/gameplay/vehicleInput.ts";
 import { v3, len, qFromAxisAngle } from "../src/sim/math.ts";
-import { WakeField, WaterWithWake } from "../src/sim/wake.ts";
+import { WakeField, WaterWithWake, armEnvelope } from "../src/sim/wake.ts";
 
 const DT = 1 / 120;
 const openWater: PhysicsWorld = { groundHeight: () => -50, spheres: [], boxes: [] };
@@ -1408,6 +1408,26 @@ for (const [label, thr] of [["baixa", 0.25], ["alta", 1]] as const) {
   check("ekranoplano", "curva no ar: guinada (°/s)", Math.abs(a.angVel.y) * 57.3, 2, 20, "°/s", 1);
   check("ekranoplano", "curva no ar: inclina para dentro (roll, °)", Math.abs(a.telemetry.rollDeg), 3, 25, "°", 1);
   check("ekranoplano", "curva no ar: não vira", a.capsized ? 1 : 0, 0, 0, "", 0);
+  // comandos de voo: manche (W/S) no profundor, ailerons (A/D) separados do leme (< >)
+  {
+    const m = mk(); run(m, water, 35, { ...emptyInput(), throttle: 1 });
+    const p0 = m.telemetry.pitchDeg;
+    run(m, water, 1.2, { ...emptyInput(), throttle: 1, pitch: 1 });
+    check("ekranoplano", "manche puxado (S): o nariz sobe (°)", m.telemetry.pitchDeg - p0, 1.5, 20, "°", 1);
+    const r = mk(); run(r, water, 35, { ...emptyInput(), throttle: 1 });
+    run(r, water, 3, { ...emptyInput(), throttle: 1, roll: 1 });
+    check("ekranoplano", "ailerons sem leme (A/D): inclina para o lado (roll, °)", Math.abs(r.telemetry.rollDeg), 3, 25, "°", 1);
+    check("ekranoplano", "ailerons sem leme: o leme fica no centro (°)", Math.abs(r.telemetry.steerDeg), 0, 0.5, "°", 1);
+  }
+  // esteira: voando o casco quase não faz onda; rente à água o colchão de ar risca a superfície
+  {
+    const f = new WakeField(); const k = mk();
+    run(k, water, 35, { ...emptyInput(), throttle: 1 }, openWater, () => f.update(DT, k));
+    const s = f.sampleBoat(k);
+    check("ekranoplano", "voando: contato do casco com a água na esteira (0..1)", s.wet, 0, 0.1, "", 2);
+    check("ekranoplano", "voando rente: colchão de ar riscando a água (0..1)", s.air, 0.2, 1, "", 2);
+    check("ekranoplano", "voando: onda da esteira bem menor que na água (fração)", armEnvelope({ ...s, age: 2 }) / armEnvelope({ ...s, wet: 1, age: 2 }), 0, 0.2, "", 2);
+  }
   // profundor todo para cima: sobe, mas longe da água a asa pequena não segura — não passa de poucos metros
   {
     const u = mk(); u.elevator = 1; let top = 0;
