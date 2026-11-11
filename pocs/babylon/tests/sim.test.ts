@@ -1514,7 +1514,7 @@ for (const [label, thr] of [["baixa", 0.25], ["alta", 1]] as const) {
   check("oceano", "no mar: anda a toda (km/h)", sea.telemetry.speedKmh, 70, 90, "km/h", 0);
 }
 
-// ---------- Modo de teste "força ×4" (tecla *): empuxo de todas as embarcações e tração dos veículos ----------
+// ---------- Modo de teste "força ×N" (tecla *: ×1…×5; os critérios usam ×4): empuxo e tração dos veículos ----------
 {
   const water = mkWater(0);
   const flat: PhysicsWorld = { groundHeight: () => -50, spheres: [], boxes: [] };
@@ -1526,6 +1526,14 @@ for (const [label, thr] of [["baixa", 0.25], ["alta", 1]] as const) {
     Speedboat.powerMult = 4; b.step(DT, { ...emptyInput(), gear: "F", throttle: 1 }, water, flat);
     Speedboat.powerMult = 1; a.step(DT, { ...emptyInput(), gear: "F", throttle: 1 }, water, flat);
     check("força ×4", `${P.kind}: empuxo no mesmo instante (×)`, b.telemetry.thrustN / Math.max(1, a.telemetry.thrustN), 3.99, 4.01, "×", 3);
+  }
+  // * sobe ×1 → ×2 → … → ×5: o empuxo segue o multiplicador
+  for (const m of [2, 3, 5]) {
+    const a = mkB(SPEEDBOAT), b = mkB(SPEEDBOAT);
+    run(a, water, 3, { ...emptyInput(), gear: "F" }, flat); run(b, water, 3, { ...emptyInput(), gear: "F" }, flat);
+    Speedboat.powerMult = m; b.step(DT, { ...emptyInput(), gear: "F", throttle: 1 }, water, flat);
+    Speedboat.powerMult = 1; a.step(DT, { ...emptyInput(), gear: "F", throttle: 1 }, water, flat);
+    check("força ×4", `lancha ×${m}: empuxo no mesmo instante (×)`, b.telemetry.thrustN / Math.max(1, a.telemetry.thrustN), m - 0.01, m + 0.01, "×", 3);
   }
   // AR-6 com ×4: a meio acelerador anda bem mais rápido; a pleno o empuxo (34 kN na popa) empina e capota de ré
   // ("blow-over") — é o resultado da física, registrado aqui de propósito

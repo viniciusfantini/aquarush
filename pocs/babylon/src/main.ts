@@ -53,7 +53,7 @@ import { Hud } from "./presentation/hud.ts";
 import { EngineAudio } from "./presentation/audio.ts";
 
 installI18n(); // inglês: traduz o DOM, as escritas futuras e os letreiros 3D (antes de montar a cena e o HUD)
-const BUILD = "poc-babylon 0.71.1";
+const BUILD = "poc-babylon 0.71.2";
 /** Escala visual da rotação da hélice (proporcional ao RPM, abaixo do limite estroboscópico). */
 const PROP_VISUAL_SCALE = 0.12;
 
@@ -557,7 +557,7 @@ const boot = async () => {
     setPeopleVisible(true);
   };
   const trailerChip = document.getElementById("h-trailer")!;
-  /** chip do modo de teste "força ×4" (tecla *) */
+  /** chip do modo de teste "força ×N" (tecla *: ×1 → ×2 → … → ×5 → ×1) */
   const powerChip = document.getElementById("h-power")!;
 
   document.getElementById("h-build")!.textContent = `${BUILD} · ${engine.isWebGPU ? "WebGPU" : "WebGL" + (engine as Engine).webGLVersion} · q=${cfg.quality.name}`;
@@ -958,12 +958,13 @@ const boot = async () => {
     }
     else if (a === "reset") resetBoat();
     else if (a === "wind") applyWind(wind.level + 1);
-    else if (a === "power4x") {
-      // MODO DE TESTE: força ×4 em todas as embarcações (empuxo) e veículos (tração) — liga/desliga com *
-      const on = Speedboat.powerMult === 1;
-      Speedboat.powerMult = TowRig.powerMult = on ? 4 : 1;
-      powerChip.style.display = on ? "" : "none";
-      hud.showToast(on ? "FORÇA ×4 ligada (modo de teste): empuxo de todas as embarcações e tração dos carros multiplicados por 4 — * desliga" : "Força normal (×1)");
+    else if (a === "powerMult") {
+      // MODO DE TESTE: cada * sobe o multiplicador da força (empuxo das embarcações e tração dos carros): ×1 → ×5 → ×1
+      const m = Speedboat.powerMult >= 5 ? 1 : Speedboat.powerMult + 1;
+      Speedboat.powerMult = TowRig.powerMult = m;
+      powerChip.textContent = `FORÇA ×${m}`;
+      powerChip.style.display = m > 1 ? "" : "none";
+      hud.showToast(m > 1 ? `FORÇA ×${m} (modo de teste): empuxo de todas as embarcações e tração dos carros multiplicados por ${m} — * sobe até ×5 e volta ao normal` : "Força normal (×1)");
     }
     else if (a === "occupants") applyOccupants(occIdx + 1);
     else if (a === "jump" && boat.params.turbine) {

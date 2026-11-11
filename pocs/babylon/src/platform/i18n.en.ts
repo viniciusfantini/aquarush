@@ -29,8 +29,8 @@ export const EN: Record<string, string> = {
   "decola da água a ~85 km/h e voa a 0,5–3 m da água no colchão de ar (longe dela a asa não segura); profundor no E/Q, manche com leme e ailerons, hélice pusher, duas centrais de injeção (LANE A/B) e duas bombas":
     "takes off from the water at ~85 km/h and flies 0.5–3 m above it on the air cushion (away from the surface the wing can't hold it up); elevator on E/Q, control stick with rudder and ailerons, pusher propeller, two injection ECUs (LANE A/B) and two fuel pumps",
   "piloto + passageiro (tandem)": "pilot + passenger (tandem)",
-  "FORÇA ×4": "POWER ×4", "força ×4 (teste)": "power ×4 (test)", "modo de teste: * desliga": "test mode: * turns it off", "Força normal (×1)": "Normal power (×1)",
-  "FORÇA ×4 ligada (modo de teste): empuxo de todas as embarcações e tração dos carros multiplicados por 4 — * desliga": "POWER ×4 on (test mode): thrust of every craft and car traction multiplied by 4 — * turns it off",
+  "FORÇA ×{}": "POWER ×{}", "força ×1…×5 (teste)": "power ×1…×5 (test)", "modo de teste: * sobe até ×5 e volta ao normal": "test mode: * steps up to ×5 and back to normal", "Força normal (×1)": "Normal power (×1)",
+  "FORÇA ×{} (modo de teste): empuxo de todas as embarcações e tração dos carros multiplicados por {} — * sobe até ×5 e volta ao normal": "POWER ×{} (test mode): thrust of every craft and car traction multiplied by {} — * steps up to ×5 and back to normal",
   "manche: W nariz para baixo, S para cima ·": "control stick: W nose down, S nose up ·", "manete (fica onde parar)": "throttle (stays where you leave it)",
   "ailerons ·": "ailerons ·", "leme": "rudder", "compensação do profundor (fica onde deixar)": "elevator trim (stays where you leave it)",
   "manete à frente: a ~85 km/h decola · sem ré ·": "throttle forward: lifts off at ~85 km/h · no reverse ·",

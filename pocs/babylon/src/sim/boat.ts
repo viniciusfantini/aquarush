@@ -698,7 +698,7 @@ export class Speedboat {
         this.cavitation += (cavTarget - this.cavitation) * (1 - Math.exp(-dt / 0.15));
         thrust *= Math.pow(immersion, 1.5) * (1 - 0.5 * aeration) * (1 - 0.3 * this.cavitation) * (1 - 0.7 * this.engineDamage); // pé/hélice avariados
       }
-      thrust *= Speedboat.powerMult; // (modo de teste "*": força ×4 em todas as embarcações)
+      thrust *= Speedboat.powerMult; // (modo de teste "*": força ×1…×5 em todas as embarcações)
       if (thrust !== 0) this.addForceAt(scale(tDir, thrust), propW, "thrust");
       this.lastThrust = thrust;
       // (hélice de superfície: trabalhar ventilada é o normal dela — não conta como "ventilação" na telemetria)
