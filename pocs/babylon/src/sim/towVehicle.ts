@@ -45,6 +45,9 @@ export const TOW_SPECS: Record<"car" | "pickup", TowSpec> = {
 export interface Pose { x: number; y: number; z: number; yaw: number; pitch: number; roll?: number }
 
 export class TowRig {
+  /** MODO DE TESTE (tecla *): multiplica a tração de todos os veículos de reboque (1 = normal). Com 4× a força, o
+   *  arrasto (∝ v²) deixa chegar a ~2× a velocidade, então o limite de velocidade sobe com √mult. */
+  static powerMult = 1;
   readonly spec: TowSpec;
   readonly t: TrailerLayout;
   private readonly ground: (x: number, z: number) => number;
@@ -136,7 +139,8 @@ export class TowRig {
     let a = -9.81 * grade * 0.9; // (o peso do barco na carretinha soma ao do carro; motor compensa)
     const up = cmd.up > 0.1, down = cmd.down > 0.1;
     // tração cai com a velocidade (curva de potência simplificada): forte saindo, ~40 % perto dos 50 km/h
-    const traction = S.accel * (1 - 0.6 * clamp(this.v / S.maxSpeed, 0, 1));
+    const pm = TowRig.powerMult, vMax = S.maxSpeed * Math.sqrt(pm);
+    const traction = S.accel * pm * (1 - 0.6 * clamp(this.v / vMax, 0, 1));
     if (up) a += this.v < -0.1 ? S.brake : traction * cmd.up;          // W: acelera para a frente (ou freia a ré)
     else if (down) a += this.v > 0.1 ? -S.brake : -S.accel * 0.6 * cmd.down; // S: freia; parado engata a ré
     // rolamento (0,15 m/s²) + arrasto do ar (∝ v²) — com isso o carro chega perto dos 50 km/h
@@ -144,7 +148,7 @@ export class TowRig {
     this.v += a * dt;
     // "auto hold": sem comando e quase parado, fica freado (não desce a rampa sozinho)
     if (!up && !down && Math.abs(this.v) < 0.4) this.v = approach(this.v, 0, S.brake * dt);
-    this.v = clamp(this.v, -S.maxReverse, S.maxSpeed);
+    this.v = clamp(this.v, -S.maxReverse, vMax);
     // de ré na rampa o motorista para quando as rodas traseiras chegam na água (~15 cm): mais que isso a
     // carretinha fica funda demais (o barco passa por cima dos postes-guia e do berço)
     const wetRear = -this.ground(this.rx - Math.sin(this.yaw) * 0.3, this.rz - Math.cos(this.yaw) * 0.3);

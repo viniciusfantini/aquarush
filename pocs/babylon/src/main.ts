@@ -53,7 +53,7 @@ import { Hud } from "./presentation/hud.ts";
 import { EngineAudio } from "./presentation/audio.ts";
 
 installI18n(); // inglês: traduz o DOM, as escritas futuras e os letreiros 3D (antes de montar a cena e o HUD)
-const BUILD = "poc-babylon 0.70.2";
+const BUILD = "poc-babylon 0.71.0";
 /** Escala visual da rotação da hélice (proporcional ao RPM, abaixo do limite estroboscópico). */
 const PROP_VISUAL_SCALE = 0.12;
 
@@ -557,6 +557,8 @@ const boot = async () => {
     setPeopleVisible(true);
   };
   const trailerChip = document.getElementById("h-trailer")!;
+  /** chip do modo de teste "força ×4" (tecla *) */
+  const powerChip = document.getElementById("h-power")!;
 
   document.getElementById("h-build")!.textContent = `${BUILD} · ${engine.isWebGPU ? "WebGPU" : "WebGL" + (engine as Engine).webGLVersion} · q=${cfg.quality.name}`;
 
@@ -956,6 +958,13 @@ const boot = async () => {
     }
     else if (a === "reset") resetBoat();
     else if (a === "wind") applyWind(wind.level + 1);
+    else if (a === "power4x") {
+      // MODO DE TESTE: força ×4 em todas as embarcações (empuxo) e veículos (tração) — liga/desliga com *
+      const on = Speedboat.powerMult === 1;
+      Speedboat.powerMult = TowRig.powerMult = on ? 4 : 1;
+      powerChip.style.display = on ? "" : "none";
+      hud.showToast(on ? "FORÇA ×4 ligada (modo de teste): empuxo de todas as embarcações e tração dos carros multiplicados por 4 — * desliga" : "Força normal (×1)");
+    }
     else if (a === "occupants") applyOccupants(occIdx + 1);
     else if (a === "jump" && boat.params.turbine) {
       // AR-10: sem jump start — a partida externa é a GPU da doca (28 V), só com o barco atracado na vaga do píer

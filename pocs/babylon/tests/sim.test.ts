@@ -1495,6 +1495,41 @@ for (const [label, thr] of [["baixa", 0.25], ["alta", 1]] as const) {
   check("ekranoplano", "vai na carretinha grande da caminhonete", smallTow("wig") ? 0 : 1, 1, 1, "", 0);
 }
 
+// ---------- Modo de teste "força ×4" (tecla *): empuxo de todas as embarcações e tração dos veículos ----------
+{
+  const water = mkWater(0);
+  const flat: PhysicsWorld = { groundHeight: () => -50, spheres: [], boxes: [] };
+  const mkB = (P: typeof SPEEDBOAT) => { const b = new Speedboat(P, v3(0, 0.25, 0)); b.systems.fuelL = 50; b.occupants = [{ seat: "helm", mass: PERSON_KG }]; return b; };
+  for (const P of [SPEEDBOAT, JETSKI, AIRBOAT]) {
+    const a = mkB(P), b = mkB(P);
+    run(a, water, 3, { ...emptyInput(), gear: "F" }, flat);
+    run(b, water, 3, { ...emptyInput(), gear: "F" }, flat);
+    Speedboat.powerMult = 4; b.step(DT, { ...emptyInput(), gear: "F", throttle: 1 }, water, flat);
+    Speedboat.powerMult = 1; a.step(DT, { ...emptyInput(), gear: "F", throttle: 1 }, water, flat);
+    check("força ×4", `${P.kind}: empuxo no mesmo instante (×)`, b.telemetry.thrustN / Math.max(1, a.telemetry.thrustN), 3.99, 4.01, "×", 3);
+  }
+  // AR-6 com ×4: a meio acelerador anda bem mais rápido; a pleno o empuxo (34 kN na popa) empina e capota de ré
+  // ("blow-over") — é o resultado da física, registrado aqui de propósito
+  const q = mkB(SPEEDBOAT); let t30 = -1, vq = 0;
+  Speedboat.powerMult = 4;
+  run(q, water, 20, { ...emptyInput(), gear: "F", throttle: 0.5 }, flat, (t) => { if (t30 < 0 && q.telemetry.speedKmh >= 30) t30 = t; vq = Math.max(vq, q.telemetry.speedKmh); });
+  const qf = mkB(SPEEDBOAT);
+  run(qf, water, 6, { ...emptyInput(), gear: "F", throttle: 1 }, flat);
+  Speedboat.powerMult = 1;
+  check("força ×4", "AR-6 a meio acelerador: 0→30 km/h (s)", t30, 0.3, 3, "s", 2);
+  check("força ×4", "AR-6 a meio acelerador: velocidade máxima (km/h; normal a pleno ~77)", vq, 85, 120, "km/h", 0);
+  check("força ×4", "AR-6 a meio acelerador: não vira", q.capsized ? 1 : 0, 0, 0, "", 0);
+  check("força ×4", "AR-6 a PLENO com ×4: empina e capota de ré (blow-over, esperado)", qf.capsized ? 1 : 0, 1, 1, "", 0);
+  // carro: 4× a tração, limite de velocidade × 2 (arrasto ∝ v²)
+  const flatG = () => 5;
+  const rigN = new TowRig(buildTrailer(DINGHY), TOW_SPECS.car, flatG), rig4 = new TowRig(buildTrailer(DINGHY), TOW_SPECS.car, flatG);
+  for (let i = 0; i < 20 / DT; i++) rigN.update(DT, { up: 1, down: 0, steer: 0 });
+  TowRig.powerMult = 4;
+  for (let i = 0; i < 20 / DT; i++) rig4.update(DT, { up: 1, down: 0, steer: 0 });
+  TowRig.powerMult = 1;
+  check("força ×4", "carro: velocidade final ×4 / normal (×)", rig4.v / Math.max(0.1, rigN.v), 1.6, 2.1, "×", 2);
+}
+
 // ---------- Painel de sistemas (Y): registro de combustível, bomba de porão, afogador, chave de baterias ----------
 {
   const water = mkWater(0);
