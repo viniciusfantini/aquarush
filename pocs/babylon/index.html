@@ -590,6 +590,8 @@
     .chip { font-size: 12px; letter-spacing: 0.08em; padding: 5px 10px; border-radius: 999px; background: var(--panel); color: var(--dim); }
     .chip.on { color: #04222a; background: var(--accent); }
     #h-trailer.show { color: var(--fg); background: rgba(13, 79, 139, 0.75); }
+    #h-tube.show { color: #04222a; background: #ffb14d; }
+    #h-tube.show.warn { color: #fff; background: #d9480f; }
     #h-trailer.ok { color: #04222a; background: #7dff9a; }
     #h-lights.on { background: #7dff9b; }
     #h-anchor.show { color: var(--fg); background: rgba(13, 79, 139, 0.75); }
@@ -603,7 +605,7 @@
     @keyframes blink { 50% { background: #ff5a4e; } }
     #status .chip.btn { pointer-events: auto; cursor: pointer; color: var(--fg); border: 1px solid rgba(255,255,255,0.3); }
     #status { pointer-events: auto; }
-    #h-trailer:not(.show), #h-dmg-hull:not(.warn), #h-dmg-eng:not(.warn), #h-hot:not(.warn), #h-lowfuel:not(.warn), #h-charge:not(.warn), #h-bilge:not(.warn), #h-anchor:not(.show), #h-cav:not(.warn), #h-vent:not(.warn) { display: none; }
+    #h-trailer:not(.show), #h-dmg-hull:not(.warn), #h-dmg-eng:not(.warn), #h-hot:not(.warn), #h-lowfuel:not(.warn), #h-charge:not(.warn), #h-bilge:not(.warn), #h-anchor:not(.show), #h-tube:not(.show), #h-cav:not(.warn), #h-vent:not(.warn) { display: none; }
     /* embaixo d'água: leve tom verde-azulado e vinheta escura nas bordas (luz que vem de cima) */
     #underwater { position: fixed; inset: 0; pointer-events: none; opacity: 0; transition: opacity 0.15s; z-index: 1;
       background: radial-gradient(ellipse at 50% 20%, rgba(40, 140, 140, 0.10), rgba(0, 35, 40, 0.55) 85%); }
@@ -696,6 +698,7 @@
         <div class="chip" id="h-bilge">BOMBA DE PORÃO</div>
         <div class="chip" id="h-anchor">ÂNCORA</div>
         <div class="chip btn" id="h-water">ÁGUA: LAGO</div>
+        <div class="chip" id="h-tube">BOIA</div>
         <div class="chip warn steady" id="h-power" style="display:none" title="modo de teste: * sobe até ×5 e volta ao normal">FORÇA ×2</div>
         <div class="chip btn" id="h-wind">VENTO: NENHUM</div>
         <div class="chip btn" id="h-occ">OCUPANTES: 1</div>
@@ -716,6 +719,7 @@
       <div><kbd>C</kbd> câmera · <span id="help-lights"><kbd>L</kbd> luzes</span> · <kbd>B</kbd> <span id="help-horn">buzina</span></div>
       <div><kbd>T</kbd> vento · <kbd>0</kbd>–<kbd>3</kbd> <kbd>V</kbd> ondas</div>
       <div><kbd>U</kbd> barco ↔ carro · <kbd>I</kbd> carretinha · <kbd>F</kbd> abastece</div>
+      <div><kbd>G</kbd> boia rebocada: engata / solta (píer da boia)</div>
       <div><kbd>R</kbd> <span id="help-reset">píer</span> · <kbd>Esc</kbd> pausa · <kbd>F3</kbd> dados · <kbd>*</kbd> força ×1…×5 (teste)</div>
       <div class="n">Arraste o mouse para girar a câmera. Comece no fim do cânion e abasteça no posto (estrada da rampa).</div>
     </div>

@@ -11,6 +11,8 @@ import { jetStreakLocal } from "../src/sim/bilgeJet.ts";
 import { SPEEDBOAT, DINGHY, RAPIDA, TURBINA, JETSKI, AIRBOAT, WIG, AMPHIB, PERSON_KG, smallTow, type Occupant } from "../src/sim/params.ts";
 import { groundLift, groundInduced } from "../src/sim/wing.ts";
 import { halfWidth } from "../src/sim/mooring.ts";
+import { TowTube, TUBE } from "../src/sim/towTube.ts";
+import { activityPierLayout } from "../src/sim/world.ts";
 import { Turbine } from "../src/sim/turbine.ts";
 import { GerstnerWater, WAVE_PRESETS, type CurrentZone } from "../src/sim/water.ts";
 import type { PhysicsWorld } from "../src/sim/world.ts";
@@ -1588,6 +1590,89 @@ for (const [label, thr] of [["baixa", 0.25], ["alta", 1]] as const) {
   }
   check("anfíbio", "vaga do píer pela meia-envergadura (m)", halfWidth(AMPHIB), 5.2, 5.4, "m", 2);
   check("anfíbio", "vai na carretinha grande da caminhonete", smallTow("anfibio") ? 0 : 1, 1, 1, "", 0);
+}
+
+// ---------- Atividade: BOIA REBOCADA (corda, arrasto, queda, volta nadando, píer da boia) ----------
+{
+  // o píer da boia existe, tem água funda na ponta e não é o píer principal
+  const AP = activityPierLayout();
+  check("boia rebocada", "píer da boia: fundo na ponta (m)", groundHeight(AP.shoreX + 3, AP.shoreZ + AP.length - 4), -3, -1.8, "m", 2);
+  check("boia rebocada", "píer da boia separado do píer principal (m)", Math.abs(AP.shoreX - buildWorld().pier.shoreX), 50, 400, "m", 0);
+  const pier = { shoreX: 0, shoreZ: -40, length: 28, width: 2.4, deckY: 0.55, dirX: 0, dirZ: 1 };
+  const water = mkWater(0.2);
+  const mkRig = () => {
+    const tube = new TowTube(pier);
+    const d = tube.dockPos();
+    const b = new Speedboat(SPEEDBOAT, v3(d.x, 0.25, d.z + 4)); b.systems.fuelL = 60; b.occupants = [{ seat: "helm", mass: PERSON_KG }];
+    return { tube, b };
+  };
+  const go = (b: Speedboat, tube: TowTube, s: number, inp: Partial<VehicleInput>, each?: () => void) => {
+    for (let i = 0; i < s / DT; i++) { water.time += DT; b.step(DT, { ...emptyInput(), gear: "F", ...inp }, water, openWater); tube.step(DT, water, openWater); each?.(); }
+  };
+  // engatar: só devagar e com a popa perto; a pessoa desce do píer para a boia
+  {
+    const { tube, b } = mkRig();
+    const far = new Speedboat(SPEEDBOAT, v3(tube.pos.x + 40, 0.25, tube.pos.z));
+    check("boia rebocada", "longe da boia: não engata", far && !tube.canHook(far) ? 1 : 0, 1, 1, "", 0);
+    check("boia rebocada", "popa perto e parado: engata", tube.hook(b) ? 1 : 0, 1, 1, "", 0);
+    check("boia rebocada", "engatou no píer: a pessoa vai na boia", tube.rider === "tube" ? 1 : 0, 1, 1, "", 0);
+    // reboque em reta: segue o barco, a corda puxa o barco (força no barco), ninguém cai
+    let tMax = 0, fBoat = 0;
+    go(b, tube, 3, { throttle: 0 });
+    go(b, tube, 20, { throttle: 0.6 }, () => { tMax = Math.max(tMax, tube.tension); fBoat = Math.max(fBoat, tube.tension); });
+    const vb = b.telemetry.speedKmh, vt = Math.hypot(tube.vel.x, tube.vel.z) * 3.6;
+    check("boia rebocada", "reta a 60 %: a boia acompanha o barco (km/h de diferença)", Math.abs(vb - vt), 0, 6, "km/h", 1);
+    check("boia rebocada", "reta a ~50 km/h: tensão da corda (N)", tube.tension, 400, 1600, "N", 0);
+    check("boia rebocada", "a corda segue esticada no comprimento (m)", Math.hypot(b.pos.x - tube.pos.x, b.pos.z - tube.pos.z), TUBE.ropeLen, TUBE.ropeLen + 6, "m", 1);
+    check("boia rebocada", "reta: ninguém cai", tube.falls, 0, 0, "", 0);
+    // a mesma lancha sem boia anda mais rápido (a corda pesa no barco de verdade)
+    const solo = new Speedboat(SPEEDBOAT, v3(300, 0.25, 0)); solo.systems.fuelL = 60; solo.occupants = [{ seat: "helm", mass: PERSON_KG }];
+    run(solo, water, 23, { ...emptyInput(), gear: "F", throttle: 0.6 });
+    check("boia rebocada", "rebocando: o barco anda mais devagar que sozinho (km/h a menos)", solo.telemetry.speedKmh - vb, 1, 25, "km/h", 1);
+    // curva média: aguenta; curva fechada a ~50 km/h: a chicotada derruba
+    go(b, tube, 6, { throttle: 0.6, steering: 0.6 });
+    check("boia rebocada", "curva média (volante 0,6): a pessoa aguenta", tube.falls, 0, 0, "", 0);
+    go(b, tube, 6, { throttle: 0.6, steering: 0 });
+    let latMax = 0; go(b, tube, 6, { throttle: 0.6, steering: 1 }, () => { latMax = Math.max(latMax, Math.abs(tube.latAcc)); });
+    check("boia rebocada", "curva fechada: a boia chicoteia (aceleração lateral, g)", latMax / 9.81, 0.85, 4, "g", 2);
+    check("boia rebocada", "curva fechada: a pessoa cai (motivo: curva)", tube.falls === 1 && tube.lastFall === "curva" ? 1 : 0, 1, 1, "", 0);
+    check("boia rebocada", "caiu: está na água", tube.rider === "water" ? 1 : 0, 1, 1, "", 0);
+    // parou: a pessoa nada até a boia e sobe; o passeio continua
+    let tBack = -1, swam = false;
+    go(b, tube, 150, { gear: "N", throttle: 0 }, () => { swam = swam || tube.swimming; if (tBack < 0 && tube.rider === "tube") tBack = 1; });
+    check("boia rebocada", "parado: ela nada até a boia", swam ? 1 : 0, 1, 1, "", 0);
+    check("boia rebocada", "e sobe de novo (está na boia)", tube.rider === "tube" ? 1 : 0, 1, 1, "", 0);
+    go(b, tube, 15, { throttle: 0.6 });
+    check("boia rebocada", "o passeio continua (boia rebocada de novo, km/h)", Math.hypot(tube.vel.x, tube.vel.z) * 3.6, 30, 80, "km/h", 0);
+    // soltar longe do píer: a boia fica solta, com a pessoa
+    check("boia rebocada", "desengatar longe do píer: fica solta", tube.unhook() === "free" && !tube.docked ? 1 : 0, 1, 1, "", 0);
+  }
+  // pulo: a boia voando sobre uma marola e caindo forte derruba
+  {
+    const tube = new TowTube(pier); tube.docked = false; tube.rider = "tube";
+    tube.pos = v3(0, 2.2, 0); tube.vel = v3(0, -4.5, 8);
+    const calm = mkWater(0);
+    for (let i = 0; i < 1.5 / DT; i++) { calm.time += DT; tube.step(DT, calm, openWater); }
+    check("boia rebocada", "aterrissagem forte (−4,5 m/s): a pessoa cai (motivo: pulo)", tube.lastFall === "pulo" ? 1 : 0, 1, 1, "", 0);
+    const t2 = new TowTube(pier); t2.docked = false; t2.rider = "tube"; t2.pos = v3(0, 0.6, 0); t2.vel = v3(0, -1.5, 8);
+    for (let i = 0; i < 1.5 / DT; i++) { calm.time += DT; t2.step(DT, calm, openWater); }
+    check("boia rebocada", "toque suave (−1,5 m/s): não cai", t2.falls, 0, 0, "", 0);
+  }
+  // desengatar no píer: a pessoa sobe no píer, a boia fica amarrada
+  {
+    const { tube, b } = mkRig();
+    tube.hook(b); go(b, tube, 2, { throttle: 0 });
+    check("boia rebocada", "desengatar perto do píer: volta ao píer", tube.unhook() === "pier" ? 1 : 0, 1, 1, "", 0);
+    check("boia rebocada", "a pessoa sobe no píer e espera", tube.rider === "pier" && tube.docked ? 1 : 0, 1, 1, "", 0);
+  }
+  // qualquer veículo engata (moto aquática, ekranoplano)
+  {
+    for (const P of [JETSKI, WIG]) {
+      const tube = new TowTube(pier); const d = tube.dockPos();
+      const b = new Speedboat(P, v3(d.x, 0.25, d.z + P.length / 2 + 1.5)); b.systems.fuelL = 30; b.occupants = [{ seat: "helm", mass: PERSON_KG }];
+      check("boia rebocada", `${P.kind}: também engata a boia`, tube.hook(b) ? 1 : 0, 1, 1, "", 0);
+    }
+  }
 }
 
 // ---------- Oceano em volta do mundo: fora da malha do terreno o mar continua, com a mesma física ----------

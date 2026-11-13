@@ -147,11 +147,14 @@ export const onRamp = (x: number, z: number, margin = 0): boolean => {
  * O lago perto da margem tem ~1 m — raso demais para o pé do motor da lancha (bate ao acelerar).
  */
 export const MARINA_BASIN = { cx: 27, cz: -226, hx: 35, hz: 22, depth: -2.3, blend: 8 };
+/** Bacia dragada em frente ao PÍER DA BOIA (atividade de boia rebocada, a leste do píer principal): a margem ali é rasa */
+export const ACTIVITY_BASIN = { cx: 100, cz: -222, hx: 22, hz: 26, depth: -2.3, blend: 8 };
 const basin = (x: number, z: number, h: number): number => {
-  const B = MARINA_BASIN;
-  const d = Math.hypot(Math.max(0, Math.abs(x - B.cx) - B.hx), Math.max(0, Math.abs(z - B.cz) - B.hz));
-  if (d >= B.blend) return h;
-  return Math.min(h, h + (B.depth - h) * (1 - smoothstep(0, B.blend, d)));
+  for (const B of [MARINA_BASIN, ACTIVITY_BASIN]) {
+    const d = Math.hypot(Math.max(0, Math.abs(x - B.cx) - B.hx), Math.max(0, Math.abs(z - B.cz) - B.hz));
+    if (d < B.blend) h = Math.min(h, h + (B.depth - h) * (1 - smoothstep(0, B.blend, d)));
+  }
+  return h;
 };
 
 const terrainWithRamp = (x: number, z: number): number => {
@@ -315,7 +318,16 @@ export const CANYON_BOOM = (() => {
   return { x: cx, z, half };
 })();
 
-export const buildWorld = (opts: { canyonClosed?: boolean } = {}): PhysicsWorld & { pier: PierLayout; rockList: SphereCollider[]; spawn: { x: number; z: number; heading: number } } => {
+/** Margem sul na coordenada x (anda do lago para o sul até a terra) */
+export const shoreZAt = (x: number): number => { let z = -150; while (z > -450 && groundHeight(x, z) < 0.3) z -= 0.25; return z; };
+
+/** PÍER DA BOIA (atividade): píer flutuante baixo a leste do píer principal, com a boia rebocada e quem vai nela */
+export const activityPierLayout = (): PierLayout => {
+  const x = ACTIVITY_BASIN.cx;
+  return { shoreX: x, shoreZ: shoreZAt(x) + 1, length: 28, width: 2.4, deckY: 0.55, dirX: 0, dirZ: 1 };
+};
+
+export const buildWorld = (opts: { canyonClosed?: boolean } = {}): PhysicsWorld & { pier: PierLayout; activityPier: PierLayout; rockList: SphereCollider[]; spawn: { x: number; z: number; heading: number } } => {
   const spheres: SphereCollider[] = [];
   const boxes: BoxCollider[] = [];
 
@@ -328,6 +340,14 @@ export const buildWorld = (opts: { canyonClosed?: boolean } = {}): PhysicsWorld 
     minZ: pier.shoreZ - 6, maxZ: pier.shoreZ + pier.length,
   });
 
+  // píer da boia (atividade)
+  const activityPier = activityPierLayout();
+  boxes.push({
+    minX: activityPier.shoreX - activityPier.width / 2, maxX: activityPier.shoreX + activityPier.width / 2,
+    minY: -6, maxY: activityPier.deckY,
+    minZ: activityPier.shoreZ - 3, maxZ: activityPier.shoreZ + activityPier.length,
+  });
+
   // (as rochas redondas foram removidas a pedido do usuário: lago e margens livres)
   // paredão da cachoeira (fim do cânion)
   boxes.push({ minX: FALLS.x - 32, maxX: FALLS.x + 32, minY: -4, maxY: FALLS.top, minZ: FALLS.z + 1, maxZ: FALLS.z + 30 });
@@ -338,7 +358,7 @@ export const buildWorld = (opts: { canyonClosed?: boolean } = {}): PhysicsWorld 
   }
 
   const spawn = { x: pier.shoreX + 9, z: pier.shoreZ + pier.length - 6, heading: 0 };
-  return { groundHeight, spheres, boxes, trailers: [], pier, rockList: spheres, spawn };
+  return { groundHeight, spheres, boxes, trailers: [], pier, activityPier, rockList: spheres, spawn };
 };
 
 export const isWater = (x: number, z: number): boolean => groundHeight(x, z) < -0.3;

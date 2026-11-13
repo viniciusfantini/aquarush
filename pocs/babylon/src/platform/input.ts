@@ -5,7 +5,7 @@
 import { type VehicleInput, type GearCommand, emptyInput } from "../gameplay/vehicleInput.ts";
 import { approach, clamp } from "../sim/math.ts";
 
-export type Action = "camera" | "lights" | "reset" | "wind" | "unhitch" | "fuel" | "moor" | "car" | "horn" | "couple" | "debug" | "help" | "pause" | "ignition" | "occupants" | "jump" | "abandon" | "powerMult" | "turbinePanel" | "water0" | "water1" | "water2" | "water3" | "waterNext";
+export type Action = "camera" | "lights" | "reset" | "wind" | "unhitch" | "fuel" | "moor" | "car" | "horn" | "couple" | "debug" | "help" | "pause" | "ignition" | "occupants" | "jump" | "abandon" | "powerMult" | "tube" | "turbinePanel" | "water0" | "water1" | "water2" | "water3" | "waterNext";
 
 /**
  * Manete única (como numa lancha real), com detentes  R ← N → F:
@@ -88,7 +88,7 @@ export class InputManager {
       this.lastDevice = "teclado";
       const map: Record<string, Action> = {
         KeyC: "camera", KeyL: "lights", KeyR: "reset", KeyT: "wind", KeyU: "unhitch", KeyF: "fuel", KeyM: "moor", KeyK: "car", KeyB: "horn", KeyI: "couple", F3: "debug", KeyH: "help", KeyP: "ignition", KeyY: "turbinePanel", Escape: "pause", KeyO: "occupants", KeyJ: "jump", Space: "abandon",
-        Digit0: "water0", Digit1: "water1", Digit2: "water2", Digit3: "water3", KeyG: "water0", KeyV: "waterNext",
+        Digit0: "water0", Digit1: "water1", Digit2: "water2", Digit3: "water3", KeyG: "tube", KeyV: "waterNext",
       };
       // "*" (teclado numérico ou Shift+8): modo de teste — cada toque sobe a força ×1 → ×5 → ×1
       const a = map[e.code] ?? (e.code === "NumpadMultiply" || e.key === "*" ? "powerMult" : undefined);

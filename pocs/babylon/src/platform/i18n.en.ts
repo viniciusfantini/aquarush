@@ -29,6 +29,20 @@ export const EN: Record<string, string> = {
   "decola da água a ~85 km/h e voa a 0,5–3 m da água no colchão de ar (longe dela a asa não segura); profundor no E/Q, manche com leme e ailerons, hélice pusher, duas centrais de injeção (LANE A/B) e duas bombas":
     "takes off from the water at ~85 km/h and flies 0.5–3 m above it on the air cushion (away from the surface the wing can't hold it up); elevator on E/Q, control stick with rudder and ailerons, pusher propeller, two injection ECUs (LANE A/B) and two fuel pumps",
   "piloto + passageiro (tandem)": "pilot + passenger (tandem)",
+  // ---------------- atividade: boia rebocada ----------------
+  "BOIA REBOCADA": "TOWABLE TUBE", "G engata · G solta": "G hooks · G releases", "boia rebocada: engata / solta (píer da boia)": "towable tube: hook / release (tube pier)",
+  "ENGATAR a boia": "HOOK the tube", "SOLTAR a boia": "RELEASE the tube",
+  "BOIA ENGATADA": "TUBE HOOKED", "BOIA SOLTA": "TUBE LOOSE", "NO AR!": "AIRBORNE!", "na boia · {} km/h · corda {} N": "on the tube · {} km/h · rope {} N",
+  "CAIU · nadando até a boia": "FELL · swimming to the tube", "CAIU · esperando a boia parar": "FELL · waiting for the tube to stop", "subindo na boia": "climbing onto the tube",
+  "Boia desengatada no píer: a pessoa sobe no píer e espera a próxima volta": "Tube released at the pier: the rider climbs onto the pier and waits for the next ride",
+  "Boia desengatada: ela fica boiando — volte devagar com a popa perto dela e aperte G para engatar de novo": "Tube released: it stays afloat — come back slowly with the stern near it and press G to hook it again",
+  "A boia é rebocada pelo barco, não pelo carro": "The tube is towed by the boat, not by the car",
+  "Corda engatada! A pessoa está na boia — saia devagar para esticar a corda, depois acelere": "Rope hooked! The rider is on the tube — pull away slowly to take up the slack, then speed up",
+  "Corda engatada na boia": "Rope hooked to the tube",
+  "Para engatar a boia: chegue DEVAGAR com a popa perto dela (píer da boia, a leste do píer principal) e aperte G": "To hook the tube: come in SLOWLY with the stern close to it (tube pier, east of the main pier) and press G",
+  "A pessoa CAIU da boia ({})! Pare e volte devagar perto dela: ela nada até a boia e sobe": "The rider FELL off the tube ({})! Stop and come back slowly near them: they swim to the tube and climb back on",
+  "chicotada na curva": "whipped out in the turn", "aterrissou forte depois do pulo": "hard landing after a jump", "tranco da corda": "rope jerk",
+  "Ela subiu na boia de novo — o passeio continua": "They're back on the tube — the ride goes on",
   // ---------------- anfíbio AR-A ----------------
   "Anfíbio AR-A": "AR-A Amphibian", "ligado · {} rpm · UMA LANE": "running · {} rpm · ONE LANE",
   "NIVELADOR": "LEVELER", "asas (LVL)": "wings (LVL)", "nivelando as asas": "leveling the wings", "armado": "armed",

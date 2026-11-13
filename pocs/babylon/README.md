@@ -96,6 +96,31 @@ A lancha é um **corpo rígido 6DOF** (massa seca de 1030 kg + gasolina, ocupant
 
 > Referência completa da lógica elétrica e dos motores: [`docs/SISTEMAS_ELETRICOS_E_MOTORES.md`](../../docs/SISTEMAS_ELETRICOS_E_MOTORES.md).
 
+## Primeira atividade: boia rebocada (v0.73)
+
+- **Píer da boia** (`activityPierLayout`/`ACTIVITY_BASIN` em `sim/world.ts`; colisor no `buildWorld`; visual em
+  `presentation/towTubeVis.ts`): píer flutuante baixo (28 m, deck a 0,55 m) em x = 100, 100 m a leste do píer principal,
+  com bacia dragada de 2,3 m (a margem ali tinha 0,8 m a 20 m da costa). Placa de duas faces, boias de reserva no suporte.
+- **Física** (`sim/towTube.ts`, `TowTube`, sem Babylon): boia de 12 kg + 80 kg da pessoa, raio 0,8 m, volume 0,42 m³.
+  Forças: peso; empuxo pela parte submersa + amortecimento vertical; planeio (14 N/(m/s)² — ela "sobe" na água);
+  arrasto da água (35 N·s/m + 6,5 N·s²/m², redonda: desliza de lado quase como para a frente — é a chicotada) e do ar.
+  **Corda**: 16 m, mola só de tração (3,5 kN/m + 450 N·s/m), presa na popa (`TowTube.towLocal`: centro do espelho na
+  altura da borda); a reação vai para o barco por `Speedboat.externalForces`. A boia aponta para a corda.
+- **Queda** (`fall`): aceleração lateral suavizada (0,2 s) acima de 0,85 g por 0,25 s ou pico de 1,2 g ("curva");
+  aterrissagem com velocidade vertical < −3,2 m/s depois de voar ("pulo"); tensão > 5,2 kN ("tranco" — arrancada a
+  pleno com a corda frouxa). A pessoa sai para fora da curva com 55 % da velocidade da boia; a água a freia; quando a
+  boia está devagar (< 1,5 m/s) ela nada a 1,1 m/s até a boia e, perto e com a boia < 1 m/s, sobe em 2,2 s.
+- **Engatar/soltar** (tecla G, ação `tube`): engata com o veículo devagar (< 1,5 m/s) e a popa a < 12 m da boia
+  amarrada (ou < 8 m da boia solta); no píer a pessoa desce para a boia. Soltando a < 10 m do ponto de amarração e
+  devagar, a boia volta a ser amarrada e a pessoa sobe no píer (`dock`); longe, a boia fica solta com a pessoa.
+  Trocar de barco, R e ir para o carro com o barco preso devolvem a boia ao píer. Qualquer veículo engata.
+- **Calibração** (`node tests/debug-boia.ts [acelerador] [volante]`): AR-6 a 60 %: 51 km/h com a boia (63 sozinha),
+  corda 930 N (pico de 4,2 kN ao esticar), curva com volante 0,6: 0,78 g (aguenta); volante todo: chicotada > 1,2 g
+  (cai); a 80 % a boia voa 1,8 s sobre as marolas e o tranco inicial derruba.
+- **Navegador**: engate no píer (pessoa sentada na boia, corda até a popa), reboque a 62 km/h (1,3 kN), queda numa
+  curva fechada, a pessoa nadou ~30 m e subiu, desengate no píer (ela em pé no píer, boia amarrada). Chip da boia no
+  topo do HUD (laranja; vermelho quando caiu) e o botão G na barra de atalhos.
+
 ## Anfíbio AR-A: ailerons no bordo de fuga (v0.72.1)
 
 - Pedido do usuário: arrumar a posição dos ailerons. Eram caixas retas no último quarto da corda, DENTRO da asa (o perfil
@@ -711,6 +736,7 @@ Limitação: é uma síntese aproximada, não uma gravação. Validar o timbre d
 | 5. Manete | de cruzeiro para N: empuxo 0 e < 1 km/h em 27 s; a hélice gira **solta** (~990 rpm 1,5 s depois do N) e para junto com a lancha. F em lenta: 5,0 km/h a 750 rpm. R em lenta: 2,8 km/h para trás. No navegador: 1 toque W = F a 4 km/h; segurar = 45 km/h; 1 toque S = N; 2º toque = R lenta; segurar S = ré acelerando |
 | 6. Ondas e correnteza | ondas fortes (×2,5): roll ≤ 30°, não emborca; deriva com correnteza de 1,6 m/s: 1,54 m/s |
 | Lago | flutua no spawn; a toda contra a margem, encalha e para sem atravessar o terreno |
+| Boia rebocada (v0.73) | píer da boia: 2,30 m de fundo na ponta, 100 m do principal; longe não engata, perto engata e a pessoa vai na boia; reta a 60 %: boia 0,1 km/h da lancha, corda 932 N, 19,8 m, sem queda; a lancha anda 11,6 km/h mais devagar rebocando; curva 0,6: aguenta; curva fechada: cai ("curva"); nadou e subiu; passeio continua a 50 km/h; soltar longe = solta; pulo −4,5 m/s cai, −1,5 m/s não; soltar no píer = pessoa no píer; moto aquática e ekranoplano engatam |
 | Anfíbio AR-A (v0.72) | parado: roll 0,5°, borda 0,38 m; decolagem (2 pessoas) 24,1 s a 108 km/h no critério (rodando a 90 km/h); 60 s depois a 103 m subindo a 117 km/h, fora do efeito solo; degrau: pitch 10,8° molhado; LVL: 2,3° (ligado) × 68° (desligado); aileron 1 s: 36°, vira 113° à direita; puxar/soltar: mín. 11,1 m; planeio de 150 m: 62 s, toque −2,8 m/s, 0 % de avaria; estol avisado; partida a frio ok |
 | Oceano (v0.71.1) | fundo a −30,00 m a 5 km e em (−4 km, 6 km); borda da malha −30,00 m; lago central −7,00 m; AR-6 a x = 2,6 km: mesma altura do lago (Δ 0,000 m), 30 m de fundo, 78 km/h a toda |
 | Força ×4 (v0.71) | empuxo ×4,000 no mesmo instante (AR-6, AR-J, AR-P); AR-6 a meio acelerador: 0→30 em 1,40 s, máx. 94 km/h, não vira; a pleno capota de ré (esperado); carro 2,00× mais rápido |
@@ -720,7 +746,7 @@ Limitação: é uma síntese aproximada, não uma gravação. Validar o timbre d
 | Lancha pantaneira AR-P (v0.69–0.69.2) | frio sem primer não pega (falha "prime"); 3 bombadas pega em 1,2 s; 9 bombadas afoga; mistura em corte não pega e apaga o motor ligado; um magneto: −103 rpm a pleno; mistura 0,8: −5,6 L/h; magnetos OFF param; trim sem ação (0°, 0 A); P frio pega; largada a 60 % pega em 2,2 s; lenta empurrando 4,5 km/h, sempre em F, borda 0,38 m; a toda 88,4 km/h a 2434 rpm, 0→40 4,4 s; sem cavitação/ventilação; pedindo R segue a 89 km/h para a frente; curva a toda derrapando 3,6 m/s, 11,1°/s, roll 3,2°, não vira; motor desligado com os lemes todos: 0,0°; partida sem N; 50 % + lemes quase parado: 20,2°/s; refrigerado a ar; barranco de lama/capim: 12,6 s no seco, avaria 2 %, 30 km/h; carretinha da caminhonete |
 | Moto aquática AR-J (v0.67–0.67.1) | compressor 1,04 bar a toda, 0,007 bar na lenta; luz do iBB: apagada em F, FREIO freando a toda, RÉ parada em R, NEUTRO em N; navegador: S segurado a 107 km/h → FREIO, 53 km/h em 1,5 s; soltar → F; toque → N; parada: CG −0,03 m da água, borda 0,25 m; a toda 108,3 km/h a 7880 rpm, 0→60 2,7 s, 0→100 7,1 s, 72 L/h; curva a toda 29,2°/s sem virar; iBB de 102 km/h a < 5 km/h em 4,2 s e depois ré; N com o guidão todo: 0,2° em 6 s; lenta + guidão 10,6°/s; N acelerado: empuxo 0, rotor a 7478 rpm; no ar: empuxo 0, giro 7951 rpm; ECO 55 % / 89,9 km/h; lotada 101,5 km/h; cordão solto não liga, puxado desliga; START pega em 1,5 s (60 %); central dorme em 30 s; casco selado 40 s lotada em ondas fortes: 0,0 L; sifão 6,1 L em 30 s (= contrato); virada: desvira em 4,5 s, piloto a bordo com o cordão, liga de novo; carretinha 3,9 m no carro |
 
-Resultado: **756/758 OK + 2 KNOWN** (v0.72.1). Na v0.10, o peso do piloto na posição real (boreste, acima do CG) aumentou o roll em curva com ondas fortes; o `bankCoef` foi para 1800 e o `rollDamping` para 15000, com 1 limitação conhecida (abaixo). Na v0.2 a hélice foi para 0,5 m atrás do espelho, como no modelo visual, e o esterço máximo em alta velocidade caiu de 13° para 11°.
+Resultado: **780/782 OK + 2 KNOWN** (v0.73.0). Na v0.10, o peso do piloto na posição real (boreste, acima do CG) aumentou o roll em curva com ondas fortes; o `bankCoef` foi para 1800 e o `rollDamping` para 15000, com 1 limitação conhecida (abaixo). Na v0.2 a hélice foi para 0,5 m atrás do espelho, como no modelo visual, e o esterço máximo em alta velocidade caiu de 13° para 11°.
 
 ### Navegador (Chrome, Windows 11, WebGL2, `q=med`, ~1370×896)
 
