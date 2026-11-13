@@ -8,7 +8,7 @@ import { Speedboat } from "../src/sim/boat.ts";
 import { JUMP_AH } from "../src/sim/engineSystems.ts";
 import { Wind, WIND_LEVELS } from "../src/sim/wind.ts";
 import { jetStreakLocal } from "../src/sim/bilgeJet.ts";
-import { SPEEDBOAT, DINGHY, RAPIDA, TURBINA, JETSKI, AIRBOAT, WIG, PERSON_KG, smallTow, type Occupant } from "../src/sim/params.ts";
+import { SPEEDBOAT, DINGHY, RAPIDA, TURBINA, JETSKI, AIRBOAT, WIG, AMPHIB, PERSON_KG, smallTow, type Occupant } from "../src/sim/params.ts";
 import { groundLift, groundInduced } from "../src/sim/wing.ts";
 import { halfWidth } from "../src/sim/mooring.ts";
 import { Turbine } from "../src/sim/turbine.ts";
@@ -1493,6 +1493,101 @@ for (const [label, thr] of [["baixa", 0.25], ["alta", 1]] as const) {
   check("ekranoplano", "vaga do píer: largura considerada = meia-envergadura (m)", halfWidth(WIG), 3.4, 3.6, "m", 2);
   check("ekranoplano", "vaga do píer: proa para o lago (rumo 0)", berthStartPose({ shoreX: 0, shoreZ: 0, width: 2.4, length: 20, deckY: 0.6 } as never, WIG).heading, 0, 0, "rad", 0);
   check("ekranoplano", "vai na carretinha grande da caminhonete", smallTow("wig") ? 0 : 1, 1, 1, "", 0);
+}
+
+// ---------- Anfíbio AR-A: avião anfíbio leve de asa alta (voa de verdade, fora do efeito solo) ----------
+{
+  const water = mkWater(0.35);
+  const mk = (pax = 1, alt = 0.1) => {
+    const b = new Speedboat(AMPHIB, v3(0, alt, 0)); b.systems.fuelL = 40;
+    b.occupants = [{ seat: "helm", mass: PERSON_KG }, ...(pax > 1 ? [{ seat: "passenger" as const, mass: PERSON_KG }] : [])];
+    return b;
+  };
+  /** decolagem como o jogador faz: manete a pleno; a ~95 km/h puxa o manche (0,6) até sair 2 s da água, depois solta */
+  const takeoff = (b: Speedboat, t = 60) => {
+    let tOff = -1, vOff = 0, rot = false;
+    for (let i = 0; i < t / DT; i++) {
+      const T = b.telemetry, ti = i * DT;
+      if (!rot && T.speedKmh > 90) rot = true;
+      const pitch = !rot ? 0 : tOff < 0 || ti < tOff + 2 ? 0.6 : 0;
+      water.time += DT; b.step(DT, { ...emptyInput(), throttle: 1, pitch }, water, openWater);
+      if (tOff < 0 && T.altitude > 1) { tOff = ti; vOff = T.speedKmh; }
+    }
+    return { tOff, vOff };
+  };
+  const a = mk(2); run(a, water, 5, { ...emptyInput() });
+  check("anfíbio", "parado: flutua de pé (sponsons, roll °)", Math.abs(a.telemetry.rollDeg), 0, 3, "°", 1);
+  check("anfíbio", "parado: borda livre (m)", a.telemetry.freeboard, 0.25, 0.6, "m", 2);
+  const to = takeoff(a);
+  check("anfíbio", "decolagem (2 pessoas): sai da água em (s)", to.tOff, 8, 25, "s", 1);
+  check("anfíbio", "decolagem: velocidade (km/h)", to.vOff, 75, 115, "km/h", 0);
+  check("anfíbio", "60 s depois, manche neutro e manete a pleno: subindo (altitude, m)", a.telemetry.altitude, 40, 400, "m", 0);
+  check("anfíbio", "subida a pleno: velocidade (km/h)", a.telemetry.speedKmh, 90, 140, "km/h", 0);
+  check("anfíbio", "voa FORA do efeito solo (asa > 30 m da água)", a.telemetry.wingH > 30 && a.telemetry.groundEffect < 1.01 ? 1 : 0, 1, 1, "", 0);
+  // rotação na água: o degrau do casco deixa o profundor levantar o nariz (sem ele o pitch ficava preso em ~1°)
+  {
+    const r = mk(2); let pMax = 0, rot = false;
+    for (let i = 0; i < 30 / DT; i++) { const T = r.telemetry; if (T.speedKmh > 85) rot = true; water.time += DT; r.step(DT, { ...emptyInput(), throttle: 1, pitch: rot ? 1 : 0 }, water, openWater); if (T.wetFraction > 0) pMax = Math.max(pMax, T.pitchDeg); }
+    check("anfíbio", "degrau do casco: manche puxado na água levanta o nariz (pitch máx. molhado, °)", pMax, 6, 30, "°", 1);
+  }
+  // nivelador (LVL): com o piloto sozinho à esquerda, solto, fica nivelado; desligado, entra na espiral
+  {
+    const on = mk(1, 300), off = mk(1, 300); off.levelerOn = false;
+    for (const b of [on, off]) { b.vel = { x: 0, y: 0, z: 31 }; run(b, water, 40, { ...emptyInput(), throttle: 0.8, roll: 0 }); }
+    check("anfíbio", "LVL ligado, piloto sozinho, 40 s sem mexer: inclinação (°)", Math.abs(on.telemetry.rollDeg), 0, 8, "°", 1);
+    check("anfíbio", "LVL desligado: entra na espiral (inclinação, °)", Math.abs(off.telemetry.rollDeg), 20, 90, "°", 0);
+  }
+  // ailerons: D inclina e vira para a direita; no ar, inclinado, NÃO é emborcamento (o motor segue, ninguém cai)
+  {
+    const c = mk(2, 300); c.vel = { x: 0, y: 0, z: 33 };
+    run(c, water, 15, { ...emptyInput(), throttle: 0.8, roll: 0 });
+    const h0 = Math.atan2(c.forward.x, c.forward.z);
+    // (como um piloto: um toque de 1 s no aileron e segura pouco; 3 s de aileron todo já é um tonneau)
+    run(c, water, 1, { ...emptyInput(), throttle: 0.8, roll: 1 });
+    check("anfíbio", "aileron à direita 1 s: inclina para a direita (°)", c.telemetry.rollDeg, 20, 70, "°", 0);
+    check("anfíbio", "taxa de rolagem com aileron todo (°/s, 1 s)", c.telemetry.rollDeg, 20, 70, "°/s", 0);
+    run(c, water, 6, { ...emptyInput(), throttle: 0.8, roll: 0.06, pitch: 0.2 });
+    check("anfíbio", "e vira para a direita (rumo, °)", ((Math.atan2(c.forward.x, c.forward.z) - h0) * 57.3 + 540) % 360 - 180, 15, 180, "°", 0);
+    check("anfíbio", "inclinado no ar: não conta como emborcado", c.capsized ? 1 : 0, 0, 0, "", 0);
+    check("anfíbio", "inclinado no ar: o motor segue ligado", c.engine === "running" ? 1 : 0, 1, 1, "", 0);
+  }
+  // manche todo puxado e solto a ~15 m (como no teclado): recupera sem bater na água
+  {
+    const p = mk(2); let phase = 0, stick = 0, minAfter = 1e9, tRel = -1;
+    for (let i = 0; i < 60 / DT; i++) { const T = p.telemetry, t = i * DT;
+      if (phase === 0 && T.speedKmh > 90) phase = 1;
+      if (phase === 1 && T.altitude > 15) { phase = 2; tRel = t; }
+      stick += Math.max(-3 * DT, Math.min(1.6 * DT, (phase === 1 ? 1 : 0) - stick));
+      water.time += DT; p.step(DT, { ...emptyInput(), throttle: 1, pitch: stick }, water, openWater);
+      if (phase === 2 && t < tRel + 25) minAfter = Math.min(minAfter, T.altitude);
+    }
+    check("anfíbio", "manche todo puxado e solto a 15 m: altitude mínima depois (m)", minAfter, 3, 100, "m", 1);
+  }
+  // motor cortado em voo: plana até a água e pousa sem avaria
+  {
+    const g = mk(2, 150); g.vel = { x: 0, y: 0, z: 33 }; run(g, water, 10, { ...emptyInput(), throttle: 0.8 });
+    g.engine = "off"; let tDown = -1, vs = 0;
+    run(g, water, 150, { ...emptyInput(), pitch: 0.1 }, openWater, (t) => { if (tDown < 0 && g.telemetry.wetFraction > 0.05) { tDown = t; vs = g.telemetry.vsi; } });
+    check("anfíbio", "motor cortado a ~150 m: plana até a água (s)", tDown, 20, 150, "s", 0);
+    check("anfíbio", "pouso planando: velocidade vertical no toque (m/s)", vs, -4, 0.5, "m/s", 1);
+    check("anfíbio", "pouso planando: sem avaria do casco (%)", g.hullDamage * 100, 0, 5, "%", 0);
+    check("anfíbio", "pouso planando: não vira", g.capsized ? 1 : 0, 0, 0, "", 0);
+  }
+  // estol: devagar e com o manche todo puxado acende o aviso
+  {
+    const e = mk(1, 200); e.vel = { x: 0, y: 0, z: 30 };
+    let warn = false; run(e, water, 12, { ...emptyInput(), throttle: 0, pitch: 1 }, openWater, () => { warn = warn || e.telemetry.stallWarn; });
+    check("anfíbio", "lenta + manche todo puxado: aviso de estol", warn ? 1 : 0, 1, 1, "", 0);
+  }
+  // injeção eletrônica (a mesma do AR-W): P parte a frio a 60 %
+  {
+    const s0 = mk(1); s0.engine = "off" as typeof s0.engine; s0.ecuA = s0.ecuB = s0.pump1 = s0.pump2 = false; s0.fuelPress = 0; s0.systems.coolantC = 24;
+    for (const bk of s0.banks) bk.batterySoc = 0.6;
+    run(s0, water, 2, { ...emptyInput() }); s0.toggleIgnition(); run(s0, water, 8, { ...emptyInput() });
+    check("anfíbio", "P: partida a frio a 60 % de bateria", (s0.engine as string) === "running" ? 1 : 0, 1, 1, "", 0);
+  }
+  check("anfíbio", "vaga do píer pela meia-envergadura (m)", halfWidth(AMPHIB), 5.2, 5.4, "m", 2);
+  check("anfíbio", "vai na carretinha grande da caminhonete", smallTow("anfibio") ? 0 : 1, 1, 1, "", 0);
 }
 
 // ---------- Oceano em volta do mundo: fora da malha do terreno o mar continua, com a mesma física ----------

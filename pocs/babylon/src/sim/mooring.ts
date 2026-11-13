@@ -66,8 +66,9 @@ export const tieToPier = (b: Speedboat, pier: PierLayout, side: number): void =>
   const B = pierBerth(pier), P = b.params;
   const lines: MooringLine[] = [];
   for (const zl of [P.length * 0.32, -P.length * 0.36]) {
-    // (ekranoplano: o cabo vai da ponta da asa, no flutuador)
-    const local = P.wing ? { x: side * (P.wing.span / 2 - 0.05), y: -0.05, z: P.wing.floats[0].pos.z + (zl > 0 ? 0.7 : -0.7) } : { x: side * P.beam * 0.46, y: P.kind === "lancha" ? 0.42 : 0.3, z: zl };
+    // (ekranoplano / anfíbio: o cabo vai do flutuador — na ponta da asa do WIG, no sponson do anfíbio)
+    const fl = P.wing?.floats[0];
+    const local = fl ? { x: side * Math.abs(fl.pos.x), y: fl.pos.y + fl.radius, z: fl.pos.z + (zl > 0 ? 0.7 : -0.7) } : { x: side * P.beam * 0.46, y: P.kind === "lancha" ? 0.42 : 0.3, z: zl };
     const w = b.toWorld(local);
     const anchor = { x: B.edgeX, y: B.deckY, z: w.z };
     lines.push({ anchor, local, length: Math.hypot(w.x - anchor.x, w.y - anchor.y, w.z - anchor.z) + 0.1 });

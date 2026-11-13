@@ -96,6 +96,40 @@ A lancha é um **corpo rígido 6DOF** (massa seca de 1030 kg + gasolina, ocupant
 
 > Referência completa da lógica elétrica e dos motores: [`docs/SISTEMAS_ELETRICOS_E_MOTORES.md`](../../docs/SISTEMAS_ELETRICOS_E_MOTORES.md).
 
+## Anfíbio AR-A — avião anfíbio leve de asa alta (v0.72)
+
+- **Oitava embarcação** (`AMPHIB` em `sim/params.ts`, `VesselKind` "anfibio", `?barco=anfibio`, no menu entre o
+  ekranoplano e a AR-6): 7 m, vazio 510 kg, 2 lugares lado a lado (piloto à esquerda), asa alta de 10,6 m (2 × 6,55 m²,
+  CLα 4,8, incidência 3°, estol 18°, diedro efetivo 20° — inclui o efeito da asa alta), estabilizador cruciforme
+  2,9 m² (−10°, profundor ±12°), deriva 0,9 m², boxer de 100 hp com injeção (LANE A/B, 2 bombas), redução 2,43, hélice
+  pusher de 3 pás (2,4 kN estáticos). Usa as mesmas placas de `sim/wing.ts` do AR-W; o efeito solo é fraco
+  (`groundGain` 0,35) e ele voa fora dele.
+- **Casco com degrau**: os pontos de flutuação de trás ficam 25 cm acima da quilha (o "afterbody" sobe). Com eles na
+  quilha, o casco segurava o pitch em ~1° e o profundor não conseguia rodar o avião na água (não decolava em água
+  calma). Agora o manche puxado levanta o nariz a ~11° embalado.
+- **Calibração** (`node tests/debug-anfibio.ts [manche_decolagem] [manche_cruzeiro] [pessoas]`): 2 pessoas, ondas 0,35 —
+  decola em 12,8 s a 70 km/h (rodando a ~90 km/h com o manche a 0,6); com o manche neutro e a manete a pleno sobe
+  ~4 m/s a 115 km/h (100 m em 60 s); 75 % de manete: 113 km/h subindo devagar; motor cortado a ~150 m: plana ~60 s e
+  toca a água a −2 m/s, sem avaria. Aileron todo: ~36°/s.
+- **Estabilidade lateral e o nivelador (LVL)**: o aileron comanda a TAXA de rolagem; sem derrapagem o diedro não traz
+  as asas de volta. Simétrico (2 pessoas) o avião é estável em espiral (de 30° volta a 0° em ~20 s com diedro 15–25° e
+  deriva 0,9 — grade medida); com o piloto sozinho à esquerda (260 N·m de momento de rolagem) ele vai para uma espiral
+  de ~68° em ~30 s — um compensador de aileron fixo não resolve (sensível demais à velocidade). Solução, como em aviões
+  leves modernos: **nivelador de asas** (`wing.leveler` {kBank 1,2, kRate 0,6, max 0,25}; `Speedboat.levelerOn`, chave
+  NIVELADOR no Y, ligada na largada): no ar, com o manche lateral solto (|roll| < 0,05), mexe nos ailerons (servo de
+  0,25 s, autoridade 25 %). Com ele: piloto sozinho, 40 s sem mexer → 2,3° de inclinação.
+- **Correções gerais**: (1) inclinar no ar não é emborcar — `updateCapsize` ignora a aeronave no ar (`telemetry.airborne`);
+  antes, 75° de inclinação cortavam o motor e jogariam as pessoas fora em pleno voo; (2) `wingH` usava 90 m como "sem
+  leitura" e voltava a 0 acima disso — o "voando" apagava a 120 m; (3) os cabos do píer saem do flutuador de cada
+  aeronave (sponson no AR-A). Telemetria nova: `altitude`, `vsi`, `leveler`.
+- **Jogo**: HUD `plane` (ALTITUDE 0–600 m, VARIÔMETRO ±6 m/s, luz VOANDO/ESTOL, barra COMPENS.); comandos de avião
+  (`flightMode`, os mesmos do AR-W); painel Y da injeção + NIVELADOR; asa dobra para trás na raiz (`setFolded`) na
+  carretinha e no pátio, que passou a **8 vagas de 2,85 m** (vaga 7 = AR-A). Navegador: decolagem pelo teclado a
+  ~98 km/h, subida estável, HUD e Y conferidos; inglês sem textos faltando.
+- Critérios (grupo "anfíbio", 24): flutuação, decolagem, subida, voo fora do efeito solo, degrau, LVL ligado/desligado,
+  ailerons (inclina e vira à direita; no ar não emborca, motor segue), puxar e soltar a 15 m (mín. 11 m), planeio e pouso,
+  estol, partida a frio, vaga do píer, carretinha.
+
 ## Força ×1…×5 na tecla * (v0.71.2)
 
 - Cada `*` (ação `powerMult`) sobe `Speedboat.powerMult` = `TowRig.powerMult`: ×1 → ×2 → ×3 → ×4 → ×5 → ×1; chip
@@ -670,6 +704,7 @@ Limitação: é uma síntese aproximada, não uma gravação. Validar o timbre d
 | 5. Manete | de cruzeiro para N: empuxo 0 e < 1 km/h em 27 s; a hélice gira **solta** (~990 rpm 1,5 s depois do N) e para junto com a lancha. F em lenta: 5,0 km/h a 750 rpm. R em lenta: 2,8 km/h para trás. No navegador: 1 toque W = F a 4 km/h; segurar = 45 km/h; 1 toque S = N; 2º toque = R lenta; segurar S = ré acelerando |
 | 6. Ondas e correnteza | ondas fortes (×2,5): roll ≤ 30°, não emborca; deriva com correnteza de 1,6 m/s: 1,54 m/s |
 | Lago | flutua no spawn; a toda contra a margem, encalha e para sem atravessar o terreno |
+| Anfíbio AR-A (v0.72) | parado: roll 0,5°, borda 0,38 m; decolagem (2 pessoas) 24,1 s a 108 km/h no critério (rodando a 90 km/h); 60 s depois a 103 m subindo a 117 km/h, fora do efeito solo; degrau: pitch 10,8° molhado; LVL: 2,3° (ligado) × 68° (desligado); aileron 1 s: 36°, vira 113° à direita; puxar/soltar: mín. 11,1 m; planeio de 150 m: 62 s, toque −2,8 m/s, 0 % de avaria; estol avisado; partida a frio ok |
 | Oceano (v0.71.1) | fundo a −30,00 m a 5 km e em (−4 km, 6 km); borda da malha −30,00 m; lago central −7,00 m; AR-6 a x = 2,6 km: mesma altura do lago (Δ 0,000 m), 30 m de fundo, 78 km/h a toda |
 | Força ×4 (v0.71) | empuxo ×4,000 no mesmo instante (AR-6, AR-J, AR-P); AR-6 a meio acelerador: 0→30 em 1,40 s, máx. 94 km/h, não vira; a pleno capota de ré (esperado); carro 2,00× mais rápido |
 | Ekranoplano AR-W: ailerons além do estol (v0.70.2) | manche 0,8: α 15,7° (além do estol) e D → +19,6° de roll (antes: −8,4°) |
@@ -678,7 +713,7 @@ Limitação: é uma síntese aproximada, não uma gravação. Validar o timbre d
 | Lancha pantaneira AR-P (v0.69–0.69.2) | frio sem primer não pega (falha "prime"); 3 bombadas pega em 1,2 s; 9 bombadas afoga; mistura em corte não pega e apaga o motor ligado; um magneto: −103 rpm a pleno; mistura 0,8: −5,6 L/h; magnetos OFF param; trim sem ação (0°, 0 A); P frio pega; largada a 60 % pega em 2,2 s; lenta empurrando 4,5 km/h, sempre em F, borda 0,38 m; a toda 88,4 km/h a 2434 rpm, 0→40 4,4 s; sem cavitação/ventilação; pedindo R segue a 89 km/h para a frente; curva a toda derrapando 3,6 m/s, 11,1°/s, roll 3,2°, não vira; motor desligado com os lemes todos: 0,0°; partida sem N; 50 % + lemes quase parado: 20,2°/s; refrigerado a ar; barranco de lama/capim: 12,6 s no seco, avaria 2 %, 30 km/h; carretinha da caminhonete |
 | Moto aquática AR-J (v0.67–0.67.1) | compressor 1,04 bar a toda, 0,007 bar na lenta; luz do iBB: apagada em F, FREIO freando a toda, RÉ parada em R, NEUTRO em N; navegador: S segurado a 107 km/h → FREIO, 53 km/h em 1,5 s; soltar → F; toque → N; parada: CG −0,03 m da água, borda 0,25 m; a toda 108,3 km/h a 7880 rpm, 0→60 2,7 s, 0→100 7,1 s, 72 L/h; curva a toda 29,2°/s sem virar; iBB de 102 km/h a < 5 km/h em 4,2 s e depois ré; N com o guidão todo: 0,2° em 6 s; lenta + guidão 10,6°/s; N acelerado: empuxo 0, rotor a 7478 rpm; no ar: empuxo 0, giro 7951 rpm; ECO 55 % / 89,9 km/h; lotada 101,5 km/h; cordão solto não liga, puxado desliga; START pega em 1,5 s (60 %); central dorme em 30 s; casco selado 40 s lotada em ondas fortes: 0,0 L; sifão 6,1 L em 30 s (= contrato); virada: desvira em 4,5 s, piloto a bordo com o cordão, liga de novo; carretinha 3,9 m no carro |
 
-Resultado: **732/734 OK + 2 KNOWN** (v0.71.2). Na v0.10, o peso do piloto na posição real (boreste, acima do CG) aumentou o roll em curva com ondas fortes; o `bankCoef` foi para 1800 e o `rollDamping` para 15000, com 1 limitação conhecida (abaixo). Na v0.2 a hélice foi para 0,5 m atrás do espelho, como no modelo visual, e o esterço máximo em alta velocidade caiu de 13° para 11°.
+Resultado: **756/758 OK + 2 KNOWN** (v0.72.0). Na v0.10, o peso do piloto na posição real (boreste, acima do CG) aumentou o roll em curva com ondas fortes; o `bankCoef` foi para 1800 e o `rollDamping` para 15000, com 1 limitação conhecida (abaixo). Na v0.2 a hélice foi para 0,5 m atrás do espelho, como no modelo visual, e o esterço máximo em alta velocidade caiu de 13° para 11°.
 
 ### Navegador (Chrome, Windows 11, WebGL2, `q=med`, ~1370×896)
 

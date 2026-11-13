@@ -99,6 +99,9 @@ export interface BoatTelemetry {
    *  ataque médio da asa (°), multiplicador do efeito solo, sustentação da asa / peso, profundor (−1..1), aviso de
    *  estol e "voando" (nenhum ponto do casco na água) */
   wingH: number;
+  /** aeronave: altura do fundo do casco sobre a água/chão (m) e velocidade vertical (m/s, + = subindo) */
+  altitude: number;
+  vsi: number;
   airspeed: number;
   aoaDeg: number;
   groundEffect: number;
@@ -107,6 +110,8 @@ export interface BoatTelemetry {
   elevator: number;
   elevTrim: number;
   aileron: number;
+  /** nivelador de asas (LVL) ligado */
+  leveler: boolean;
   stallWarn: boolean;
   airborne: boolean;
   /** pressão de sobrealimentação do compressor (bar, manométrica; 0 = sem compressor / sem carga) */
@@ -466,7 +471,7 @@ export class Speedboat {
       distanceM: 0, collisions: 0, draftHull: 0, draftMotor: 0, capsized: false, swimmers: 0, hullDamage: 0, engineDamage: 0, damageEvent: "", damageCount: 0, lastImpact: 0, depth: 0, submergedPoints: params.buoyancyPoints.map(() => false),
       rpms: [params.idleRpm], gears: ["N"], throttles: [0], thrusts: [0], engines: ["running"], keys: ["on"], houseV: 12.6, propRpms: [0], coolants: [45], batteryVs: [12.6], batterySocs: [0.92], batteryAs: [0], turbine: null, nominalV: 12, gpu: false, gpuState: "off", gpuT: 0, gpuKw: 0, busBattery: true, busGen: false, extPwr: false, extPwrClosed: false, extPwrFault: false, gpuA: 0, coolingLps: 0, fuelValveOpen: true, fuelLineFrac: 1, bilgeMode: "auto", batterySel: "ind", choke: false,
       lanyard: true, driveMode: "normal", righting: false, magnetos: "both", mixture: 1, prime: 0, boostBar: 0, ibb: "off",
-      ecuA: false, ecuB: false, pump1: false, pump2: false, fuelPressBar: 0, wingH: 0, airspeed: 0, aoaDeg: 0, groundEffect: 1, wingLoad: 0, elevator: 0, elevTrim: 0, aileron: 0, stallWarn: false, airborne: false,
+      ecuA: false, ecuB: false, pump1: false, pump2: false, fuelPressBar: 0, wingH: 0, altitude: 0, vsi: 0, airspeed: 0, aoaDeg: 0, groundEffect: 1, wingLoad: 0, elevator: 0, elevTrim: 0, aileron: 0, leveler: false, stallWarn: false, airborne: false,
     };
   }
 
@@ -1353,7 +1358,9 @@ export class Speedboat {
    */
   private updateCapsize(dt: number, water: IWaterSurface, world: PhysicsWorld): void {
     const upY = this.up.y;
-    this.capsizeT = upY < 0.25 ? this.capsizeT + dt : 0;
+    // (aeronave no ar: inclinar ou até ficar de dorso é manobra, não emborcamento — só conta tocando a água)
+    const inAir = !!this.params.wing && this.telemetry.airborne;
+    this.capsizeT = upY < 0.25 && !inAir ? this.capsizeT + dt : 0;
     if (!this.capsized && this.capsizeT > 0.4) {
       this.capsized = true;
       if (this.engine !== "off") { this.engine = "off"; this.telemetry.stall = "capsize"; }
@@ -1526,10 +1533,11 @@ export class Speedboat {
   private applyWing(dt: number, water: IWaterSurface, world: PhysicsWorld, wetFraction: number): void {
     const W = this.params.wing!;
     const t = this.telemetry;
+    this.updateLeveler(dt);
     t.elevator = this.elevatorCmd; t.elevTrim = this.elevator; t.aileron = this.aileronCmd;
     if (this.wingFolded) { t.wingH = 0; t.airspeed = 0; t.aoaDeg = 0; t.groundEffect = 1; t.wingLoad = 0; t.stallWarn = false; t.airborne = false; return; }
     const wv = world.wind ?? v3();
-    let hMin = 99, aoa = 0, kSum = 0, nG = 0, liftUp = 0;
+    let hMin = Infinity, aoa = 0, kSum = 0, nG = 0, liftUp = 0;
     for (const pn of W.panels) {
       const wp = this.toWorld(pn.pos);
       const pv = this.pointVelocity(wp);
@@ -1562,20 +1570,38 @@ export class Speedboat {
       this.addForceAt(f, p, "buoy");
     }
     const vc = rotateInv(this.rot, v3(wv.x - this.vel.x, -this.vel.y, wv.z - this.vel.z));
-    t.wingH = hMin < 90 ? hMin : 0;
+    t.wingH = Number.isFinite(hMin) ? hMin : 0; // (antes o "sem leitura" era 90 m: voando acima disso a altura virava 0)
+    t.altitude = Math.max(0, this.pos.y - Math.max(water.getHeight(this.pos.x, this.pos.z), world.groundHeight(this.pos.x, this.pos.z)) + this.keelLocalY);
+    t.vsi = this.vel.y;
     t.airspeed = Math.max(0, -vc.z);
     t.aoaDeg = nG ? aoa / nG / (Math.PI / 180) : 0;
     t.groundEffect = nG ? kSum / nG : 1;
     t.wingLoad = liftUp / (this.totalMass * G);
     t.stallWarn = nG > 0 && aoa / nG > W.stallWarn && t.airspeed > 12;
     t.airborne = wetFraction <= 0 && t.wingH > 0.05 && this.impactN < 1; // (nem na água nem arrastando no chão)
-    void dt;
   }
 
   /** profundor efetivo: compensação (E/Q) + manche (W/S) */
   get elevatorCmd(): number { return clamp(this.elevator + this.pitchIn, -1, 1); }
   /** ailerons: manche lateral (A/D) — ou, sem ele, a direção */
-  get aileronCmd(): number { return this.rollIn ?? this.steer / Math.max(1e-3, this.params.maxSteerLow); }
+  get aileronCmd(): number { return clamp((this.rollIn ?? this.steer / Math.max(1e-3, this.params.maxSteerLow)) + this.levelerCmd, -1, 1); }
+  /** NIVELADOR DE ASAS (botão LVL do piloto automático, `wing.leveler`): ligado e no ar, com o manche lateral solto, ele
+   *  mexe nos AILERONS (autoridade limitada) para trazer a inclinação a zero. Sem ele o avião entra devagar numa espiral
+   *  (aileron comanda a taxa de rolagem; o piloto sozinho num lado já basta para inclinar) */
+  levelerOn = true;
+  private levelerCmd = 0;
+  private updateLeveler(dt: number): void {
+    const L = this.params.wing?.leveler;
+    const active = !!L && this.levelerOn && this.telemetry.airborne && Math.abs(this.rollIn ?? 0) < 0.05;
+    let target = 0;
+    if (active && L) {
+      const bank = -Math.asin(clamp(this.right.y, -1, 1));       // + = asa direita abaixada
+      const rate = -rotateInv(this.rot, this.angVel).z;          // + = rolando para a direita
+      target = clamp(-(L.kBank * bank + L.kRate * rate), -L.max, L.max);
+    }
+    this.levelerCmd += (target - this.levelerCmd) * (1 - Math.exp(-dt / 0.25)); // servo
+    this.telemetry.leveler = !!L && this.levelerOn;
+  }
 
   // ---------------- injeção eletrônica (ekranoplano): centrais A/B e bombas de combustível ----------------
   /** central LANE A ou B (cada uma injeta e acende sozinha) */

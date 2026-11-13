@@ -58,6 +58,9 @@ export interface WingParams {
   /** efeito solo DINÂMICO: descendo em direção à água o ar preso é comprimido e sustenta mais (subindo, menos) —
    *  ΔCL = −dynGain·(ḣ/V)·(kL − 1). É o amortecimento vertical do colchão de ar (sem ele a altura "golfinha") */
   dynGain: number;
+  /** nivelador de asas (LVL): ganho na inclinação (por rad) e na taxa de rolagem (por rad/s), autoridade máxima do
+   *  aileron (0..1). Ausente = o avião não tem */
+  leveler?: { kBank: number; kRate: number; max: number };
   /** comando do profundor: velocidade da roda de compensação (fração do curso por s) */
   elevatorRate: number;
   /** aviso de estol: ângulo de ataque da asa acima deste (rad) */

@@ -29,6 +29,19 @@ export const EN: Record<string, string> = {
   "decola da água a ~85 km/h e voa a 0,5–3 m da água no colchão de ar (longe dela a asa não segura); profundor no E/Q, manche com leme e ailerons, hélice pusher, duas centrais de injeção (LANE A/B) e duas bombas":
     "takes off from the water at ~85 km/h and flies 0.5–3 m above it on the air cushion (away from the surface the wing can't hold it up); elevator on E/Q, control stick with rudder and ailerons, pusher propeller, two injection ECUs (LANE A/B) and two fuel pumps",
   "piloto + passageiro (tandem)": "pilot + passenger (tandem)",
+  // ---------------- anfíbio AR-A ----------------
+  "Anfíbio AR-A": "AR-A Amphibian", "ligado · {} rpm · UMA LANE": "running · {} rpm · ONE LANE",
+  "NIVELADOR": "LEVELER", "asas (LVL)": "wings (LVL)", "nivelando as asas": "leveling the wings", "armado": "armed",
+  "NIVELADOR (LVL) ligado: com o manche lateral solto, os ailerons trazem as asas ao nível": "LEVELER (LVL) on: with the stick centered sideways, the ailerons bring the wings level",
+  "NIVELADOR desligado: o avião fica só com a estabilidade dele (entra devagar numa espiral)": "LEVELER off: the airplane relies on its own stability (it slowly enters a spiral)",
+  "7 m · avião anfíbio de asa alta · 100 hp com injeção · 2 lugares lado a lado · tanque 75 L (começa com 40 L)": "7 m · high-wing amphibious airplane · 100 hp fuel-injected · 2 seats side by side · 75 L tank (starts with 40 L)",
+  "avião anfíbio de asa alta": "high-wing amphibious airplane", "100 hp com injeção": "100 hp fuel-injected", "2 lugares lado a lado": "2 seats side by side", "tanque 75 L (começa com 40 L)": "75 L tank (starts with 40 L)",
+  "decola e pousa na água e voa de verdade (até centenas de metros): casco com degrau e \"seawings\", hélice pusher de 3 pás, asa de 10,6 m que dobra para a carretinha; manche, ailerons, leme e compensador, altímetro e variômetro":
+    "takes off from and lands on the water and really flies (up to hundreds of meters): stepped hull with \"seawings\", 3-blade pusher propeller, 10.6 m wing that folds for the trailer; control stick, ailerons, rudder and trim, altimeter and vertical speed indicator",
+  "piloto + passageiro (lado a lado)": "pilot + passenger (side by side)",
+  "manete a pleno, a ~95 km/h puxe o manche (": "full throttle, at ~95 km/h pull back the stick (", ") para decolar · sem ré ·": ") to take off · no reverse ·",
+  "ALTITUDE m": "ALTITUDE m", "VARIÔM. m/s": "VSI m/s", "VOANDO": "FLYING", "subida": "climb", "descida": "descent", "nivelado": "level",
+  "O anfíbio não tem luzes de navegação nesta versão (uso só de dia)": "The amphibian has no navigation lights in this version (daytime use only)",
   "FORÇA ×{}": "POWER ×{}", "força ×1…×5 (teste)": "power ×1…×5 (test)", "modo de teste: * sobe até ×5 e volta ao normal": "test mode: * steps up to ×5 and back to normal", "Força normal (×1)": "Normal power (×1)",
   "FORÇA ×{} (modo de teste): empuxo de todas as embarcações e tração dos carros multiplicados por {} — * sobe até ×5 e volta ao normal": "POWER ×{} (test mode): thrust of every craft and car traction multiplied by {} — * steps up to ×5 and back to normal",
   "manche: W nariz para baixo, S para cima ·": "control stick: W nose down, S nose up ·", "manete (fica onde parar)": "throttle (stays where you leave it)",

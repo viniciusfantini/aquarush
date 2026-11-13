@@ -40,6 +40,7 @@ export interface SystemsPanelActions {
   setMixture(v: number): void;                    // motor de avião: alavanca de mistura (1 = rica, 0 = corte)
   setEcu(lane: "a" | "b", on: boolean): void;     // injeção eletrônica: central LANE A / LANE B
   setFuelPump(i: 1 | 2, on: boolean): void;       // injeção eletrônica: bomba elétrica de combustível 1 / 2
+  setLeveler(on: boolean): void;                  // avião: nivelador de asas (LVL)
   close(): void;
 }
 
@@ -66,6 +67,8 @@ export interface SystemsPanelCaps {
   annunciators?: boolean | "efi";
   /** motor de avião com INJEÇÃO ELETRÔNICA: LANE A/B + START na partida, bombas de combustível 1/2 nos sistemas */
   efi?: boolean;
+  /** avião: chave do nivelador de asas (LVL) */
+  leveler?: boolean;
   /** motor de avião: magnetos + primer na partida e a alavanca de mistura no comando (no lugar da chave de ignição) */
   aircraft?: boolean;
 }
@@ -108,6 +111,7 @@ export class SystemsPanel {
       else if (d.eco) this.act.setEco(!b.classList.contains("on"));
       else if (d.mag && d.mag !== "start") this.act.setMagnetos(d.mag as "off" | "r" | "l" | "both");
       else if (d.ecu) this.act.setEcu(d.ecu as "a" | "b", !b.classList.contains("on"));
+      else if (d.lvl) this.act.setLeveler(!b.classList.contains("on"));
       else if (d.pump) this.act.setFuelPump(d.pump === "2" ? 2 : 1, !b.classList.contains("on"));
       else if (d.prime) { this.act.prime(); b.classList.remove("push"); void b.offsetWidth; b.classList.add("push"); }
     });
@@ -163,6 +167,7 @@ export class SystemsPanel {
       cells.push(cell(toggle({ attr: "pump", val: "1", label: "BOMBA 1", sub: "combustível (principal)" }), "pump1"));
       cells.push(cell(toggle({ attr: "pump", val: "2", label: "BOMBA 2", sub: "reserva (decolagem)" }), "pump2"));
     }
+    if (caps.leveler) cells.push(cell(toggle({ attr: "lvl", val: "1", label: "NIVELADOR", sub: "asas (LVL)" }), "lvl"));
     if (caps.fuelValve !== false) cells.push(cell(rotary("fuel", "COMBUSTÍVEL", "registro do tanque", [{ v: "closed", l: "FECHADO" }, { v: "open", l: "ABERTO" }], { cls: "fuel" }), "fuel"));
     if (caps.ecoMode && !caps.startStop) cells.push(cell(toggle({ attr: "eco", val: "1", label: "MODO", sub: "ECO limita o gatilho", on: "ECO", off: "SPORT" }), "eco"));
     if (caps.choke) cells.push(cell(pull("choke", "1", "AFOGADOR", "partida a frio"), "choke"));
@@ -280,6 +285,10 @@ export class SystemsPanel {
         : !t.lanyard ? "cordão SOLTO: não liga" : awake ? "central acordada" : "desligada"), !t.lanyard || (t.startFail !== "" && t.engine === "off" && awake));
 
     }
+    if (c.leveler) {
+      setToggle(el, "lvl", "1", t.leveler, t.leveler && hv > 6);
+      info("lvl", t.leveler ? (t.airborne ? "nivelando as asas" : "armado") : "desligado");
+    }
     if (c.efi) {
       setToggle(el, "ecu", "a", t.ecuA, t.ecuA && hv > 6);
       setToggle(el, "ecu", "b", t.ecuB, t.ecuB && hv > 6);
@@ -287,7 +296,7 @@ export class SystemsPanel {
       setToggle(el, "pump", "2", t.pump2, t.pump2 && hv > 6);
       const sb = el.querySelector<HTMLElement>("button[data-ss='start']");
       sb?.classList.toggle("lit", t.engine === "running" && hv > 9); sb?.classList.toggle("busy", t.engine === "cranking");
-      info("efi", t.engine === "running" ? `ligado · ${Math.round(t.rpm)} rpm · turbo ${t.boostBar.toFixed(2)} bar${t.ecuA && t.ecuB ? "" : " · UMA LANE"}` : t.engine === "cranking" ? `arranque · ${Math.round(t.rpm)} rpm`
+      info("efi", t.engine === "running" ? `ligado · ${Math.round(t.rpm)} rpm${t.boostBar > 0.02 ? ` · turbo ${t.boostBar.toFixed(2)} bar` : ""}${t.ecuA && t.ecuB ? "" : " · UMA LANE"}` : t.engine === "cranking" ? `arranque · ${Math.round(t.rpm)} rpm`
         : !t.ecuA && !t.ecuB ? "centrais desligadas" : "centrais ligadas", t.engine === "running" && !(t.ecuA && t.ecuB));
       info("pump1", `${t.fuelPressBar.toFixed(1)} bar`, (t.ecuA || t.ecuB) && t.fuelPressBar < 2);
       info("pump2", t.pump1 && t.pump2 ? "as duas ligadas" : t.pump2 ? "só a reserva" : "desligada");

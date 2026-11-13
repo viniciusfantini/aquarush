@@ -32,9 +32,9 @@ para continuar o trabalho em outra IA/ferramenta ou portar para Unity/Unreal sem
 
 ---
 
-## 2. As 7 embarcações (o que muda nos sistemas)
+## 2. As 8 embarcações (o que muda nos sistemas)
 
-(O ekranoplano AR-W — 7ª, v0.70 — está na seção 10e; a tabela abaixo cobre as outras.)
+(O ekranoplano AR-W — 7ª, v0.70 — e o anfíbio AR-A — 8ª, v0.72 — estão na seção 10e; a tabela abaixo cobre as outras.)
 
 | | AR-6 lancha (`lancha`) | AR-3 bote (`bote`) | AR-J moto aquática (`jetski`) | AR-9 rápida (`rapida`) | AR-10 turbina (`turbina`) |
 |---|---|---|---|---|---|
@@ -50,7 +50,7 @@ para continuar o trabalho em outra IA/ferramenta ou portar para Unity/Unreal sem
 | Temperatura | água (termostato 58 °C) | água | água (pressão do jato) | água por motor | **óleo da turbina** (sem corte automático) |
 
 Largada (todos): atracada na vaga do píer, motor desligado (turbina fria), chaves em OFF, bateria 60 %, combustível
-temporário (`START_FUEL` em `main.ts`: 5 L lancha/bote, 30 L AR-W, 10 L AR-P, 8 L AR-J, 20 L AR-9, 120 L AR-10). O bote sai com o motor frio (24 °C).
+temporário (`START_FUEL` em `main.ts`: 5 L lancha/bote, 30 L AR-W, 40 L AR-A, 10 L AR-P, 8 L AR-J, 20 L AR-9, 120 L AR-10). O bote sai com o motor frio (24 °C).
 
 ---
 
@@ -383,7 +383,12 @@ girando → `"busy"`.
   `toggleIgnition`/`setKey` não exigem N quando `params.airProp`.
 - Gasolina de aviação (0,72 kg/L), tanque de 80 L, 8 L/h na lenta, 70 L/h a pleno.
 
-## 10e. Ekranoplano AR-W: motor turbo com injeção eletrônica (v0.70)
+## 10e. Ekranoplano AR-W e anfíbio AR-A: motor de avião com injeção eletrônica (v0.70 / v0.72)
+
+- **Anfíbio AR-A** (v0.72): o mesmo sistema da AR-W abaixo (LANE A/B, bombas 1/2, pressão, START, luzes da injeção),
+  num boxer de **100 hp sem turbo** (`boostBar` 0 — o painel não mostra turbo), 5–27 L/h, tanque de 75 L, 12 V com
+  bateria 30 Ah / arranque 110 A / geradores 30 A. Chave extra no Y: **NIVELADOR (LVL)** (`Speedboat.levelerOn`), que só
+  comanda os ailerons; liga sozinho na largada. Bomba de porão de 2000 L/h.
 
 - **Motor**: boxer 4 cilindros, turbo, **injeção eletrônica**, 141 hp a 5800 rpm (lenta 1700), redução de 2,43 para a
   hélice de 3 pás, cabeçotes arrefecidos a líquido com o radiador no pilone (a "tomada d'água" é sempre considerada ok,
