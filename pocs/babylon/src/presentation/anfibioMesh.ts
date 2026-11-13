@@ -134,11 +134,18 @@ export const buildAmphib = (scene: Scene): BoatVisual & { controls: AmphibContro
     // ponta levantada (winglet curto)
     const tip = add(MeshBuilder.CreateBox("amWingTip", { width: 0.04, height: 0.22, depth: 0.9 }, scene), accent, hinge);
     tip.position.set(s * (SPAN - ROOT_X), (SPAN - ROOT_X) * DIH + 0.08, leZ(SPAN) - 0.45 - teZ(ROOT_X)); tip.rotation.z = -s * 0.35;
-    // aileron (externo)
-    const a0 = 2.6, a1 = SPAN - 0.25, am = (a0 + a1) / 2;
-    const ail = new TransformNode("amAileron", scene); ail.parent = hinge;
-    ail.position.set(s * (am - ROOT_X), (am - ROOT_X) * DIH, teZ(am) + 0.25 - teZ(ROOT_X));
-    add(MeshBuilder.CreateBox("amAileronM", { width: a1 - a0, height: 0.03, depth: 0.25 }, scene), grey, ail).position.z = -0.125;
+    // aileron (externo): articulado NO bordo de fuga (a dobradiça é o próprio bordo) e inclinado com o diedro — antes era
+    // uma caixa reta dentro da asa e só aparecia como uma faixa no meio da corda
+    const a0 = 2.6, a1 = SPAN - 0.3, am = (a0 + a1) / 2;
+    const ailBase = new TransformNode("amAileronBase", scene); ailBase.parent = hinge;
+    ailBase.position.set(s * (am - ROOT_X), (am - ROOT_X) * DIH, teZ(am) - teZ(ROOT_X));
+    ailBase.rotation.z = s * Math.atan(DIH);
+    const ail = new TransformNode("amAileron", scene); ail.parent = ailBase;
+    const ailM = add(MeshBuilder.CreateBox("amAileronM", { width: a1 - a0, height: 0.035, depth: 0.3 }, scene), paint, ail);
+    ailM.position.z = -0.15;
+    colorize(ailM, (x) => (s * x > (a1 - a0) / 2 - 0.4 ? ORANGE : WHITE));
+    // (linha da dobradiça, cinza, para ler o aileron)
+    add(MeshBuilder.CreateCylinder("amAileronHinge", { height: a1 - a0, diameter: 0.04, tessellation: 8 }, scene), grey, ailBase).rotation.z = Math.PI / 2;
     ailerons.push({ node: ail, s });
   }
 
