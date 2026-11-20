@@ -3,7 +3,7 @@
 
 import { type Scene, Mesh, MeshBuilder, StandardMaterial, Color3, Color4, Vector3, TransformNode, Quaternion, DynamicTexture, ParticleSystem, type LinesMesh } from "@babylonjs/core";
 import { colorize } from "./boatMesh.ts";
-import { RopeTube } from "./ropeTube.ts";
+import { RopeTube, TowBridleVis } from "./ropeTube.ts";
 import type { PierLayout } from "../sim/world.ts";
 import { groundHeight } from "../sim/world.ts";
 import { TowTube } from "../sim/towTube.ts";
@@ -123,6 +123,7 @@ export class TowTubeVisual {
   readonly meshes: Mesh[];
   readonly rider: Pilot;
   private readonly rope: RopeTube;
+  private readonly bridle: TowBridleVis;
   private onTube = true;
   private readonly spray: ParticleSystem;
 
@@ -143,6 +144,7 @@ export class TowTubeVisual {
     this.rider = buildPassenger(scene, this.root, 0, -0.05, "tubeRider", 2, -0.32);
     this.meshes.push(...this.rider.meshes);
     this.rope = new RopeTube(scene, "towRope", new Color3(1, 0.82, 0.1), 0.011); // corda amarela
+    this.bridle = new TowBridleVis(scene, "towBridle", new Color3(0.95, 0.95, 0.95));
   }
 
   update(tube: TowTube, t: number): void {
@@ -152,6 +154,8 @@ export class TowTubeVisual {
     // corda: da popa do veículo à argola da frente da boia
     const b: Speedboat | null = tube.hooked;
     this.rope.setEnabled(!!b);
+    if (b) this.bridle.update(TowTube.towEyes(b).map((e) => { const w = b.toWorld(e); return new Vector3(w.x, w.y, w.z); }), (() => { const w = b.toWorld(TowTube.towLocal(b)); return new Vector3(w.x, w.y, w.z); })(), true);
+    else this.bridle.update([], Vector3.Zero(), false);
     if (b) {
       const tp = b.toWorld(TowTube.towLocal(b));
       const front = new Vector3(tube.pos.x + Math.sin(tube.yaw) * 0.8, tube.pos.y, tube.pos.z + Math.cos(tube.yaw) * 0.8);

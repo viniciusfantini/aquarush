@@ -10,7 +10,7 @@ import { TowTube } from "../sim/towTube.ts";
 import { buildPassenger, type Pilot } from "./pilot.ts";
 import { signMat } from "./station.ts";
 import { colorize } from "./boatMesh.ts";
-import { RopeTube } from "./ropeTube.ts";
+import { RopeTube, TowBridleVis } from "./ropeTube.ts";
 
 const CANOPY_R = 4.2, RISER_L = 7.5, GORES = 12;
 
@@ -64,6 +64,7 @@ export class ParasailVisual {
   private readonly canopy: Mesh;
   private readonly lines: LinesMesh;
   private readonly rope: RopeTube;
+  private readonly bridle: TowBridleVis;
   private readonly flyerRoot: TransformNode;
   /** equipe da plataforma: dois ajudantes que seguram a borda do velame até a pessoa sair */
   private readonly crew: Pilot[] = [];
@@ -112,6 +113,7 @@ export class ParasailVisual {
     this.lines = MeshBuilder.CreateLineSystem("psLines", { lines: this.linePts(Vector3.Zero(), Vector3.Up(), 1), updatable: true }, scene);
     this.lines.color = new Color3(0.9, 0.9, 0.9); this.lines.isPickable = false;
     this.rope = new RopeTube(scene, "psRope", new Color3(1, 0.45, 0.1), 0.012); // corda laranja (contrasta com o céu e a água)
+    this.bridle = new TowBridleVis(scene, "psBridle", new Color3(0.95, 0.95, 0.95));
     this.flyerRoot = new TransformNode("psFlyerRoot", scene);
     this.flyer = buildPassenger(scene, this.flyerRoot, 0, 0, "psFlyer", 3, 0);
     this.meshes.push(...this.flyer.meshes);
@@ -203,6 +205,8 @@ export class ParasailVisual {
     // corda até a popa
     const b = ps.hooked;
     this.rope.setEnabled(!!b);
+    if (b) this.bridle.update(TowTube.towEyes(b).map((e) => { const w = b.toWorld(e); return new Vector3(w.x, w.y, w.z); }), (() => { const w = b.toWorld(TowTube.towLocal(b)); return new Vector3(w.x, w.y, w.z); })(), true);
+    else this.bridle.update([], Vector3.Zero(), false);
     if (b) {
       const tp = b.toWorld(TowTube.towLocal(b));
       // presa na frente da cadeirinha (abaixo dos olhos: em 1ª pessoa ela sai do peito e desce até o barco)

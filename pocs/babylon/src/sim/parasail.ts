@@ -178,7 +178,7 @@ export class Parasail {
         const T = Math.max(0, P.ropeK * (dist - P.ropeLen) + P.ropeC * vRel);
         this.tension = T;
         F = add(F, scale(dir, T));
-        b.externalForces.push({ p: tp, f: scale(dir, -T) });
+        TowTube.applyTow(b, scale(dir, -T));
       }
       if (Math.hypot(d.x, d.z) > 1) this.yawV = Math.atan2(d.x, d.z);
     } else if (sh > 0.5) this.yawV = Math.atan2(vh.x, vh.z);

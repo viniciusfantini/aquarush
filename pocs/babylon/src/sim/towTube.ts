@@ -90,8 +90,39 @@ export class TowTube {
   dockPos(): Vec3 { const P = this.pier; return v3(P.shoreX + P.width / 2 + this.p.radius + 0.4, 0.05, P.shoreZ + P.length - 4); }
   /** onde quem vai na boia espera, em pé no píer */
   waitPos(): Vec3 { const P = this.pier; return v3(P.shoreX + 0.35, P.deckY, P.shoreZ + P.length - 4); }
-  /** ponto da popa do veículo onde a corda é presa (local do barco) */
-  static towLocal(b: Speedboat): Vec3 { return v3(0, b.params.gunwaleY, -b.params.length / 2 + 0.1); }
+  /** olhais de reboque (local do barco): dois nos cantos da popa (com o Y) ou um gancho só */
+  static towEyes(b: Speedboat): Vec3[] {
+    const T = b.params.tow;
+    if (!T) return [v3(0, b.params.gunwaleY, -b.params.length / 2 + 0.1)];
+    return T.leg > 0 && T.eyeX > 0 ? [v3(-T.eyeX, T.eyeY, T.eyeZ), v3(T.eyeX, T.eyeY, T.eyeZ)] : [v3(0, T.eyeY, T.eyeZ)];
+  }
+  /** ponto onde a corda é presa (local do barco): a ARGOLA do Y, atrás da popa (ou o gancho) */
+  static towLocal(b: Speedboat): Vec3 {
+    const T = b.params.tow;
+    if (!T) return v3(0, b.params.gunwaleY, -b.params.length / 2 + 0.1);
+    if (!(T.leg > 0 && T.eyeX > 0)) return v3(0, T.eyeY, T.eyeZ);
+    return v3(0, T.eyeY, T.eyeZ - Math.sqrt(Math.max(0.01, T.leg * T.leg - T.eyeX * T.eyeX)));
+  }
+  /**
+   * Aplica no barco a força da corda `f` (mundo) que chega na argola: pelo Y ela se divide entre os dois olhais na
+   * proporção das trações dos braços (solução no plano horizontal: puxando de lado, o braço desse lado carrega mais e o
+   * outro pode afrouxar). Com gancho único, vai toda nele.
+   */
+  static applyTow(b: Speedboat, f: Vec3): void {
+    const eyes = TowTube.towEyes(b).map((e) => b.toWorld(e));
+    if (eyes.length === 1) { b.externalForces.push({ p: eyes[0], f }); return; }
+    const apex = b.toWorld(TowTube.towLocal(b));
+    // braços (da argola para cada olhal) e a força — resolve T1·l1 + T2·l2 = f no plano XZ
+    const l1 = sub(eyes[0], apex), l2 = sub(eyes[1], apex);
+    const det = l1.x * l2.z - l1.z * l2.x;
+    let w1 = 0.5;
+    if (Math.abs(det) > 1e-6) {
+      const t1 = (f.x * l2.z - f.z * l2.x) / det, t2 = (l1.x * f.z - l1.z * f.x) / det;
+      const a1 = Math.max(0, t1), a2 = Math.max(0, t2);
+      w1 = a1 + a2 > 1e-9 ? a1 / (a1 + a2) : 0.5;
+    }
+    b.externalForces.push({ p: eyes[0], f: scale(f, w1) }, { p: eyes[1], f: scale(f, 1 - w1) });
+  }
 
   /** o veículo pode engatar a corda agora? (devagar, com a popa perto da boia) */
   canHook(b: Speedboat): boolean {
@@ -165,7 +196,7 @@ export class TowTube {
         const T = Math.max(0, P.ropeK * (dist - P.ropeLen) + P.ropeC * vRel);
         this.tension = T;
         F = add(F, scale(dir, T));
-        b.externalForces.push({ p: tp, f: scale(dir, -T) });
+        TowTube.applyTow(b, scale(dir, -T));
       }
       // a boia aponta para a corda (o ponto de reboque fica na frente dela)
       if (dist > 1) this.yaw = turnToward(this.yaw, Math.atan2(d.x, d.z), dt * 6);

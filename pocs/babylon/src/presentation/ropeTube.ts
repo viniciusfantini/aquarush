@@ -48,3 +48,27 @@ export class RopeTube {
 
   setEnabled(on: boolean): void { this.mesh.setEnabled(on); }
 }
+
+/** O "Y" de reboque no barco: dois braços dos olhais da popa até a argola (e as argolas de inox). Só visual. */
+export class TowBridleVis {
+  private readonly legs: RopeTube[];
+  private readonly rings: Mesh[] = [];
+  constructor(scene: Scene, name: string, color: Color3) {
+    this.legs = [new RopeTube(scene, name + "Leg0", color, 0.01), new RopeTube(scene, name + "Leg1", color, 0.01)];
+    const steel = new StandardMaterial(name + "Steel", scene); steel.diffuseColor = new Color3(0.8, 0.81, 0.84); steel.specularColor = new Color3(0.9, 0.9, 0.9);
+    for (let k = 0; k < 3; k++) {
+      const r = MeshBuilder.CreateTorus(name + "Ring" + k, { diameter: k === 2 ? 0.1 : 0.07, thickness: 0.015, tessellation: 14 }, scene);
+      r.material = steel; r.isPickable = false; this.rings.push(r);
+    }
+  }
+  /** `eyes` (mundo, 1 ou 2) e `apex` (argola, mundo); `on` = engatado */
+  update(eyes: Vector3[], apex: Vector3, on: boolean): void {
+    const two = on && eyes.length === 2;
+    this.legs.forEach((l, k) => { l.setEnabled(two); if (two) l.update(eyes[k], apex, 0.02); });
+    this.rings.forEach((r, k) => {
+      const show = on && (k === 2 || two);
+      r.setEnabled(show);
+      if (show) r.position.copyFrom(k === 2 ? apex : eyes[k]);
+    });
+  }
+}

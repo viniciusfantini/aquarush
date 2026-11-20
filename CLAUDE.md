@@ -15,7 +15,7 @@
 3. **O HUD lê só a telemetria real** (`BoatTelemetry`). Nada de valores decorativos.
 4. **`VehicleInput` é o único contrato** entre dispositivos e controladores. Os controladores não sabem a origem do comando.
 5. **Nada é marcado como concluído sem um teste executado e o resultado registrado** (README da POC).
-6. Os parâmetros dos barcos (`pocs/babylon/src/sim/params.ts`: `SPEEDBOAT`, `DINGHY`, `AIRBOAT`, `JETSKI`, `RAPIDA`, `TURBINA`, `WIG` e `AMPHIB`, mais a turbina em `turbine.ts` e as placas da asa em `wing.ts`) são o **contrato entre as POCs**. As POCs Unity e Unreal devem usar a mesma massa, as mesmas dimensões, os 6 pontos e os mesmos coeficientes.
+6. Os parâmetros dos barcos (incluindo o ponto de reboque `tow`) (`pocs/babylon/src/sim/params.ts`: `SPEEDBOAT`, `DINGHY`, `AIRBOAT`, `JETSKI`, `RAPIDA`, `TURBINA`, `WIG` e `AMPHIB`, mais a turbina em `turbine.ts` e as placas da asa em `wing.ts`) são o **contrato entre as POCs**. As POCs Unity e Unreal devem usar a mesma massa, as mesmas dimensões, os 6 pontos e os mesmos coeficientes.
 
 ## POC 1: Babylon (`pocs/babylon`)
 
@@ -94,6 +94,7 @@ Valores de referência (lancha): massa seca 1030 kg; empuxo máximo 8,5 t; borda
 
 | Data | Decisão | Motivo |
 |---|---|---|
+| 2026-11-20 | **Fixação da corda de reboque** (v0.76): parâmetro do contrato `tow` (olhais + "Y" de braços `leg`, ou gancho único) em todos os barcos; `TowTube.applyTow` divide a força entre os olhais; `TowBridleVis` | Pedido do usuário: "melhore os pontos de fixação da corda para todas embarcações, se necessário use aquele Y" |
 | 2026-11-20 | **Referência da câmera**: 3ª pessoa no barco/equipamento; 1ª pessoa na pessoa (piloto na água → câmera nos olhos dele; boia → quem caiu) | Pedido do usuário: "em 3 pessoa fica no barco, em 1 no piloto (ou no esportista)" |
 | 2026-11-20 | Cordas de reboque = `RopeTube` (tubo que engrossa com a distância, `ropeTube.ts`); barco virado não troca a câmera | Pedido do usuário: cabo mais visível, principalmente em 1ª pessoa do equipamento; "caso o barco vire mantenha a câmera do jeito que está" |
 | 2026-11-20 | **Câmera trava onde foi deixada** (v0.75.1): sem retorno automático; um clique sem arrastar no canvas (`returning`) a traz para trás do barco | Pedido do usuário: "ele tem que travar onde eu deixei e só voltar para trás da lancha se eu clicar 1x sem posicionar" |

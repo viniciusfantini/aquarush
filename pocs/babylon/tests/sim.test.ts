@@ -8,7 +8,7 @@ import { Speedboat } from "../src/sim/boat.ts";
 import { JUMP_AH } from "../src/sim/engineSystems.ts";
 import { Wind, WIND_LEVELS } from "../src/sim/wind.ts";
 import { jetStreakLocal } from "../src/sim/bilgeJet.ts";
-import { SPEEDBOAT, DINGHY, RAPIDA, TURBINA, JETSKI, AIRBOAT, WIG, AMPHIB, PERSON_KG, smallTow, type Occupant } from "../src/sim/params.ts";
+import { VESSELS, SPEEDBOAT, DINGHY, RAPIDA, TURBINA, JETSKI, AIRBOAT, WIG, AMPHIB, PERSON_KG, smallTow, type Occupant } from "../src/sim/params.ts";
 import { groundLift, groundInduced } from "../src/sim/wing.ts";
 import { halfWidth } from "../src/sim/mooring.ts";
 import { TowTube, TUBE } from "../src/sim/towTube.ts";
@@ -1677,6 +1677,44 @@ for (const [label, thr] of [["baixa", 0.25], ["alta", 1]] as const) {
       const b = new Speedboat(P, v3(d.x, 0.25, d.z + P.length / 2 + 1.5)); b.systems.fuelL = 30; b.occupants = [{ seat: "helm", mass: PERSON_KG }];
       check("boia rebocada", `${P.kind}: também engata a boia`, tube.hook(b) ? 1 : 0, 1, 1, "", 0);
     }
+  }
+}
+
+// ---------- Fixação da corda de reboque: olhais + "Y" em todas as embarcações (v0.75.8) ----------
+{
+  for (const [kind, P] of Object.entries(VESSELS)) {
+    const b = new Speedboat(P, v3(0, 0.3, 0));
+    const apex = TowTube.towLocal(b), eyes = TowTube.towEyes(b);
+    if (P.airProp) {
+      check("corda de reboque", `${kind}: a argola fica atrás da hélice no ar (m)`, P.propPos.z - apex.z, 1, 5, "m", 2);
+      check("corda de reboque", `${kind}: e abaixo dela (m)`, P.propPos.y - apex.y, 0.5, 5, "m", 2);
+    }
+    else if (P.waterjet) check("corda de reboque", `${kind}: gancho acima do bocal do jato (m)`, apex.y - P.propPos.y, 0.25, 2, "m", 2);
+    else check("corda de reboque", `${kind}: a argola do Y fica atrás da hélice/rabeta (m)`, P.propPos.z - apex.z, 0.2, 2, "m", 2);
+    check("corda de reboque", `${kind}: olhais dentro do casco (|x| ≤ meia boca)`, Math.max(...eyes.map((e) => Math.abs(e.x))) <= P.beam / 2 ? 1 : 0, 1, 1, "", 0);
+  }
+  // o Y divide a força: puxando reto, metade em cada olhal; puxando para a direita do barco, o olhal da direita carrega mais
+  const b = new Speedboat(SPEEDBOAT, v3(0, 0.3, 0));
+  b.externalForces.length = 0; TowTube.applyTow(b, v3(0, 0, -1000));
+  const st = b.externalForces.map((e) => Math.hypot(e.f.x, e.f.y, e.f.z));
+  check("corda de reboque", "Y puxado reto: força no olhal BB ÷ BE", st[0] / st[1], 0.95, 1.05, "×", 2);
+  b.externalForces.length = 0; TowTube.applyTow(b, v3(800, 0, -600));
+  const sd = b.externalForces.map((e) => ({ x: e.p.x, f: Math.hypot(e.f.x, e.f.z) }));
+  const right = sd.find((e) => e.x > 0)!.f, left = sd.find((e) => e.x < 0)!.f;
+  check("corda de reboque", "Y puxado para a direita: parte da força no olhal da direita", right / (right + left), 0.6, 1, "", 2);
+  b.externalForces.length = 0;
+  // todas as embarcações rebocam a boia em reta sem virar, e a boia acompanha
+  const water = mkWater(0.2);
+  const pier = { shoreX: 0, shoreZ: -40, length: 28, width: 2.4, deckY: 0.55, dirX: 0, dirZ: 1 };
+  for (const [kind, P] of Object.entries(VESSELS)) {
+    const tube = new TowTube(pier); const d = tube.dockPos();
+    const loc = TowTube.towLocal(new Speedboat(P, v3()));
+    const bb = new Speedboat(P, v3(d.x, 0.25, d.z - loc.z + 2)); bb.systems.fuelL = 40; bb.occupants = [{ seat: "helm", mass: PERSON_KG }];
+    tube.hook(bb);
+    let capsized = false;
+    for (let i = 0; i < 25 / DT; i++) { water.time += DT; bb.step(DT, { ...emptyInput(), gear: "F", throttle: i * DT < 3 ? 0.03 : 0.3 }, water, openWater); tube.step(DT, water, openWater); if (bb.telemetry.capsized) capsized = true; }
+    const vb = Math.hypot(bb.vel.x, bb.vel.z) * 3.6, vt = Math.hypot(tube.vel.x, tube.vel.z) * 3.6;
+    check("corda de reboque", `${kind}: reboca a boia a 30 % sem virar e ela acompanha (km/h de diferença)`, capsized ? 99 : Math.abs(vb - vt), 0, 6, "km/h", 1);
   }
 }
 
