@@ -58,7 +58,7 @@ import { Hud } from "./presentation/hud.ts";
 import { EngineAudio } from "./presentation/audio.ts";
 
 installI18n(); // inglês: traduz o DOM, as escritas futuras e os letreiros 3D (antes de montar a cena e o HUD)
-const BUILD = "poc-babylon 0.75.2";
+const BUILD = "poc-babylon 0.75.3";
 /** Escala visual da rotação da hélice (proporcional ao RPM, abaixo do limite estroboscópico). */
 const PROP_VISUAL_SCALE = 0.12;
 
@@ -617,9 +617,7 @@ const boot = async () => {
     if (cam.mode === "cockpit") cam.toggle();
     cam.resetOrbit(); camLabel();
   };
-  let pilotHeadHidden = false;
   const setCockpitHead = (hidden: boolean) => {
-    pilotHeadHidden = hidden;
     // no cockpit a câmera fica na cabeça do piloto: esconde cabeça/tronco (mãos e pernas continuam visíveis)
     for (const m of V.vis.meshes) if (/^pilot(Head|Jaw|Nose|Ear|Hair|Cap|Glasses|Neck)/.test(m.name)) m.setEnabled(!hidden);
   };
@@ -1272,9 +1270,8 @@ const boot = async () => {
     const pilotAboard = !boat.swimmers.some((s) => s.seat === "helm");
     if (V.dinghy) V.dinghy.pilotAboard = pilotAboard;
     if (pilotAboard) V.pilot.update(toRootLocal(V.helm.wheelGrip, vis.root), toRootLocal(V.helm.leverGrip, vis.root));
-    // (v0.75.2: barco virado / piloto na água NÃO troca a câmera — fica a vista escolhida, inclusive no equipamento;
-    //  no cockpit do barco a cabeça do piloto reaparece porque ele não está mais no posto)
-    if (cam.mode === "cockpit" && !camEquip && pilotAboard !== pilotHeadHidden) { setCockpitHead(pilotAboard); pilotHeadHidden = pilotAboard; }
+    // (v0.75.2: barco virado / piloto na água NÃO troca a câmera — fica a vista escolhida, inclusive no equipamento.
+    //  v0.75.3: a 1ª pessoa é a do PILOTO — com ele na água a câmera vai junto, nos olhos dele)
     if (T.capsized && !capsizeWarned && mode === "game") {
       hud.showToast(V.P.rightable ? "A moto virou! O cordão desligou o motor e todos caíram na água — o piloto nada até ela e a desvira; depois sobem pela popa (P liga de novo)"
         : V.P.enclosedCockpit ? "O barco virou! A turbina apagou; o piloto está preso no cinto, dentro do habitáculo fechado (célula de segurança com ar) — R para recomeçar"
@@ -1543,7 +1540,11 @@ const boot = async () => {
       // câmera no equipamento: atrás dele olhando para o barco (3ª) ou nos olhos de quem vai nele (1ª)
       const eq = towedEquip();
       const tp = boat.toWorld(TowTube.towLocal(boat));
-      if (eq === "tube") {
+      if (eq === "tube" && cam.mode === "cockpit" && tube.rider !== "tube") {
+        // 1ª pessoa = a pessoa (caiu na água, subindo ou no píer), não a boia
+        const rp = tube.riderPos, up = tube.rider === "pier" ? 1.6 : tube.rider === "climbing" ? 0.5 : 0.3;
+        cam.update(dtReal, new Vector3(rp.x, rp.y + up, rp.z), Quaternion.FromEulerAngles(0, tube.riderYaw, 0), 0, Vector3.Zero());
+      } else if (eq === "tube") {
         cam.distScale = 0.55;
         cam.update(dtReal, new Vector3(tube.pos.x, tube.pos.y, tube.pos.z), Quaternion.FromEulerAngles(0, tube.yaw, tube.bank), Math.hypot(tube.vel.x, tube.vel.z), new Vector3(0, 0.95, -0.12));
       } else {
@@ -1554,7 +1555,10 @@ const boot = async () => {
       }
     } else {
       if (camEquip) camToBoat(); // a corda foi solta: volta para o barco
-      cam.update(dtReal, rPos, rRot, Math.hypot(boat.vel.x, boat.vel.z));
+      // 3ª pessoa: referência no barco; 1ª pessoa: no PILOTO — se ele está na água, a câmera vai com ele
+      const swHelm = cam.mode === "cockpit" ? boat.swimmers.find((s) => s.seat === "helm") : undefined;
+      if (swHelm) cam.update(dtReal, new Vector3(swHelm.pos.x, swHelm.pos.y + 0.32, swHelm.pos.z), Quaternion.FromEulerAngles(0, swHelm.yaw, 0), 0, Vector3.Zero());
+      else cam.update(dtReal, rPos, rRot, Math.hypot(boat.vel.x, boat.vel.z));
     }
     fx.water = physWater; // as partículas param na mesma superfície da física (com a esteira)
     if (!paused) fx.update(dtReal, boat, water);

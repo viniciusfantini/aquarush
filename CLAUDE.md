@@ -94,6 +94,7 @@ Valores de referência (lancha): massa seca 1030 kg; empuxo máximo 8,5 t; borda
 
 | Data | Decisão | Motivo |
 |---|---|---|
+| 2026-11-20 | **Referência da câmera**: 3ª pessoa no barco/equipamento; 1ª pessoa na pessoa (piloto na água → câmera nos olhos dele; boia → quem caiu) | Pedido do usuário: "em 3 pessoa fica no barco, em 1 no piloto (ou no esportista)" |
 | 2026-11-20 | Cordas de reboque = `RopeTube` (tubo que engrossa com a distância, `ropeTube.ts`); barco virado não troca a câmera | Pedido do usuário: cabo mais visível, principalmente em 1ª pessoa do equipamento; "caso o barco vire mantenha a câmera do jeito que está" |
 | 2026-11-20 | **Câmera trava onde foi deixada** (v0.75.1): sem retorno automático; um clique sem arrastar no canvas (`returning`) a traz para trás do barco | Pedido do usuário: "ele tem que travar onde eu deixei e só voltar para trás da lancha se eu clicar 1x sem posicionar" |
 | 2026-11-20 | **Câmera v0.75**: roda do mouse = `BoatCamera.zoom`; com boia/parasail engatado o C cicla 3ª barco → 1ª barco → 3ª equipamento → 1ª equipamento (`camEquip`, `cam.update(..., head0)`) | Pedido do usuário: roda do mouse com zoom; "apertando C a câmera vai para ele em 1 ou 3 pessoa" |
