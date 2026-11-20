@@ -172,10 +172,14 @@ export const ACTIVITY_BASIN = { cx: 100, cz: -222, hx: 22, hz: 26, depth: -2.3, 
 // v0.75.4: bacia contínua do píer da boia até depois do píer do parasail (antes havia um banco de ~1 m entre as duas,
 // onde o barco batia chegando pela esquerda do píer do parasail) e transição mais suave para o lago (14 m)
 export const PARASAIL_BASIN = { cx: 160, cz: -190, hx: 50, hz: 50, depth: -2.3, blend: 14 };
+/** Bacia dragada do PÍER DO WAKEBOARD (v0.77, a leste do píer do parasail) */
+export const WAKE_BASIN = { cx: 240, cz: -185, hx: 22, hz: 32, depth: -2.3, blend: 14 };
+/** Bacia dragada do POSTO NÁUTICO (v0.77, a oeste do píer principal, depois da rampa) */
+export const FUEL_BASIN = { cx: -95, cz: -228, hx: 24, hz: 28, depth: -2.5, blend: 14 };
 /** x do píer do parasail (fixo: a bacia em volta dele é maior que o píer) */
 export const PARASAIL_PIER_X = 165;
 const basin = (x: number, z: number, h: number): number => {
-  for (const B of [MARINA_BASIN, ACTIVITY_BASIN, PARASAIL_BASIN]) {
+  for (const B of [MARINA_BASIN, ACTIVITY_BASIN, PARASAIL_BASIN, WAKE_BASIN, FUEL_BASIN]) {
     const d = Math.hypot(Math.max(0, Math.abs(x - B.cx) - B.hx), Math.max(0, Math.abs(z - B.cz) - B.hz));
     if (d < B.blend) h = Math.min(h, h + (B.depth - h) * (1 - smoothstep(0, B.blend, d)));
   }
@@ -347,7 +351,21 @@ export const parasailPierLayout = (): PierLayout => {
   return { shoreX: x, shoreZ: shoreZAt(x) + 1, length: 30, width: 3.0, deckY: 1.3, dirX: 0, dirZ: 1 };
 };
 
-export const buildWorld = (opts: { canyonClosed?: boolean } = {}): PhysicsWorld & { pier: PierLayout; activityPier: PierLayout; parasailPier: PierLayout; rockList: SphereCollider[]; spawn: { x: number; z: number; heading: number } } => {
+/** PÍER DO WAKEBOARD (v0.77): flutuante e baixo (deck a 0,55 m), de onde a pessoa pula na água com o manete */
+export const wakePierLayout = (): PierLayout => {
+  const x = WAKE_BASIN.cx;
+  return { shoreX: x, shoreZ: shoreZAt(x) + 1, length: 26, width: 2.6, deckY: 0.55, dirX: 0, dirZ: 1 };
+};
+/** POSTO NÁUTICO (v0.77): píer de abastecimento com a vaga e a bomba do lado LESTE da ponta */
+export const fuelPierLayout = (): PierLayout => {
+  const x = FUEL_BASIN.cx;
+  return { shoreX: x, shoreZ: shoreZAt(x) + 1, length: 30, width: 3.4, deckY: 1.0, dirX: 0, dirZ: 1 };
+};
+/** vaga de abastecimento: encostado no lado leste do píer do posto, perto da ponta (centro e meio-comprimento) */
+export const fuelBerth = (P: PierLayout): { x: number; z: number; len: number; edgeX: number } =>
+  ({ x: P.shoreX + P.width / 2 + 1.4, z: P.shoreZ + P.length - 9, len: 12, edgeX: P.shoreX + P.width / 2 });
+
+export const buildWorld = (opts: { canyonClosed?: boolean } = {}): PhysicsWorld & { pier: PierLayout; activityPier: PierLayout; parasailPier: PierLayout; wakePier: PierLayout; fuelPier: PierLayout; rockList: SphereCollider[]; spawn: { x: number; z: number; heading: number } } => {
   const spheres: SphereCollider[] = [];
   const boxes: BoxCollider[] = [];
 
@@ -376,6 +394,12 @@ export const buildWorld = (opts: { canyonClosed?: boolean } = {}): PhysicsWorld 
     minZ: parasailPier.shoreZ - 3, maxZ: parasailPier.shoreZ + parasailPier.length,
   });
 
+  // píer do wakeboard e posto náutico (colisores do deck)
+  const wakePier = wakePierLayout(), fuelPier = fuelPierLayout();
+  for (const Q of [wakePier, fuelPier]) boxes.push({
+    minX: Q.shoreX - Q.width / 2, maxX: Q.shoreX + Q.width / 2, minY: -6, maxY: Q.deckY, minZ: Q.shoreZ - 3, maxZ: Q.shoreZ + Q.length,
+  });
+
   // (as rochas redondas foram removidas a pedido do usuário: lago e margens livres)
   // (v0.74: sem o paredão da cachoeira — o cânion segue até o mar)
   // (a barreira "EM BREVE" na entrada do cânion fica guardada para outro uso — v0.66.1: não é ligada no jogo)
@@ -385,7 +409,7 @@ export const buildWorld = (opts: { canyonClosed?: boolean } = {}): PhysicsWorld 
   }
 
   const spawn = { x: pier.shoreX + 9, z: pier.shoreZ + pier.length - 6, heading: 0 };
-  return { groundHeight, spheres, boxes, trailers: [], pier, activityPier, parasailPier, rockList: spheres, spawn };
+  return { groundHeight, spheres, boxes, trailers: [], pier, activityPier, parasailPier, wakePier, fuelPier, rockList: spheres, spawn };
 };
 
 export const isWater = (x: number, z: number): boolean => groundHeight(x, z) < -0.3;

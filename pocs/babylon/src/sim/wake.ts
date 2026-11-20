@@ -117,6 +117,8 @@ export class WakeField {
       air: boat.params.wing && !boat.wingFolded ? (1 - smoothstep(0.4, 3.5, T.wingH)) * smoothstep(12, 30, Math.abs(T.waterSpeed)) * (1 - 0.6 * this.wetS) : 0,
       span: boat.params.wing ? boat.params.wing.span / 2 : 0,
       age: 0,
+      // lancha de wakeboard: casco feito para onda + lastro (mais fundo = onda maior)
+      ...(boat.params.ballast ? { size: boat.params.ballast.wakeBoost * (1 + 1.1 * boat.ballastFrac) } : {}),
     };
   }
 
@@ -131,6 +133,7 @@ export class WakeField {
     if (drop) this.samples.splice(0, drop);
     this.emitTimer -= dt;
     const live = this.sampleBoat(boat);
+    this.liveBoat = live;
     const moving = live.v > 0.3 || live.thr > 0.05;
     if (this.emitTimer <= 0 && moving) {
       this.emitTimer = live.v > 2 ? EMIT_DT_FAST : EMIT_DT_SLOW;
@@ -195,6 +198,36 @@ export class WakeField {
       }
     }
   }
+
+  /**
+   * Altura (m) da esteira NOVA em (x, z): a mesma conta do `heightAt`, mas só com os trechos de até `maxAge` s e SEM a
+   * idade mínima — é o que quem vem logo atrás do barco sente (o wakeboarder a ~20 m, < 3 s de esteira). O barco não usa.
+   */
+  heightAtYoung(x: number, z: number, maxAge = 8): number {
+    const S = this.samples, live = this.liveBoat;
+    const pts = live ? [...S.slice(-Math.ceil(maxAge / EMIT_DT_FAST) - 2), live] : S.slice(-Math.ceil(maxAge / EMIT_DT_FAST) - 2);
+    let h = 0;
+    for (let i = 0; i < pts.length - 1; i++) {
+      const a = pts[i], b = pts[i + 1];
+      if (a.age > maxAge || Math.abs(a.age - b.age) > 0.6) continue;
+      const env = (armEnvelope(a) + armEnvelope(b)) * 0.5;
+      if (env < 0.002) continue;
+      for (const side of [-1, 1]) for (const r of WAKE_RIDGES) {
+        const pa = armPoint(a, side, r.inward), pb = armPoint(b, side, r.inward);
+        if (!pa || !pb) continue;
+        const ex = pb.x - pa.x, ez = pb.z - pa.z, L2 = ex * ex + ez * ez;
+        let t = L2 > 1e-9 ? ((x - pa.x) * ex + (z - pa.z) * ez) / L2 : 0;
+        t = t < 0 ? 0 : t > 1 ? 1 : t;
+        const dx = x - (pa.x + ex * t), dz = z - (pa.z + ez * t);
+        const w = ridgeHalfWidth((a.age + b.age) * 0.5, r.width), q = (dx * dx + dz * dz) / (w * w);
+        if (q > 4) continue;
+        h += r.sign * r.amp * env * Math.exp(-q) * (t <= 0 || t >= 1 ? 0.5 : 1);
+      }
+    }
+    return h;
+  }
+  /** última amostra viva do barco (a ponta da esteira), para o `heightAtYoung` */
+  liveBoat: WakeSample | null = null;
 
   /** Altura (m) da marola da esteira em (x, z) — usada pela física. */
   heightAt(x: number, z: number): number {

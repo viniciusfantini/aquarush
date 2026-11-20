@@ -27,7 +27,7 @@ export interface BuoyancyPoint {
   incidence: number;
 }
 
-export type VesselKind = "lancha" | "bote" | "rapida" | "turbina" | "jetski" | "airboat" | "wig" | "anfibio";
+export type VesselKind = "lancha" | "bote" | "rapida" | "turbina" | "jetski" | "airboat" | "wig" | "anfibio" | "wake";
 
 export interface SpeedboatParams {
   kind: VesselKind;
@@ -223,6 +223,12 @@ export interface SpeedboatParams {
    */
   tow?: { eyeX: number; eyeY: number; eyeZ: number; leg: number };
   noAnchor?: boolean;
+  /**
+   * Tanques de LASTRO de água (lancha de wakeboard): cada tanque é uma carga de água (1 kg/L) na sua posição; bombas
+   * enchem (`fillLps`) e esvaziam (`drainLps`) cada tanque. Mais lastro = casco mais fundo = onda maior: a esteira cresce
+   * por `wakeBoost` × (1 + 1,1 × fração cheia).
+   */
+  ballast?: { tanks: { pos: Vec3; maxL: number }[]; fillLps: number; drainLps: number; wakeBoost: number };
   /** atrito do fundo do casco no chão (padrão 0,45). Airboat: fundo de alumínio com polímero desliza em lama/capim */
   groundMu?: number;
   /** compressor mecânico (supercharger), acionado pelo virabrequim: pressão máxima de sobrealimentação (bar) a giro
@@ -1220,4 +1226,45 @@ export const AMPHIB: SpeedboatParams = {
 /** embarcação pequena (bote, moto aquática): carretinha leve puxada por um carro comum (as outras: caminhonete) */
 export const smallTow = (k: VesselKind): boolean => k === "bote" || k === "jetski";
 
-export const VESSELS: Record<VesselKind, SpeedboatParams> = { lancha: SPEEDBOAT, bote: DINGHY, rapida: RAPIDA, turbina: TURBINA, jetski: JETSKI, airboat: AIRBOAT, wig: WIG, anfibio: AMPHIB };
+/**
+ * LANCHA DE WAKEBOARD AR-8 (v0.77): o casco da AR-6 com motor de centro (inboard, ~350 hp) e hélice sob o casco com
+ * leme atrás (sem pé de motor na popa: a pessoa rebocada fica longe da hélice), torre TARGA com o ponto de reboque no
+ * alto (a corda puxa de cima: o wakeboarder sobe mais nos pulos) e três tanques de LASTRO (popa BB/BE e proa) que deixam
+ * o casco mais fundo e a esteira maior. Sem trim de motor. Parâmetros do contrato entre as POCs, como os outros.
+ */
+export const WAKEBOAT: SpeedboatParams = {
+  ...SPEEDBOAT,
+  kind: "wake",
+  name: "Lancha de wakeboard AR-8",
+  tow: { eyeX: 0, eyeY: 2.15, eyeZ: -0.75, leg: 0 }, // reboque: argola no alto da torre targa (corda puxa de cima)
+  trimMode: "none",
+  mass: 1550,
+  inertia: v3(5400, 6000, 1350),
+  tankLiters: 200,
+  fuelIdleLph: 4,
+  fuelMaxLph: 80,
+  cylinders: 8,
+  enginePowerHp: 350,
+  maxThrust: 15000,
+  propPitchSpeed: 28,
+  propPos: v3(0, -0.62, -2.3),      // hélice sob o casco (eixo inclinado do motor de centro)
+  propRadius: 0.17,
+  drivePivot: v3(0, -0.25, -2.65),  // leme atrás da hélice
+  intakePos: v3(0, -0.5, -2.0),
+  idleRpm: 650,
+  maxRpm: 5200,
+  revLimitRpm: 5600,
+  maxSteerLow: 30 * DEG,
+  maxSteerHigh: 12 * DEG,
+  gearcaseRudder: 0.14,
+  tiltMax: 0,
+  // espelho INTEIRO até a borda (sem o poço do motor de popa da AR-6)
+  bilge: { ...SPEEDBOAT.bilge, transomY: 0.44, transomW: 0 },
+  ballast: {
+    // 750 L no casco de 6 m (com 1000 L a borda livre ficava em ~20 cm e a marola entrava pela popa)
+    tanks: [{ pos: v3(-0.6, -0.3, -2.0), maxL: 260 }, { pos: v3(0.6, -0.3, -2.0), maxL: 260 }, { pos: v3(0, -0.32, 0.6), maxL: 230 }],
+    fillLps: 7, drainLps: 10, wakeBoost: 1.45,
+  },
+};
+
+export const VESSELS: Record<VesselKind, SpeedboatParams> = { lancha: SPEEDBOAT, bote: DINGHY, rapida: RAPIDA, turbina: TURBINA, jetski: JETSKI, airboat: AIRBOAT, wig: WIG, anfibio: AMPHIB, wake: WAKEBOAT };

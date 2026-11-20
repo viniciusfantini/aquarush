@@ -408,6 +408,30 @@ export class Speedboat {
   prime = 0;
   /** modo de condução (moto aquática): "eco" limita o acelerador */
   driveMode: "normal" | "eco" = "normal";
+  /** LASTRO (lancha de wakeboard): litros em cada tanque e o comando das bombas (+1 enche, −1 esvazia, 0 parado) */
+  ballastL: number[] = [];
+  ballastCmd: -1 | 0 | 1 = 0;
+  /** fração total de lastro (0..1) */
+  get ballastFrac(): number {
+    const B = this.params.ballast; if (!B) return 0;
+    const max = B.tanks.reduce((a, t) => a + t.maxL, 0);
+    return max > 0 ? this.ballastL.reduce((a, v) => a + v, 0) / max : 0;
+  }
+  /** enche/esvazia os tanques pelas bombas (o comando para sozinho quando todos ficam cheios/vazios) */
+  private updateBallast(dt: number): void {
+    const B = this.params.ballast; if (!B) return;
+    while (this.ballastL.length < B.tanks.length) this.ballastL.push(0);
+    if (!this.ballastCmd) return;
+    let moving = false;
+    B.tanks.forEach((t, i) => {
+      const v = this.ballastL[i];
+      const nv = this.ballastCmd > 0 ? Math.min(t.maxL, v + B.fillLps * dt) : Math.max(0, v - B.drainLps * dt);
+      if (nv !== v) moving = true;
+      this.ballastL[i] = nv;
+    });
+    if (!moving) this.ballastCmd = 0;
+  }
+
   /** Ocupantes (posição = banco). Padrão: só o piloto. */
   occupants: Occupant[] = [{ seat: "helm", mass: PERSON_KG }];
   totalMass = 0;
@@ -420,6 +444,7 @@ export class Speedboat {
     this.loads = [{ mass: this.systems.fuelL * P.fuelDensity, pos: P.fuelTankPos }];
     if (this.bilgeL > 0) this.loads.push({ mass: this.bilgeL, pos: this.bilgeLoadPos() }); // água doce: 1 kg/L
     for (const o of this.occupants) this.loads.push({ mass: o.mass, pos: P.seats[o.seat] });
+    if (P.ballast) P.ballast.tanks.forEach((t, i) => { const l = this.ballastL[i] ?? 0; if (l > 0) this.loads.push({ mass: l, pos: t.pos }); }); // água doce: 1 kg/L
     let m = P.mass, ix = P.inertia.x, iy = P.inertia.y, iz = P.inertia.z;
     for (const L of this.loads) {
       m += L.mass;
@@ -857,6 +882,7 @@ export class Speedboat {
     const sys = this.systems;
     this.runSystems(dt, { lightsOn: input.navigationLights, trimMotorA: this.trimMotorA, auxA: this.anchor.motorA + this.bilgePumpA + this.turbinePeripheralA(), intakeSubmerged });
     this.updateBilge(dt, water, input);
+    this.updateBallast(dt);
     this.updateSlosh(dt);
     t.anchorOut = this.anchor.out; t.anchorState = this.anchor.state; t.anchorDepth = this.anchor.depth; t.anchorScope = this.anchor.scope;
     t.anchorTension = this.anchor.tension; t.anchorRelay = this.anchor.relay; t.windlassA = this.anchor.motorA;

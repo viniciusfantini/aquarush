@@ -599,6 +599,9 @@
     #h-tube.show { color: #04222a; background: #ffb14d; }
     #h-tube.show.warn { color: #fff; background: #d9480f; }
     #h-para.show { color: #04222a; background: #8fd3ff; }
+    #h-ballast.show { color: #04222a; background: #7fd0ff; }
+    #h-wkb.show { color: #04222a; background: #5ee8d4; }
+    #h-wkb.show.warn { color: #fff; background: #d9480f; }
     #h-para.show.warn { color: #fff; background: #d9480f; }
     #h-trailer.ok { color: #04222a; background: #7dff9a; }
     #h-lights.on { background: #7dff9b; }
@@ -613,7 +616,7 @@
     @keyframes blink { 50% { background: #ff5a4e; } }
     #status .chip.btn { pointer-events: auto; cursor: pointer; color: var(--fg); border: 1px solid rgba(255,255,255,0.3); }
     #status { pointer-events: auto; }
-    #h-trailer:not(.show), #h-dmg-hull:not(.warn), #h-dmg-eng:not(.warn), #h-hot:not(.warn), #h-lowfuel:not(.warn), #h-charge:not(.warn), #h-bilge:not(.warn), #h-anchor:not(.show), #h-tube:not(.show), #h-para:not(.show), #h-cav:not(.warn), #h-vent:not(.warn) { display: none; }
+    #h-trailer:not(.show), #h-dmg-hull:not(.warn), #h-dmg-eng:not(.warn), #h-hot:not(.warn), #h-lowfuel:not(.warn), #h-charge:not(.warn), #h-bilge:not(.warn), #h-anchor:not(.show), #h-tube:not(.show), #h-para:not(.show), #h-ballast:not(.show), #h-wkb:not(.show), #h-cav:not(.warn), #h-vent:not(.warn) { display: none; }
     /* embaixo d'água: leve tom verde-azulado e vinheta escura nas bordas (luz que vem de cima) */
     #underwater { position: fixed; inset: 0; pointer-events: none; opacity: 0; transition: opacity 0.15s; z-index: 1;
       background: radial-gradient(ellipse at 50% 20%, rgba(40, 140, 140, 0.10), rgba(0, 35, 40, 0.55) 85%); }
@@ -683,6 +686,7 @@
         <button class="pick-b" data-kind="wig"><b>Ekranoplano AR-W</b><span>7 m · asa com efeito solo · 141 hp turbo injetado · 2 pessoas em tandem · tanque 80 L (começa com 30 L)</span><span>decola da água a ~85 km/h e voa a 0,5–3 m da água no colchão de ar (longe dela a asa não segura); profundor no E/Q, manche com leme e ailerons, hélice pusher, duas centrais de injeção (LANE A/B) e duas bombas</span></button>
         <button class="pick-b" data-kind="anfibio"><b>Anfíbio AR-A</b><span>7 m · avião anfíbio de asa alta · 100 hp com injeção · 2 lugares lado a lado · tanque 75 L (começa com 40 L)</span><span>decola e pousa na água e voa de verdade (até centenas de metros): casco com degrau e "seawings", hélice pusher de 3 pás, asa de 10,6 m que dobra para a carretinha; manche, ailerons, leme e compensador, altímetro e variômetro</span></button>
         <button class="pick-b" data-kind="lancha"><b>Lancha AR-6</b><span>6 m · 150 hp · até 4 pessoas · tanque 120 L (começa com 5 L)</span><span>volante, manete, power trim elétrico, partida na chave, luzes de navegação</span></button>
+        <button class="pick-b" data-kind="wake"><b>Lancha de wakeboard AR-8</b><span>6 m · motor de centro 350 hp · até 4 pessoas · tanque 200 L (começa com 15 L)</span><span>hélice sob o casco e leme (nada na popa), torre targa com o reboque no alto, 3 tanques de lastro (tecla 4: enche / esvazia) que afundam o casco e aumentam a onda para o wakeboard</span></button>
         <button class="pick-b" data-kind="airboat"><b>Lancha pantaneira AR-P</b><span>4,9 m · airboat com motor de avião de 260 hp · até 3 pessoas · tanque 80 L (começa com 10 L)</span><span>hélice pusher no ar numa gaiola, lemes de ar no bastão, acelerador de pé, sem embreagem nem ré, fundo chato que derrapa nas curvas e passa por cima de lama e capim; banco alto do piloto</span></button>
         <button class="pick-b" data-kind="jetski"><b>Moto aquática AR-J</b><span>3,45 m · 300 hp com compressor · até 3 pessoas montadas · tanque 70 L (começa com 8 L)</span><span>jato d'água (sem hélice): guidão gira o bocal, gatilho, freio/ré iBB, trim VTS, START/STOP com cordão de segurança, modo ECO; virou, o piloto desvira</span></button>
         <button class="pick-b" data-kind="rapida"><b>Lancha rápida AR-9</b><span>8,6 m · 2 × V8 300 hp · 2 pessoas · tanque 380 L (começa com 20 L)</span><span>dois motores de centro com rabeta, um conta-giros por motor, empuxo diferencial (Z/X) para girar no lugar</span></button>
@@ -711,6 +715,8 @@
         <div class="chip btn" id="h-water">ÁGUA: LAGO</div>
         <div class="chip" id="h-tube">BOIA</div>
         <div class="chip" id="h-para">PARASAIL</div>
+        <div class="chip" id="h-ballast">LASTRO</div>
+        <div class="chip" id="h-wkb">WAKEBOARD</div>
         <div class="chip warn steady" id="h-power" style="display:none" title="modo de teste: * sobe até ×5 e volta ao normal">FORÇA ×2</div>
         <div class="chip btn" id="h-wind">VENTO: NENHUM</div>
         <div class="chip btn" id="h-occ">OCUPANTES: 1</div>
@@ -731,7 +737,8 @@
       <div><kbd>C</kbd> câmera · <span id="help-lights"><kbd>L</kbd> luzes</span> · <kbd>B</kbd> <span id="help-horn">buzina</span></div>
       <div><kbd>T</kbd> vento · <kbd>0</kbd>–<kbd>3</kbd> <kbd>V</kbd> ondas</div>
       <div><kbd>U</kbd> barco ↔ carro · <kbd>I</kbd> carretinha · <kbd>F</kbd> abastece</div>
-      <div><kbd>G</kbd> boia rebocada / parasail: engata / solta (píeres a leste)</div>
+      <div><kbd>G</kbd> boia rebocada / parasail / wakeboard: engata / solta (píeres a leste)</div>
+      <div><kbd>F</kbd> abastecer: posto náutico (píer a oeste) ou posto da estrada · <kbd>4</kbd> lastro (AR-8)</div>
       <div><kbd>R</kbd> <span id="help-reset">píer</span> · <kbd>Esc</kbd> pausa · <kbd>F3</kbd> dados · <kbd>*</kbd> força ×1…×5 (teste)</div>
       <div class="n">Arraste o mouse para girar a câmera (ela fica onde você deixar; um clique sem arrastar a traz para trás do barco) e use a roda para aproximar/afastar. Com a boia ou o parasail engatado, o C também leva a câmera para ele (3ª e 1ª pessoa). Abasteça no posto (estrada da rampa).</div>
     </div>

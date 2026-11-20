@@ -96,6 +96,33 @@ A lancha é um **corpo rígido 6DOF** (massa seca de 1030 kg + gasolina, ocupant
 
 > Referência completa da lógica elétrica e dos motores: [`docs/SISTEMAS_ELETRICOS_E_MOTORES.md`](../../docs/SISTEMAS_ELETRICOS_E_MOTORES.md).
 
+## Wakeboard, lancha de wakeboard AR-8 e posto náutico (v0.77)
+
+- **AR-8** (`WAKEBOAT` em `params.ts`, `VesselKind` "wake"; visual `wakeboatMesh.ts` sobre o casco da AR-6): 1550 kg seca,
+  350 hp (15 kN), hélice sob o casco (`propPos` 0/−0,62/−2,3) e leme no pivô (`drivePivot`), `trimMode` "none", espelho
+  inteiro (`bilge.transomY` 0,44, sem rebaixo), ponto de reboque `tow` no alto da targa (0/2,15/−0,75, olhal único) e
+  **lastro** (parâmetro novo do contrato `ballast`: 3 tanques 260/260/230 L, enche 7 L/s, esvazia 10 L/s, `wakeBoost`
+  1,45): cada tanque é uma carga de água (1 kg/L) na posição dele (`Speedboat.ballastL`, `ballastCmd`, `updateBallast`)
+  e a esteira cresce `wakeBoost` × (1 + 1,1 × fração) (`WakeSample.size`). Tecla 4 (ação `ballast`), chip `#h-ballast`.
+  Medido: 67 km/h a toda; enche em 37 s; +750 kg, afunda 7 cm, borda livre parada 46 cm; esteira 12–25 m atrás
+  38 cm → ×1,83 com lastro (com 1000 L a borda caía a ~20 cm e a marola entrava pela popa: reduzido para 750 L).
+- **Wakeboard** (`sim/wakeboard.ts`, visual `wakeboardVis.ts`, píer `wakePierLayout`/`WAKE_BASIN` em x = 240):
+  corda de 20 m (2,2 kN/m) no ponto `tow`; estados pier → water (boiando com o manete; barco parado = afundada) →
+  rising (> 3,5 m/s e corda > 200 N, 1,5 s) → riding (prancha na superfície = água + esteira NOVA,
+  `WakeField.heightAtYoung`, porque a física só tem a esteira de ≥ 3 s; arrasto 4,2·v²; borda até 4,5 m/s² levando-a
+  de ±7 m de um lado ao outro, velocidade lateral em relação ao barco) → air (pula quando a superfície sob ela sobe
+  > 1 m/s e para de subir: vy = 0,55 × subida + 1,1 m/s, até 3,8 m/s; manobra pelo voo esperado: grab 0,3 s, 360 0,5 s,
+  backroll 0,65 s) → riding, ou fallen (aterrissagem com vy relativa à superfície < −7 m/s, manobra < 92 %, tranco
+  > 3,8 kN). Caída, o manete fica na ponta da corda arrastado pelo barco; ela pega se ele passar a < 2,2 m, devagar
+  (< 3 m/s) com o barco < 3,5 m/s e 1,5 s depois da queda. G engata/solta (uma atividade por vez); C = câmera nela.
+  Medido (`node tests/debug-wakeboard.ts`): levanta em ~5 s; a 50 % com lastro, 11 pulos em 74 s, até 0,75 m, 360 e
+  backroll; passando em lenta com a corda, pega em ~54 s (percurso) e sai de novo em 3,3 s.
+- **Posto náutico** (`fuelPierLayout`/`FUEL_BASIN` em x = −95, `fuelBerth`, `sim/fuelDock.ts` `fuelDockState`): F
+  abastece encostado no lado leste da ponta (costado a < 1,6 m da borda, < 0,6 m/s, motor desligado), 1,5 L/s na AR-6.
+- Pátio do posto: 9 vagas (8 conjuntos estacionados + a livre).
+- Navegador: AR-8 com targa e plataforma; wakeboard levantando a 29 km/h, backroll no ar e pouso em pé; posto
+  náutico abastecendo 5 → 11 L em 4 s.
+
 ## Modo história no menu (desabilitado) (v0.76.6)
 
 - `index.html`: `#splash-story` ("JOGAR MODO HISTÓRIA", `disabled`, faixa `.band` "EM BREVE" girada no canto), acima do
@@ -968,7 +995,7 @@ Limitação: é uma síntese aproximada, não uma gravação. Validar o timbre d
 | Lancha pantaneira AR-P (v0.69–0.69.2) | frio sem primer não pega (falha "prime"); 3 bombadas pega em 1,2 s; 9 bombadas afoga; mistura em corte não pega e apaga o motor ligado; um magneto: −103 rpm a pleno; mistura 0,8: −5,6 L/h; magnetos OFF param; trim sem ação (0°, 0 A); P frio pega; largada a 60 % pega em 2,2 s; lenta empurrando 4,5 km/h, sempre em F, borda 0,38 m; a toda 88,4 km/h a 2434 rpm, 0→40 4,4 s; sem cavitação/ventilação; pedindo R segue a 89 km/h para a frente; curva a toda derrapando 3,6 m/s, 11,1°/s, roll 3,2°, não vira; motor desligado com os lemes todos: 0,0°; partida sem N; 50 % + lemes quase parado: 20,2°/s; refrigerado a ar; barranco de lama/capim: 12,6 s no seco, avaria 2 %, 30 km/h; carretinha da caminhonete |
 | Moto aquática AR-J (v0.67–0.67.1) | compressor 1,04 bar a toda, 0,007 bar na lenta; luz do iBB: apagada em F, FREIO freando a toda, RÉ parada em R, NEUTRO em N; navegador: S segurado a 107 km/h → FREIO, 53 km/h em 1,5 s; soltar → F; toque → N; parada: CG −0,03 m da água, borda 0,25 m; a toda 108,3 km/h a 7880 rpm, 0→60 2,7 s, 0→100 7,1 s, 72 L/h; curva a toda 29,2°/s sem virar; iBB de 102 km/h a < 5 km/h em 4,2 s e depois ré; N com o guidão todo: 0,2° em 6 s; lenta + guidão 10,6°/s; N acelerado: empuxo 0, rotor a 7478 rpm; no ar: empuxo 0, giro 7951 rpm; ECO 55 % / 89,9 km/h; lotada 101,5 km/h; cordão solto não liga, puxado desliga; START pega em 1,5 s (60 %); central dorme em 30 s; casco selado 40 s lotada em ondas fortes: 0,0 L; sifão 6,1 L em 30 s (= contrato); virada: desvira em 4,5 s, piloto a bordo com o cordão, liga de novo; carretinha 3,9 m no carro |
 
-Resultado: **839/841 OK + 2 KNOWN** (v0.76.6). Na v0.10, o peso do piloto na posição real (boreste, acima do CG) aumentou o roll em curva com ondas fortes; o `bankCoef` foi para 1800 e o `rollDamping` para 15000, com 1 limitação conhecida (abaixo). Na v0.2 a hélice foi para 0,5 m atrás do espelho, como no modelo visual, e o esterço máximo em alta velocidade caiu de 13° para 11°.
+Resultado: **871/873 OK + 2 KNOWN** (v0.77.0). Na v0.10, o peso do piloto na posição real (boreste, acima do CG) aumentou o roll em curva com ondas fortes; o `bankCoef` foi para 1800 e o `rollDamping` para 15000, com 1 limitação conhecida (abaixo). Na v0.2 a hélice foi para 0,5 m atrás do espelho, como no modelo visual, e o esterço máximo em alta velocidade caiu de 13° para 11°.
 
 ### Navegador (Chrome, Windows 11, WebGL2, `q=med`, ~1370×896)
 

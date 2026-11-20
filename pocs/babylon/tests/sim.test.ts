@@ -8,11 +8,14 @@ import { Speedboat } from "../src/sim/boat.ts";
 import { JUMP_AH } from "../src/sim/engineSystems.ts";
 import { Wind, WIND_LEVELS } from "../src/sim/wind.ts";
 import { jetStreakLocal } from "../src/sim/bilgeJet.ts";
-import { VESSELS, SPEEDBOAT, DINGHY, RAPIDA, TURBINA, JETSKI, AIRBOAT, WIG, AMPHIB, PERSON_KG, smallTow, type Occupant } from "../src/sim/params.ts";
+import { VESSELS, WAKEBOAT, SPEEDBOAT, DINGHY, RAPIDA, TURBINA, JETSKI, AIRBOAT, WIG, AMPHIB, PERSON_KG, smallTow, type Occupant } from "../src/sim/params.ts";
 import { groundLift, groundInduced } from "../src/sim/wing.ts";
 import { halfWidth } from "../src/sim/mooring.ts";
 import { TowTube, TUBE } from "../src/sim/towTube.ts";
 import { Parasail, PARASAIL } from "../src/sim/parasail.ts";
+import { Wakeboard } from "../src/sim/wakeboard.ts";
+import { fuelDockState } from "../src/sim/fuelDock.ts";
+import { fuelBerth } from "../src/sim/world.ts";
 import { activityPierLayout } from "../src/sim/world.ts";
 import { Turbine } from "../src/sim/turbine.ts";
 import { GerstnerWater, WAVE_PRESETS, type CurrentZone } from "../src/sim/water.ts";
@@ -1709,6 +1712,7 @@ for (const [label, thr] of [["baixa", 0.25], ["alta", 1]] as const) {
       check("corda de reboque", `${kind}: e abaixo dela (m)`, P.propPos.y - apex.y, 0.5, 5, "m", 2);
     }
     else if (P.waterjet) check("corda de reboque", `${kind}: gancho acima do bocal do jato (m)`, apex.y - P.propPos.y, 0.25, 2, "m", 2);
+    else if (P.tow && P.tow.eyeY > P.gunwaleY + 1) check("corda de reboque", `${kind}: reboque no alto da torre, bem acima da hélice sob o casco (m)`, apex.y - P.propPos.y, 2, 4, "m", 2);
     else check("corda de reboque", `${kind}: a argola do Y fica atrás da hélice/rabeta (m)`, P.propPos.z - apex.z, 0.2, 2, "m", 2);
     check("corda de reboque", `${kind}: olhais dentro do casco (|x| ≤ meia boca)`, Math.max(...eyes.map((e) => Math.abs(e.x))) <= P.beam / 2 ? 1 : 0, 1, 1, "", 0);
   }
@@ -1735,6 +1739,112 @@ for (const [label, thr] of [["baixa", 0.25], ["alta", 1]] as const) {
     const vb = Math.hypot(bb.vel.x, bb.vel.z) * 3.6, vt = Math.hypot(tube.vel.x, tube.vel.z) * 3.6;
     check("corda de reboque", `${kind}: reboca a boia a 30 % sem virar e ela acompanha (km/h de diferença)`, capsized ? 99 : Math.abs(vb - vt), 0, 6, "km/h", 1);
   }
+}
+
+// ---------- Lancha de wakeboard AR-8: motor de centro, targa, lastro (v0.77) ----------
+{
+  const water = mkWater(0);
+  const mk = (bal: number) => { const b = new Speedboat(WAKEBOAT, v3(0, 0.3, 0)); b.systems.fuelL = 120; b.ballastL = WAKEBOAT.ballast!.tanks.map((t) => t.maxL * bal); return b; };
+  const top = mk(0);
+  run(top, water, 40, { ...emptyInput(), gear: "F", throttle: 1 }, openWater);
+  check("lancha de wakeboard", "a toda, sem lastro (km/h)", top.telemetry.speedKmh, 55, 80, "km/h", 0);
+  check("lancha de wakeboard", "ponto de reboque no alto da torre targa (m acima da linha d'água)", TowTube.towLocal(top).y, 1.8, 2.5, "m", 2);
+  // lastro: as bombas enchem os 3 tanques; a massa sobe 1000 kg e o casco afunda
+  const bl = mk(0); run(bl, water, 5, { ...emptyInput(), gear: "N" }, openWater); const y0 = bl.pos.y, m0 = bl.totalMass;
+  bl.ballastCmd = 1; let tFill = 0;
+  while ((bl.ballastCmd as number) !== 0 && tFill < 200) { water.time += DT; bl.step(DT, { ...emptyInput(), gear: "N" }, water, openWater); tFill += DT; }
+  run(bl, water, 8, { ...emptyInput(), gear: "N" }, openWater);
+  check("lancha de wakeboard", "lastro: tempo para encher os 3 tanques (s)", tFill, 25, 70, "s", 0);
+  check("lancha de wakeboard", "lastro cheio: borda livre parado (cm)", bl.telemetry.freeboard * 100, 25, 70, "cm", 0);
+  check("lancha de wakeboard", "lastro cheio: massa a mais (kg)", bl.totalMass - m0, 740, 760, "kg", 0);
+  check("lancha de wakeboard", "lastro cheio: o casco afunda (m)", y0 - bl.pos.y, 0.04, 0.4, "m", 2);
+  bl.ballastCmd = -1; let tDrain = 0;
+  while ((bl.ballastCmd as number) !== 0 && tDrain < 200) { water.time += DT; bl.step(DT, { ...emptyInput(), gear: "N" }, water, openWater); tDrain += DT; }
+  check("lancha de wakeboard", "lastro: esvazia (L que sobram)", bl.ballastL.reduce((a2, v) => a2 + v, 0), 0, 0.01, "L", 2);
+  // a onda: com lastro cheio bem maior, na mesma posição do acelerador
+  const wave = (bal: number) => {
+    const b = mk(bal), f = new WakeField();
+    for (let i = 0; i < 25 / DT; i++) { water.time += DT; b.step(DT, { ...emptyInput(), gear: "F", throttle: 0.55 }, water, openWater); f.update(DT, b); }
+    let hm = 0; const fw = b.forward, r = b.right;
+    for (let d = 12; d <= 25; d += 0.5) for (let x = -8; x <= 8; x += 0.25) hm = Math.max(hm, Math.abs(f.heightAtYoung(b.pos.x - fw.x * d + r.x * x, b.pos.z - fw.z * d + r.z * x)));
+    return hm;
+  };
+  const w0 = wave(0), w1 = wave(1);
+  check("lancha de wakeboard", "esteira sem lastro, 12–25 m atrás (cm)", w0 * 100, 15, 60, "cm", 0);
+  check("lancha de wakeboard", "lastro cheio: esteira maior (×)", w1 / w0, 1.8, 5, "×", 2);
+}
+
+// ---------- Atividade: WAKEBOARD (píer, sai da água, anda e pula sozinha, cai, pega o manete de novo) ----------
+{
+  const w = buildWorld(), WP = w.wakePier;
+  check("wakeboard", "píer do wakeboard: fundo na frente (m)", groundHeight(WP.shoreX, WP.shoreZ + WP.length + 8), -3, -1.8, "m", 2);
+  const water = mkWater(0.2);
+  const pier = { shoreX: 0, shoreZ: -40, length: 28, width: 2.4, deckY: 0.55, dirX: 0, dirZ: 1 };
+  const mk = () => {
+    const wb = new Wakeboard(pier), W0 = wb.waitPos();
+    const b = new Speedboat(WAKEBOAT, v3(W0.x + 3, 0.3, W0.z + 8)); b.systems.fuelL = 150; b.ballastL = WAKEBOAT.ballast!.tanks.map((t) => t.maxL);
+    return { wb, b, f: new WakeField() };
+  };
+  const go = (r: ReturnType<typeof mk>, s: number, inp: Partial<VehicleInput>, each?: () => void) => {
+    for (let i = 0; i < s / DT; i++) { water.time += DT; r.b.step(DT, { ...emptyInput(), gear: "F", ...inp }, water, openWater); r.f.update(DT, r.b); r.wb.step(DT, water, openWater, r.f); each?.(); }
+  };
+  const r = mk();
+  const far = new Speedboat(WAKEBOAT, v3(60, 0.3, 0));
+  check("wakeboard", "longe do píer: não engata", !r.wb.canHook(far) ? 1 : 0, 1, 1, "", 0);
+  check("wakeboard", "popa perto do píer e parado: engata (ela pula na água com o manete)", r.wb.hook(r.b) && r.wb.state === "water" ? 1 : 0, 1, 1, "", 0);
+  go(r, 4, { gear: "N" });
+  check("wakeboard", "barco parado: ela fica na água, afundada, esperando", r.wb.state === "water" && r.wb.speed < 0.5 ? 1 : 0, 1, 1, "", 0);
+  go(r, 6, { throttle: 0.05 });
+  let tUp = -1, t = 0;
+  go(r, 14, { throttle: 0.5 }, () => { t += DT; if (tUp < 0 && r.wb.state === "riding") tUp = t; });
+  check("wakeboard", "acelerando: ela levanta e fica em pé (s)", tUp, 2, 12, "s", 1);
+  const kinds = new Set<string>(); let lj = r.wb.jumps, spd = 0, n = 0;
+  go(r, 60, { throttle: 0.5 }, () => { if (r.wb.jumps !== lj) { lj = r.wb.jumps; kinds.add(r.wb.lastTrick); } if (r.wb.state === "riding") { spd += r.wb.speed; n++; } });
+  check("wakeboard", "andando sozinha: pula na esteira (pulos em 74 s)", r.wb.jumps, 3, 60, "", 0);
+  check("wakeboard", "pulo mais alto (m)", r.wb.maxAir, 0.3, 2.0, "m", 2);
+  check("wakeboard", "manobras diferentes no ar", kinds.size, 2, 3, "", 0);
+  check("wakeboard", "velocidade em pé (km/h)", (spd / Math.max(1, n)) * 3.6, 22, 42, "km/h", 0);
+  // caiu: o barco volta em marcha lenta passando com o manete por ela — ela pega e sai de novo
+  {
+    const q = mk(); q.wb.hook(q.b); q.wb.state = "fallen"; q.wb.pos = v3(0, 0, 0);
+    q.b.pos = v3(1.5, 0.3, -45); q.wb.handle = v3(1.5, 0, -65);
+    let grab = -1, tt = 0;
+    for (let i = 0; i < 70 / DT && grab < 0; i++) { water.time += DT; q.b.step(DT, { ...emptyInput(), gear: "F", throttle: 0 }, water, openWater); q.wb.step(DT, water, openWater, null); tt += DT; if ((q.wb.state as string) === "water") grab = tt; }
+    check("wakeboard", "caiu: passando devagar com a corda perto, ela pega o manete (s)", grab, 1, 70, "s", 1);
+    let up = -1; tt = 0;
+    for (let i = 0; i < 25 / DT && up < 0; i++) { water.time += DT; q.b.step(DT, { ...emptyInput(), gear: "F", throttle: 0.5 }, water, openWater); q.wb.step(DT, water, openWater, null); tt += DT; if ((q.wb.state as string) === "riding") up = tt; }
+    check("wakeboard", "e sai da água de novo (s)", up, 1, 25, "s", 1);
+  }
+  {
+    // passando rápido o manete corre demais: ela não consegue pegar
+    const q = mk(); q.wb.hook(q.b); q.wb.state = "fallen"; q.wb.pos = v3(0, 0, 0);
+    q.b.pos = v3(1.5, 0.3, -45); q.wb.handle = v3(1.5, 0, -65);
+    let grabbed = 0;
+    for (let i = 0; i < 12 / DT; i++) { water.time += DT; q.b.step(DT, { ...emptyInput(), gear: "F", throttle: 0.5 }, water, openWater); q.wb.step(DT, water, openWater, null); if ((q.wb.state as string) !== "fallen") grabbed = 1; }
+    check("wakeboard", "passando rápido: ela não alcança o manete", grabbed, 0, 0, "", 0);
+  }
+  {
+    // soltar perto do píer: ela nada de volta e sobe
+    const q = mk(); q.wb.hook(q.b);
+    check("wakeboard", "soltar perto do píer: volta ao píer", q.wb.unhook() === "pier" ? 1 : 0, 1, 1, "", 0);
+    let tt = -1; for (let i = 0; i < 60 / DT; i++) { water.time += DT; q.wb.step(DT, water, openWater, null); if (q.wb.docked) { tt = i * DT; break; } }
+    check("wakeboard", "e nada até ele e sobe (s)", tt, 1, 40, "s", 1);
+  }
+}
+
+// ---------- Posto náutico: abastecer encostado no píer (v0.77) ----------
+{
+  const w = buildWorld(), FP = w.fuelPier, B = fuelBerth(FP);
+  check("posto náutico", "vaga de abastecimento: fundo (m)", -groundHeight(B.x, B.z), 2, 4, "m", 2);
+  check("posto náutico", "a oeste do píer principal e afastado (m)", w.pier.shoreX - FP.shoreX, 60, 200, "m", 0);
+  const b = new Speedboat(SPEEDBOAT, v3(B.edgeX + SPEEDBOAT.beam / 2 + 0.3, 0.25, B.z));
+  check("posto náutico", "encostado e parado na vaga: pode abastecer", fuelDockState(b, FP).ok ? 1 : 0, 1, 1, "", 0);
+  const far = new Speedboat(SPEEDBOAT, v3(B.x + 40, 0.25, B.z));
+  check("posto náutico", "longe: não é a vaga", fuelDockState(far, FP).near ? 0 : 1, 1, 1, "", 0);
+  const off = new Speedboat(SPEEDBOAT, v3(B.edgeX + SPEEDBOAT.beam / 2 + 4, 0.25, B.z));
+  check("posto náutico", "afastado do píer: a mangueira não alcança", !fuelDockState(off, FP).ok ? 1 : 0, 1, 1, "", 0);
+  const mov = new Speedboat(SPEEDBOAT, v3(B.edgeX + SPEEDBOAT.beam / 2 + 0.3, 0.25, B.z)); mov.vel = v3(0, 0, 2);
+  check("posto náutico", "andando: não abastece", !fuelDockState(mov, FP).ok ? 1 : 0, 1, 1, "", 0);
 }
 
 // ---------- Atividade: PARASAIL (píer com plataforma, decolagem rebocada, voo, descida, queda na água) ----------
