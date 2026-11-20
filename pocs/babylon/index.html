@@ -55,6 +55,12 @@
     #splash-play:hover, #splash-play:focus-visible { filter: brightness(1.1); outline: none; }
     #splash-play span { font-size: 0.72em; letter-spacing: 0.16em; font-weight: 700; opacity: 0.85; }
     .sp-ver { font-size: 11px; color: rgba(244,248,251,0.4); letter-spacing: 0.08em; }
+    /* modo história: ainda desabilitado, com a faixa "EM BREVE" atravessando o canto */
+    #splash-story { position: relative; overflow: hidden; font: inherit; font-size: 17px; letter-spacing: 0.22em; padding: 12px 78px 12px 46px; border-radius: 999px;
+      border: 1px solid rgba(255,255,255,0.3); background: rgba(8,20,30,0.6); color: rgba(244,248,251,0.55); font-weight: 800; cursor: not-allowed; }
+    #splash-story span { font-size: 0.72em; letter-spacing: 0.16em; font-weight: 700; }
+    #splash-story .band { position: absolute; top: 9px; right: -34px; width: 130px; transform: rotate(18deg); background: #ffcf2e; color: #1b1300;
+      font-size: 10px; font-weight: 900; letter-spacing: 0.16em; padding: 3px 0; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,0.4); }
     /* ---------------- painel de partida da turbina (Y) ---------------- */
     #tpanel, #spanel { position: fixed; right: 14px; top: 64px; z-index: 3; width: min(700px, calc(100vw - 24px)); max-height: calc(100vh - 80px); overflow-y: auto;
       display: none; padding: 12px 14px 14px; border-radius: 14px; background: rgba(8, 18, 26, 0.9); border: 1px solid rgba(255,255,255,0.18); box-shadow: 0 10px 40px rgba(0,0,0,0.5);
@@ -663,7 +669,10 @@
           <button data-lang="en"><svg viewBox="0 0 28 20"><rect width="28" height="20" fill="#fff"/><rect y="0.000" width="28" height="1.538" fill="#b22234"/><rect y="3.077" width="28" height="1.538" fill="#b22234"/><rect y="6.154" width="28" height="1.538" fill="#b22234"/><rect y="9.231" width="28" height="1.538" fill="#b22234"/><rect y="12.308" width="28" height="1.538" fill="#b22234"/><rect y="15.385" width="28" height="1.538" fill="#b22234"/><rect y="18.462" width="28" height="1.538" fill="#b22234"/><rect width="12.5" height="10.8" fill="#3c3b6e"/><circle cx="1.40" cy="1.20" r="0.45" fill="#fff"/><circle cx="3.80" cy="1.20" r="0.45" fill="#fff"/><circle cx="6.20" cy="1.20" r="0.45" fill="#fff"/><circle cx="8.60" cy="1.20" r="0.45" fill="#fff"/><circle cx="11.00" cy="1.20" r="0.45" fill="#fff"/><circle cx="2.60" cy="2.95" r="0.45" fill="#fff"/><circle cx="5.00" cy="2.95" r="0.45" fill="#fff"/><circle cx="7.40" cy="2.95" r="0.45" fill="#fff"/><circle cx="9.80" cy="2.95" r="0.45" fill="#fff"/><circle cx="1.40" cy="4.70" r="0.45" fill="#fff"/><circle cx="3.80" cy="4.70" r="0.45" fill="#fff"/><circle cx="6.20" cy="4.70" r="0.45" fill="#fff"/><circle cx="8.60" cy="4.70" r="0.45" fill="#fff"/><circle cx="11.00" cy="4.70" r="0.45" fill="#fff"/><circle cx="2.60" cy="6.45" r="0.45" fill="#fff"/><circle cx="5.00" cy="6.45" r="0.45" fill="#fff"/><circle cx="7.40" cy="6.45" r="0.45" fill="#fff"/><circle cx="9.80" cy="6.45" r="0.45" fill="#fff"/><circle cx="1.40" cy="8.20" r="0.45" fill="#fff"/><circle cx="3.80" cy="8.20" r="0.45" fill="#fff"/><circle cx="6.20" cy="8.20" r="0.45" fill="#fff"/><circle cx="8.60" cy="8.20" r="0.45" fill="#fff"/><circle cx="11.00" cy="8.20" r="0.45" fill="#fff"/><circle cx="2.60" cy="9.95" r="0.45" fill="#fff"/><circle cx="5.00" cy="9.95" r="0.45" fill="#fff"/><circle cx="7.40" cy="9.95" r="0.45" fill="#fff"/><circle cx="9.80" cy="9.95" r="0.45" fill="#fff"/></svg>English</button>
         </div>
       </div>
-      <div class="sp-foot"><button id="splash-play">JOGAR <span>MODO PLAYGROUND</span> ▶</button><div class="sp-ver" id="splash-ver"></div></div>
+      <div class="sp-foot">
+        <button id="splash-story" disabled aria-disabled="true" title="O modo história chega numa próxima atualização">JOGAR <span>MODO HISTÓRIA</span><span class="band">EM BREVE</span></button>
+        <button id="splash-play">JOGAR <span>MODO PLAYGROUND</span> ▶</button><div class="sp-ver" id="splash-ver"></div>
+      </div>
     </div>
   </div>
   <div id="menu" class="hidden">

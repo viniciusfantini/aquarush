@@ -476,6 +476,8 @@ export const EN: Record<string, string> = {
   "NENHUM": "NONE", "FRACO": "LIGHT", "MODERADO": "MODERATE", "FORTE": "STRONG", "TEMPESTADE": "STORM",
   "vidro": "glass", "calma": "calm", "lago": "lake", "ondas fortes": "rough", "VIDRO": "GLASS", "CALMA": "CALM", "LAGO": "LAKE", "ONDAS FORTES": "ROUGH",
 
+  // ---------------- splash: modo história (desabilitado) ----------------
+  "MODO HISTÓRIA": "STORY MODE", "O modo história chega numa próxima atualização": "Story mode arrives in an upcoming update",
   // ---------------- cânion / EM BREVE ----------------
   "EM BREVE": "COMING SOON", "O CÂNION E NOVAS ÁREAS CHEGAM NAS PRÓXIMAS ATUALIZAÇÕES": "THE CANYON AND NEW AREAS ARRIVE IN UPCOMING UPDATES",
   "O JOGO COMEÇA AQUI · NOVAS ÁREAS NAS PRÓXIMAS ATUALIZAÇÕES": "THE GAME STARTS HERE · NEW AREAS IN UPCOMING UPDATES",
