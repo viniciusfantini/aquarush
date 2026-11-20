@@ -1799,6 +1799,18 @@ for (const [label, thr] of [["baixa", 0.25], ["alta", 1]] as const) {
   let tUp = -1, t = 0;
   go(r, 14, { throttle: 0.5 }, () => { t += DT; if (tUp < 0 && r.wb.state === "riding") tUp = t; });
   check("wakeboard", "acelerando: ela levanta e fica em pé (s)", tUp, 2, 12, "s", 1);
+  {
+    // depois de ficar em pé ela se equilibra no meio; só corta e pula com o barco estável há ~4 s
+    // (ela pode ter levantado deslocada e a corda a traz de volta; o que não pode é ela se AFASTAR do meio cortando)
+    let firstJumpAfter = -1, tt = 0, maxOff = 0; const j0 = r.wb.jumps, off0 = Math.abs(r.wb.offset);
+    go(r, 12, { throttle: 0.5 }, () => {
+      tt += DT;
+      if (tt < 3) maxOff = Math.max(maxOff, Math.abs(r.wb.offset));
+      if (firstJumpAfter < 0 && r.wb.jumps > j0) firstJumpAfter = tt;
+    });
+    check("wakeboard", "recém em pé: não se afasta do meio enquanto o barco estabiliza (m além de onde levantou, 3 s)", maxOff - off0, -99, 0.5, "m", 2);
+    check("wakeboard", "manobras só depois de ~4 s com o barco estável (1º pulo, s depois)", firstJumpAfter < 0 ? 99 : firstJumpAfter, 3.5, 99, "s", 1);
+  }
   const kinds = new Set<string>(); let lj = r.wb.jumps, spd = 0, n = 0, inwardJ = 0, measured = 0;
   const offHist: number[] = []; // lado da esteira nos últimos ~0,8 s (o pulo é perto do centro: o lado de onde ela VEIO)
   go(r, 60, { throttle: 0.5 }, () => {
@@ -1867,6 +1879,51 @@ for (const [label, thr] of [["baixa", 0.25], ["alta", 1]] as const) {
     check("wakeboard", "soltar perto do píer: volta ao píer", q.wb.unhook() === "pier" ? 1 : 0, 1, 1, "", 0);
     let tt = -1; for (let i = 0; i < 60 / DT; i++) { water.time += DT; q.wb.step(DT, water, openWater, null); if (q.wb.docked) { tt = i * DT; break; } }
     check("wakeboard", "e nada até ele e sobe (s)", tt, 1, 40, "s", 1);
+  }
+}
+
+// ---------- Barco virou: quem está nos esportes vai para a água e nada até o barco, reunido (v0.77.6) ----------
+{
+  const water = mkWater(0);
+  const tpier = { shoreX: 0, shoreZ: -40, length: 28, width: 2.4, deckY: 0.55, dirX: 0, dirZ: 1 };
+  const capsizeNow = (b: Speedboat) => { b.rot = { x: 0, y: 0, z: 1, w: 0 }; b.vel = v3(); b.angVel = v3(); };
+  // boia
+  {
+    const tube = new TowTube(tpier), d = tube.dockPos();
+    const b = new Speedboat(SPEEDBOAT, v3(d.x, 0.25, d.z + 4)); b.systems.fuelL = 60;
+    tube.hook(b);
+    for (let i = 0; i < 25 / DT; i++) { water.time += DT; b.step(DT, { ...emptyInput(), gear: "F", throttle: i * DT < 3 ? 0 : 0.5 }, water, openWater); tube.step(DT, water, openWater); }
+    capsizeNow(b);
+    let dist = 99;
+    for (let i = 0; i < 70 / DT; i++) { water.time += DT; b.step(DT, { ...emptyInput(), gear: "N" }, water, openWater); tube.step(DT, water, openWater); }
+    dist = Math.hypot(tube.riderPos.x - b.pos.x, tube.riderPos.z - b.pos.z);
+    check("emborcamento", "barco virou rebocando a boia: a pessoa caiu (está na água)", b.capsized && tube.rider === "water" ? 1 : 0, 1, 1, "", 0);
+    check("emborcamento", "boia: ela nadou até o barco virado (m dele)", dist, 0, 4.5, "m", 1);
+  }
+  // wakeboard
+  {
+    const wb = new Wakeboard(tpier), W0 = wb.waitPos();
+    const b = new Speedboat(WAKEBOAT, v3(W0.x + 3, 0.3, W0.z + 8)); b.systems.fuelL = 150;
+    const f = new WakeField(); wb.hook(b);
+    for (let i = 0; i < 30 / DT; i++) { water.time += DT; b.step(DT, { ...emptyInput(), gear: "F", throttle: i * DT < 6 ? 0.05 : 0.5 }, water, openWater); f.update(DT, b); wb.step(DT, water, openWater, f); }
+    const wasUp = wb.state === "riding" || wb.state === "air";
+    capsizeNow(b);
+    for (let i = 0; i < 90 / DT; i++) { water.time += DT; b.step(DT, { ...emptyInput(), gear: "N" }, water, openWater); f.update(DT, b); wb.step(DT, water, openWater, f); }
+    check("emborcamento", "barco virou com o wakeboard em pé: ela soltou o manete", wasUp && wb.state === "fallen" && wb.lastFall === "barco virou" ? 1 : 0, 1, 1, "", 0);
+    check("emborcamento", "wakeboard: ela nadou até o barco virado (m dele)", Math.hypot(wb.pos.x - b.pos.x, wb.pos.z - b.pos.z), 0, 4.5, "m", 1);
+  }
+  // parasail no ar: a corda solta, ela desce e nada até o barco
+  {
+    const w = buildWorld(), PP = w.parasailPier;
+    const ps = new Parasail(PP), L = ps.launchPos();
+    const b = new Speedboat(SPEEDBOAT, v3(L.x + 3, 0.25, L.z + 9)); b.systems.fuelL = 60;
+    ps.hook(b);
+    for (let i = 0; i < 40 / DT; i++) { water.time += DT; b.step(DT, { ...emptyInput(), gear: "F", throttle: i * DT < 10 ? 0.05 : 0.5 }, water, w); ps.step(DT, water, w); }
+    const flew = ps.state === "air";
+    capsizeNow(b);
+    for (let i = 0; i < 150 / DT; i++) { water.time += DT; b.step(DT, { ...emptyInput(), gear: "N" }, water, w); ps.step(DT, water, w); }
+    check("emborcamento", "barco virou com o parasail no ar: ela desceu na água", flew && ps.state === "water" && !ps.hooked ? 1 : 0, 1, 1, "", 0);
+    check("emborcamento", "parasail: ela nadou até o barco virado (m dele)", Math.hypot(ps.pos.x - b.pos.x, ps.pos.z - b.pos.z), 0, 4.5, "m", 1);
   }
 }
 

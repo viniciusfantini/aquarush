@@ -49,6 +49,23 @@ export const TUBE: TubeParams = {
 };
 
 export type RiderState = "pier" | "tube" | "water" | "climbing";
+
+/**
+ * Barco virado: quem está nos esportes também vai para a água e nada até o barco, onde todos ficam reunidos. Cada esporte
+ * tem um lugar em volta dele (ângulo `slot` rad a partir da proa, ~2,8 m do centro) para não se amontoarem.
+ */
+export const gatherSpot = (b: Speedboat, slot: number): Vec3 => {
+  const f = b.forward, fl = Math.hypot(f.x, f.z) || 1, fx = f.x / fl, fz = f.z / fl;
+  const c = Math.cos(slot), s = Math.sin(slot), R = b.params.beam / 2 + 1.6;
+  return v3(b.pos.x + (fx * c + fz * s) * R, b.pos.y, b.pos.z + (fz * c - fx * s) * R);
+};
+/** nado até um ponto: velocidade de nado (m/s) na direção dele, parando a `stop` m */
+export const swimToward = (from: Vec3, to: Vec3, speed: number, stop = 0.6): Vec3 => {
+  const dx = to.x - from.x, dz = to.z - from.z, d = Math.hypot(dx, dz);
+  if (d < stop) return v3();
+  const k = Math.min(1, (d - stop) / 1.5) * speed / d;
+  return v3(dx * k, 0, dz * k);
+};
 const RHO = 1000, RHO_AIR = 1.2, SWIM_MS = 1.1;
 
 export class TowTube {
@@ -73,7 +90,9 @@ export class TowTube {
   airborne = false;
   latAcc = 0;
   falls = 0;
-  lastFall: "" | "curva" | "pulo" | "tranco" = "";
+  lastFall: "" | "curva" | "pulo" | "tranco" | "barco virou" = "";
+  /** barco que virou com a boia engatada: a pessoa vai para a água e nada até ele (reunida com os outros) */
+  toBoat: Speedboat | null = null;
   /** inclinação visual da boia (rad) pela aceleração lateral */
   bank = 0;
   private latT = 0;
@@ -149,7 +168,7 @@ export class TowTube {
   /** volta para o píer: boia amarrada, pessoa em pé esperando */
   dock(): void {
     this.hooked = null; this.docked = true; this.vel = v3(); this.pos = this.dockPos(); this.yaw = Math.PI / 2; this.tension = 0;
-    this.rider = "pier"; this.riderPos = this.waitPos(); this.riderVel = v3(); this.swimming = false; this.climbT = 0; this.latT = 0; this.latAcc = 0; this.bank = 0;
+    this.rider = "pier"; this.riderPos = this.waitPos(); this.riderVel = v3(); this.swimming = false; this.climbT = 0; this.latT = 0; this.latAcc = 0; this.bank = 0; this.toBoat = null;
   }
 
   /** amostra de esteira da boia (fonte pequena: `size` 0,3), ou null se ela não está na água andando */
@@ -172,6 +191,13 @@ export class TowTube {
       this.tension = 0; this.airborne = false; this.bank *= 0.9;
       return;
     }
+    // o barco que reboca VIROU: quem está na boia cai na água e vai nadar até o barco (a corda fica solta)
+    if (this.hooked && this.hooked.capsized) {
+      this.toBoat = this.hooked;
+      if (this.rider === "tube" || this.rider === "climbing") this.fall("barco virou", v3(Math.cos(this.yaw), 0, -Math.sin(this.yaw)));
+      this.hooked = null; this.tension = 0;
+    }
+    if (this.toBoat && !this.toBoat.capsized && Math.hypot(this.toBoat.vel.x, this.toBoat.vel.z) > 3) this.toBoat = null;
     const M = this.massNow;
     const v0 = this.vel;
     let F = v3(0, -M * G, 0);
@@ -237,7 +263,7 @@ export class TowTube {
   }
 
   /** a pessoa cai da boia: sai para fora da curva com parte da velocidade */
-  private fall(why: "curva" | "pulo" | "tranco", right: Vec3): void {
+  private fall(why: "curva" | "pulo" | "tranco" | "barco virou", right: Vec3): void {
     this.rider = "water"; this.falls++; this.lastFall = why; this.latT = 0; this.climbT = 0;
     const side = Math.sign(-this.latAcc) || 1; // a força para fora da curva é oposta à aceleração lateral
     this.riderPos = add(this.pos, scale(right, side * (this.p.radius + 0.3)));
@@ -251,6 +277,17 @@ export class TowTube {
       this.climbT += dt; this.riderPos = add(this.pos, v3(0, 0, 0)); this.swimming = false;
       if (Math.hypot(this.vel.x, this.vel.z) > 2) { this.rider = "water"; this.climbT = 0; return; } // a boia arrancou: cai de novo
       if (this.climbT >= this.p.climbS) { this.rider = "tube"; this.climbT = 0; }
+      return;
+    }
+    // barco virado: nada até ele e fica reunida em volta (não volta para a boia)
+    if (this.toBoat) {
+      const cur0 = water.getCurrent(this.riderPos.x, this.riderPos.z);
+      this.riderVel = scale(this.riderVel, Math.exp(-dt * 1.6));
+      const sw0 = swimToward(this.riderPos, gatherSpot(this.toBoat, 0.6 * Math.PI), SWIM_MS);
+      this.swimming = Math.hypot(sw0.x, sw0.z) > 0.2;
+      if (this.swimming) this.riderYaw = Math.atan2(sw0.x, sw0.z);
+      this.riderPos = add(this.riderPos, scale(add(add(this.riderVel, sw0), cur0), dt));
+      this.riderPos = v3(this.riderPos.x, water.getHeight(this.riderPos.x, this.riderPos.z), this.riderPos.z);
       return;
     }
     // na água: o colete segura; a água freia o deslize; com a boia devagar, nada até ela

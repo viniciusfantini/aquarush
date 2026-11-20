@@ -19,7 +19,7 @@ import { type Vec3, v3, add, sub, scale, len, dot, clamp, normalize } from "./ma
 import { G, type IWaterSurface } from "./water.ts";
 import type { PhysicsWorld, PierLayout } from "./world.ts";
 import type { Speedboat } from "./boat.ts";
-import { TowTube } from "./towTube.ts";
+import { TowTube, gatherSpot, swimToward } from "./towTube.ts";
 
 export interface ParasailParams {
   mass: number;        // pessoa + cadeirinha + velame (kg)
@@ -79,6 +79,8 @@ export class Parasail {
   splashes = 0;
   lastSplashV = 0;
   swimming = false;
+  /** barco que virou com o parasail engatado: a corda solta, ela desce e nada até o barco (reunida com os outros) */
+  toBoat: Speedboat | null = null;
   private yawV = 0;
 
   constructor(pier: PierLayout, p: ParasailParams = PARASAIL) {
@@ -112,7 +114,7 @@ export class Parasail {
   private nearPier(r: number): boolean { const L = this.launchPos(); return Math.hypot(this.pos.x - L.x, this.pos.z - L.z) < r; }
   dock(): void {
     this.hooked = null; this.docked = true; this.state = "pier"; this.pos = this.launchPos(); this.vel = v3();
-    this.infl = 0; this.tension = 0; this.swimming = false; this.canopyDir = v3(0, 0, -1); this.yawV = 0; this.altitude = 0;
+    this.infl = 0; this.tension = 0; this.swimming = false; this.canopyDir = v3(0, 0, -1); this.yawV = 0; this.altitude = 0; this.toBoat = null;
   }
 
   private onDeck(x: number, z: number): boolean {
@@ -127,6 +129,9 @@ export class Parasail {
       this.infl += (0 - this.infl) * Math.min(1, dt / P.deflS);
       return;
     }
+    // o barco que reboca VIROU: a corda solta (no ar ela desce de paraquedas) e depois ela nada até o barco
+    if (this.hooked && this.hooked.capsized) { this.toBoat = this.hooked; this.hooked = null; this.tension = 0; }
+    if (this.toBoat && !this.toBoat.capsized && Math.hypot(this.toBoat.vel.x, this.toBoat.vel.z) > 3) this.toBoat = null;
     const M = P.mass;
     let F = v3(0, -M * G, 0);
     const hw = water.getHeight(this.pos.x, this.pos.z);
@@ -184,7 +189,13 @@ export class Parasail {
     } else if (sh > 0.5) this.yawV = Math.atan2(vh.x, vh.z);
     // ---- na água, solta: nada até o píer se ele estiver perto ----
     this.swimming = false;
-    if (!this.hooked && inWater && this.nearPier(40)) {
+    if (!this.hooked && inWater && this.toBoat) {
+      // barco virado: nada até ele e fica reunida em volta
+      const sw = swimToward(this.pos, gatherSpot(this.toBoat, Math.PI), SWIM_MS);
+      this.swimming = Math.hypot(sw.x, sw.z) > 0.2;
+      if (this.swimming) this.yawV = Math.atan2(sw.x, sw.z);
+      F = add(F, scale(sub(sw, v3(rel.x, 0, rel.z)), M * 2));
+    } else if (!this.hooked && inWater && this.nearPier(40)) {
       const L = this.launchPos(), dx = L.x - this.pos.x, dz = L.z - 1 - this.pos.z, dd = Math.hypot(dx, dz);
       if (dd > 2.5) {
         this.swimming = true; this.yawV = Math.atan2(dx, dz);

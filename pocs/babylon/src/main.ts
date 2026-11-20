@@ -63,7 +63,7 @@ import { Hud } from "./presentation/hud.ts";
 import { EngineAudio } from "./presentation/audio.ts";
 
 installI18n(); // inglês: traduz o DOM, as escritas futuras e os letreiros 3D (antes de montar a cena e o HUD)
-const BUILD = "poc-babylon 0.77.5";
+const BUILD = "poc-babylon 0.77.6";
 /** Escala visual da rotação da hélice (proporcional ao RPM, abaixo do limite estroboscópico). */
 const PROP_VISUAL_SCALE = 0.12;
 
@@ -1280,7 +1280,8 @@ const boot = async () => {
     tubeVis.update(tube, performance.now() / 1000);
     if (tube.falls !== tubeFalls) {
       tubeFalls = tube.falls;
-      hud.showToast(`A pessoa CAIU da boia (${tube.lastFall === "curva" ? "chicotada na curva" : tube.lastFall === "pulo" ? "aterrissou forte depois do pulo" : "tranco da corda"})! Pare e volte devagar perto dela: ela nada até a boia e sobe`);
+      if (tube.lastFall === "barco virou") hud.showToast("O barco virou: quem estava na boia caiu e vai nadando até o barco, junto com os outros");
+      else hud.showToast(`A pessoa CAIU da boia (${tube.lastFall === "curva" ? "chicotada na curva" : tube.lastFall === "pulo" ? "aterrissou forte depois do pulo" : "tranco da corda"})! Pare e volte devagar perto dela: ela nada até a boia e sobe`);
     }
     if (tube.rider !== tubeRider) {
       if (tube.rider === "tube" && (tubeRider === "climbing")) hud.showToast("Ela subiu na boia de novo — o passeio continua");
@@ -1292,7 +1293,7 @@ const boot = async () => {
       ch.classList.toggle("show", !!show);
       if (show) {
         const st = tube.rider === "tube" ? (tube.airborne ? "NO AR!" : `na boia · ${(Math.hypot(tube.vel.x, tube.vel.z) * 3.6).toFixed(0)} km/h · corda ${tube.tension.toFixed(0)} N`)
-          : tube.rider === "water" ? (tube.swimming ? "CAIU · nadando até a boia" : "CAIU · esperando a boia parar") : tube.rider === "climbing" ? "subindo na boia" : "";
+          : tube.rider === "water" ? (tube.toBoat ? "nadando até o barco virado" : tube.swimming ? "CAIU · nadando até a boia" : "CAIU · esperando a boia parar") : tube.rider === "climbing" ? "subindo na boia" : "";
         const txt = `BOIA ${tube.hooked ? "ENGATADA" : "SOLTA"}${st ? " · " + st : ""}`;
         if (ch.textContent !== txt) ch.textContent = txt;
         ch.classList.toggle("warn", tube.rider === "water");
@@ -1313,7 +1314,8 @@ const boot = async () => {
     wkbVis.update(wkb, physWater.getHeight(wkb.pos.x, wkb.pos.z), performance.now() / 1000);
     if (wkb.falls !== wkbFalls) {
       wkbFalls = wkb.falls;
-      hud.showToast(`Ela CAIU do wakeboard (${wkb.lastFall === "aterrissagem" ? "aterrissou forte" : wkb.lastFall === "manobra" ? "não completou a manobra" : "tranco da corda"})! Volte devagar e passe com a corda perto dela: ela pega o manete e sai de novo`);
+      if (wkb.lastFall === "barco virou") hud.showToast("O barco virou: ela soltou o manete e vai nadando até o barco, junto com os outros");
+      else hud.showToast(`Ela CAIU do wakeboard (${wkb.lastFall === "aterrissagem" ? "aterrissou forte" : wkb.lastFall === "manobra" ? "não completou a manobra" : "tranco da corda"})! Volte devagar e passe com a corda perto dela: ela pega o manete e sai de novo`);
     }
     if (wkb.jumps !== wkbJumps) {
       wkbJumps = wkb.jumps;
@@ -1330,7 +1332,7 @@ const boot = async () => {
       ch.classList.toggle("show", show);
       if (show) {
         const st = wkb.state === "air" ? `NO AR · ${(Math.max(0, wkb.pos.y - physWater.getHeight(wkb.pos.x, wkb.pos.z))).toFixed(1)} m` : wkb.state === "riding" ? `em pé · ${(wkb.speed * 3.6).toFixed(0)} km/h · corda ${wkb.tension.toFixed(0)} N`
-          : wkb.state === "rising" ? "levantando" : wkb.state === "water" ? "na água segurando o manete" : wkb.state === "fallen" ? (wkb.swimming ? (wkb.hooked ? "CAIU · nadando até o manete" : "nadando até o píer") : "CAIU · passe a corda perto dela") : "";
+          : wkb.state === "rising" ? "levantando" : wkb.state === "water" ? "na água segurando o manete" : wkb.state === "fallen" ? (wkb.toBoat ? "nadando até o barco virado" : wkb.swimming ? (wkb.hooked ? "CAIU · nadando até o manete" : "nadando até o píer") : "CAIU · passe a corda perto dela") : "";
         const txt = `WAKEBOARD ${wkb.hooked ? "ENGATADO" : "SOLTO"}${st ? " · " + st : ""} · pulos ${wkb.jumps}`;
         if (ch.textContent !== txt) ch.textContent = txt;
         ch.classList.toggle("warn", wkb.state === "fallen");
@@ -1353,7 +1355,7 @@ const boot = async () => {
       ch.classList.toggle("show", show);
       if (show) {
         const st = para.state === "air" ? `NO AR · ${para.altitude.toFixed(0)} m · ${(para.airspeed * 3.6).toFixed(0)} km/h · corda ${para.tension.toFixed(0)} N`
-          : para.state === "water" ? (para.swimming ? "na água · nadando até o píer" : "na água") : "na plataforma";
+          : para.state === "water" ? (para.toBoat ? "nadando até o barco virado" : para.swimming ? "na água · nadando até o píer" : "na água") : "na plataforma";
         const txt = `PARASAIL ${para.hooked ? "ENGATADO" : "SOLTO"} · ${st}`;
         if (ch.textContent !== txt) ch.textContent = txt;
         ch.classList.toggle("warn", para.state === "water");

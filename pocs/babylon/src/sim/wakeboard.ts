@@ -21,7 +21,7 @@ import { G, type IWaterSurface } from "./water.ts";
 import type { PhysicsWorld, PierLayout } from "./world.ts";
 import type { Speedboat } from "./boat.ts";
 import type { WakeField } from "./wake.ts";
-import { TowTube } from "./towTube.ts";
+import { TowTube, gatherSpot, swimToward } from "./towTube.ts";
 
 export interface WakeboardParams {
   mass: number;        // pessoa + prancha (kg)
@@ -39,6 +39,7 @@ export interface WakeboardParams {
   popV: number;        // impulso das pernas no pulo (m/s)
   fallLandV: number;   // aterrissagem que derruba (m/s, para baixo)
   fallJerkN: number;   // tranco: pico de tensão logo depois da corda frouxa que derruba (N); 1,9× isso derruba sempre
+  settleS: number;     // tempo com o barco estável, ela em pé, antes de começar a cortar e pular (s)
   grabR: number;       // distância para pegar o manete (m)
   cutOffset: number;   // até onde ela vai para os lados da esteira (m, do centro)
 }
@@ -47,7 +48,7 @@ export const WAKEBOARD: WakeboardParams = {
   mass: 85, ropeLen: 20, ropeK: 2200, ropeC: 300,
   boardCd: 4.2, waterLin: 90, waterQuad: 45,
   edgeAcc: 4.5, riseV: 5.0, riseS: 2.4, sinkV: 4.2, sinkS: 0.9, popV: 1.1,
-  fallLandV: 7.0, fallJerkN: 3800, grabR: 2.2, cutOffset: 7,
+  fallLandV: 7.0, fallJerkN: 3800, settleS: 4, grabR: 2.2, cutOffset: 7,
 };
 
 export type RiderState = "pier" | "water" | "rising" | "riding" | "air" | "fallen";
@@ -86,7 +87,12 @@ export class Wakeboard {
   wakeH = 0;
   jumps = 0;
   falls = 0;
-  lastFall: "" | "aterrissagem" | "manobra" | "tranco" = "";
+  lastFall: "" | "aterrissagem" | "manobra" | "tranco" | "barco virou" = "";
+  /** barco que virou com ela engatada: ela solta o manete e nada até ele (reunida com os outros) */
+  toBoat: Speedboat | null = null;
+  /** há quanto tempo o barco anda estável com ela em pé (s): as manobras só começam depois de ~4 s */
+  settleT = 0;
+  private boatSpPrev = -1;
   lastTrick: TrickKind = "";
   maxAir = 0;
   swimming = false;
@@ -153,7 +159,7 @@ export class Wakeboard {
   private nearPier(r: number): boolean { const L = this.waitPos(); return Math.hypot(this.pos.x - L.x, this.pos.z - L.z) < r; }
   dock(): void {
     this.hooked = null; this.docked = true; this.state = "pier"; this.pos = this.waitPos(); this.vel = v3(); this.tension = 0;
-    this.rise = 0; this.trick = ""; this.trickT = 0; this.airT = 0; this.swimming = false; this.yaw = 0;
+    this.rise = 0; this.trick = ""; this.trickT = 0; this.airT = 0; this.swimming = false; this.yaw = 0; this.toBoat = null; this.settleT = 0;
   }
 
   /** idade máxima da esteira somada por cima da água (no jogo a água da física já tem a esteira de ≥ 3 s: só falta a
@@ -176,6 +182,13 @@ export class Wakeboard {
   step(dt: number, water: IWaterSurface, world: PhysicsWorld, wake: WakeField | null = null): void {
     const P = this.p;
     if (this.docked) { this.pos = this.waitPos(); this.vel = v3(); this.state = "pier"; this.tension = 0; return; }
+    // o barco que reboca VIROU: ela solta o manete, cai e vai nadar até ele
+    if (this.hooked && this.hooked.capsized) {
+      this.toBoat = this.hooked;
+      if (this.state !== "fallen") this.fall("barco virou");
+      this.hooked = null; this.tension = 0;
+    }
+    if (this.toBoat && !this.toBoat.capsized && Math.hypot(this.toBoat.vel.x, this.toBoat.vel.z) > 3) this.toBoat = null;
     const b = this.hooked;
     const M = P.mass;
     const sy = this.surf(water, wake, this.pos.x, this.pos.z);
@@ -216,8 +229,15 @@ export class Wakeboard {
       if (this.state === "water" && this.tension > 200 && this.speed > P.sinkV * 0.9) { this.state = "rising"; this.rise = 0; }
       // caída: nada até o píer se ele estiver perto e ninguém reboca
       this.swimming = false;
+      // barco virado: nada até ele e fica reunida em volta
+      if (this.state === "fallen" && this.toBoat) {
+        const sw = swimToward(this.pos, gatherSpot(this.toBoat, -0.6 * Math.PI), SWIM_MS);
+        this.swimming = Math.hypot(sw.x, sw.z) > 0.2;
+        if (this.swimming) this.yaw = Math.atan2(sw.x, sw.z);
+        F = add(F, scale(sub(sw, vh), M * 2));
+      }
       // caída com a corda engatada: SEMPRE nada na direção do manete (para pegá-lo quando o barco passar devagar)
-      if (this.state === "fallen" && b) {
+      else if (this.state === "fallen" && b) {
         const dx = this.handle.x - this.pos.x, dz = this.handle.z - this.pos.z, dd = Math.hypot(dx, dz);
         if (dd > 0.8) { this.swimming = true; this.yaw = Math.atan2(dx, dz); F = add(F, scale(sub(v3(dx / dd * SWIM_MS, 0, dz / dd * SWIM_MS), vh), M * 2)); }
       }
@@ -237,21 +257,30 @@ export class Wakeboard {
       const plow = 1 - this.rise; // prancha atravessada, "arado" de água
       F = add(F, scale(vh, -(P.waterLin * plow * 1.6 + P.boardCd * sh + P.waterQuad * plow * 1.6 * sh)));
       if (this.rise <= 0) { this.state = "water"; this.rise = 0; }
-      else if (this.rise >= 1) { this.state = "riding"; this.lastSurfY = sy; this.dhdtPrev = 0; }
+      else if (this.rise >= 1) { this.state = "riding"; this.lastSurfY = sy; this.dhdtPrev = 0; this.settleT = 0; }
     } else if (this.state === "riding") {
       // planando: segue a superfície (a prancha não afunda) e anda para onde a borda leva
       const dhdt = (sy - this.lastSurfY) / dt;
       this.lastSurfY = sy;
       F = add(F, scale(vh, -P.boardCd * sh));
       F = add(F, v3(0, M * G, 0)); // a água sustenta a prancha (a altura é a da superfície, abaixo)
-      // "IA": cruza a esteira de um lado para o outro; ao chegar no lado escolhido, vira e corta de volta
+      // o barco precisa estar ESTÁVEL (sem acelerar/frear nem curva fechada) há ~4 s antes das manobras
+      if (b) {
+        const bs = Math.hypot(b.vel.x, b.vel.z), acc = this.boatSpPrev < 0 ? 0 : Math.abs(bs - this.boatSpPrev) / dt;
+        this.boatSpPrev = bs;
+        const steady = acc < 0.6 && Math.abs(b.angVel.y) < 0.15;
+        this.settleT = steady ? this.settleT + dt : Math.max(0, this.settleT - dt * 3);
+      }
+      const settled = this.settleT > P.settleS;
+      // "IA": cruza a esteira de um lado para o outro; ao chegar no lado escolhido, vira e corta de volta (antes de
+      // estabilizar ela só se equilibra atrás do barco, no meio da esteira)
       if (b) {
         this.sideT += dt;
         const target = this.side * P.cutOffset;
         if ((this.side > 0 && this.offset > target - 0.8) || (this.side < 0 && this.offset < target + 0.8) || this.sideT > 7) { this.side = -this.side as 1 | -1; this.sideT = 0; }
         const r = b.right, rh = normalize(v3(r.x, 0, r.z));
         // (a velocidade lateral é medida em relação ao barco: ela corta a esteira, não "corre" do barco)
-        const bl = dot(b.vel, rh), vLat = dot(this.vel, rh) - bl, want = clamp((this.side * P.cutOffset - this.offset) * 0.8, -4, 4);
+        const bl = dot(b.vel, rh), vLat = dot(this.vel, rh) - bl, want = clamp(((settled ? this.side * P.cutOffset : 0) - this.offset) * 0.8, settled ? -4 : -1.5, settled ? 4 : 1.5);
         const ea = clamp((want - vLat) * 1.8, -P.edgeAcc, P.edgeAcc);
         F = add(F, scale(rh, M * ea));
         this.edgeAx += (rh.x * ea - this.edgeAx) * Math.min(1, dt * 6);
@@ -263,7 +292,7 @@ export class Wakeboard {
       }
       // PULO: cortando forte e passando a crista da marola (a superfície sobe e para de subir)
       // (só cortando PARA DENTRO — saindo para fora ela passa por cima da marola sem pular, como na vida real)
-      if (this.dhdtPrev > 1.0 && dhdt <= 0.2 && this.speed > 5 && this.landing <= 0 && this.inward) {
+      if (settled && this.dhdtPrev > 1.0 && dhdt <= 0.2 && this.speed > 5 && this.landing <= 0 && this.inward) {
         // (as pernas absorvem parte da rampa: a subida da marola entra pela metade, até ~4,5 m/s — pulo de ~1 m)
         const vy = Math.min(3.8, this.dhdtPrev * 0.55 + P.popV);
         this.vel = v3(this.vel.x, vy, this.vel.z);
@@ -343,7 +372,7 @@ export class Wakeboard {
     if (this.pos.y < g) { this.pos = v3(this.pos.x, g, this.pos.z); if (this.vel.y < 0) this.vel = v3(this.vel.x * 0.5, 0, this.vel.z * 0.5); }
   }
 
-  private fall(why: "aterrissagem" | "manobra" | "tranco"): void {
+  private fall(why: "aterrissagem" | "manobra" | "tranco" | "barco virou"): void {
     this.state = "fallen"; this.falls++; this.lastFall = why; this.trick = ""; this.trickT = 0; this.rise = 0; this.fallenT = 0;
     this.handle = add(this.pos, v3(0, 0.8, 0)); this.handleVel = scale(this.vel, 0.6);
     this.vel = scale(this.vel, 0.35); // a água freia o tombo
