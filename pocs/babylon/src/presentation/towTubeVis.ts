@@ -3,6 +3,7 @@
 
 import { type Scene, Mesh, MeshBuilder, StandardMaterial, Color3, Color4, Vector3, TransformNode, Quaternion, DynamicTexture, ParticleSystem, type LinesMesh } from "@babylonjs/core";
 import { colorize } from "./boatMesh.ts";
+import { RopeTube } from "./ropeTube.ts";
 import type { PierLayout } from "../sim/world.ts";
 import { groundHeight } from "../sim/world.ts";
 import { TowTube } from "../sim/towTube.ts";
@@ -121,7 +122,7 @@ export class TowTubeVisual {
   readonly root: TransformNode;
   readonly meshes: Mesh[];
   readonly rider: Pilot;
-  private readonly rope: LinesMesh;
+  private readonly rope: RopeTube;
   private onTube = true;
   private readonly spray: ParticleSystem;
 
@@ -141,8 +142,7 @@ export class TowTubeVisual {
     // a pessoa sentada no assento da boia, de frente para a corda (para o barco)
     this.rider = buildPassenger(scene, this.root, 0, -0.05, "tubeRider", 2, -0.32);
     this.meshes.push(...this.rider.meshes);
-    this.rope = MeshBuilder.CreateLines("towRope", { points: [Vector3.Zero(), Vector3.Up()], updatable: true, colors: [new Color4(0.95, 0.85, 0.2, 1), new Color4(0.95, 0.85, 0.2, 1)] }, scene);
-    this.rope.isPickable = false;
+    this.rope = new RopeTube(scene, "towRope", new Color3(1, 0.82, 0.1), 0.011); // corda amarela
   }
 
   update(tube: TowTube, t: number): void {
@@ -156,8 +156,7 @@ export class TowTubeVisual {
       const tp = b.toWorld(TowTube.towLocal(b));
       const front = new Vector3(tube.pos.x + Math.sin(tube.yaw) * 0.8, tube.pos.y, tube.pos.z + Math.cos(tube.yaw) * 0.8);
       // corda frouxa: um pouco de barriga (até a água); esticada: reta
-      const mid = new Vector3((tp.x + front.x) / 2, Math.max(tube.pos.y - 0.05, (tp.y + front.y) / 2 - (tube.tension > 30 ? 0 : 0.6)), (tp.z + front.z) / 2);
-      MeshBuilder.CreateLines("towRope", { points: [new Vector3(tp.x, tp.y, tp.z), mid, front], instance: this.rope });
+      this.rope.update(new Vector3(tp.x, tp.y, tp.z), front, tube.tension > 30 ? 0.05 : 0.7, tube.pos.y - 0.1);
     }
     // spray dos lados quando ela anda rápido encostada na água
     const sp = Math.hypot(tube.vel.x, tube.vel.z);

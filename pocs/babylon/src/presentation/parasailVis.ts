@@ -10,6 +10,7 @@ import { TowTube } from "../sim/towTube.ts";
 import { buildPassenger, type Pilot } from "./pilot.ts";
 import { signMat } from "./station.ts";
 import { colorize } from "./boatMesh.ts";
+import { RopeTube } from "./ropeTube.ts";
 
 const CANOPY_R = 4.2, RISER_L = 7.5, GORES = 12;
 
@@ -71,7 +72,7 @@ export class ParasailVisual {
   private readonly canopyRoot: TransformNode;
   private readonly canopy: Mesh;
   private readonly lines: LinesMesh;
-  private readonly rope: LinesMesh;
+  private readonly rope: RopeTube;
   private readonly flyerRoot: TransformNode;
 
   constructor(scene: Scene) {
@@ -89,8 +90,7 @@ export class ParasailVisual {
     this.canopy = c; this.meshes.push(c);
     this.lines = MeshBuilder.CreateLineSystem("psLines", { lines: this.linePts(Vector3.Zero(), Vector3.Up(), 1), updatable: true }, scene);
     this.lines.color = new Color3(0.9, 0.9, 0.9); this.lines.isPickable = false;
-    this.rope = MeshBuilder.CreateLines("psRope", { points: [Vector3.Zero(), Vector3.Up()], updatable: true, colors: [new Color4(0.95, 0.95, 0.95, 1), new Color4(0.95, 0.95, 0.95, 1)] }, scene);
-    this.rope.isPickable = false;
+    this.rope = new RopeTube(scene, "psRope", new Color3(1, 0.45, 0.1), 0.012); // corda laranja (contrasta com o céu e a água)
     this.flyerRoot = new TransformNode("psFlyerRoot", scene);
     this.flyer = buildPassenger(scene, this.flyerRoot, 0, 0, "psFlyer", 3, 0);
     this.meshes.push(...this.flyer.meshes);
@@ -135,8 +135,9 @@ export class ParasailVisual {
     this.rope.setEnabled(!!b);
     if (b) {
       const tp = b.toWorld(TowTube.towLocal(b));
-      const mid = new Vector3((tp.x + h.x) / 2, Math.max(waterY, (tp.y + h.y) / 2 - (ps.tension > 50 ? 0 : 1.5)), (tp.z + h.z) / 2);
-      MeshBuilder.CreateLines("psRope", { points: [new Vector3(tp.x, tp.y, tp.z), mid, h], instance: this.rope });
+      // presa na frente da cadeirinha (abaixo dos olhos: em 1ª pessoa ela sai do peito e desce até o barco)
+      const yw = ps.yaw, ring = new Vector3(ps.pos.x + Math.sin(yw) * 0.25, ps.pos.y + 0.05, ps.pos.z + Math.cos(yw) * 0.25);
+      this.rope.update(new Vector3(tp.x, tp.y, tp.z), ring, ps.tension > 50 ? 0.3 : 2.5, waterY);
     }
     // a pessoa
     const feet = new Vector3(ps.pos.x, ps.pos.y - HARNESS_H, ps.pos.z);

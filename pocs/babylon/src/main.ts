@@ -58,7 +58,7 @@ import { Hud } from "./presentation/hud.ts";
 import { EngineAudio } from "./presentation/audio.ts";
 
 installI18n(); // inglês: traduz o DOM, as escritas futuras e os letreiros 3D (antes de montar a cena e o HUD)
-const BUILD = "poc-babylon 0.75.1";
+const BUILD = "poc-babylon 0.75.2";
 /** Escala visual da rotação da hélice (proporcional ao RPM, abaixo do limite estroboscópico). */
 const PROP_VISUAL_SCALE = 0.12;
 
@@ -617,7 +617,9 @@ const boot = async () => {
     if (cam.mode === "cockpit") cam.toggle();
     cam.resetOrbit(); camLabel();
   };
+  let pilotHeadHidden = false;
   const setCockpitHead = (hidden: boolean) => {
+    pilotHeadHidden = hidden;
     // no cockpit a câmera fica na cabeça do piloto: esconde cabeça/tronco (mãos e pernas continuam visíveis)
     for (const m of V.vis.meshes) if (/^pilot(Head|Jaw|Nose|Ear|Hair|Cap|Glasses|Neck)/.test(m.name)) m.setEnabled(!hidden);
   };
@@ -1270,7 +1272,9 @@ const boot = async () => {
     const pilotAboard = !boat.swimmers.some((s) => s.seat === "helm");
     if (V.dinghy) V.dinghy.pilotAboard = pilotAboard;
     if (pilotAboard) V.pilot.update(toRootLocal(V.helm.wheelGrip, vis.root), toRootLocal(V.helm.leverGrip, vis.root));
-    else if (cam.mode === "cockpit") { cam.toggle(); hud.setCamera(cam.mode); setCockpitHead(false); }
+    // (v0.75.2: barco virado / piloto na água NÃO troca a câmera — fica a vista escolhida, inclusive no equipamento;
+    //  no cockpit do barco a cabeça do piloto reaparece porque ele não está mais no posto)
+    if (cam.mode === "cockpit" && !camEquip && pilotAboard !== pilotHeadHidden) { setCockpitHead(pilotAboard); pilotHeadHidden = pilotAboard; }
     if (T.capsized && !capsizeWarned && mode === "game") {
       hud.showToast(V.P.rightable ? "A moto virou! O cordão desligou o motor e todos caíram na água — o piloto nada até ela e a desvira; depois sobem pela popa (P liga de novo)"
         : V.P.enclosedCockpit ? "O barco virou! A turbina apagou; o piloto está preso no cinto, dentro do habitáculo fechado (célula de segurança com ar) — R para recomeçar"
