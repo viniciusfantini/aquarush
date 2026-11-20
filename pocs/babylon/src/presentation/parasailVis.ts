@@ -14,7 +14,7 @@ import { RopeTube } from "./ropeTube.ts";
 
 const CANOPY_R = 4.2, RISER_L = 7.5, GORES = 12;
 
-/** Píer do parasail: deck sobre estacas (1,3 m), plataforma de decolagem com guarda-corpo, placa, biruta e o saco do velame */
+/** Píer do parasail: deck sobre estacas (1,3 m), plataforma de decolagem, placa, biruta e o saco do velame */
 export const buildParasailPier = (scene: Scene, P: PierLayout): Mesh[] => {
   const meshes: Mesh[] = [];
   const wood = new StandardMaterial("psWood", scene); wood.diffuseColor = new Color3(0.5, 0.37, 0.24); wood.specularColor = new Color3(0.05, 0.05, 0.05);
@@ -33,24 +33,15 @@ export const buildParasailPier = (scene: Scene, P: PierLayout): Mesh[] => {
     const p = MeshBuilder.CreateCylinder("psPile", { height: h, diameter: 0.26, tessellation: 8 }, scene);
     p.material = post; p.position.set(x, g + h / 2, z); meshes.push(p);
   }
-  // guarda-corpo dos lados da plataforma (a frente fica aberta: é por onde ela sai)
-  for (const sx of [-1, 1]) {
-    const x = P.shoreX + sx * (P.width / 2 - 0.05);
-    const rail = MeshBuilder.CreateBox("psRail", { width: 0.06, height: 0.06, depth: 5 }, scene);
-    rail.material = white; rail.position.set(x, P.deckY + 1.0, z0 + len - 2.5); meshes.push(rail);
-    for (const dz of [0.1, 2.5, 4.9]) {
-      const st = MeshBuilder.CreateBox("psRailPost", { width: 0.06, height: 1.0, depth: 0.06 }, scene);
-      st.material = white; st.position.set(x, P.deckY + 0.5, z0 + len - 5 + dz); meshes.push(st);
-    }
-  }
+  // (v0.75.5: sem guarda-corpo — a equipe e o velame aberto ocupam a plataforma)
   // placa de duas faces
   const sm = signMat(scene, "psSignT", "PARASAIL", "G engata · G solta", "#1b5fd1", "#ffffff");
   for (const yaw of [0, Math.PI]) {
     const s = MeshBuilder.CreatePlane("psSign", { width: 2.6, height: 0.8 }, scene);
-    s.material = sm; s.rotation.y = yaw; s.position.set(P.shoreX, P.deckY + 2.3, z0 + len - 5.6 + (yaw ? -0.01 : 0.01)); meshes.push(s);
+    s.material = sm; s.rotation.y = yaw; s.position.set(P.shoreX, P.deckY + 2.3, z0 + len - 12 + (yaw ? -0.01 : 0.01)); meshes.push(s);
   }
   const pole = MeshBuilder.CreateCylinder("psSignPole", { height: 2, diameter: 0.08, tessellation: 8 }, scene);
-  pole.material = post; pole.position.set(P.shoreX, P.deckY + 1, z0 + len - 5.6); meshes.push(pole);
+  pole.material = post; pole.position.set(P.shoreX, P.deckY + 1, z0 + len - 12); meshes.push(pole);
   // biruta (mastro + cone listrado)
   const mast = MeshBuilder.CreateCylinder("psMast", { height: 4.5, diameter: 0.07, tessellation: 8 }, scene);
   mast.material = white; mast.position.set(P.shoreX - P.width / 2 + 0.1, P.deckY + 2.25, z0 + len - 9); meshes.push(mast);
@@ -74,6 +65,8 @@ export class ParasailVisual {
   private readonly lines: LinesMesh;
   private readonly rope: RopeTube;
   private readonly flyerRoot: TransformNode;
+  /** equipe da plataforma: dois ajudantes que seguram a borda do velame até a pessoa sair */
+  private readonly crew: Pilot[] = [];
 
   constructor(scene: Scene) {
     this.canopyRoot = new TransformNode("psCanopyRoot", scene);
@@ -94,6 +87,10 @@ export class ParasailVisual {
     this.flyerRoot = new TransformNode("psFlyerRoot", scene);
     this.flyer = buildPassenger(scene, this.flyerRoot, 0, 0, "psFlyer", 3, 0);
     this.meshes.push(...this.flyer.meshes);
+    for (const k of [0, 1]) {
+      const c = buildPassenger(scene, this.flyerRoot, 0, 0, "psCrew" + k, k, 0);
+      this.crew.push(c); this.meshes.push(...c.meshes);
+    }
     for (const m of this.meshes) m.isPickable = false;
   }
 
@@ -119,25 +116,32 @@ export class ParasailVisual {
     const dist = RISER_L * (0.45 + 0.55 * open);
     let cc = h.add(ax.scale(dist));
     if (cc.y < waterY + 0.25) { cc = new Vector3(cc.x, waterY + 0.25, cc.z); ax = cc.subtract(h).normalize(); }
-    if (!ps.docked && ps.state === "pier" && open >= 0.3) {
-      // na plataforma, antes de decolar: a equipe segura o velame EM PÉ atrás da pessoa (boca para o vento/barco),
-      // inteiro acima do deck — antes ele deitava na horizontal e atravessava a plataforma
-      const yw = ps.yaw, back = new Vector3(-Math.sin(yw), 0, -Math.cos(yw));
-      ax = back.scale(0.45).add(new Vector3(0, 0.9, 0)).normalize();
-      cc = h.add(ax.scale(dist));
-      const r = CANOPY_R * (0.35 + 0.65 * open), deckTop = ps.pos.y - HARNESS_H;
-      const minY = deckTop + 0.4 + r * Math.sqrt(Math.max(0, 1 - ax.y * ax.y));
-      if (cc.y < minY) { cc = new Vector3(cc.x, minY, cc.z); ax = cc.subtract(h).normalize(); }
+    // plataforma (referencial do píer: frente = +Z, para o lago)
+    const L = ps.launchPos(), deckTop = L.y - HARNESS_H;
+    const holding = !ps.docked && ps.state === "pier";
+    // quanto a corda já puxa: 0 = a equipe segura o velame em leque, baixo, atrás da pessoa; 1 = soltaram, ele enche
+    const pull = holding ? Math.min(1, ps.tension / 800) : 1;
+    if (holding) {
+      // em leque: boca virada para a pessoa/barco, eixo deitado para trás, a borda nas mãos da equipe (~2 m do deck)
+      const axHeld = new Vector3(0, 0.45, -0.89).normalize();
+      const ccHeld = new Vector3(L.x, deckTop + 2.1, L.z - 2.6);
+      // enchendo (a corda puxou): o eixo sobe e vai para a resultante, acima do deck
+      const axUp = new Vector3(0, 0.9, -0.45).normalize();
+      ax = Vector3.Lerp(axHeld, axUp, pull).normalize();
+      cc = Vector3.Lerp(ccHeld, h.add(axUp.scale(dist)), pull);
+      const r = CANOPY_R * (0.35 + 0.65 * open);
+      const minY = deckTop + 0.3 + r * Math.sqrt(Math.max(0, 1 - ax.y * ax.y));
+      if (cc.y < minY) cc = new Vector3(cc.x, minY, cc.z);
     }
-    if (ps.docked || ps.state === "pier" && open < 0.3) {
+    if (ps.docked) {
       // dobrado na plataforma, atrás da pessoa (no deck)
       cc = new Vector3(ps.pos.x + 0.6, ps.pos.y - HARNESS_H, ps.pos.z - 1.8); ax = Vector3.Up();
     }
     this.canopyRoot.position.copyFrom(cc);
     const q = new Quaternion(); Quaternion.FromUnitVectorsToRef(Vector3.Up(), ax, q);
     this.canopyRoot.rotationQuaternion = q;
-    const bundled = ps.docked || ps.state === "pier" && open < 0.3;
-    if (bundled) this.canopyRoot.scaling.set(0.17, 0.2, 0.17); // dobrado: um "fardo" de pano no deck (também enquanto abre)
+    if (ps.docked) this.canopyRoot.scaling.set(0.17, 0.2, 0.17); // dobrado: um "fardo" de pano no deck
+    else if (holding) { const w = 0.5 + 0.35 * pull; this.canopyRoot.scaling.set(w, 0.3 + 0.5 * pull, w); } // em leque nas mãos da equipe
     else this.canopyRoot.scaling.set(0.35 + 0.65 * open, 0.12 + 0.88 * open, 0.35 + 0.65 * open);
     MeshBuilder.CreateLineSystem("psLines", { lines: this.linePts(h, ax, open, cc), instance: this.lines });
     this.lines.setEnabled(!ps.docked);
@@ -158,5 +162,13 @@ export class ParasailVisual {
       // no ar (ou rebocada na plataforma): mãos nas linhas, acima da cabeça
       if (!ps.docked) this.flyer.update(new Vector3(-0.22, 1.25, -0.2), new Vector3(0.22, 1.25, -0.2));
     }
+    // equipe: atrás da pessoa, um de cada lado; segura a borda do velame com os braços para cima até ele sair da
+    // plataforma (soltam quando a corda puxa); sem o velame nas mãos, ficam de braços baixos olhando o lago
+    this.crew.forEach((c, k) => {
+      const sx = k ? 1 : -1;
+      // de frente para o velame (de costas para o lago), segurando a borda da boca
+      c.stand(new Vector3(L.x + sx * 1.0, deckTop, L.z - 1.7), holding && pull < 0.7 ? Math.PI : 0, t + k * 1.3);
+      if (holding && pull < 0.7) c.update(new Vector3(-0.25, 1.3, 0.4), new Vector3(0.25, 1.3, 0.4));
+    });
   }
 }

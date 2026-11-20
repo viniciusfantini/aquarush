@@ -147,7 +147,9 @@ export class Parasail {
       if (this.infl < 0.6) F = add(F, scale(vh, -P.canopyDrag * sh * (1 - this.infl / 0.6))); // velame murcho = âncora
     }
     // ---- velame ----
-    const held = this.state === "pier" && this.hooked ? 0.6 : 0; // a equipe segura o velame meio aberto na plataforma
+    // na plataforma a equipe segura o velame aberto em leque, baixo (0,25); quando a corda estica e puxa, eles soltam
+    // e ele enche (0,6) — antes ele já ficava meio inflado de pé com o barco parado
+    const held = this.state === "pier" && this.hooked ? (this.tension > 150 ? 0.6 : 0.25) : 0;
     const want = inWater ? (sh > 4.5 && this.hooked ? 1 : 0) : V > P.openV ? 1 : 0;
     const target = Math.max(want, held);
     const tau = target > this.infl ? (inWater ? P.inflWaterS : P.inflAirS) : P.deflS;
