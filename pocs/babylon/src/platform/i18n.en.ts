@@ -192,6 +192,8 @@ export const EN: Record<string, string> = {
   "vento ·": "wind ·", "ondas": "waves", "barco ↔ carro ·": "boat ↔ car ·", "carretinha ·": "trailer ·", "abastece": "refuel", "píer": "pier",
   "pausa ·": "pause ·", "dados": "data",
   "Arraste o mouse para girar a câmera. Comece no fim do cânion e abasteça no posto (estrada da rampa).": "Drag the mouse to orbit the camera. Start at the end of the canyon and refuel at the gas station (ramp road).",
+  "Arraste o mouse para girar a câmera e use a roda para aproximar/afastar. Com a boia ou o parasail engatado, o C também leva a câmera para ele (3ª e 1ª pessoa). Abasteça no posto (estrada da rampa).": "Drag the mouse to orbit the camera and use the wheel to zoom in/out. With the tube or the parasail hooked, C also takes the camera to it (3rd and 1st person). Refuel at the gas station (ramp road).",
+  "BOIA (3ª)": "TUBE (3rd)", "BOIA (1ª)": "TUBE (1st)", "PARASAIL (3ª)": "PARASAIL (3rd)", "PARASAIL (1ª)": "PARASAIL (1st)",
   "trim manual (pinos 1–3, depois tilt)": "manual trim (pins 1–3, then tilt)", "trim do bocal (VTS)": "nozzle trim (VTS)",
   "piloto único (habitáculo fechado)": "single pilot (enclosed cockpit)", "corda (em N) ·": "pull cord (in N) ·", "sistemas (afogador)": "systems (choke)",
   "START/STOP (em N, cordão preso) · segure": "START/STOP (in N, lanyard on) · hold", "andando: freio iBB (toque: N) ·": "while moving: iBB brake (tap: N) ·",

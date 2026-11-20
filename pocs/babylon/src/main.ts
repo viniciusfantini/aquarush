@@ -58,7 +58,7 @@ import { Hud } from "./presentation/hud.ts";
 import { EngineAudio } from "./presentation/audio.ts";
 
 installI18n(); // inglês: traduz o DOM, as escritas futuras e os letreiros 3D (antes de montar a cena e o HUD)
-const BUILD = "poc-babylon 0.74.1";
+const BUILD = "poc-babylon 0.75.0";
 /** Escala visual da rotação da hélice (proporcional ao RPM, abaixo do limite estroboscópico). */
 const PROP_VISUAL_SCALE = 0.12;
 
@@ -459,6 +459,7 @@ const boot = async () => {
   let hornPulse = 0, reachedEnd = false;
   const enterCar = () => {
     carOnly = true; setPeopleVisible(false);
+    camToBoat();
     if (cam.mode === "cockpit") { cam.toggle(); hud.setCamera(cam.mode); setCockpitHead(false); }
     cam.resetOrbit();
     hud.showToast(`Barco amarrado. Você está ${!smallTow(V.kind) ? "na caminhonete" : "no carro"} (carretinha vazia): W/S/A/D · estacione numa vaga do pátio · K volta ao barco`);
@@ -544,6 +545,7 @@ const boot = async () => {
     if (para.hooked) para.dock();
     if (b.params.wing && !b.wingFolded) { b.wingFolded = true; sysToast("Asa dobrada para a carretinha (as pontas sobem nas dobradiças)"); }
     setPeopleVisible(false);
+    camToBoat();
     if (cam.mode === "cockpit") { cam.toggle(); hud.setCamera(cam.mode); setCockpitHead(false); }
     cam.resetOrbit();
     hud.showToast(`Barco preso. Acelerador e direção agora são ${!smallTow(V.kind) ? "da caminhonete" : "do carro"} (W/S/A/D); o motor do barco continua no P e no E/Q. U passa o comando ao barco`);
@@ -597,6 +599,24 @@ const boot = async () => {
 
   document.getElementById("h-build")!.textContent = `${BUILD} · ${engine.isWebGPU ? "WebGPU" : "WebGL" + (engine as Engine).webGLVersion} · q=${cfg.quality.name}`;
 
+  // câmera no EQUIPAMENTO rebocado (boia ou parasail): C cicla 3ª barco → 1ª barco → 3ª equipamento → 1ª equipamento
+  let camEquip = false;
+  const towedEquip = (): "tube" | "para" | null => (driving || carOnly ? null : tube.hooked ? "tube" : para.hooked ? "para" : null);
+  const setRiderHead = (hidden: boolean) => {
+    for (const m of [...tubeVis.meshes, ...paraVis.meshes]) if (/^(tubeRider|psFlyer)(Head|Jaw|Nose|Ear|Hair|Cap|Glasses|Neck)/.test(m.name)) m.setEnabled(!hidden);
+  };
+  const camLabel = () => {
+    const eq = towedEquip();
+    if (camEquip && eq) hud.setCamera(cam.mode, `${eq === "tube" ? "BOIA" : "PARASAIL"} ${cam.mode === "cockpit" ? "(1ª)" : "(3ª)"}`);
+    else hud.setCamera(cam.mode);
+  };
+  /** volta a câmera para o barco (3ª pessoa se estava no equipamento) */
+  const camToBoat = () => {
+    if (!camEquip) return;
+    camEquip = false; setRiderHead(false);
+    if (cam.mode === "cockpit") cam.toggle();
+    cam.resetOrbit(); camLabel();
+  };
   const setCockpitHead = (hidden: boolean) => {
     // no cockpit a câmera fica na cabeça do piloto: esconde cabeça/tronco (mãos e pernas continuam visíveis)
     for (const m of V.vis.meshes) if (/^pilot(Head|Jaw|Nose|Ear|Hair|Cap|Glasses|Neck)/.test(m.name)) m.setEnabled(!hidden);
@@ -990,9 +1010,25 @@ const boot = async () => {
     if (carOnly && (a === "ignition" || a === "lights" || a === "occupants" || a === "camera")) { hud.showToast("Você está no carro — K volta ao barco"); return; }
     if (driving && a === "camera") return;
     if (a === "camera") {
-      if (V.pilot.group.parent !== V.vis.root) { hud.showToast("O piloto está na água"); return; }
+      const eq = towedEquip();
+      if (camEquip) {
+        // no equipamento: 3ª → 1ª → de volta à 3ª do barco
+        if (cam.mode === "externa") { cam.toggle(); setRiderHead(true); }
+        else camToBoat();
+        camLabel();
+        return;
+      }
+      if (cam.mode === "cockpit" && eq) {
+        // 1ª do barco → 3ª do equipamento
+        cam.toggle(); setCockpitHead(false); camEquip = true; cam.resetOrbit(); camLabel();
+        return;
+      }
+      if (V.pilot.group.parent !== V.vis.root) {
+        if (eq) { camEquip = true; cam.resetOrbit(); camLabel(); return; } // (piloto na água: pula a 1ª do barco)
+        hud.showToast("O piloto está na água"); return;
+      }
       const m = cam.toggle();
-      hud.setCamera(m);
+      camLabel();
       setCockpitHead(m === "cockpit");
     }
     else if (a === "lights") {
@@ -1499,7 +1535,23 @@ const boot = async () => {
       const cp = V.rig.carPose();
       cam.distScale = V.kind === "turbina" ? 1.6 : V.kind === "rapida" ? 1.45 : V.kind === "lancha" ? 1.25 : 1.0;
       cam.update(dtReal, new Vector3(cp.x, cp.y, cp.z), Quaternion.FromEulerAngles(cp.pitch, cp.yaw, 0), Math.abs(V.rig.v));
-    } else cam.update(dtReal, rPos, rRot, Math.hypot(boat.vel.x, boat.vel.z));
+    } else if (camEquip && towedEquip()) {
+      // câmera no equipamento: atrás dele olhando para o barco (3ª) ou nos olhos de quem vai nele (1ª)
+      const eq = towedEquip();
+      const tp = boat.toWorld(TowTube.towLocal(boat));
+      if (eq === "tube") {
+        cam.distScale = 0.55;
+        cam.update(dtReal, new Vector3(tube.pos.x, tube.pos.y, tube.pos.z), Quaternion.FromEulerAngles(0, tube.yaw, tube.bank), Math.hypot(tube.vel.x, tube.vel.z), new Vector3(0, 0.95, -0.12));
+      } else {
+        cam.distScale = 0.9;
+        const dx = tp.x - para.pos.x, dz = tp.z - para.pos.z, dy = para.pos.y - tp.y;
+        const yaw = Math.atan2(dx, dz), pitch = cam.mode === "cockpit" ? Math.atan2(dy, Math.hypot(dx, dz)) * 0.7 : 0;
+        cam.update(dtReal, new Vector3(para.pos.x, para.pos.y, para.pos.z), Quaternion.FromEulerAngles(pitch, yaw, 0), Math.hypot(para.vel.x, para.vel.z), new Vector3(0, 0.62, 0.05));
+      }
+    } else {
+      if (camEquip) camToBoat(); // a corda foi solta: volta para o barco
+      cam.update(dtReal, rPos, rRot, Math.hypot(boat.vel.x, boat.vel.z));
+    }
     fx.water = physWater; // as partículas param na mesma superfície da física (com a esteira)
     if (!paused) fx.update(dtReal, boat, water);
     exhaustFx.update(dtReal, vis.exhausts, T.turbine, boat.vel, paused);

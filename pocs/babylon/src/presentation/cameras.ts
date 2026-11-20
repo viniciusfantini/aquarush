@@ -19,6 +19,8 @@ export class BoatCamera {
   private lastY = 0;
   private idle = 0;
   private first = true;
+  /** zoom da roda do mouse (multiplica a distância da câmera externa; no cockpit, o campo de visão) — não volta sozinho */
+  zoom = 1;
   /** olhos do piloto (local do barco) para a câmera de cockpit */
   headLocal = new Vector3(0.5, 1.24, -0.06);
   /** escala da distância da câmera externa (barcos menores = mais perto) */
@@ -43,6 +45,11 @@ export class BoatCamera {
     window.addEventListener("pointercancel", stop, true);
     window.addEventListener("blur", stop);
     canvas.addEventListener("lostpointercapture", stop);
+    // roda do mouse: aproxima/afasta (v0.75)
+    canvas.addEventListener("wheel", (e) => {
+      e.preventDefault();
+      this.zoom = clamp(this.zoom * Math.exp(e.deltaY * 0.0012), 0.35, 4);
+    }, { passive: false });
     window.addEventListener("pointermove", (e) => {
       if (!this.dragging) return;
       if (e.pointerType === "mouse" && e.buttons === 0) { stop(); return; } // o botão já foi solto (o pointerup se perdeu)
@@ -68,8 +75,9 @@ export class BoatCamera {
     return this.mode;
   }
 
-  /** Atualiza a câmera a partir da pose (interpolada) do barco. */
-  update(dt: number, boatPos: Vector3, boatRot: Quaternion, speed: number): void {
+  /** Atualiza a câmera a partir da pose (interpolada) do barco — ou de outro alvo (boia, parasail), com `head` = olhos
+   *  no local do alvo (`head0`) para a 1ª pessoa (padrão: a cabeça do piloto, `headLocal`). */
+  update(dt: number, boatPos: Vector3, boatRot: Quaternion, speed: number, head0?: Vector3): void {
     const m = new Matrix();
     boatRot.toRotationMatrix(m);
     const fwd = Vector3.TransformNormal(new Vector3(0, 0, 1), m);
@@ -88,8 +96,8 @@ export class BoatCamera {
       this.cam.fov = 0.95 + clamp(speed / 25, 0, 1) * 0.12;
       const flat = new Vector3(fwd.x, 0, fwd.z).normalize();
       const yaw = Math.atan2(flat.x, flat.z) + this.orbitYaw;
-      const dist = (11 + clamp(speed / 22, 0, 1) * 2.5) * this.distScale;
-      const height = (3.3 + this.orbitPitch * 8) * (0.4 + 0.6 * this.distScale);
+      const dist = (11 + clamp(speed / 22, 0, 1) * 2.5) * this.distScale * this.zoom;
+      const height = (3.3 + this.orbitPitch * 8) * (0.4 + 0.6 * this.distScale) * Math.pow(this.zoom, 0.8);
       const desired = new Vector3(boatPos.x - Math.sin(yaw) * dist, boatPos.y + height, boatPos.z - Math.cos(yaw) * dist);
       const k = this.first ? 1 : 1 - Math.exp(-dt * 6);
       this.pos = Vector3.Lerp(this.pos, desired, k);
@@ -105,8 +113,8 @@ export class BoatCamera {
       this.cam.upVector = Vector3.Up();
       this.cam.setTarget(this.look);
     } else {
-      this.cam.fov = 1.15;
-      const head = Vector3.TransformCoordinates(this.headLocal, Matrix.Compose(Vector3.One(), boatRot, boatPos));
+      this.cam.fov = clamp(1.15 * Math.pow(this.zoom, 0.6), 0.35, 1.6);
+      const head = Vector3.TransformCoordinates(head0 ?? this.headLocal, Matrix.Compose(Vector3.One(), boatRot, boatPos));
       this.cam.position.copyFrom(head);
       const yawQ = Quaternion.RotationAxis(Vector3.Up(), this.orbitYaw * 1.5);
       const pitchQ = Quaternion.RotationAxis(Vector3.Right(), 0.2 + this.orbitPitch * 0.6);

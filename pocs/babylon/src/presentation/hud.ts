@@ -463,7 +463,7 @@ export class Hud {
     }
   }
 
-  setCamera(name: string): void { this.cam.textContent = name === "cockpit" ? "COCKPIT" : "EXTERNA"; }
+  setCamera(name: string, label?: string): void { this.cam.textContent = label ?? (name === "cockpit" ? "COCKPIT" : "EXTERNA"); }
   /** Barco afundado: só o essencial na tela (sem chips de alerta nem avisos que já não importam). */
   private quiet = false;
   setQuiet(on: boolean): void { this.quiet = on; document.body.classList.toggle("sunk-quiet", on); }
