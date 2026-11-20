@@ -47,7 +47,6 @@ const results: { test: string; metric: string; value: string; ok: boolean; expec
 // Limitações conhecidas e registradas no README: aparecem como KNOWN e não quebram o exit code.
 const KNOWN: Record<string, string> = {
   "pitch em velocidade final (°)": "modelo de 6 pontos planeia com ~0.6° (lancha real: 3–5°) — ver README/limitações",
-  "roll máx com ondas fortes (°)": "desde a v0.43 a lancha embarca 200–330 L nesse cenário (curva a 80 % no mar forte) e o peso deixa os picos em ~40–42° — não emborca (ver README/limitações)",
 };
 const check = (test: string, metric: string, value: number, lo: number, hi: number, unit = "", digits = 2) => {
   const ok = value >= lo && value <= hi;
@@ -555,33 +554,35 @@ for (const [label, thr] of [["baixa", 0.25], ["alta", 1]] as const) {
   run(b, water, 2, emptyInput());
   const m0 = b.totalMass;
   b.hullDamage = 0.17; // pedra a ~15 km/h
-  let maxL = 0, pumped = false, alarm = false, maxFlow = 0, pumpBatA = 0, inflow0 = 0;
+  let maxL = 0, pumped = false, alarm = false, warn = false, maxFlow = 0, pumpBatA = 0, inflow0 = 0;
   run(b, water, 120, emptyInput(), openWater, (t) => {
-    const T = b.telemetry; maxL = Math.max(maxL, T.bilgeL); pumped ||= T.bilgePump; alarm ||= T.bilgeAlarm; maxFlow = Math.max(maxFlow, T.bilgeFlowLps);
+    const T = b.telemetry; maxL = Math.max(maxL, T.bilgeL); pumped ||= T.bilgePump; alarm ||= T.bilgeAlarm; warn ||= T.bilgeWarn; maxFlow = Math.max(maxFlow, T.bilgeFlowLps);
     if (t < 0.5) inflow0 = T.bilgeInflowLps;
     if (T.bilgePump) pumpBatA = Math.min(pumpBatA, T.batteryA);
   });
   check("porão", "casco 17 %: entrada pelo furo, orifício Cd·A·√(2gh) (L/s)", inflow0, 0.35, 0.6, "L/s", 2);
   check("porão", "a boia liga a bomba sozinha", pumped ? 1 : 0, 1, 1, "", 0);
   check("porão", "casco 17 %: a bomba dá conta, máximo no porão (L)", maxL, 4, 12, "L", 1);
-  check("porão", "vazão da bomba: 1500 GPH na curva com ~0,8 m de coluna (L/s)", maxFlow, 1.0, 1.3, "L/s", 2);
-  check("porão", "jato: velocidade de saída na mangueira de 1 1/8\" (m/s)", Math.hypot(b.telemetry.bilgeJetVel.x, b.telemetry.bilgeJetVel.y, b.telemetry.bilgeJetVel.z), 0, 2.2, "m/s", 2);
-  check("porão", "alarme sonoro/luminoso com a bomba jogando água fora", alarm ? 1 : 0, 1, 1, "", 0);
-  check("porão", "bomba ligada: corrente na bateria (A)", pumpBatA, -7, -4, "A", 1);
+  // (v0.77.2: bomba de 2500 GPH — antes 1500 — para esvaziar mais rápido; mangueira de 1 1/2")
+  check("porão", "vazão da bomba: 2500 GPH na curva com ~0,8 m de coluna (L/s)", maxFlow, 1.6, 2.2, "L/s", 2);
+  check("porão", "jato: velocidade de saída na mangueira de 1 1/2\" (m/s)", Math.hypot(b.telemetry.bilgeJetVel.x, b.telemetry.bilgeJetVel.y, b.telemetry.bilgeJetVel.z), 0, 2.2, "m/s", 2);
+  check("porão", "pouca água com a bomba dando conta: aviso laranja", warn ? 1 : 0, 1, 1, "", 0);
+  check("porão", "pouca água com a bomba dando conta: SEM alarme sonoro", alarm ? 1 : 0, 0, 0, "", 0);
+  check("porão", "bomba ligada: corrente na bateria (A)", pumpBatA, -10, -6, "A", 1);
   // furo maior que a bomba: a água acumula, pesa e afunda o barco (e o furo fica mais fundo)
   const z = new Speedboat(SPEEDBOAT, v3(0, 0.25, 0));
   run(z, water, 2, emptyInput());
   const y0 = z.pos.y;
-  z.hullDamage = 0.6;
+  z.hullDamage = 0.85; // (com a bomba de 2500 GPH um furo de 60 % já não vence: o cenário usa 85 %)
   run(z, water, 120, emptyInput());
-  check("porão", "casco 60 %: entra mais que a bomba tira, água em 2 min (L)", z.telemetry.bilgeL, 40, 300, "L", 0);
+  check("porão", "casco 85 %: entra mais que a bomba tira, água em 2 min (L)", z.telemetry.bilgeL, 40, 300, "L", 0);
   check("porão", "a água pesa no barco (kg a mais)", z.totalMass - m0, z.telemetry.bilgeL - 1, z.telemetry.bilgeL + 1, "kg", 1);
   check("porão", "barco mais fundo com a água (cm)", (y0 - z.pos.y) * 100, 0.3, 15, "cm", 1);
   check("porão", "água alta: alarme", z.telemetry.bilgeAlarm ? 1 : 0, 1, 1, "", 0);
   const big = new Speedboat(SPEEDBOAT, v3(0, 0.25, 0));
   big.hullDamage = 1;
   run(big, water, 60, emptyInput());
-  check("porão", "casco 100 %: 1 min (L)", big.telemetry.bilgeL, 100, 300, "L", 0);
+  check("porão", "casco 100 %: 1 min, entra mais que a bomba tira (L)", big.telemetry.bilgeL, 60, 300, "L", 0);
   // água por cima da borda/espelho
   const over = (waves: number, inp: VehicleInput, secs: number) => {
     const w = mkWater(waves);
@@ -1798,17 +1799,18 @@ for (const [label, thr] of [["baixa", 0.25], ["alta", 1]] as const) {
   let tUp = -1, t = 0;
   go(r, 14, { throttle: 0.5 }, () => { t += DT; if (tUp < 0 && r.wb.state === "riding") tUp = t; });
   check("wakeboard", "acelerando: ela levanta e fica em pé (s)", tUp, 2, 12, "s", 1);
-  const kinds = new Set<string>(); let lj = r.wb.jumps, spd = 0, n = 0, inwardJ = 0;
+  const kinds = new Set<string>(); let lj = r.wb.jumps, spd = 0, n = 0, inwardJ = 0, measured = 0;
+  const offHist: number[] = []; // lado da esteira nos últimos ~0,8 s (o pulo é perto do centro: o lado de onde ela VEIO)
   go(r, 60, { throttle: 0.5 }, () => {
+    offHist.push(r.wb.offset); if (offHist.length > 96) offHist.shift();
     if (r.wb.jumps !== lj) {
       lj = r.wb.jumps; kinds.add(r.wb.lastTrick);
-      // na decolagem: ela ia para o centro da esteira? (velocidade lateral em relação ao barco contra o lado em que está)
       const rr = r.b.right, rl = Math.hypot(rr.x, rr.z), vl = ((r.wb.vel.x - r.b.vel.x) * rr.x + (r.wb.vel.z - r.b.vel.z) * rr.z) / rl;
-      if (vl * r.wb.offset < 0) inwardJ++;
+      if (offHist.length >= 96) { measured++; if (vl * offHist[0] < 0) inwardJ++; } // (só com 0,8 s de histórico)
     }
     if (r.wb.state === "riding") { spd += r.wb.speed; n++; }
   });
-  check("wakeboard", "pula só cortando para DENTRO da esteira (fração dos pulos)", r.wb.jumps ? inwardJ / r.wb.jumps : 0, 0.99, 1, "", 2);
+  check("wakeboard", "pula só cortando para DENTRO da esteira (fração dos pulos)", measured ? inwardJ / measured : 0, 0.99, 1, "", 2);
   check("wakeboard", "andando sozinha: pula na esteira (pulos em 74 s)", r.wb.jumps, 3, 60, "", 0);
   check("wakeboard", "pulo mais alto (m)", r.wb.maxAir, 0.3, 2.0, "m", 2);
   check("wakeboard", "manobras diferentes no ar", kinds.size, 2, 3, "", 0);

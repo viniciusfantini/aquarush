@@ -71,6 +71,7 @@ export interface AudioState {
   starterRpm?: number;    // rotação do arranque (cai com a bateria fraca)
   pullStart?: boolean;    // partida na corda (sem motor de arranque elétrico)
   bilgeAlarm?: boolean;   // alarme de porão (bipe intermitente)
+  stallWarn?: boolean;    // aviso de estol (aeronaves): buzina contínua de estol
   bilgeFlowLps?: number;  // jato da bomba de porão caindo na água
   bilgePumpOn?: boolean;  // motor da bomba de porão girando (mesmo seca)
   bilgeWaterL?: number;   // água no porão (a bomba seca gira mais leve e aguda)
@@ -162,6 +163,7 @@ export class EngineAudio {
   private solenoidT = 0;
   private pumpGain!: GainNode;
   private alarmGain!: GainNode;
+  private stallGain!: GainNode;
   private bilgeGain!: GainNode;
   private bilgeMotorOsc!: OscillatorNode;
   private bilgeMotorGain!: GainNode;
@@ -434,6 +436,14 @@ export class EngineAudio {
     const alLP = ctx.createBiquadFilter(); alLP.type = "lowpass"; alLP.frequency.value = 7000;
     this.alarmGain = ctx.createGain(); this.alarmGain.gain.value = 0;
     al.connect(alLP).connect(this.alarmGain).connect(this.master); al.start();
+    // ---- buzina de ESTOL (aeronaves): tom contínuo e áspero, como o "stall horn" de palheta ----
+    {
+      const o1 = ctx.createOscillator(); o1.type = "sawtooth"; o1.frequency.value = 760;
+      const o2 = ctx.createOscillator(); o2.type = "square"; o2.frequency.value = 768;
+      const bp = ctx.createBiquadFilter(); bp.type = "bandpass"; bp.frequency.value = 1500; bp.Q.value = 1.4;
+      this.stallGain = ctx.createGain(); this.stallGain.gain.value = 0;
+      o1.connect(bp); o2.connect(bp); bp.connect(this.stallGain).connect(this.master); o1.start(); o2.start();
+    }
     // ---- jato da bomba de porão caindo na água (chiado de água) ----
     const bgBP = ctx.createBiquadFilter(); bgBP.type = "bandpass"; bgBP.frequency.value = 1400; bgBP.Q.value = 0.7;
     this.bilgeGain = ctx.createGain(); this.bilgeGain.gain.value = 0;
@@ -576,6 +586,8 @@ export class EngineAudio {
       this.cautionOsc.frequency.setValueAtTime(ph < 0.18 ? 950 : 720, t);
       this.cautionG.gain.setTargetAtTime(m * (onA ? 0.045 : 0), t, 0.01);
     }
+    // buzina de estol: liga com o aviso de estol da asa (lido da telemetria)
+    this.stallGain.gain.setTargetAtTime(m * (st.stallWarn ? 0.05 : 0), t, 0.02);
     // alarme de porão: 0,25 s ligado a cada 0,6 s
     this.alarmGain.gain.setTargetAtTime(m * (st.bilgeAlarm && t % 0.6 < 0.25 ? 0.035 : 0), t, 0.005);
     this.bilgeGain.gain.setTargetAtTime(m * Math.min(0.06, 0.05 * (st.bilgeFlowLps ?? 0)), t, 0.1);

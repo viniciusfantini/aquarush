@@ -258,8 +258,8 @@ export class TowTube {
     const rv = sub(this.riderVel, cur);
     this.riderVel = sub(this.riderVel, scale(v3(rv.x, 0, rv.z), Math.min(1, dt * 1.6)));
     const d = sub(this.pos, this.riderPos), dist = Math.hypot(d.x, d.z);
-    const tubeSlow = Math.hypot(this.vel.x, this.vel.z) < 1.5;
-    this.swimming = tubeSlow && dist > this.p.radius + 0.5;
+    // v0.77.2: ela SEMPRE nada de volta para a boia (antes só com a boia quase parada); subir continua exigindo a boia devagar
+    this.swimming = dist > this.p.radius + 0.5;
     let sw = v3();
     if (this.swimming) { sw = v3(d.x / dist * SWIM_MS, 0, d.z / dist * SWIM_MS); this.riderYaw = Math.atan2(d.x, d.z); }
     const slide = Math.hypot(this.riderVel.x, this.riderVel.z);

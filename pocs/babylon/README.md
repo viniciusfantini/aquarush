@@ -96,6 +96,22 @@ A lancha é um **corpo rígido 6DOF** (massa seca de 1030 kg + gasolina, ocupant
 
 > Referência completa da lógica elétrica e dos motores: [`docs/SISTEMAS_ELETRICOS_E_MOTORES.md`](../../docs/SISTEMAS_ELETRICOS_E_MOTORES.md).
 
+## Bombas de porão, alarmes, estol, nado de volta, prancha nos pés e lastro no Y (v0.77.2)
+
+- Bombas: `pumpLph` 5700 → 9500 (AR-6, AR-9, AR-10 e AR-8), `pumpA` 8, saída de 1 1/2" (`outletAreaM2` 1,14e-3);
+  aeronaves 2000 → 3500 L/h. Medido: 1,87 L/s com ~0,8 m de coluna (antes 1,15), jato 1,6 m/s, 8,3 A.
+- `bilgeWarn` (aviso laranja fixo, sem som: bomba trabalhando ou > 15 L) × `bilgeAlarm` (som + pisca: > 120 L, ou > 30 L
+  entrando mais do que a bomba tira). Critérios: furo de 17 % → aviso sim, alarme não; furo de 85 % (antes 60 %: com a
+  bomba nova ele já não vence) → alarme.
+- Buzina de estol (`audio.ts`, `stallGain`: duas ondas a ~760 Hz, passa-faixa): com `telemetry.stallWarn` no ar.
+- Nado de volta: `TowTube.updateRider` nada sempre atrás da boia (subir só com a boia < 1 m/s); `Wakeboard` caída e
+  engatada nada na direção do manete (1,1 m/s).
+- Prancha do wakeboard filha do corpo (`boardRoot.parent = rider.group`, sob as solas, girada −90°): uma peça só.
+- Painel Y (`SystemsPanelCaps.ballast`, `setBallast`): chave de três posições ENCHER / PARAR / ESVAZIAR (LED com as
+  bombas trabalhando) e leitura `██████░░░░ 64 % · 480 L · enchendo · BB 70% · BE 70% · PROA 51%`; telemetria nova
+  `ballastL`, `ballastMaxL`, `ballastTanks`, `ballastPump`.
+- Teste 6 (roll com ondas fortes): 41,7° → 31,5° (menos água no porão com a bomba nova) — saiu do `KNOWN`.
+
 ## Wakeboard mais realista: twin-tip, postura e manobras (v0.77.1)
 
 - Prancha (`buildBoardMesh` em `wakeboardVis.ts`): ribbon de 40 seções, 1,38 × 0,43 m, cantos com raio 0,10 m, 3,2 cm,
@@ -1011,7 +1027,7 @@ Limitação: é uma síntese aproximada, não uma gravação. Validar o timbre d
 | Lancha pantaneira AR-P (v0.69–0.69.2) | frio sem primer não pega (falha "prime"); 3 bombadas pega em 1,2 s; 9 bombadas afoga; mistura em corte não pega e apaga o motor ligado; um magneto: −103 rpm a pleno; mistura 0,8: −5,6 L/h; magnetos OFF param; trim sem ação (0°, 0 A); P frio pega; largada a 60 % pega em 2,2 s; lenta empurrando 4,5 km/h, sempre em F, borda 0,38 m; a toda 88,4 km/h a 2434 rpm, 0→40 4,4 s; sem cavitação/ventilação; pedindo R segue a 89 km/h para a frente; curva a toda derrapando 3,6 m/s, 11,1°/s, roll 3,2°, não vira; motor desligado com os lemes todos: 0,0°; partida sem N; 50 % + lemes quase parado: 20,2°/s; refrigerado a ar; barranco de lama/capim: 12,6 s no seco, avaria 2 %, 30 km/h; carretinha da caminhonete |
 | Moto aquática AR-J (v0.67–0.67.1) | compressor 1,04 bar a toda, 0,007 bar na lenta; luz do iBB: apagada em F, FREIO freando a toda, RÉ parada em R, NEUTRO em N; navegador: S segurado a 107 km/h → FREIO, 53 km/h em 1,5 s; soltar → F; toque → N; parada: CG −0,03 m da água, borda 0,25 m; a toda 108,3 km/h a 7880 rpm, 0→60 2,7 s, 0→100 7,1 s, 72 L/h; curva a toda 29,2°/s sem virar; iBB de 102 km/h a < 5 km/h em 4,2 s e depois ré; N com o guidão todo: 0,2° em 6 s; lenta + guidão 10,6°/s; N acelerado: empuxo 0, rotor a 7478 rpm; no ar: empuxo 0, giro 7951 rpm; ECO 55 % / 89,9 km/h; lotada 101,5 km/h; cordão solto não liga, puxado desliga; START pega em 1,5 s (60 %); central dorme em 30 s; casco selado 40 s lotada em ondas fortes: 0,0 L; sifão 6,1 L em 30 s (= contrato); virada: desvira em 4,5 s, piloto a bordo com o cordão, liga de novo; carretinha 3,9 m no carro |
 
-Resultado: **872/874 OK + 2 KNOWN** (v0.77.1). Na v0.10, o peso do piloto na posição real (boreste, acima do CG) aumentou o roll em curva com ondas fortes; o `bankCoef` foi para 1800 e o `rollDamping` para 15000, com 1 limitação conhecida (abaixo). Na v0.2 a hélice foi para 0,5 m atrás do espelho, como no modelo visual, e o esterço máximo em alta velocidade caiu de 13° para 11°.
+Resultado: **874/875 OK + 1 KNOWN** (v0.77.2). Na v0.10, o peso do piloto na posição real (boreste, acima do CG) aumentou o roll em curva com ondas fortes; o `bankCoef` foi para 1800 e o `rollDamping` para 15000, com 1 limitação conhecida (abaixo). Na v0.2 a hélice foi para 0,5 m atrás do espelho, como no modelo visual, e o esterço máximo em alta velocidade caiu de 13° para 11°.
 
 ### Navegador (Chrome, Windows 11, WebGL2, `q=med`, ~1370×896)
 
@@ -1030,7 +1046,7 @@ Resultado: **872/874 OK + 2 KNOWN** (v0.77.1). Na v0.10, o peso do piloto na pos
 3. **Bundle grande**: 6,6 MB (1,5 MB gzip) no arquivo principal e 7,7 MB no total (v0.48.2), porque importa `@babylonjs/core` inteiro. Dá para otimizar com imports por caminho na fase P5.
 4. Em `low` não há reflexo planar (só o céu). Sem dia/noite nem chuva (o vento existe desde a v0.36, sem ondas de vento no lago).
 5. Colisão por pontos: um objeto fino entre dois pontos de contato pode atravessar o costado.
-6. **Rolagem em ondas fortes com água no porão** (v0.46.1, KNOWN no teste 6): desde a v0.43 a lancha embarca 200–330 L nesse cenário (curva a 80 % no mar forte) e o peso extra deixa os picos de rolagem em ~40–42° (sem água: 32,9°). Ela não emborca. O GDD não fixa número para o teste 6; o limite de 40° era nosso.
+6. ~~**Rolagem em ondas fortes com água no porão**~~ — **resolvida na v0.77.2** (bomba de 2500 GPH: 31,5°). Histórico (v0.46.1, era KNOWN no teste 6): desde a v0.43 a lancha embarca 200–330 L nesse cenário (curva a 80 % no mar forte) e o peso extra deixa os picos de rolagem em ~40–42° (sem água: 32,9°). Ela não emborca. O GDD não fixa número para o teste 6; o limite de 40° era nosso.
 7. **AR-9 sem chave de paralelo de baterias** (v0.47.1): cada V8 tem o seu banco; com o banco de boreste zerado só o motor de bombordo pega e não há como ligar os dois bancos (barcos reais têm a chave de emergência). O jump start liga só no banco de bombordo.
 8. **Painel 3D da AR-9 e da AR-10 é o da AR-6** (velocímetro até 100 km/h e conta-giros). Os instrumentos certos (dois conta-giros; N1, EGT, torque, N2, óleo) estão só no HUD.
 9. **Turbina**: modelo de desempenho simplificado (curvas de N1, EGT e torque calibradas para o comportamento esperado, não tiradas de um manual de turbina). O sistema de 24 V é o mesmo modelo elétrico de 12 V com a escala ×2/÷2 na telemetria. A hélice de superfície usa a imersão como única variável (sem modelo de ventilação por pá); o trim + não deixa a AR-10 mais rápida (mesma causa da limitação 2).

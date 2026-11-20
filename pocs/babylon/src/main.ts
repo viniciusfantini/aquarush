@@ -63,7 +63,7 @@ import { Hud } from "./presentation/hud.ts";
 import { EngineAudio } from "./presentation/audio.ts";
 
 installI18n(); // inglês: traduz o DOM, as escritas futuras e os letreiros 3D (antes de montar a cena e o HUD)
-const BUILD = "poc-babylon 0.77.1";
+const BUILD = "poc-babylon 0.77.2";
 /** Escala visual da rotação da hélice (proporcional ao RPM, abaixo do limite estroboscópico). */
 const PROP_VISUAL_SCALE = 0.12;
 
@@ -720,7 +720,7 @@ const boot = async () => {
       display: isBote ? "grey" : isJet || flyer ? "glass" : isAir ? "grey" : V.boat.units.length > 1 ? "vfd" : "lcd",
       trim: isAir || flyer ? null : trimOptsFor(V.P), choke: !!V.P.carbureted, bilgePump: V.P.bilge.pumpLph > 0, lights: isBote ? "LANTERNA" : isJet || isAir || flyer ? "" : "LUZES",
       startStop: !!V.P.startStop, batterySwitch: !V.P.startStop, fuelValve: !V.P.startStop, ecoMode: !!V.P.ecoThrottle, horn: isBote || isJet ? "apito" : "buzina",
-      annunciators: flyer ? "efi" : isAir, aircraft: !!V.P.aircraft, efi: !!V.P.efi, leveler: !!V.P.wing?.leveler });
+      annunciators: flyer ? "efi" : isAir, aircraft: !!V.P.aircraft, efi: !!V.P.efi, leveler: !!V.P.wing?.leveler, ballast: !!V.P.ballast });
     lights = false; input.setLights(false);
     setNavLights(V.vis, false); V.dinghy?.setLantern(false);
     hud.setLights(false, isBote ? "LANTERNA" : "LUZES");
@@ -896,6 +896,12 @@ const boot = async () => {
       sysToast(!on && was !== "off" && b.engine === "off" ? `LANE ${L} desligada e a outra também: o motor parou`
         : !on && b.engine === "running" ? `LANE ${L} desligada: o motor segue com a outra central (sem redundância)`
         : on ? `LANE ${L} ligada${b.systems.supplyV(2) > 9 ? " — autoteste da central" : " — sem tensão"}` : `LANE ${L} desligada`);
+    },
+    setBallast: (cmd) => {
+      const b = V.boat;
+      b.ballastCmd = cmd === "fill" ? 1 : cmd === "drain" ? -1 : 0;
+      if (b.ballastCmd !== 0) lastBallastDir = b.ballastCmd;
+      sysToast(cmd === "fill" ? "Bombas do lastro ENCHENDO os tanques — o casco afunda e a onda cresce" : cmd === "drain" ? "Bombas do lastro ESVAZIANDO os tanques" : `Bombas do lastro paradas (${(b.ballastFrac * 100).toFixed(0)} %)`);
     },
     setLeveler: (on) => {
       V.boat.levelerOn = on;
@@ -1320,7 +1326,7 @@ const boot = async () => {
       ch.classList.toggle("show", show);
       if (show) {
         const st = wkb.state === "air" ? `NO AR · ${(Math.max(0, wkb.pos.y - physWater.getHeight(wkb.pos.x, wkb.pos.z))).toFixed(1)} m` : wkb.state === "riding" ? `em pé · ${(wkb.speed * 3.6).toFixed(0)} km/h · corda ${wkb.tension.toFixed(0)} N`
-          : wkb.state === "rising" ? "levantando" : wkb.state === "water" ? "na água segurando o manete" : wkb.state === "fallen" ? (wkb.swimming ? "nadando até o píer" : "CAIU · passe a corda perto dela") : "";
+          : wkb.state === "rising" ? "levantando" : wkb.state === "water" ? "na água segurando o manete" : wkb.state === "fallen" ? (wkb.swimming ? (wkb.hooked ? "CAIU · nadando até o manete" : "nadando até o píer") : "CAIU · passe a corda perto dela") : "";
         const txt = `WAKEBOARD ${wkb.hooked ? "ENGATADO" : "SOLTO"}${st ? " · " + st : ""} · pulos ${wkb.jumps}`;
         if (ch.textContent !== txt) ch.textContent = txt;
         ch.classList.toggle("warn", wkb.state === "fallen");
@@ -1684,7 +1690,7 @@ const boot = async () => {
     if (T.gear !== lastGear) { audio.clunk(T.gear !== "N"); lastGear = T.gear; }
     audio.update({
       rpm: T.rpm, throttle: T.throttle, speed: Math.hypot(boat.vel.x, boat.vel.z), boil: Math.max(T.cavitation, 1 - T.ventilation),
-      inGear: T.gear !== "N", propInWater: T.propImmersion > 0.5, revLimiter: T.revLimiter, cockpit: cam.mode === "cockpit", engine: T.engine, trimMotorA: T.trimMotorA, trimRelay: T.trimRelay, bilgeAlarm: mode === "game" && T.bilgeAlarm && !T.capsized && !T.sunk, bilgeFlowLps: T.bilgeFlowLps, bilgePumpOn: T.bilgePump && !T.sunk, bilgeWaterL: T.bilgeL, windlassA: T.windlassA, apparentWind: T.apparentWind, anchorRelay: T.anchorRelay, buzzer: T.buzzer, starterRpm: T.starterRpm, pullStart: T.pullStart,
+      inGear: T.gear !== "N", propInWater: T.propImmersion > 0.5, revLimiter: T.revLimiter, cockpit: cam.mode === "cockpit", engine: T.engine, trimMotorA: T.trimMotorA, trimRelay: T.trimRelay, bilgeAlarm: mode === "game" && T.bilgeAlarm && !T.capsized && !T.sunk, stallWarn: mode === "game" && !!P.wing && T.stallWarn && T.airborne, bilgeFlowLps: T.bilgeFlowLps, bilgePumpOn: T.bilgePump && !T.sunk, bilgeWaterL: T.bilgeL, windlassA: T.windlassA, apparentWind: T.apparentWind, anchorRelay: T.anchorRelay, buzzer: T.buzzer, starterRpm: T.starterRpm, pullStart: T.pullStart,
       supercharger: V.kind === "jetski" || V.kind === "wig", // (ekranoplano: o assobio do turbo)
       airProp: V.kind === "airboat" || V.kind === "wig" || V.kind === "anfibio",
       propBladeHz: V.kind === "wig" || V.kind === "anfibio" ? (T.rpm / (P.propGear ?? 1) / 60) * 3 : undefined, // 3 pás depois da redução

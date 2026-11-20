@@ -200,6 +200,11 @@ export class Wakeboard {
       if (this.state === "water" && this.tension > 200 && this.speed > P.riseV) { this.state = "rising"; this.rise = 0; }
       // caída: nada até o píer se ele estiver perto e ninguém reboca
       this.swimming = false;
+      // caída com a corda engatada: SEMPRE nada na direção do manete (para pegá-lo quando o barco passar devagar)
+      if (this.state === "fallen" && b) {
+        const dx = this.handle.x - this.pos.x, dz = this.handle.z - this.pos.z, dd = Math.hypot(dx, dz);
+        if (dd > 0.8) { this.swimming = true; this.yaw = Math.atan2(dx, dz); F = add(F, scale(sub(v3(dx / dd * SWIM_MS, 0, dz / dd * SWIM_MS), vh), M * 2)); }
+      }
       if (this.state === "fallen" && !b && this.nearPier(40)) {
         const L = this.waitPos(), dx = L.x - this.pos.x, dz = L.z - 1 - this.pos.z, dd = Math.hypot(dx, dz);
         if (dd > 2.5) { this.swimming = true; this.yaw = Math.atan2(dx, dz); F = add(F, scale(sub(v3(dx / dd * SWIM_MS, 0, dz / dd * SWIM_MS), vh), M * 2)); }

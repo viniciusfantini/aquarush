@@ -303,10 +303,10 @@ export const SPEEDBOAT: SpeedboatParams = {
   // bomba de porão de ~1100 GPH (≈ 4200 L/h) com boia automática; saída no costado de boreste, à ré
   // bomba de porão de ~1500 GPH (≈ 5700 L/h) com boia automática; saída no costado de boreste, à ré.
   // Levantando ~0,8 m até a saída ela entrega ~1,15 L/s (a vazão que a bomba tinha antes da curva vazão × altura)
-  bilge: { pos: v3(0, -0.32, -1.9), maxL: 8200, pumpLph: 5700, pumpA: 5.5, outlet: v3(1.13, 0.2, -2.2), areaM2: 7.0, holeMaxM2: 0.004, bowRise: 0.2, transomY: 0.38, transomW: 0.7,
+  bilge: { pos: v3(0, -0.32, -1.9), maxL: 8200, pumpLph: 9500, pumpA: 8, outlet: v3(1.13, 0.2, -2.2), areaM2: 7.0, holeMaxM2: 0.004, bowRise: 0.2, transomY: 0.38, transomW: 0.7,
     // poço ~150 L sob o piso; piso do cockpit a 0,02 m; bomba para de bombear com ~2,7 m de coluna;
     // mangueira de 1 1/8" (28,6 mm). Capacidade = volume alagável do casco (~8,9 m³ até a borda − estrutura/espuma)
-    sumpL: LANCHA_UNDERFLOOR.liters[LANCHA_UNDERFLOOR.liters.length - 1], floorY: 0.02, floodCenter: v3(0, 0, -0.65), floodLen: 3.6, floodHalfW: 0.97, scupperM2: 2 * 1.14e-3 /* 2 drenos de 1,5" */, scupperFromStern: 0.55, shutoffHeadM: 2.7, outletAreaM2: 6.42e-4, capsizeAirFrac: 0.35, ventM2: 2e-5,
+    sumpL: LANCHA_UNDERFLOOR.liters[LANCHA_UNDERFLOOR.liters.length - 1], floorY: 0.02, floodCenter: v3(0, 0, -0.65), floodLen: 3.6, floodHalfW: 0.97, scupperM2: 2 * 1.14e-3 /* 2 drenos de 1,5" */, scupperFromStern: 0.55, shutoffHeadM: 2.7, outletAreaM2: 1.14e-3 /* mangueira de 1 1/2" (bomba de 2500 GPH) */, capsizeAirFrac: 0.35, ventM2: 2e-5,
     underFloor: LANCHA_UNDERFLOOR },
   // âncora tipo Danforth ~7 kg, 50 m de cabo, molinete elétrico de ~60 A
   anchor: { roller: v3(0, 0.62, 3.12), rodeMax: 50, rateOut: 0.8, rateIn: 0.5, motorA: 60, holdN: 4000 },
@@ -527,8 +527,8 @@ export const RAPIDA: SpeedboatParams = {
   bunkPoints: [-3.7, -2.0, 0, 2.0].flatMap((z) => [v3(0, -0.52, z), v3(-0.6, -0.4, z), v3(0.6, -0.4, z)]),
   gunwaleY: 0.5,
   // sterndrive: espelho inteiro (sem rebaixo de motor de popa); porão sob o piso + praça de máquinas
-  bilge: { pos: v3(0, -0.38, -2.6), maxL: 10000, pumpLph: 5700, pumpA: 5.5, outlet: v3(1.2, 0.22, -3.0), areaM2: 5.5, holeMaxM2: 0.005, bowRise: 0.25, transomY: 0.5, transomW: 0.4,
-    sumpL: 900, floorY: 0.06, floodCenter: v3(0, 0, -1.4), floodLen: 3.4, floodHalfW: 0.9, scupperM2: 2 * 1.14e-3, scupperFromStern: 0.6, shutoffHeadM: 2.7, outletAreaM2: 6.42e-4, capsizeAirFrac: 0.35, ventM2: 2e-5 },
+  bilge: { pos: v3(0, -0.38, -2.6), maxL: 10000, pumpLph: 9500, pumpA: 8, outlet: v3(1.2, 0.22, -3.0), areaM2: 5.5, holeMaxM2: 0.005, bowRise: 0.25, transomY: 0.5, transomW: 0.4,
+    sumpL: 900, floorY: 0.06, floodCenter: v3(0, 0, -1.4), floodLen: 3.4, floodHalfW: 0.9, scupperM2: 2 * 1.14e-3, scupperFromStern: 0.6, shutoffHeadM: 2.7, outletAreaM2: 1.14e-3 /* mangueira de 1 1/2" (bomba de 2500 GPH) */, capsizeAirFrac: 0.35, ventM2: 2e-5 },
   anchor: { roller: v3(0, 0.72, 4.42), rodeMax: 50, rateOut: 0.8, rateIn: 0.5, motorA: 60, holdN: 6000 },
 
   engines: [{ x: -0.55 }, { x: 0.55 }], // bombordo, boreste
@@ -642,8 +642,8 @@ export const TURBINA: SpeedboatParams = {
   bunkPoints: [-4.3, -2.3, 0, 2.3].flatMap((z) => [v3(0, -0.55, z), v3(-0.6, -0.43, z), v3(0.6, -0.43, z)]),
   gunwaleY: 0.5,
   // cabine fechada: sem cockpit aberto para alagar (só a praça de máquinas e o poço do piloto)
-  bilge: { pos: v3(0, -0.38, -2.8), maxL: 11000, pumpLph: 5700, pumpA: 5.5, outlet: v3(1.22, 0.22, -3.5), areaM2: 2.0, holeMaxM2: 0.005, bowRise: 0.25, transomY: 0.5, transomW: 0.4,
-    sumpL: 1000, floorY: 0.0, floodCenter: v3(0, 0, -0.6), floodLen: 2.0, floodHalfW: 0.5, scupperM2: 0, scupperFromStern: 0.6, shutoffHeadM: 2.7, outletAreaM2: 6.42e-4, capsizeAirFrac: 0.6, ventM2: 1e-5 },
+  bilge: { pos: v3(0, -0.38, -2.8), maxL: 11000, pumpLph: 9500, pumpA: 8, outlet: v3(1.22, 0.22, -3.5), areaM2: 2.0, holeMaxM2: 0.005, bowRise: 0.25, transomY: 0.5, transomW: 0.4,
+    sumpL: 1000, floorY: 0.0, floodCenter: v3(0, 0, -0.6), floodLen: 2.0, floodHalfW: 0.5, scupperM2: 0, scupperFromStern: 0.6, shutoffHeadM: 2.7, outletAreaM2: 1.14e-3 /* mangueira de 1 1/2" (bomba de 2500 GPH) */, capsizeAirFrac: 0.6, ventM2: 1e-5 },
   // molinete elétrico no barramento de 24 V: ~35 A reais (70 A no equivalente 12 V)
   anchor: { roller: v3(0, 0.7, 4.9), rodeMax: 40, rateOut: 0.8, rateIn: 0.5, motorA: 70, holdN: 5000 },
 
@@ -1007,7 +1007,7 @@ export const WIG: SpeedboatParams = {
   bunkPoints: [-2.4, -1.0, 0.4, 1.8].flatMap((z) => [v3(0, -0.48, z), v3(-0.5, -0.42, z), v3(0.5, -0.42, z)]),
   gunwaleY: 0.3,
   // casco fechado de fibra com cabine aberta; bomba de porão pequena
-  bilge: { pos: v3(0, -0.35, -0.2), maxL: 2500, pumpLph: 2000, pumpA: 3, outlet: v3(0.8, 0.0, -1.5), areaM2: 4.5, holeMaxM2: 0.003, bowRise: 0.25, transomY: 0.25, transomW: 0.01,
+  bilge: { pos: v3(0, -0.35, -0.2), maxL: 2500, pumpLph: 3500, pumpA: 4.5, outlet: v3(0.8, 0.0, -1.5), areaM2: 4.5, holeMaxM2: 0.003, bowRise: 0.25, transomY: 0.25, transomW: 0.01,
     sumpL: 40, floorY: -0.3, floodCenter: v3(0, 0, 0), floodLen: 5.0, floodHalfW: 0.7, scupperM2: 0, scupperFromStern: 0.3, shutoffHeadM: 2, outletAreaM2: 2e-4, capsizeAirFrac: 0.5, ventM2: 1e-5 },
   anchor: { roller: v3(0, 0.2, 3.3), rodeMax: 20, rateOut: 0.7, rateIn: 0.35, motorA: 0, holdN: 1200 },
 
@@ -1149,7 +1149,7 @@ export const AMPHIB: SpeedboatParams = {
   ],
   bunkPoints: [-1.8, -0.6, 0.6, 1.8].flatMap((z) => [v3(0, -0.48, z), v3(-0.45, -0.42, z), v3(0.45, -0.42, z)]),
   gunwaleY: 0.35,
-  bilge: { pos: v3(0, -0.35, 0), maxL: 2000, pumpLph: 2000, pumpA: 3, outlet: v3(0.7, 0.0, -1.0), areaM2: 3.5, holeMaxM2: 0.003, bowRise: 0.25, transomY: 0.3, transomW: 0.01,
+  bilge: { pos: v3(0, -0.35, 0), maxL: 2000, pumpLph: 3500, pumpA: 4.5, outlet: v3(0.7, 0.0, -1.0), areaM2: 3.5, holeMaxM2: 0.003, bowRise: 0.25, transomY: 0.3, transomW: 0.01,
     sumpL: 30, floorY: -0.3, floodCenter: v3(0, 0, 0.2), floodLen: 3.5, floodHalfW: 0.6, scupperM2: 0, scupperFromStern: 0.3, shutoffHeadM: 2, outletAreaM2: 2e-4, capsizeAirFrac: 0.5, ventM2: 1e-5 },
   anchor: { roller: v3(0, 0.2, 2.9), rodeMax: 20, rateOut: 0.7, rateIn: 0.35, motorA: 0, holdN: 1200 },
 

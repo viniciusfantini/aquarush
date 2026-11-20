@@ -141,7 +141,10 @@ export interface BoatTelemetry {
   bilgeInflowLps: number; // entrada de água (L/s): furo no casco + água por cima da borda
   bilgePump: boolean;    // bomba de porão ligada
   bilgeFlowLps: number;  // vazão da bomba (L/s) — o jato pelo costado
-  bilgeAlarm: boolean;   // alarme de porão (bomba acionada com água, ou água alta sem bomba)
+  bilgeAlarm: boolean;   // alarme de porão (som + pisca): muita água, ou entrando mais do que a bomba tira
+  bilgeWarn: boolean;    // aviso de porão (laranja fixo, sem som): bomba trabalhando ou um pouco de água
+  /** lastro (lancha de wakeboard): litros no total, capacidade, fração de cada tanque e as bombas (+1 enche, −1 esvazia) */
+  ballastL: number; ballastMaxL: number; ballastTanks: number[]; ballastPump: number;
   bilgeJetPos: Vec3;     // saída da bomba no costado (mundo)
   bilgeJetVel: Vec3;     // velocidade do jato ao sair (mundo, m/s)
   freeboard: number;     // borda livre: menor altura da borda/espelho acima da água (m)
@@ -421,6 +424,11 @@ export class Speedboat {
   private updateBallast(dt: number): void {
     const B = this.params.ballast; if (!B) return;
     while (this.ballastL.length < B.tanks.length) this.ballastL.push(0);
+    const t = this.telemetry;
+    t.ballastMaxL = B.tanks.reduce((a, k) => a + k.maxL, 0);
+    t.ballastL = this.ballastL.reduce((a, v) => a + v, 0);
+    t.ballastTanks = B.tanks.map((k, i) => this.ballastL[i] / k.maxL);
+    t.ballastPump = this.ballastCmd;
     if (!this.ballastCmd) return;
     let moving = false;
     B.tanks.forEach((t, i) => {
@@ -491,7 +499,7 @@ export class Speedboat {
     this.rpm = params.idleRpm;
     this.telemetry = {
       speedKmh: 0, waterSpeed: 0, rpm: params.idleRpm, throttle: 0, throttleCmd: 0, trim: 0, trimDeg: 0, tiltDeg: 0, tiltBlocked: false, intakeSubmerged: true, steerDeg: 0,
-      gear: "N", pitchDeg: 0, rollDeg: 0, wetFraction: 0, planing: false, thrustN: 0, ventilation: 1, cavitation: 0, propImmersion: 1, revLimiter: false, propSlip: 0, propRpm: 0, engine: "running", fuelL: 0, fuelFrac: 1, coolantC: 45, batteryV: 12.6, engineHours: 0, overheatWarn: false, protectMode: false, lowFuel: false, chargeWarn: false, stall: "", trimMotorA: 0, trimRelay: false, jumper: false, jumpCharge: 1, batteryA: 0, bilgeL: 0, bilgeInflowLps: 0, bilgePump: false, bilgeFlowLps: 0, bilgeAlarm: false, bilgeJetPos: v3(), bilgeJetVel: v3(), freeboard: 1, swamped: false, sunk: false, airPocketL: 0,
+      gear: "N", pitchDeg: 0, rollDeg: 0, wetFraction: 0, planing: false, thrustN: 0, ventilation: 1, cavitation: 0, propImmersion: 1, revLimiter: false, propSlip: 0, propRpm: 0, engine: "running", fuelL: 0, fuelFrac: 1, coolantC: 45, batteryV: 12.6, engineHours: 0, overheatWarn: false, protectMode: false, lowFuel: false, chargeWarn: false, stall: "", trimMotorA: 0, trimRelay: false, jumper: false, jumpCharge: 1, batteryA: 0, bilgeL: 0, bilgeInflowLps: 0, bilgePump: false, bilgeFlowLps: 0, bilgeAlarm: false, bilgeWarn: false, ballastL: 0, ballastMaxL: 0, ballastTanks: [], ballastPump: 0, bilgeJetPos: v3(), bilgeJetVel: v3(), freeboard: 1, swamped: false, sunk: false, airPocketL: 0,
       anchorOut: 0, anchorState: "recolhida", anchorDepth: 0, anchorScope: 0, anchorTension: 0, anchorRelay: false, windlassA: 0, apparentWind: 0, neutralRev: false, fuelLph: 0, buzzer: false, starterRpm: 0, startFail: "", batterySoc: 0.92, trimPin: 0, pullStart: !params.electricStart,
       distanceM: 0, collisions: 0, draftHull: 0, draftMotor: 0, capsized: false, swimmers: 0, hullDamage: 0, engineDamage: 0, damageEvent: "", damageCount: 0, lastImpact: 0, depth: 0, submergedPoints: params.buoyancyPoints.map(() => false),
       rpms: [params.idleRpm], gears: ["N"], throttles: [0], thrusts: [0], engines: ["running"], keys: ["on"], houseV: 12.6, propRpms: [0], coolants: [45], batteryVs: [12.6], batterySocs: [0.92], batteryAs: [0], turbine: null, nominalV: 12, gpu: false, gpuState: "off", gpuT: 0, gpuKw: 0, busBattery: true, busGen: false, extPwr: false, extPwrClosed: false, extPwrFault: false, gpuA: 0, coolingLps: 0, fuelValveOpen: true, fuelLineFrac: 1, bilgeMode: "auto", batterySel: "ind", choke: false,
@@ -1117,8 +1125,10 @@ export class Speedboat {
     }
     t.airPocketL = Math.max(0, this.airL);
     t.sunk = this.sunk;
-    // alarme: bomba acionada e jogando água fora, ou água alta (sem bomba / bomba sem força)
-    t.bilgeAlarm = (powered && t.bilgeFlowLps > 0.05) || this.bilgeL > 40;
+    // v0.77.2: pouca água = só o AVISO laranja (a bomba dá conta); ALARME (som) com água alta ou quando entra mais
+    // do que a bomba tira (ou sem bomba/energia com água acumulando)
+    t.bilgeWarn = (powered && t.bilgeFlowLps > 0.05) || this.bilgeL > 15;
+    t.bilgeAlarm = this.bilgeL > 120 || (this.bilgeL > 30 && t.bilgeInflowLps > Math.max(0.05, t.bilgeFlowLps) * 0.95);
   }
 
   /** Empuxo máximo do casco (kg): casco imerso até a borda (modelo de pontos saturado). */

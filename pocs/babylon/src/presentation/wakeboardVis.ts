@@ -15,6 +15,8 @@ const mat = (scene: Scene, name: string, c: Color3, spec = 0.1) => { const m = n
 
 /** prancha: comprimento, largura, raio dos cantos, espessura e rocker (as pontas sobem) */
 const BL = 1.38, BW = 0.43, BR = 0.1, BT = 0.032, ROCK = 0.065;
+/** onde a prancha fica presa no corpo (local da pessoa): sob as solas (sola −0,465 − placa da bota e meia espessura) */
+const BOARD_SOLE_Y = -0.465 - 0.034, BOARD_Z = -0.05;
 const rockerY = (z: number) => ROCK * Math.pow(Math.min(1, Math.abs(z) / (BL / 2)), 2.4);
 const boardW = (z: number) => { const a = Math.abs(z) - (BL / 2 - BR); return a <= 0 ? BW : BW - 2 * BR + 2 * Math.sqrt(Math.max(0, BR * BR - a * a)); };
 
@@ -166,6 +168,11 @@ export class WakeboardVisual {
     this.riderRoot = new TransformNode("wkRiderRoot", scene);
     this.rider = buildPassenger(scene, this.riderRoot, 0, 0, "wkRider", 1, 0);
     this.meshes.push(...this.rider.meshes);
+    // a prancha é PRESA nos pés (v0.77.2): filha do corpo, sob as solas, ao longo do eixo lateral da pessoa — acompanha
+    // qualquer inclinação, agachamento, manobra e a queda, como uma peça só
+    this.boardRoot.parent = this.rider.group;
+    this.boardRoot.rotationQuaternion = null;
+    this.boardRoot.rotation.set(0, -Math.PI / 2, 0);
     this.rope = new RopeTube(scene, "wkRope", new Color3(0.15, 0.75, 0.95), 0.009); // corda de wake (azul)
     this.bridle = new TowBridleVis(scene, "wkBridle", new Color3(0.95, 0.95, 0.95));
     const hm = mat(scene, "wkHandle", new Color3(0.08, 0.08, 0.1), 0.3);
@@ -188,9 +195,9 @@ export class WakeboardVisual {
       // sentada na água (colete), prancha na frente, de lado; caída: prancha boiando perto
       this.boardRoot.setEnabled(true);
       const fx = Math.sin(fwdYaw), fz = Math.cos(fwdYaw);
+      void fx; void fz;
       this.rider.float(new Vector3(p.x, waterY, p.z), fwdYaw, t, wb.swimming ? 1 : 0);
-      this.boardRoot.position.set(p.x + fx * 0.7, waterY + 0.02, p.z + fz * 0.7);
-      this.boardRoot.rotationQuaternion = Quaternion.FromEulerAngles(wb.state === "water" ? -1.2 : 0, fwdYaw + Math.PI / 2, 0);
+      this.boardRoot.position.set(0, BOARD_SOLE_Y, BOARD_Z); // nos pés (pernas retas na água)
       if (wb.state === "water") this.rider.update(new Vector3(-0.15, 0.85, 0.35), new Vector3(0.15, 0.85, 0.35));
     } else {
       // EM PÉ: de lado na prancha (prancha ao longo do rumo), pé da frente para o barco — base "regular" (esquerdo à
@@ -226,15 +233,15 @@ export class WakeboardVisual {
       const qBody = trickQ.multiply(bodyQ), qBoard = trickQ.multiply(boardQ);
       const feet = center.subtract(new Vector3(0, 0.85, 0).applyRotationQuaternion(trickQ));
       const crouch = wb.state === "rising" ? 1 - 0.6 * rise : wb.crouch;
-      this.rider.ride!(feet.add(upP.scale(BT / 2 + 0.02)), qBody, 0.27, crouch);
+      this.rider.ride!(feet.add(upP.scale(0.05)), qBody, 0.27, crouch);
+      this.boardRoot.position.set(0, BOARD_SOLE_Y + 0.3 * Math.max(0, Math.min(1, crouch)), BOARD_Z); // sob as solas (o agachamento sobe os tornozelos)
       // mãos no manete, baixo, na frente do quadril, puxado para o lado do barco (pé da frente); no grab a mão de trás
       // desce na borda da prancha
       const lx = wb.regular ? -1 : 1; // lado do barco no local da pessoa
       const hl = new Vector3(lx * 0.16 - 0.08, 0.5 - 0.18 * crouch, 0.22), hr = new Vector3(lx * 0.16 + 0.08, 0.5 - 0.18 * crouch, 0.22);
       const grab = air && wb.trick === "grab";
       this.rider.update(grab && lx > 0 ? new Vector3(-0.18, -0.25, 0.12) : hl, grab && lx < 0 ? new Vector3(0.18, -0.25, 0.12) : hr);
-      this.boardRoot.position.copyFrom(feet);
-      this.boardRoot.rotationQuaternion = qBoard;
+      void qBoard;
       // manete: entre as mãos (no mundo)
       this.rider.group.computeWorldMatrix(true);
       handW = Vector3.TransformCoordinates(new Vector3(lx * 0.16, 0.5 - 0.18 * crouch, 0.24), this.rider.group.getWorldMatrix());

@@ -339,8 +339,10 @@ export class Hud {
       if (this.ibbLamp.dataset.s !== st) { this.ibbLamp.dataset.s = st; this.ibbLamp.querySelector("em")!.textContent = txt; }
     }
     // porão: bomba jogando água fora / água alta (alerta luminoso piscando)
-    const bilgeShow = t.bilgeAlarm || t.swamped || t.sunk;
+    // (v0.77.2: pouca água = laranja fixo; alarme = pisca)
+    const bilgeShow = t.bilgeWarn || t.bilgeAlarm || t.swamped || t.sunk;
     this.bilgeChip.classList.toggle("warn", bilgeShow);
+    this.bilgeChip.classList.toggle("steady", bilgeShow && !(t.bilgeAlarm || t.swamped || t.sunk));
     if (bilgeShow) {
       const fb = t.freeboard < 5 ? ` · borda ${Math.max(0, t.freeboard * 100).toFixed(0)} cm` : "";
       this.bilgeChip.textContent = t.sunk ? `AFUNDOU · ${t.bilgeL.toFixed(0)} L dentro`

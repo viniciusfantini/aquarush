@@ -41,6 +41,7 @@ export interface SystemsPanelActions {
   setEcu(lane: "a" | "b", on: boolean): void;     // injeção eletrônica: central LANE A / LANE B
   setFuelPump(i: 1 | 2, on: boolean): void;       // injeção eletrônica: bomba elétrica de combustível 1 / 2
   setLeveler(on: boolean): void;                  // avião: nivelador de asas (LVL)
+  setBallast(cmd: "fill" | "stop" | "drain"): void; // lancha de wakeboard: bombas do lastro
   close(): void;
 }
 
@@ -71,6 +72,8 @@ export interface SystemsPanelCaps {
   leveler?: boolean;
   /** motor de avião: magnetos + primer na partida e a alavanca de mistura no comando (no lugar da chave de ignição) */
   aircraft?: boolean;
+  /** tanques de lastro (lancha de wakeboard): chave ENCHER / PARAR / ESVAZIAR e o nível */
+  ballast?: boolean;
 }
 
 const plate = (inner: string, cls = "") => `<div class="sw-plate ${cls}"><span class="screw s1"></span><span class="screw s2"></span><span class="screw s3"></span><span class="screw s4"></span>${inner}</div>`;
@@ -112,6 +115,7 @@ export class SystemsPanel {
       else if (d.mag && d.mag !== "start") this.act.setMagnetos(d.mag as "off" | "r" | "l" | "both");
       else if (d.ecu) this.act.setEcu(d.ecu as "a" | "b", !b.classList.contains("on"));
       else if (d.lvl) this.act.setLeveler(!b.classList.contains("on"));
+      else if (d.ballast) this.act.setBallast(d.ballast as "fill" | "stop" | "drain");
       else if (d.pump) this.act.setFuelPump(d.pump === "2" ? 2 : 1, !b.classList.contains("on"));
       else if (d.prime) { this.act.prime(); b.classList.remove("push"); void b.offsetWidth; b.classList.add("push"); }
     });
@@ -172,6 +176,7 @@ export class SystemsPanel {
     if (caps.ecoMode && !caps.startStop) cells.push(cell(toggle({ attr: "eco", val: "1", label: "MODO", sub: "ECO limita o gatilho", on: "ECO", off: "SPORT" }), "eco"));
     if (caps.choke) cells.push(cell(pull("choke", "1", "AFOGADOR", "partida a frio"), "choke"));
     if (caps.bilgePump) cells.push(cell(tri("bilge", "BOMBA PORÃO", "boia ou manual", { v: "on", l: "ON" }, { v: "off", l: "OFF" }, { v: "auto", l: "AUTO" }), "bilge"));
+    if (caps.ballast) cells.push(cell(tri("ballast", "LASTRO", "bombas dos 3 tanques", { v: "fill", l: "ENCHER" }, { v: "stop", l: "PARAR" }, { v: "drain", l: "ESVAZIAR" }), "ballast"));
     // bote: lanterna de mão a pilha (manual) — não é chave de painel
     if (caps.lights) cells.push(cell(caps.banks ? toggle({ attr: "lights", val: "1", label: caps.lights, sub: "navegação" }) : lantern("lights", caps.lights, "de mão, a pilha"), "lights"));
     this.title.textContent = `⠿ SISTEMAS — ${caps.title}`;
@@ -284,6 +289,14 @@ export class SystemsPanel {
       info("ss", (t.driveMode === "eco" ? "ECO · " : "") + (t.engine === "running" ? `ligada · ${Math.round(t.rpm)} rpm · ${t.boostBar.toFixed(2)} bar` : t.engine === "cranking" ? `arranque · ${Math.round(t.rpm)} rpm`
         : !t.lanyard ? "cordão SOLTO: não liga" : awake ? "central acordada" : "desligada"), !t.lanyard || (t.startFail !== "" && t.engine === "off" && awake));
 
+    }
+    if (c.ballast) {
+      // chave na posição do que as bombas estão fazendo; LED aceso bombeando; nível: barra + % de cada tanque
+      setTri(el, "ballast", t.ballastPump > 0 ? "fill" : t.ballastPump < 0 ? "drain" : "stop", powered, powered && t.ballastPump !== 0);
+      const f = t.ballastMaxL > 0 ? t.ballastL / t.ballastMaxL : 0, n = Math.round(f * 10);
+      const bar = "█".repeat(n) + "░".repeat(10 - n);
+      const tk = t.ballastTanks.map((v, i) => `${["BB", "BE", "PROA"][i] ?? i + 1} ${(v * 100).toFixed(0)}%`).join(" · ");
+      info("ballast", `${bar} ${(f * 100).toFixed(0)} % · ${t.ballastL.toFixed(0)} L${t.ballastPump > 0 ? " · enchendo" : t.ballastPump < 0 ? " · esvaziando" : ""} · ${tk}`);
     }
     if (c.leveler) {
       setToggle(el, "lvl", "1", t.leveler, t.leveler && hv > 6);
