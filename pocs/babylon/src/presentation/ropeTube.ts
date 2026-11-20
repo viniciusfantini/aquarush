@@ -1,7 +1,7 @@
 // Corda de reboque visível: um tubo fino (malha de verdade, não uma linha de 1 px) que engrossa com a distância da câmera
 // para nunca sumir na tela (~2 px no mínimo), com barriga quando frouxa. Só visual.
 
-import { type Scene, Mesh, MeshBuilder, StandardMaterial, Color3, Vector3, Ray, type TransformNode } from "@babylonjs/core";
+import { type Scene, Mesh, MeshBuilder, StandardMaterial, Color3, Vector3, Ray, Quaternion, TransformNode } from "@babylonjs/core";
 import type { SpeedboatParams } from "../sim/params.ts";
 import type { Speedboat } from "../sim/boat.ts";
 import { TowTube } from "../sim/towTube.ts";
@@ -67,44 +67,68 @@ export class RopeTube {
   setEnabled(on: boolean): void { this.mesh.setEnabled(on); }
 }
 
+/** posições REAIS dos olhais no casco (local do barco), achadas pelo `buildTowEyes` — o Y sai delas */
+export const towEyesVisual = new Map<SpeedboatParams, Vec3[]>();
+
 /**
- * OLHAIS DE REBOQUE fixos no barco (sempre à vista, engatado ou não): um "U" de inox sobre uma chapinha em cada canto da
- * popa (ou o gancho único da moto aquática), nas posições do parâmetro `tow`. Filhos do `root` do visual (local = sim).
+ * OLHAIS DE REBOQUE fixos no barco (sempre à vista, engatado ou não). Barcos com espelho: um "U" de inox DEITADO,
+ * parafusado no espelho de popa (chapinha vertical), saindo para trás. Bote inflável (`mount` "tube"): argola em "D"
+ * sobre um remendo de borracha colado no flutuador, de cada lado da popa. Ekranoplano/anfíbio e moto aquática: um só, no
+ * centro da popa. A posição sai de um raio contra as malhas do casco (de trás para a frente, ou de fora para dentro no
+ * flutuador), com a normal da superfície; sem acerto, fica no parâmetro `tow`.
  */
-export const buildTowEyes = (scene: Scene, root: TransformNode, P: SpeedboatParams, name: string, hull: Mesh[] = []): Mesh[] => {
+export const buildTowEyes = (scene: Scene, root: TransformNode, P: SpeedboatParams, name: string, hull: Mesh[] = [], mount: "transom" | "tube" = "transom"): Mesh[] => {
   const T = P.tow;
   if (!T) return [];
   const steel = new StandardMaterial(name + "EyeSteel", scene); steel.diffuseColor = new Color3(0.82, 0.83, 0.86); steel.specularColor = new Color3(1, 1, 1); steel.specularPower = 96;
-  const pts = T.leg > 0 && T.eyeX > 0 ? [-T.eyeX, T.eyeX] : [0];
-  const out: Mesh[] = [];
-  // assenta o olhal na superfície de verdade do casco: raio de cima para baixo na malha do barco (local do root)
+  const rubber = new StandardMaterial(name + "EyePatch", scene); rubber.diffuseColor = new Color3(0.13, 0.13, 0.15); rubber.specularColor = new Color3(0.15, 0.15, 0.15);
+  const xs = T.leg > 0 && T.eyeX > 0 ? [-T.eyeX, T.eyeX] : [0];
   root.computeWorldMatrix(true);
   const W = root.getWorldMatrix(), inv = W.clone().invert();
-  const surfaceY = (x: number, z: number): number => {
-    const o = Vector3.TransformCoordinates(new Vector3(x, T.eyeY + 1.2, z), W);
-    const d = Vector3.TransformNormal(new Vector3(0, -1, 0), W).normalize();
-    const ray = new Ray(o, d, 2.5);
-    let best = Infinity, hitY = T.eyeY;
+  for (const m of hull) m.computeWorldMatrix(true);
+  /** raio local (origem, direção) contra o casco: ponto e normal locais */
+  const cast = (o: Vector3, d: Vector3, len: number): { p: Vector3; n: Vector3 } | null => {
+    const ray = new Ray(Vector3.TransformCoordinates(o, W), Vector3.TransformNormal(d, W).normalize(), len);
+    let best: { p: Vector3; n: Vector3; dist: number } | null = null;
     for (const m of hull) {
       if (!m.getTotalVertices()) continue;
-      m.computeWorldMatrix(true);
       const pi = ray.intersectsMesh(m, false);
-      if (pi.hit && pi.distance < best && pi.pickedPoint) { best = pi.distance; hitY = Vector3.TransformCoordinates(pi.pickedPoint, inv).y; }
+      if (!pi.hit || !pi.pickedPoint || (best && pi.distance >= best.dist)) continue;
+      const nw = pi.getNormal(true, true) ?? Vector3.TransformNormal(d.scale(-1), W);
+      let n = Vector3.TransformNormal(nw, inv).normalize();
+      if (Vector3.Dot(n, d) > 0) n = n.scale(-1); // (normal voltada para quem olha)
+      best = { p: Vector3.TransformCoordinates(pi.pickedPoint, inv), n, dist: pi.distance };
     }
-    return best < Infinity && Math.abs(hitY - T.eyeY) < 0.6 ? hitY : T.eyeY;
+    return best;
   };
-  for (const x of pts) {
-    const y = surfaceY(x, T.eyeZ);
-    // "U" (meia-volta) voltado para trás, e a chapinha de base
+  const out: Mesh[] = [], placed: Vec3[] = [];
+  for (const x of xs) {
+    const sx = Math.sign(x || 1);
+    const hit = mount === "tube"
+      ? cast(new Vector3(sx * 2, T.eyeY, T.eyeZ), new Vector3(-sx, 0, 0), 2)
+      : cast(new Vector3(x, T.eyeY, T.eyeZ - 2), new Vector3(0, 0, 1), 4);
+    const at = hit ? hit.p : new Vector3(x, T.eyeY, T.eyeZ);
+    const n = hit ? hit.n : (mount === "tube" ? new Vector3(sx, 0, 0) : new Vector3(0, 0, -1));
+    // o "U" no plano horizontal (deitado), saindo na direção −Z do nó, que é girado para a normal da superfície
+    const q = new Quaternion(); Quaternion.FromUnitVectorsToRef(new Vector3(0, 0, -1), n, q);
+    const node = new TransformNode(name + "EyeNode", scene); node.parent = root; node.position.copyFrom(at); node.rotationQuaternion = q;
     const path: Vector3[] = [];
-    for (let i = 0; i <= 16; i++) { const a = Math.PI * (i / 16); path.push(new Vector3(Math.cos(a) * 0.045, Math.sin(a) * 0.05, 0)); }
-    const u = MeshBuilder.CreateTube(name + "Eye", { path, radius: 0.011, tessellation: 8 }, scene);
-    u.material = steel; u.parent = root; u.position.set(x, y, T.eyeZ);
-    u.rotation.x = -0.6; // em pé, inclinado para trás (a corda sai para a popa)
-    const plate = MeshBuilder.CreateBox(name + "EyePlate", { width: 0.13, height: 0.012, depth: 0.07 }, scene);
-    plate.material = steel; plate.parent = root; plate.position.set(x, y + 0.004, T.eyeZ + 0.01);
+    const rw = mount === "tube" ? 0.04 : 0.042, rl = mount === "tube" ? 0.045 : 0.05;
+    for (let k = 0; k <= 16; k++) { const a = Math.PI * (k / 16); path.push(new Vector3(Math.cos(a) * rw, 0, -Math.sin(a) * rl - 0.006)); }
+    const u = MeshBuilder.CreateTube(name + "Eye", { path, radius: mount === "tube" ? 0.007 : 0.009, tessellation: 8 }, scene);
+    u.material = steel; u.parent = node;
+    // chapinha de inox (espelho) ou remendo de borracha colado (flutuador do bote), rente à superfície
+    const plate = mount === "tube"
+      ? MeshBuilder.CreateCylinder(name + "EyePatch", { diameter: 0.14, height: 0.008, tessellation: 20 }, scene)
+      : MeshBuilder.CreateBox(name + "EyePlate", { width: 0.13, height: 0.06, depth: 0.01 }, scene);
+    plate.material = mount === "tube" ? rubber : steel; plate.parent = node;
+    if (mount === "tube") plate.rotation.x = Math.PI / 2;
+    plate.position.z = -0.002;
     out.push(u, plate);
+    // onde o Y prende: na ponta do "U"
+    placed.push(v3(at.x + n.x * 0.05, at.y + n.y * 0.05, at.z + n.z * 0.05));
   }
+  towEyesVisual.set(P, placed);
   for (const m of out) m.isPickable = false;
   return out;
 };
@@ -178,7 +202,8 @@ export class TowBridleVis {
    */
   update(b: Speedboat | null, pullTo?: Vector3, tension = 0, floorY = -1e9, dt = 1 / 60): Vector3 {
     if (!b) { this.boat = null; this.legs.forEach((l) => l.setEnabled(false)); this.rings.forEach((r) => r.setEnabled(false)); return Vector3.Zero(); }
-    const eyesL = TowTube.towEyes(b), apexL = TowTube.towLocal(b), T = b.params.tow;
+    const eyesL = towEyesVisual.get(b.params) ?? TowTube.towEyes(b), T = b.params.tow;
+    const apexL = eyesL.length === 1 ? eyesL[0] : TowTube.towLocal(b);
     const leg = T?.leg ?? 0;
     if (eyesL.length < 2 || leg <= 0) {
       this.legs.forEach((l) => l.setEnabled(false));

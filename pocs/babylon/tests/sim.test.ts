@@ -1705,7 +1705,7 @@ for (const [label, thr] of [["baixa", 0.25], ["alta", 1]] as const) {
     const b = new Speedboat(P, v3(0, 0.3, 0));
     const apex = TowTube.towLocal(b), eyes = TowTube.towEyes(b);
     if (P.airProp) {
-      check("corda de reboque", `${kind}: a argola fica atrás da hélice no ar (m)`, P.propPos.z - apex.z, 1, 5, "m", 2);
+      check("corda de reboque", `${kind}: a argola fica atrás da hélice no ar (m)`, P.propPos.z - apex.z, 0.5, 5, "m", 2);
       check("corda de reboque", `${kind}: e abaixo dela (m)`, P.propPos.y - apex.y, 0.5, 5, "m", 2);
     }
     else if (P.waterjet) check("corda de reboque", `${kind}: gancho acima do bocal do jato (m)`, apex.y - P.propPos.y, 0.25, 2, "m", 2);

@@ -246,7 +246,7 @@ export interface AnchorParams {
 const LANCHA_UNDERFLOOR = floodTable(0.02, 0.15, 1.15);
 
 export const SPEEDBOAT: SpeedboatParams = {
-  tow: { eyeX: 0.9, eyeY: 0.4, eyeZ: -2.9, leg: 1.6 }, // reboque: olhais nos cantos do espelho; o Y passa por fora do motor de popa
+  tow: { eyeX: 0.9, eyeY: 0.25, eyeZ: -3.0, leg: 1.6 }, // reboque: olhais deitados no espelho de popa; o Y passa por fora do motor
   kind: "lancha",
   name: "Lancha provisória AR-6",
   steering: "remote",
@@ -364,7 +364,7 @@ export const SPEEDBOAT: SpeedboatParams = {
 const dl = 0.5; // meia-distância transversal dos pontos (fundo rígido + flutuadores)
 
 export const DINGHY: SpeedboatParams = {
-  tow: { eyeX: 0.65, eyeY: 0.3, eyeZ: -1.45, leg: 1.0 }, // reboque: alças da popa; o Y passa por trás do motor de cana
+  tow: { eyeX: 0.72, eyeY: 0.18, eyeZ: -1.3, leg: 1.1 }, // reboque: argolas em D coladas nos flutuadores da popa; o Y passa por trás do motor de cana
   kind: "bote",
   name: "Bote de apoio AR-3",
   steering: "tiller",
@@ -473,7 +473,7 @@ export const DINGHY: SpeedboatParams = {
 const rl = 0.77; // meia-distância transversal dos pontos de flutuação
 
 export const RAPIDA: SpeedboatParams = {
-  tow: { eyeX: 1.0, eyeY: 0.45, eyeZ: -4.2, leg: 1.6 }, // reboque: olhais da popa; o Y passa por trás das duas rabetas
+  tow: { eyeX: 1.0, eyeY: 0.3, eyeZ: -4.3, leg: 1.6 }, // reboque: olhais deitados no espelho; o Y passa por trás das duas rabetas
   kind: "rapida",
   name: "Lancha rápida AR-9",
   steering: "remote",
@@ -588,7 +588,7 @@ const tl = 0.8; // meia-distância transversal dos pontos de flutuação
 const zk = 10 / 8.6;
 
 export const TURBINA: SpeedboatParams = {
-  tow: { eyeX: 1.05, eyeY: 0.45, eyeZ: -4.9, leg: 1.8 }, // reboque: olhais da popa; o Y passa por trás da hélice de superfície
+  tow: { eyeX: 1.05, eyeY: 0.3, eyeZ: -5.0, leg: 1.8 }, // reboque: olhais deitados no espelho; o Y passa por trás da hélice de superfície
   kind: "turbina",
   name: "Lancha de turbina AR-10",
   steering: "remote",
@@ -719,7 +719,7 @@ export const TURBINA: SpeedboatParams = {
 const jl = 0.38; // meia-distância transversal dos pontos de flutuação
 
 export const JETSKI: SpeedboatParams = {
-  tow: { eyeX: 0, eyeY: 0.25, eyeZ: -1.65, leg: 0 }, // reboque: gancho de reboque atrás do banco (sem Y)
+  tow: { eyeX: 0, eyeY: 0.15, eyeZ: -1.72, leg: 0 }, // reboque: um olhal no espelho da popa, acima do bocal (sem Y)
   kind: "jetski",
   name: "Moto aquática AR-J",
   steering: "handlebar",
@@ -839,7 +839,7 @@ export const JETSKI: SpeedboatParams = {
 const al = 0.95; // meia-distância transversal dos pontos de flutuação (fundo chato e largo)
 
 export const AIRBOAT: SpeedboatParams = {
-  tow: { eyeX: 1.0, eyeY: 0.15, eyeZ: -2.35, leg: 1.4 }, // reboque: olhais no costado da popa, baixos: o Y passa por baixo da gaiola da hélice
+  tow: { eyeX: 1.0, eyeY: 0.0, eyeZ: -2.45, leg: 1.4 }, // reboque: olhais deitados no espelho, baixos: o Y passa por baixo da gaiola da hélice
   kind: "airboat",
   name: "Lancha pantaneira AR-P",
   steering: "stick",
@@ -952,7 +952,7 @@ const wl = 0.6; // meia-distância transversal dos pontos de flutuação (casco 
 const WIG_WING_Y = -0.05; // asa baixa: ~0,3 m acima da água parado
 
 export const WIG: SpeedboatParams = {
-  tow: { eyeX: 0.6, eyeY: 0.25, eyeZ: -3.3, leg: 1.0 }, // reboque: olhais na popa do casco, abaixo da cauda
+  tow: { eyeX: 0, eyeY: 0.25, eyeZ: -3.5, leg: 0 }, // reboque: UM olhal no centro da popa do casco, abaixo da cauda
   kind: "wig",
   name: "Ekranoplano AR-W",
   steering: "stick",
@@ -1092,7 +1092,7 @@ const AMPH_WING_Y = 1.05;  // asa alta, em cima da cabine
 export const AMPH_DIHEDRAL = 20 * DEG; // (efetivo: inclui o efeito da asa alta acima do CG)
 
 export const AMPHIB: SpeedboatParams = {
-  tow: { eyeX: 0.5, eyeY: 0.3, eyeZ: -3.3, leg: 0.9 }, // reboque: olhais na popa do casco, atrás do degrau
+  tow: { eyeX: 0, eyeY: 0.3, eyeZ: -2.3, leg: 0 }, // reboque: UM olhal no centro da popa do casco (que termina em −2,3), atrás do degrau
   kind: "anfibio",
   name: "Anfíbio AR-A",
   steering: "stick",
