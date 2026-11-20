@@ -187,7 +187,7 @@ export class WakeboardVisual {
     const ps = new ParticleSystem("wkSpray", 700, scene);
     ps.particleTexture = dot; ps.emitter = Vector3.Zero(); ps.minEmitBox = Vector3.Zero(); ps.maxEmitBox = Vector3.Zero();
     ps.color1 = new Color4(1, 1, 1, 0.85); ps.color2 = new Color4(0.85, 0.93, 0.97, 0.6); ps.colorDead = new Color4(0.9, 0.95, 1, 0);
-    ps.minSize = 0.08; ps.maxSize = 0.42; ps.minLifeTime = 0.4; ps.maxLifeTime = 1.0; ps.gravity = new Vector3(0, -9.81, 0);
+    ps.minSize = 0.06; ps.maxSize = 0.26; ps.minLifeTime = 0.3; ps.maxLifeTime = 0.7; ps.gravity = new Vector3(0, -9.81, 0);
     ps.emitRate = 0; ps.start();
     this.spray = ps;
   }
@@ -268,7 +268,8 @@ export class WakeboardVisual {
       const k = Math.min(1.4, sp / 8);
       this.spray.direction1 = out.scale(2.2 * k).add(back.scale(1.5 * k)).add(new Vector3(0, 1.4, 0));
       this.spray.direction2 = out.scale(4.2 * k).add(back.scale(0.5 * k)).add(new Vector3(0, 2.8 * Math.min(1, ea / 3), 0));
-      this.spray.emitRate = riding && sp > 4 ? Math.min(600, 120 + ea * 130) : 0;
+      // (v0.78.1: menos spray — só cortando com a borda, nada andando reto)
+      this.spray.emitRate = riding && sp > 4 && ea > 1.2 ? Math.min(220, (ea - 1.2) * 90) : 0;
     }
     // ---- manete e corda ----
     const hand = wb.state === "fallen" ? new Vector3(wb.handle.x, wb.handle.y + 0.02, wb.handle.z)

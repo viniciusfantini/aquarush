@@ -103,7 +103,8 @@ export class WakeMap {
       WAKE_RIDGES.forEach((r, k) => {
         strokeChain((s) => armPoint(s, side, r.inward), (s) => {
           const a = (armEnvelope(s) * r.amp) / H;
-          const foam = k === 0 ? smoothstep(5, 14, s.v) * s.wet * Math.exp(-s.age / 1.4) * 0.75 : 0;
+          // (a espuma dos braços também segue o `size`: fonte com size 0 — a prancha de wakeboard — não tem braços)
+          const foam = k === 0 ? smoothstep(5, 14, s.v) * s.wet * Math.exp(-s.age / 1.4) * 0.75 * Math.min(1, (s.size ?? 1) * 4) : 0;
           // (esteira grande — lastro — desenhada mais larga: alta e estreita, a malha da água fazia "dentes de serra")
           return { r: foam, g: r.sign > 0 ? a : 0, b: r.sign < 0 ? a : 0, w: 2 * ridgeHalfWidth(s.age, r.width) * 0.85 * Math.max(1, Math.sqrt(s.size ?? 1)) };
         });
