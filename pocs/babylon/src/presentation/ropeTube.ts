@@ -1,7 +1,8 @@
 // Corda de reboque visível: um tubo fino (malha de verdade, não uma linha de 1 px) que engrossa com a distância da câmera
 // para nunca sumir na tela (~2 px no mínimo), com barriga quando frouxa. Só visual.
 
-import { type Scene, Mesh, MeshBuilder, StandardMaterial, Color3, Vector3 } from "@babylonjs/core";
+import { type Scene, Mesh, MeshBuilder, StandardMaterial, Color3, Vector3, Ray, type TransformNode } from "@babylonjs/core";
+import type { SpeedboatParams } from "../sim/params.ts";
 import type { Speedboat } from "../sim/boat.ts";
 import { TowTube } from "../sim/towTube.ts";
 import { type Vec3, v3, add, sub, scale, len, dot, normalize, rotateInv } from "../sim/math.ts";
@@ -65,6 +66,48 @@ export class RopeTube {
 
   setEnabled(on: boolean): void { this.mesh.setEnabled(on); }
 }
+
+/**
+ * OLHAIS DE REBOQUE fixos no barco (sempre à vista, engatado ou não): um "U" de inox sobre uma chapinha em cada canto da
+ * popa (ou o gancho único da moto aquática), nas posições do parâmetro `tow`. Filhos do `root` do visual (local = sim).
+ */
+export const buildTowEyes = (scene: Scene, root: TransformNode, P: SpeedboatParams, name: string, hull: Mesh[] = []): Mesh[] => {
+  const T = P.tow;
+  if (!T) return [];
+  const steel = new StandardMaterial(name + "EyeSteel", scene); steel.diffuseColor = new Color3(0.82, 0.83, 0.86); steel.specularColor = new Color3(1, 1, 1); steel.specularPower = 96;
+  const pts = T.leg > 0 && T.eyeX > 0 ? [-T.eyeX, T.eyeX] : [0];
+  const out: Mesh[] = [];
+  // assenta o olhal na superfície de verdade do casco: raio de cima para baixo na malha do barco (local do root)
+  root.computeWorldMatrix(true);
+  const W = root.getWorldMatrix(), inv = W.clone().invert();
+  const surfaceY = (x: number, z: number): number => {
+    const o = Vector3.TransformCoordinates(new Vector3(x, T.eyeY + 1.2, z), W);
+    const d = Vector3.TransformNormal(new Vector3(0, -1, 0), W).normalize();
+    const ray = new Ray(o, d, 2.5);
+    let best = Infinity, hitY = T.eyeY;
+    for (const m of hull) {
+      if (!m.getTotalVertices()) continue;
+      m.computeWorldMatrix(true);
+      const pi = ray.intersectsMesh(m, false);
+      if (pi.hit && pi.distance < best && pi.pickedPoint) { best = pi.distance; hitY = Vector3.TransformCoordinates(pi.pickedPoint, inv).y; }
+    }
+    return best < Infinity && Math.abs(hitY - T.eyeY) < 0.6 ? hitY : T.eyeY;
+  };
+  for (const x of pts) {
+    const y = surfaceY(x, T.eyeZ);
+    // "U" (meia-volta) voltado para trás, e a chapinha de base
+    const path: Vector3[] = [];
+    for (let i = 0; i <= 16; i++) { const a = Math.PI * (i / 16); path.push(new Vector3(Math.cos(a) * 0.045, Math.sin(a) * 0.05, 0)); }
+    const u = MeshBuilder.CreateTube(name + "Eye", { path, radius: 0.011, tessellation: 8 }, scene);
+    u.material = steel; u.parent = root; u.position.set(x, y, T.eyeZ);
+    u.rotation.x = -0.6; // em pé, inclinado para trás (a corda sai para a popa)
+    const plate = MeshBuilder.CreateBox(name + "EyePlate", { width: 0.13, height: 0.012, depth: 0.07 }, scene);
+    plate.material = steel; plate.parent = root; plate.position.set(x, y + 0.004, T.eyeZ + 0.01);
+    out.push(u, plate);
+  }
+  for (const m of out) m.isPickable = false;
+  return out;
+};
 
 /** caixa de exclusão (local do barco): motor de popa / rabeta / hélice — a argola e os braços passam por fora */
 interface KeepOut { x0: number; x1: number; y0: number; y1: number; z0: number; z1: number }
@@ -187,7 +230,7 @@ export class TowBridleVis {
       }
       l.updateCurve(toV(b.toWorld(e)), toV(b.toWorld(c)), ringW, floorY);
     });
-    this.rings.forEach((r, k) => { r.setEnabled(true); r.position.copyFrom(k === 2 ? ringW : toV(b.toWorld(eyesL[k]))); });
+    this.rings.forEach((r, k) => { r.setEnabled(k === 2); if (k === 2) r.position.copyFrom(ringW); }); // (os olhais são fixos no barco)
     return ringW;
   }
 }

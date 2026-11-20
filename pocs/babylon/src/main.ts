@@ -23,6 +23,7 @@ import { buildAmphib, AMPH_FLOOR } from "./presentation/anfibioMesh.ts";
 import { TowTube } from "./sim/towTube.ts";
 import { buildActivityPier, TowTubeVisual } from "./presentation/towTubeVis.ts";
 import { Parasail } from "./sim/parasail.ts";
+import { buildTowEyes } from "./presentation/ropeTube.ts";
 import { buildParasailPier, ParasailVisual } from "./presentation/parasailVis.ts";
 import { GerstnerWater, WAVE_PRESETS } from "./sim/water.ts";
 import { buildWorld, RIVER_CURRENT, RAMP, fromFrame } from "./sim/world.ts";
@@ -58,7 +59,7 @@ import { Hud } from "./presentation/hud.ts";
 import { EngineAudio } from "./presentation/audio.ts";
 
 installI18n(); // inglês: traduz o DOM, as escritas futuras e os letreiros 3D (antes de montar a cena e o HUD)
-const BUILD = "poc-babylon 0.76.2";
+const BUILD = "poc-babylon 0.76.3";
 /** Escala visual da rotação da hélice (proporcional ao RPM, abaixo do limite estroboscópico). */
 const PROP_VISUAL_SCALE = 0.12;
 
@@ -239,6 +240,7 @@ const boot = async () => {
     // anfíbio: avião de asa alta, dois lugares lado a lado, asa que dobra para trás
     const am = kind === "anfibio" ? buildAmphib(scene) : null;
     const vis: BoatVisual = d ?? rap ?? j ?? ab ?? wg ?? am ?? buildBoat(scene);
+    vis.meshes.push(...buildTowEyes(scene, vis.root, P, "v" + kind, [...vis.meshes])); // olhais de reboque fixos na popa (sempre à vista), assentados no casco
     // AR-9: o mesmo painel da AR-6 (volante, manete, chave), num nó deslocado para a frente do banco do piloto
     let helmRoot = vis.root;
     if (rap) {
