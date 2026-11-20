@@ -96,6 +96,18 @@ A lancha é um **corpo rígido 6DOF** (massa seca de 1030 kg + gasolina, ocupant
 
 > Referência completa da lógica elétrica e dos motores: [`docs/SISTEMAS_ELETRICOS_E_MOTORES.md`](../../docs/SISTEMAS_ELETRICOS_E_MOTORES.md).
 
+## Controle de velocidade da AR-8 e indicadores por evento (v0.78.0)
+
+- Parâmetro novo do contrato `cruise` (AR-8). `Speedboat.applyCruise` no começo do `step`: PI na velocidade
+  (Kp 0,05/km/h, Ki 0,012/km/h·s, integrador limitado a 0–1, parte do acelerador atual ao ligar) com atuador de 0,25 s;
+  acelerador = mín(manete, controle) — a manete é o limite. Só age em F e com o barco de pé. Telemetria `cruiseOn`,
+  `cruiseKmh`, `cruiseThr`, `cruiseLimited`. Painel Y: chave + `− / +` (0,5 km/h, 5–70). Critérios: 30 km/h com lastro
+  cheio → 30,0 ± 0 nos últimos 20 s; ajuste a 36 → 36,0; manete a 15 % → limita e avisa; desligado → a manete comanda (64 km/h).
+- HUD (`Hud.setupChips`/`tickChips`, chamado depois do render): indicadores de estado com a classe `stat`, escondidos
+  com `#status.compact` (botão `#h-ind`, `localStorage` `aquarush.statusChips`); indicadores de evento (`EVENT_CHIPS`):
+  ao perder `.warn`/`.show` ganham `.linger` (sem piscar, cor apagada, último texto) e `.fade` aos 4 s (opacidade em 1,5 s).
+  **Ao criar um indicador novo, ponha o id em `STATUS_CHIPS` ou `EVENT_CHIPS`.** Chip novo `#h-cruise`.
+
 ## Manobras com o barco estável e todos reunidos no barco virado (v0.77.6)
 
 - `Wakeboard.settleT`: soma o tempo com o barco estável (variação de velocidade < 0,6 m/s² e guinada < 0,15 rad/s) com
@@ -1060,7 +1072,7 @@ Limitação: é uma síntese aproximada, não uma gravação. Validar o timbre d
 | Lancha pantaneira AR-P (v0.69–0.69.2) | frio sem primer não pega (falha "prime"); 3 bombadas pega em 1,2 s; 9 bombadas afoga; mistura em corte não pega e apaga o motor ligado; um magneto: −103 rpm a pleno; mistura 0,8: −5,6 L/h; magnetos OFF param; trim sem ação (0°, 0 A); P frio pega; largada a 60 % pega em 2,2 s; lenta empurrando 4,5 km/h, sempre em F, borda 0,38 m; a toda 88,4 km/h a 2434 rpm, 0→40 4,4 s; sem cavitação/ventilação; pedindo R segue a 89 km/h para a frente; curva a toda derrapando 3,6 m/s, 11,1°/s, roll 3,2°, não vira; motor desligado com os lemes todos: 0,0°; partida sem N; 50 % + lemes quase parado: 20,2°/s; refrigerado a ar; barranco de lama/capim: 12,6 s no seco, avaria 2 %, 30 km/h; carretinha da caminhonete |
 | Moto aquática AR-J (v0.67–0.67.1) | compressor 1,04 bar a toda, 0,007 bar na lenta; luz do iBB: apagada em F, FREIO freando a toda, RÉ parada em R, NEUTRO em N; navegador: S segurado a 107 km/h → FREIO, 53 km/h em 1,5 s; soltar → F; toque → N; parada: CG −0,03 m da água, borda 0,25 m; a toda 108,3 km/h a 7880 rpm, 0→60 2,7 s, 0→100 7,1 s, 72 L/h; curva a toda 29,2°/s sem virar; iBB de 102 km/h a < 5 km/h em 4,2 s e depois ré; N com o guidão todo: 0,2° em 6 s; lenta + guidão 10,6°/s; N acelerado: empuxo 0, rotor a 7478 rpm; no ar: empuxo 0, giro 7951 rpm; ECO 55 % / 89,9 km/h; lotada 101,5 km/h; cordão solto não liga, puxado desliga; START pega em 1,5 s (60 %); central dorme em 30 s; casco selado 40 s lotada em ondas fortes: 0,0 L; sifão 6,1 L em 30 s (= contrato); virada: desvira em 4,5 s, piloto a bordo com o cordão, liga de novo; carretinha 3,9 m no carro |
 
-Resultado: **889/890 OK + 1 KNOWN** (v0.77.6). Na v0.10, o peso do piloto na posição real (boreste, acima do CG) aumentou o roll em curva com ondas fortes; o `bankCoef` foi para 1800 e o `rollDamping` para 15000, com 1 limitação conhecida (abaixo). Na v0.2 a hélice foi para 0,5 m atrás do espelho, como no modelo visual, e o esterço máximo em alta velocidade caiu de 13° para 11°.
+Resultado: **894/895 OK + 1 KNOWN** (v0.78.0). Na v0.10, o peso do piloto na posição real (boreste, acima do CG) aumentou o roll em curva com ondas fortes; o `bankCoef` foi para 1800 e o `rollDamping` para 15000, com 1 limitação conhecida (abaixo). Na v0.2 a hélice foi para 0,5 m atrás do espelho, como no modelo visual, e o esterço máximo em alta velocidade caiu de 13° para 11°.
 
 ### Navegador (Chrome, Windows 11, WebGL2, `q=med`, ~1370×896)
 

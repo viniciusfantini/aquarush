@@ -169,7 +169,51 @@ export class Hud {
   debugOn = false;
 
   /** opts: barco com/sem painel de instrumentos (bote de cana não tem temperatura nem bateria) */
-  constructor(opts?: HudOpts) { this.configure(opts); }
+  constructor(opts?: HudOpts) { this.configure(opts); this.setupChips(); }
+
+  // ---- indicadores do alto à esquerda (v0.78) ----
+  // STATUS (câmera, motor, planeio, luzes, água, vento, ocupantes): o botão INDICADORES mostra/esconde (guardado no navegador).
+  // EVENTO (cavitação, reserva, porão, avarias, esportes…): só aparecem enquanto o evento acontece; quando ele acaba, o
+  // indicador para de piscar, fica apagado alguns segundos e esmaece até sumir.
+  private static readonly STATUS_CHIPS = ["h-cam", "h-engine", "h-planing", "h-lights", "h-water", "h-wind", "h-occ"];
+  private static readonly EVENT_CHIPS = ["h-cav", "h-vent", "h-hot", "h-lowfuel", "h-trailer", "h-dmg-hull", "h-dmg-eng", "h-charge",
+    "h-bilge", "h-anchor", "h-tube", "h-para", "h-ballast", "h-cruise", "h-wkb"];
+  private chipEndT = new Map<HTMLElement, number>();
+  private chipLast = new Map<HTMLElement, string>();
+  private setupChips(): void {
+    const status = document.getElementById("status"), btn = document.getElementById("h-ind");
+    if (!status || !btn) return;
+    for (const id of Hud.STATUS_CHIPS) document.getElementById(id)?.classList.add("stat");
+    let show = false;
+    try { show = localStorage.getItem("aquarush.statusChips") === "1"; } catch { /* sem armazenamento */ }
+    const apply = () => { status.classList.toggle("compact", !show); btn.classList.toggle("on", show); btn.textContent = show ? "INDICADORES ◂" : "INDICADORES ▸"; };
+    btn.addEventListener("click", () => { show = !show; apply(); try { localStorage.setItem("aquarush.statusChips", show ? "1" : "0"); } catch { /* */ } });
+    apply();
+  }
+  /** a cada quadro: indicador de evento que deixou de acontecer fica apagado (sem piscar) ~4 s e esmaece em 1,5 s */
+  tickChips(): void {
+    const now = performance.now();
+    for (const id of Hud.EVENT_CHIPS) {
+      const el = document.getElementById(id);
+      if (!el) continue;
+      const active = el.classList.contains("warn") || el.classList.contains("show");
+      if (active) {
+        if (this.chipEndT.has(el)) { this.chipEndT.delete(el); el.classList.remove("linger", "fade"); }
+        this.chipLast.set(el, el.textContent ?? "");
+        continue;
+      }
+      const wasActive = this.chipLast.has(el);
+      if (wasActive && !this.chipEndT.has(el)) {
+        this.chipEndT.set(el, now); el.classList.add("linger"); el.classList.remove("fade");
+        const txt = this.chipLast.get(el); if (txt && el.textContent !== txt) el.textContent = txt; // mostra o último estado
+      }
+      const t0 = this.chipEndT.get(el);
+      if (t0 === undefined) continue;
+      const age = now - t0;
+      if (age > 4000) el.classList.add("fade");
+      if (age > 5600) { el.classList.remove("linger", "fade"); this.chipEndT.delete(el); this.chipLast.delete(el); }
+    }
+  }
 
   /** (Re)monta os relógios para o barco escolhido. */
   configure(opts: HudOpts = { speedMax: 100, temp: true, battery: true, trimPins: 0, gear: "bar" }): void {
@@ -401,7 +445,7 @@ export class Hud {
 
     this.planing.classList.toggle("on", t.planing);
     this.engineChip.textContent = t.engine === "running" ? "MOTOR LIGADO" : t.engine === "cranking" ? "DANDO PARTIDA…" : "MOTOR DESLIGADO";
-    this.engineChip.className = "chip " + (t.engine === "running" ? "on" : t.engine === "cranking" ? "crank" : "off");
+    this.engineChip.className = "chip stat " + (t.engine === "running" ? "on" : t.engine === "cranking" ? "crank" : "off");
     this.cav.classList.toggle("warn", t.cavitation > 0.25);
     this.vent.classList.toggle("warn", t.ventilation < 0.75 && t.throttle > 0.15 && t.propImmersion > 0.2);
     this.hotChip.classList.toggle("warn", t.overheatWarn);

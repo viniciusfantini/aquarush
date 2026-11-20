@@ -63,7 +63,7 @@ import { Hud } from "./presentation/hud.ts";
 import { EngineAudio } from "./presentation/audio.ts";
 
 installI18n(); // inglês: traduz o DOM, as escritas futuras e os letreiros 3D (antes de montar a cena e o HUD)
-const BUILD = "poc-babylon 0.77.6";
+const BUILD = "poc-babylon 0.78.0";
 /** Escala visual da rotação da hélice (proporcional ao RPM, abaixo do limite estroboscópico). */
 const PROP_VISUAL_SCALE = 0.12;
 
@@ -723,7 +723,7 @@ const boot = async () => {
       display: isBote ? "grey" : isJet || flyer ? "glass" : isAir ? "grey" : V.boat.units.length > 1 ? "vfd" : "lcd",
       trim: isAir || flyer ? null : trimOptsFor(V.P), choke: !!V.P.carbureted, bilgePump: V.P.bilge.pumpLph > 0, lights: isBote ? "LANTERNA" : isJet || isAir || flyer ? "" : "LUZES",
       startStop: !!V.P.startStop, batterySwitch: !V.P.startStop, fuelValve: !V.P.startStop, ecoMode: !!V.P.ecoThrottle, horn: isBote || isJet ? "apito" : "buzina",
-      annunciators: flyer ? "efi" : isAir, aircraft: !!V.P.aircraft, efi: !!V.P.efi, leveler: !!V.P.wing?.leveler, ballast: !!V.P.ballast });
+      annunciators: flyer ? "efi" : isAir, aircraft: !!V.P.aircraft, efi: !!V.P.efi, leveler: !!V.P.wing?.leveler, ballast: !!V.P.ballast, cruise: !!V.P.cruise });
     lights = false; input.setLights(false);
     setNavLights(V.vis, false); V.dinghy?.setLantern(false);
     hud.setLights(false, isBote ? "LANTERNA" : "LUZES");
@@ -899,6 +899,13 @@ const boot = async () => {
       sysToast(!on && was !== "off" && b.engine === "off" ? `LANE ${L} desligada e a outra também: o motor parou`
         : !on && b.engine === "running" ? `LANE ${L} desligada: o motor segue com a outra central (sem redundância)`
         : on ? `LANE ${L} ligada${b.systems.supplyV(2) > 9 ? " — autoteste da central" : " — sem tensão"}` : `LANE ${L} desligada`);
+    },
+    setCruise: (on) => {
+      V.boat.setCruise(on);
+      sysToast(on ? `CONTROLE DE VELOCIDADE ligado: mantém ${V.boat.cruiseKmh.toFixed(1)} km/h (a manete é o limite — deixe-a à frente)` : "Controle de velocidade desligado: a manete comanda");
+    },
+    adjustCruise: (d) => {
+      const b = V.boat; b.cruiseKmh = Math.min(70, Math.max(5, Math.round((b.cruiseKmh + d) * 2) / 2));
     },
     setBallast: (cmd) => {
       const b = V.boat;
@@ -1299,10 +1306,23 @@ const boot = async () => {
         ch.classList.toggle("warn", tube.rider === "water");
       }
     }
+    // controle de velocidade: chip enquanto ligado (velocidade escolhida e se a manete está limitando)
+    {
+      const ch = document.getElementById("h-cruise")!;
+      const on = boat.cruiseOn && mode === "game";
+      ch.classList.toggle("show", on);
+      ch.classList.toggle("warn", on && boat.telemetry.cruiseLimited);
+      ch.classList.toggle("steady", on && boat.telemetry.cruiseLimited);
+      if (on) {
+        const txt = `VELOCIDADE ${boat.cruiseKmh.toFixed(1)} km/h${boat.telemetry.cruiseLimited ? " · MANETE LIMITA" : ""}`;
+        if (ch.textContent !== txt) ch.textContent = txt;
+      }
+    }
     // lastro: chip com a fração e o que as bombas estão fazendo (lido da sim)
     {
       const ch = document.getElementById("h-ballast")!;
-      const has = !!boat.params.ballast && mode === "game";
+      // (v0.78: é um evento — só aparece com as bombas trabalhando; o nível fica no painel Y)
+      const has = !!boat.params.ballast && mode === "game" && boat.ballastCmd !== 0;
       ch.classList.toggle("show", has);
       if (has) {
         const f = boat.ballastFrac, L = boat.ballastL.reduce((a, v) => a + v, 0);
@@ -1759,6 +1779,7 @@ const boot = async () => {
     "partículas vivas": scene.particleSystems.reduce((a, p) => a + p.getActiveCount(), 0),
   });
   (window as unknown as Record<string, unknown>).__perf = perf;
+  scene.onAfterRenderObservable.add(() => hud.tickChips());
   engine.runRenderLoop(() => scene.render());
   window.addEventListener("resize", () => engine.resize());
   document.getElementById("loading")?.classList.add("done");

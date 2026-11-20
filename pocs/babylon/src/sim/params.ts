@@ -229,6 +229,11 @@ export interface SpeedboatParams {
    * por `wakeBoost` × (1 + 1,1 × fração cheia).
    */
   ballast?: { tanks: { pos: Vec3; maxL: number }[]; fillLps: number; drainLps: number; wakeBoost: number };
+  /**
+   * CONTROLE DE VELOCIDADE (lancha de wakeboard): segura a velocidade escolhida mexendo no acelerador (PI), sem passar da
+   * posição da manete (a manete é o limite, como nos sistemas de reboque de esportes). Sem marca de fabricante.
+   */
+  cruise?: boolean;
   /** atrito do fundo do casco no chão (padrão 0,45). Airboat: fundo de alumínio com polímero desliza em lama/capim */
   groundMu?: number;
   /** compressor mecânico (supercharger), acionado pelo virabrequim: pressão máxima de sobrealimentação (bar) a giro
@@ -1237,6 +1242,7 @@ export const WAKEBOAT: SpeedboatParams = {
   kind: "wake",
   name: "Lancha de wakeboard AR-8",
   tow: { eyeX: 0, eyeY: 2.15, eyeZ: -0.75, leg: 0 }, // reboque: argola no alto da torre targa (corda puxa de cima)
+  cruise: true, // controle de velocidade (painel Y)
   trimMode: "none",
   mass: 1550,
   inertia: v3(5400, 6000, 1350),

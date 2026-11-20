@@ -42,6 +42,8 @@ export interface SystemsPanelActions {
   setFuelPump(i: 1 | 2, on: boolean): void;       // injeção eletrônica: bomba elétrica de combustível 1 / 2
   setLeveler(on: boolean): void;                  // avião: nivelador de asas (LVL)
   setBallast(cmd: "fill" | "stop" | "drain"): void; // lancha de wakeboard: bombas do lastro
+  setCruise(on: boolean): void;                    // controle de velocidade: liga/desliga
+  adjustCruise(dKmh: number): void;                // controle de velocidade: ajusta a velocidade escolhida
   close(): void;
 }
 
@@ -74,6 +76,8 @@ export interface SystemsPanelCaps {
   aircraft?: boolean;
   /** tanques de lastro (lancha de wakeboard): chave ENCHER / PARAR / ESVAZIAR e o nível */
   ballast?: boolean;
+  /** controle de velocidade (lancha de wakeboard): chave ON/OFF, − / + e a velocidade escolhida */
+  cruise?: boolean;
 }
 
 const plate = (inner: string, cls = "") => `<div class="sw-plate ${cls}"><span class="screw s1"></span><span class="screw s2"></span><span class="screw s3"></span><span class="screw s4"></span>${inner}</div>`;
@@ -116,6 +120,8 @@ export class SystemsPanel {
       else if (d.ecu) this.act.setEcu(d.ecu as "a" | "b", !b.classList.contains("on"));
       else if (d.lvl) this.act.setLeveler(!b.classList.contains("on"));
       else if (d.ballast) this.act.setBallast(d.ballast as "fill" | "stop" | "drain");
+      else if (d.cruise) this.act.setCruise(!b.classList.contains("on"));
+      else if (d.cruiseSet) this.act.adjustCruise(Number(d.cruiseSet) * 0.5);
       else if (d.pump) this.act.setFuelPump(d.pump === "2" ? 2 : 1, !b.classList.contains("on"));
       else if (d.prime) { this.act.prime(); b.classList.remove("push"); void b.offsetWidth; b.classList.add("push"); }
     });
@@ -177,6 +183,8 @@ export class SystemsPanel {
     if (caps.choke) cells.push(cell(pull("choke", "1", "AFOGADOR", "partida a frio"), "choke"));
     if (caps.bilgePump) cells.push(cell(tri("bilge", "BOMBA PORÃO", "boia ou manual", { v: "on", l: "ON" }, { v: "off", l: "OFF" }, { v: "auto", l: "AUTO" }), "bilge"));
     if (caps.ballast) cells.push(cell(tri("ballast", "LASTRO", "bombas dos 3 tanques", { v: "fill", l: "ENCHER" }, { v: "stop", l: "PARAR" }, { v: "drain", l: "ESVAZIAR" }), "ballast"));
+    if (caps.cruise) cells.push(cell(toggle({ attr: "cruise", val: "1", label: "VELOCIDADE", sub: "controle automático" })
+      + `<div class="cruise-set"><button data-cruise-set="-1" aria-label="velocidade −">−</button><span data-cruise-v>30,0</span><button data-cruise-set="1" aria-label="velocidade +">+</button></div>`, "cruise"));
     // bote: lanterna de mão a pilha (manual) — não é chave de painel
     if (caps.lights) cells.push(cell(caps.banks ? toggle({ attr: "lights", val: "1", label: caps.lights, sub: "navegação" }) : lantern("lights", caps.lights, "de mão, a pilha"), "lights"));
     this.title.textContent = `⠿ SISTEMAS — ${caps.title}`;
@@ -289,6 +297,14 @@ export class SystemsPanel {
       info("ss", (t.driveMode === "eco" ? "ECO · " : "") + (t.engine === "running" ? `ligada · ${Math.round(t.rpm)} rpm · ${t.boostBar.toFixed(2)} bar` : t.engine === "cranking" ? `arranque · ${Math.round(t.rpm)} rpm`
         : !t.lanyard ? "cordão SOLTO: não liga" : awake ? "central acordada" : "desligada"), !t.lanyard || (t.startFail !== "" && t.engine === "off" && awake));
 
+    }
+    if (c.cruise) {
+      // chave e a velocidade escolhida; leitura: atual, acelerador que ele comanda e se a manete está limitando
+      setToggle(el, "cruise", "1", t.cruiseOn, t.cruiseOn && powered);
+      const sv = el.querySelector<HTMLElement>("[data-cruise-v]");
+      const txt = `${t.cruiseKmh.toFixed(1).replace(".", ",")} km/h`;
+      if (sv && sv.textContent !== txt) sv.textContent = txt;
+      info("cruise", t.cruiseOn ? `mantendo ${t.cruiseKmh.toFixed(1)} km/h · agora ${t.speedKmh.toFixed(1)} · acel. ${(t.cruiseThr * 100).toFixed(0)} %${t.cruiseLimited ? " · MANETE LIMITA" : ""}` : "desligado — a manete comanda", t.cruiseOn && t.cruiseLimited);
     }
     if (c.ballast) {
       // chave na posição do que as bombas estão fazendo; LED aceso bombeando; nível: barra + % de cada tanque

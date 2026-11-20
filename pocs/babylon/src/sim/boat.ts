@@ -145,6 +145,8 @@ export interface BoatTelemetry {
   bilgeWarn: boolean;    // aviso de porão (laranja fixo, sem som): bomba trabalhando ou um pouco de água
   /** lastro (lancha de wakeboard): litros no total, capacidade, fração de cada tanque e as bombas (+1 enche, −1 esvazia) */
   ballastL: number; ballastMaxL: number; ballastTanks: number[]; ballastPump: number;
+  /** controle de velocidade: ligado, velocidade escolhida (km/h), acelerador que ele comanda e se a manete limita */
+  cruiseOn: boolean; cruiseKmh: number; cruiseThr: number; cruiseLimited: boolean;
   bilgeJetPos: Vec3;     // saída da bomba no costado (mundo)
   bilgeJetVel: Vec3;     // velocidade do jato ao sair (mundo, m/s)
   freeboard: number;     // borda livre: menor altura da borda/espelho acima da água (m)
@@ -411,6 +413,31 @@ export class Speedboat {
   prime = 0;
   /** modo de condução (moto aquática): "eco" limita o acelerador */
   driveMode: "normal" | "eco" = "normal";
+  /** CONTROLE DE VELOCIDADE (`params.cruise`): ligado, velocidade escolhida (km/h) e o acelerador que ele comanda */
+  cruiseOn = false;
+  cruiseKmh = 30;
+  private cruiseI = 0;
+  private cruiseThr = 1;
+  /** liga/desliga; ao ligar, o integrador parte do acelerador atual (sem tranco) */
+  setCruise(on: boolean): void {
+    if (!this.params.cruise) return;
+    if (on && !this.cruiseOn) { this.cruiseI = Math.min(1, Math.max(0, this.telemetry.throttle)); this.cruiseThr = this.cruiseI; }
+    this.cruiseOn = on;
+  }
+  /** acelerador efetivo com o controle de velocidade: PI na velocidade, limitado pela manete */
+  private applyCruise(dt: number, input: VehicleInput): VehicleInput {
+    const t = this.telemetry;
+    t.cruiseOn = this.cruiseOn; t.cruiseKmh = this.cruiseKmh;
+    if (!this.params.cruise || !this.cruiseOn || input.gear !== "F" || this.capsized) { t.cruiseThr = input.throttle; t.cruiseLimited = false; return input; }
+    const err = this.cruiseKmh - Math.hypot(this.vel.x, this.vel.z) * 3.6;
+    this.cruiseI = Math.min(1, Math.max(0, this.cruiseI + 0.012 * err * dt));
+    const out = Math.min(1, Math.max(0, this.cruiseI + 0.05 * err));
+    this.cruiseThr += (out - this.cruiseThr) * Math.min(1, dt * 4); // atuador do acelerador (não salta)
+    const thr = Math.min(input.throttle, this.cruiseThr);
+    t.cruiseThr = thr; t.cruiseLimited = input.throttle < this.cruiseThr - 0.02; // a manete está abaixo do que ele pede
+    return { ...input, throttle: thr };
+  }
+
   /** LASTRO (lancha de wakeboard): litros em cada tanque e o comando das bombas (+1 enche, −1 esvazia, 0 parado) */
   ballastL: number[] = [];
   ballastCmd: -1 | 0 | 1 = 0;
@@ -499,7 +526,7 @@ export class Speedboat {
     this.rpm = params.idleRpm;
     this.telemetry = {
       speedKmh: 0, waterSpeed: 0, rpm: params.idleRpm, throttle: 0, throttleCmd: 0, trim: 0, trimDeg: 0, tiltDeg: 0, tiltBlocked: false, intakeSubmerged: true, steerDeg: 0,
-      gear: "N", pitchDeg: 0, rollDeg: 0, wetFraction: 0, planing: false, thrustN: 0, ventilation: 1, cavitation: 0, propImmersion: 1, revLimiter: false, propSlip: 0, propRpm: 0, engine: "running", fuelL: 0, fuelFrac: 1, coolantC: 45, batteryV: 12.6, engineHours: 0, overheatWarn: false, protectMode: false, lowFuel: false, chargeWarn: false, stall: "", trimMotorA: 0, trimRelay: false, jumper: false, jumpCharge: 1, batteryA: 0, bilgeL: 0, bilgeInflowLps: 0, bilgePump: false, bilgeFlowLps: 0, bilgeAlarm: false, bilgeWarn: false, ballastL: 0, ballastMaxL: 0, ballastTanks: [], ballastPump: 0, bilgeJetPos: v3(), bilgeJetVel: v3(), freeboard: 1, swamped: false, sunk: false, airPocketL: 0,
+      gear: "N", pitchDeg: 0, rollDeg: 0, wetFraction: 0, planing: false, thrustN: 0, ventilation: 1, cavitation: 0, propImmersion: 1, revLimiter: false, propSlip: 0, propRpm: 0, engine: "running", fuelL: 0, fuelFrac: 1, coolantC: 45, batteryV: 12.6, engineHours: 0, overheatWarn: false, protectMode: false, lowFuel: false, chargeWarn: false, stall: "", trimMotorA: 0, trimRelay: false, jumper: false, jumpCharge: 1, batteryA: 0, bilgeL: 0, bilgeInflowLps: 0, bilgePump: false, bilgeFlowLps: 0, bilgeAlarm: false, bilgeWarn: false, ballastL: 0, ballastMaxL: 0, ballastTanks: [], ballastPump: 0, cruiseOn: false, cruiseKmh: 30, cruiseThr: 0, cruiseLimited: false, bilgeJetPos: v3(), bilgeJetVel: v3(), freeboard: 1, swamped: false, sunk: false, airPocketL: 0,
       anchorOut: 0, anchorState: "recolhida", anchorDepth: 0, anchorScope: 0, anchorTension: 0, anchorRelay: false, windlassA: 0, apparentWind: 0, neutralRev: false, fuelLph: 0, buzzer: false, starterRpm: 0, startFail: "", batterySoc: 0.92, trimPin: 0, pullStart: !params.electricStart,
       distanceM: 0, collisions: 0, draftHull: 0, draftMotor: 0, capsized: false, swimmers: 0, hullDamage: 0, engineDamage: 0, damageEvent: "", damageCount: 0, lastImpact: 0, depth: 0, submergedPoints: params.buoyancyPoints.map(() => false),
       rpms: [params.idleRpm], gears: ["N"], throttles: [0], thrusts: [0], engines: ["running"], keys: ["on"], houseV: 12.6, propRpms: [0], coolants: [45], batteryVs: [12.6], batterySocs: [0.92], batteryAs: [0], turbine: null, nominalV: 12, gpu: false, gpuState: "off", gpuT: 0, gpuKw: 0, busBattery: true, busGen: false, extPwr: false, extPwrClosed: false, extPwrFault: false, gpuA: 0, coolingLps: 0, fuelValveOpen: true, fuelLineFrac: 1, bilgeMode: "auto", batterySel: "ind", choke: false,
@@ -544,6 +571,7 @@ export class Speedboat {
   }
 
   step(dt: number, input: VehicleInput, water: IWaterSurface, world: PhysicsWorld): void {
+    input = this.applyCruise(dt, input);
     const P = this.params;
     this.F = v3();
     this.T = v3();

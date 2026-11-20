@@ -1750,6 +1750,22 @@ for (const [label, thr] of [["baixa", 0.25], ["alta", 1]] as const) {
   run(top, water, 40, { ...emptyInput(), gear: "F", throttle: 1 }, openWater);
   check("lancha de wakeboard", "a toda, sem lastro (km/h)", top.telemetry.speedKmh, 55, 80, "km/h", 0);
   check("lancha de wakeboard", "ponto de reboque no alto da torre targa (m acima da linha d'água)", TowTube.towLocal(top).y, 1.8, 2.5, "m", 2);
+  {
+    // CONTROLE DE VELOCIDADE (v0.78): segura a velocidade escolhida com a manete à frente; a manete é o limite
+    const c = mk(1); c.cruiseKmh = 30; c.setCruise(true);
+    let sMin = 99, sMax = 0;
+    for (let i = 0; i < 60 / DT; i++) { water.time += DT; c.step(DT, { ...emptyInput(), gear: "F", throttle: 1 }, water, openWater); if (i * DT > 40) { const v = c.telemetry.speedKmh; sMin = Math.min(sMin, v); sMax = Math.max(sMax, v); } }
+    check("lancha de wakeboard", "controle de velocidade em 30 km/h, manete à frente: menor velocidade nos últimos 20 s (km/h)", sMin, 29, 31, "km/h", 1);
+    check("lancha de wakeboard", "controle de velocidade em 30 km/h, manete à frente: maior velocidade nos últimos 20 s (km/h)", sMax, 29, 31, "km/h", 1);
+    c.cruiseKmh = 36;
+    run(c, water, 30, { ...emptyInput(), gear: "F", throttle: 1 }, openWater);
+    check("lancha de wakeboard", "controle de velocidade: ajustado para 36 km/h, chega lá (km/h)", c.telemetry.speedKmh, 35, 37, "km/h", 1);
+    run(c, water, 25, { ...emptyInput(), gear: "F", throttle: 0.15 }, openWater);
+    check("lancha de wakeboard", "controle de velocidade: com a manete baixa ela limita (fica abaixo e avisa)", c.telemetry.speedKmh < 33 && c.telemetry.cruiseLimited ? 1 : 0, 1, 1, "", 0);
+    c.setCruise(false);
+    run(c, water, 25, { ...emptyInput(), gear: "F", throttle: 1 }, openWater);
+    check("lancha de wakeboard", "controle de velocidade desligado: a manete volta a comandar (a toda, km/h)", c.telemetry.speedKmh, 45, 80, "km/h", 0);
+  }
   // lastro: as bombas enchem os 3 tanques; a massa sobe 1000 kg e o casco afunda
   const bl = mk(0); run(bl, water, 5, { ...emptyInput(), gear: "N" }, openWater); const y0 = bl.pos.y, m0 = bl.totalMass;
   bl.ballastCmd = 1; let tFill = 0;
