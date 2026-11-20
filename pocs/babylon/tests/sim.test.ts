@@ -2616,11 +2616,33 @@ for (const [label, thr] of [["baixa", 0.25], ["alta", 1]] as const) {
   }
 }
 
+// ---------- Represa sem bancos rasos no meio (v0.76.5) ----------
+{
+  // água com menos de 1,8 m a mais de 40 m de terra seca (grade de 10 m, distância por BFS) — antes: 0,72 km²
+  const S = 10, X0 = -1400, X1 = 1400, Z0 = -1200, Z1 = 1500, nx = (X1 - X0) / S + 1, nz = (Z1 - Z0) / S + 1;
+  const hh = new Float32Array(nx * nz), dd = new Float32Array(nx * nz).fill(1e9), q: number[] = [];
+  for (let i = 0; i < nx; i++) for (let j = 0; j < nz; j++) { const k = i * nz + j; hh[k] = groundHeight(X0 + i * S, Z0 + j * S); if (hh[k] > 0.2) { dd[k] = 0; q.push(k); } }
+  for (let qi = 0; qi < q.length; qi++) {
+    const k = q[qi], i = Math.floor(k / nz), j = k % nz;
+    for (const [di, dj] of [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]]) {
+      const a2 = i + di, b2 = j + dj; if (a2 < 0 || b2 < 0 || a2 >= nx || b2 >= nz) continue;
+      const kk = a2 * nz + b2, nd = dd[k] + S * Math.hypot(di, dj); if (nd < dd[kk]) { dd[kk] = nd; q.push(kk); }
+    }
+  }
+  let shallow = 0; for (let k = 0; k < nx * nz; k++) if (hh[k] < -0.05 && hh[k] > -1.8 && dd[k] >= 40) shallow++;
+  check("lago", "represa: área rasa (< 1,8 m) a mais de 40 m da margem (m²)", shallow * S * S, 0, 2000, "m²", 0);
+  // talude: a 45 m da margem já tem a profundidade máxima (perfil na direção do centro de um lobo grande)
+  let x = -1400; while (groundHeight(x, 700) > 0) x += 1;
+  check("lago", "lobo grande: profundidade a 45 m da margem (m)", -groundHeight(x + 45, 700), 6, 7.2, "m", 1);
+}
+
 // ---------- Ponto de partida (bacia dragada da marina) ----------
 {
   const w = buildWorld();
   const water = mkWater(0.35);
-  check("partida", "profundidade no ponto de partida (m)", -groundHeight(w.spawn.x, w.spawn.z), 2.0, 3.0, "m", 2);
+  // (v0.76.5: com o talude da represa mais íngreme o fundo natural na marina passou da bacia dragada de 2,3 m — o
+  //  limite de cima subiu de 3 para 4,5 m; o de baixo, que garante água para o pé do motor, não mudou)
+  check("partida", "profundidade no ponto de partida (m)", -groundHeight(w.spawn.x, w.spawn.z), 2.0, 4.5, "m", 2);
   for (const P of [SPEEDBOAT, DINGHY]) {
     const b = new Speedboat(P, v3(w.spawn.x, 0.25, w.spawn.z), w.spawn.heading);
     let minClear = 9;
@@ -2636,7 +2658,7 @@ for (const [label, thr] of [["baixa", 0.25], ["alta", 1]] as const) {
   for (const P of [SPEEDBOAT, DINGHY]) {
     const water = mkWater(0.35);
     const s = berthStartPose(w.pier, P);
-    check("embarque", `${P.kind}: profundidade na vaga do píer (m)`, -groundHeight(s.pos.x, s.pos.z), 1.5, 3.0, "m", 2);
+    check("embarque", `${P.kind}: profundidade na vaga do píer (m)`, -groundHeight(s.pos.x, s.pos.z), 1.5, 4.5, "m", 2); // (v0.76.5: até 4,5 m, talude mais íngreme)
     const b = new Speedboat(P, v3(s.pos.x, s.pos.y, s.pos.z), s.heading);
     b.occupants = (Object.keys(P.seats) as Occupant["seat"][]).map((seat) => ({ seat, mass: PERSON_KG })); // lotado
     tieToPier(b, w.pier, s.side);

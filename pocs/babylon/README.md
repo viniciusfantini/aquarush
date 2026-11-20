@@ -96,6 +96,17 @@ A lancha é um **corpo rígido 6DOF** (massa seca de 1030 kg + gasolina, ocupant
 
 > Referência completa da lógica elétrica e dos motores: [`docs/SISTEMAS_ELETRICOS_E_MOTORES.md`](../../docs/SISTEMAS_ELETRICOS_E_MOTORES.md).
 
+## Represa sem bancos rasos: talude em metros (v0.76.5)
+
+- `baseGround`: na faixa 0,45 < r < 1,25 do contorno do lago, a distância à margem em metros é estimada por
+  (1 − r)/|∇r| (diferença finita de 2 m); dentro d'água o fundo = −0,8 − 6,2·smoothstep(0, `LAKE_SHELF_M` = 45 m, d);
+  fora, −0,8 + 2,6·smoothstep(0, 22 m, −d) (mesma linha d'água e mesma praia de antes). Antes era smoothstep em r
+  (0,5→1,0), que nos lobos de 500 m virava uma plataforma de ~250 m com 1–2,5 m de fundo.
+- Medido (grade de 10 m, distância à terra por BFS): água < 1,8 m a ≥ 40 m da margem 7236 células (0,72 km²) → 1
+  (100 m²). Critérios novos em "lago": essa área ≤ 2000 m² e 6,4 m de fundo a 45 m da margem de um lobo grande.
+- A marina ficou mais funda que a bacia dragada (3,35 m no ponto de partida, 3,7 m na vaga): os critérios "partida" e
+  "embarque" subiram o limite de cima de 3 para 4,5 m (o mínimo, que garante água para o motor, não mudou).
+
 ## Olhais no espelho de popa, argolas no bote, olhal único nas aeronaves (v0.76.4)
 
 - `buildTowEyes(..., mount)`: raio de trás para a frente (espelho) ou de fora para dentro no flutuador (bote, `"tube"`)
@@ -951,7 +962,7 @@ Limitação: é uma síntese aproximada, não uma gravação. Validar o timbre d
 | Lancha pantaneira AR-P (v0.69–0.69.2) | frio sem primer não pega (falha "prime"); 3 bombadas pega em 1,2 s; 9 bombadas afoga; mistura em corte não pega e apaga o motor ligado; um magneto: −103 rpm a pleno; mistura 0,8: −5,6 L/h; magnetos OFF param; trim sem ação (0°, 0 A); P frio pega; largada a 60 % pega em 2,2 s; lenta empurrando 4,5 km/h, sempre em F, borda 0,38 m; a toda 88,4 km/h a 2434 rpm, 0→40 4,4 s; sem cavitação/ventilação; pedindo R segue a 89 km/h para a frente; curva a toda derrapando 3,6 m/s, 11,1°/s, roll 3,2°, não vira; motor desligado com os lemes todos: 0,0°; partida sem N; 50 % + lemes quase parado: 20,2°/s; refrigerado a ar; barranco de lama/capim: 12,6 s no seco, avaria 2 %, 30 km/h; carretinha da caminhonete |
 | Moto aquática AR-J (v0.67–0.67.1) | compressor 1,04 bar a toda, 0,007 bar na lenta; luz do iBB: apagada em F, FREIO freando a toda, RÉ parada em R, NEUTRO em N; navegador: S segurado a 107 km/h → FREIO, 53 km/h em 1,5 s; soltar → F; toque → N; parada: CG −0,03 m da água, borda 0,25 m; a toda 108,3 km/h a 7880 rpm, 0→60 2,7 s, 0→100 7,1 s, 72 L/h; curva a toda 29,2°/s sem virar; iBB de 102 km/h a < 5 km/h em 4,2 s e depois ré; N com o guidão todo: 0,2° em 6 s; lenta + guidão 10,6°/s; N acelerado: empuxo 0, rotor a 7478 rpm; no ar: empuxo 0, giro 7951 rpm; ECO 55 % / 89,9 km/h; lotada 101,5 km/h; cordão solto não liga, puxado desliga; START pega em 1,5 s (60 %); central dorme em 30 s; casco selado 40 s lotada em ondas fortes: 0,0 L; sifão 6,1 L em 30 s (= contrato); virada: desvira em 4,5 s, piloto a bordo com o cordão, liga de novo; carretinha 3,9 m no carro |
 
-Resultado: **837/839 OK + 2 KNOWN** (v0.76.4). Na v0.10, o peso do piloto na posição real (boreste, acima do CG) aumentou o roll em curva com ondas fortes; o `bankCoef` foi para 1800 e o `rollDamping` para 15000, com 1 limitação conhecida (abaixo). Na v0.2 a hélice foi para 0,5 m atrás do espelho, como no modelo visual, e o esterço máximo em alta velocidade caiu de 13° para 11°.
+Resultado: **839/841 OK + 2 KNOWN** (v0.76.5). Na v0.10, o peso do piloto na posição real (boreste, acima do CG) aumentou o roll em curva com ondas fortes; o `bankCoef` foi para 1800 e o `rollDamping` para 15000, com 1 limitação conhecida (abaixo). Na v0.2 a hélice foi para 0,5 m atrás do espelho, como no modelo visual, e o esterço máximo em alta velocidade caiu de 13° para 11°.
 
 ### Navegador (Chrome, Windows 11, WebGL2, `q=med`, ~1370×896)
 

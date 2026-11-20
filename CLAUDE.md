@@ -94,6 +94,7 @@ Valores de referência (lancha): massa seca 1030 kg; empuxo máximo 8,5 t; borda
 
 | Data | Decisão | Motivo |
 |---|---|---|
+| 2026-11-20 | **Talude da represa em metros** (`LAKE_SHELF_M` 45 m, distância à margem por (1 − r)/|∇r| em `baseGround`): sem plataformas rasas no meio dos lobos grandes | Relato do usuário: "tem alguns lugares na represa que está raso sem sentido… o motor está batendo" |
 | 2026-11-20 | **Fixação da corda de reboque** (v0.76): parâmetro do contrato `tow` (olhais + "Y" de braços `leg`, ou gancho único) em todos os barcos; `TowTube.applyTow` divide a força entre os olhais; `TowBridleVis` | Pedido do usuário: "melhore os pontos de fixação da corda para todas embarcações, se necessário use aquele Y" |
 | 2026-11-20 | **Referência da câmera**: 3ª pessoa no barco/equipamento; 1ª pessoa na pessoa (piloto na água → câmera nos olhos dele; boia → quem caiu) | Pedido do usuário: "em 3 pessoa fica no barco, em 1 no piloto (ou no esportista)" |
 | 2026-11-20 | Cordas de reboque = `RopeTube` (tubo que engrossa com a distância, `ropeTube.ts`); barco virado não troca a câmera | Pedido do usuário: cabo mais visível, principalmente em 1ª pessoa do equipamento; "caso o barco vire mantenha a câmera do jeito que está" |

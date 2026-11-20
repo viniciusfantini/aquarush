@@ -82,6 +82,8 @@ export const LAKE_LOBES = [
 ];
 /** união suave de dois campos de distância (k = largura da emenda) */
 const smin = (a: number, b: number, k: number): number => { const h = clamp(0.5 + 0.5 * (b - a) / k, 0, 1); return b + (a - b) * h - k * h * (1 - h); };
+/** distância (m) da margem em que o fundo do lago chega à profundidade máxima (7 m) */
+export const LAKE_SHELF_M = 45;
 export const ISLAND = { x: 140, z: 70, r: 48 };
 /** Canal de rio (cânion) que liga o lago, ao norte, ao MAR ABERTO (v0.74: antes terminava numa cachoeira em z ≈ 780).
  *  Lago e mar estão no mesmo nível; a correnteza corre devagar do lago para o mar. */
@@ -98,7 +100,18 @@ const lakeR = (x: number, z: number): number => {
 const baseGround = (x: number, z: number): number => {
   const r = lakeR(x, z);
   const hills = 6 + 22 * (0.5 + 0.5 * fbm(x / 210, z / 210, 4));
-  let h = -7 + 6.2 * smoothstep(0.5, 1.0, r) + 2.6 * smoothstep(1.0, 1.14, r) + hills * smoothstep(1.12, 1.75, r);
+  // v0.76.5: o talude do lago depende da DISTÂNCIA EM METROS até a margem (estimada por (1 − r)/|∇r|), não da fração do
+  // raio — com os lobos de 500 m o fundo levava ~250 m para chegar a 7 m e sobravam plataformas enormes de 1–2,5 m no
+  // meio da represa (o pé do motor batia). Agora: −0,8 m na linha da margem, −7 m a `LAKE_SHELF_M` dela, em todo lobo.
+  let lakeH: number;
+  if (r <= 0.45) lakeH = -7;
+  else if (r >= 1.25) lakeH = -0.8 + 2.6;
+  else {
+    const e = 2, g = Math.max(1e-4, Math.hypot(lakeR(x + e, z) - r, lakeR(x, z + e) - r) / e);
+    const dm = (1 - r) / g; // > 0 dentro d'água
+    lakeH = dm >= 0 ? -0.8 - 6.2 * smoothstep(0, LAKE_SHELF_M, dm) : -0.8 + 2.6 * smoothstep(0, 22, -dm);
+  }
+  let h = lakeH + hills * smoothstep(1.12, 1.75, r);
   h += 0.6 * fbm(x / 25, z / 25, 2) * smoothstep(0.9, 1.2, r); // irregularidade das margens
 
   // ilha
