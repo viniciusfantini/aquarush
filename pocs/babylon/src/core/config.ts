@@ -24,7 +24,10 @@ export const QUALITY: Record<QualityName, Quality> = {
 };
 
 export const PHYSICS_DT = 1 / 120;
-export const MAX_SUBSTEPS = 10;
+/** passos de física por quadro, no máximo (5 = tempo real até 24 fps). Acima disso o jogo fica em câmera lenta por um
+ *  instante em vez de tentar alcançar: com 10, um quadro lento pedia 10 passos, o quadro seguinte ficava mais lento ainda
+ *  e o FPS desabava ("espiral da morte") */
+export const MAX_SUBSTEPS = 5;
 
 export const readUrlConfig = () => {
   const p = new URLSearchParams(location.search);

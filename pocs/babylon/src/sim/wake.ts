@@ -68,13 +68,27 @@ export const armPoint = (s: WakeSample, side: number, inward: number): { x: numb
   return { x: s.bx + s.rx * side * half, z: s.bz + s.rz * side * half };
 };
 
-interface Chunk { i0: number; i1: number; minX: number; maxX: number; minZ: number; maxZ: number }
+/** Um trecho de crista/cavado da esteira (entre duas amostras, num lado, numa das cristas) — guardado no índice espacial */
+interface WakeSeg { a: WakeSample; b: WakeSample; side: number; r: (typeof WAKE_RIDGES)[number] }
 
 export class WakeField {
   samples: WakeSample[] = [];
   private emitTimer = 0;
-  private chunks: Chunk[] = [];
-  private static readonly CH = 10;
+  /**
+   * ÍNDICE ESPACIAL da esteira para a física (v0.73.1): células de `BUCKET` m com os trechos de crista que podem chegar
+   * nelas. Antes cada consulta de altura percorria todo o histórico (até ~900 amostras × 6 cristas) — com o barco fazendo
+   * curvas por cima da própria esteira um passo de física chegava a ~6 ms. O índice é refeito a cada `REBUILD_S` s com a
+   * caixa de cada trecho ampliada para onde ele pode ir até a próxima reconstrução (as cristas se abrem com a idade); a
+   * consulta faz a MESMA conta de antes, só com os trechos da célula.
+   */
+  private buckets = new Map<number, WakeSeg[]>();
+  private sinceRebuild = Infinity;
+  private static readonly BUCKET = 6;
+  private static readonly REBUILD_S = 0.1;
+  /** raio (m) em volta do barco coberto pelo índice: é onde ficam quem consulta a esteira (casco, boia rebocada a 16 m,
+   *  pessoas nadando). Fora dele a esteira não é sentida pela física (as cristas velhas se abrem por mais de 100 m e
+   *  indexá-las todas custava ~10 ms a cada reconstrução) */
+  static readonly INDEX_R = 70;
   /** contato do casco com a água, suavizado (o casco planando toca e solta a água o tempo todo) */
   private wetS = 1;
 
@@ -120,59 +134,72 @@ export class WakeField {
       this.emitTimer = live.v > 2 ? EMIT_DT_FAST : EMIT_DT_SLOW;
       this.samples.push(live);
     }
-    this.rebuildChunks();
+    this.sinceRebuild += dt;
+    if (this.sinceRebuild >= WakeField.REBUILD_S) { this.sinceRebuild = 0; this.rebuildIndex(boat.pos.x, boat.pos.z); }
   }
 
-  reset(): void { this.samples = []; this.chunks = []; this.wetS = 1; }
+  reset(): void { this.samples = []; this.buckets.clear(); this.sinceRebuild = Infinity; this.wetS = 1; }
 
-  /** Caixas envolventes por trecho (aceleram a consulta da física). */
-  private rebuildChunks(): void {
-    this.chunks = [];
-    const S = this.samples, CH = WakeField.CH;
-    for (let i0 = 0; i0 < S.length - 1; i0 += CH - 1) {
-      const i1 = Math.min(i0 + CH - 1, S.length - 1);
-      let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
-      for (let i = i0; i <= i1; i++) {
-        const s = S[i];
-        if (s.age < WAKE_PHYSICS_MIN_AGE) continue;
-        const reach = Math.max(armOffset(s, 0), 0) + ridgeHalfWidth(s.age, 1.2) * 2.2;
-        minX = Math.min(minX, s.bx - reach); maxX = Math.max(maxX, s.bx + reach);
-        minZ = Math.min(minZ, s.bz - reach); maxZ = Math.max(maxZ, s.bz + reach);
+  private static key(ix: number, iz: number): number { return (ix + 32768) * 65536 + (iz + 32768); }
+
+  /** Refaz o índice: cada trecho entra nas células que sua faixa de influência (±2 meias-larguras) pode cobrir agora
+   *  e daqui a `REBUILD_S` s (+ folga). */
+  private rebuildIndex(cx: number, cz: number): void {
+    this.buckets.clear();
+    const S = this.samples, B = WakeField.BUCKET, ahead = WakeField.REBUILD_S + 0.05, R = WakeField.INDEX_R;
+    const wx0 = Math.floor((cx - R) / B), wx1 = Math.floor((cx + R) / B), wz0 = Math.floor((cz - R) / B), wz1 = Math.floor((cz + R) / B);
+    for (let i = 0; i < S.length - 1; i++) {
+      const a = S[i], b = S[i + 1];
+      if (a.age + ahead < WAKE_PHYSICS_MIN_AGE || Math.abs(a.age - b.age) > 0.6) continue;
+      const a2 = { ...a, age: a.age + ahead }, b2 = { ...b, age: b.age + ahead };
+      if ((armEnvelope(a) + armEnvelope(b)) * 0.5 < 0.002 && (armEnvelope(a2) + armEnvelope(b2)) * 0.5 < 0.002) continue;
+      for (const side of [-1, 1]) for (const r of WAKE_RIDGES) {
+        let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
+        for (const s of [a, b, a2, b2]) {
+          const p = armPoint(s, side, r.inward);
+          if (!p) continue;
+          minX = Math.min(minX, p.x); maxX = Math.max(maxX, p.x); minZ = Math.min(minZ, p.z); maxZ = Math.max(maxZ, p.z);
+        }
+        if (minX === Infinity) continue;
+        const pad = 2 * ridgeHalfWidth((a.age + b.age) * 0.5 + ahead, r.width) + 0.3;
+        const ix0 = Math.max(wx0, Math.floor((minX - pad) / B)), ix1 = Math.min(wx1, Math.floor((maxX + pad) / B));
+        const iz0 = Math.max(wz0, Math.floor((minZ - pad) / B)), iz1 = Math.min(wz1, Math.floor((maxZ + pad) / B));
+        if (ix0 > ix1 || iz0 > iz1) continue; // longe do barco
+        const seg: WakeSeg = { a, b, side, r };
+        for (let ix = ix0; ix <= ix1; ix++)
+          for (let iz = iz0; iz <= iz1; iz++) {
+            const k = WakeField.key(ix, iz);
+            const list = this.buckets.get(k);
+            if (list) list.push(seg); else this.buckets.set(k, [seg]);
+          }
       }
-      if (minX < Infinity) this.chunks.push({ i0, i1, minX, maxX, minZ, maxZ });
     }
   }
 
   /** Altura (m) da marola da esteira em (x, z) — usada pela física. */
   heightAt(x: number, z: number): number {
+    const list = this.buckets.get(WakeField.key(Math.floor(x / WakeField.BUCKET), Math.floor(z / WakeField.BUCKET)));
+    if (!list) return 0;
     let h = 0;
-    const S = this.samples;
-    for (const c of this.chunks) {
-      if (x < c.minX || x > c.maxX || z < c.minZ || z > c.maxZ) continue;
-      for (let i = c.i0; i < c.i1; i++) {
-        const a = S[i], b = S[i + 1];
-        if (a.age < WAKE_PHYSICS_MIN_AGE || Math.abs(a.age - b.age) > 0.6) continue;
-        const env = (armEnvelope(a) + armEnvelope(b)) * 0.5;
-        if (env < 0.002) continue;
-        for (const side of [-1, 1]) {
-          for (const r of WAKE_RIDGES) {
-            const pa = armPoint(a, side, r.inward), pb = armPoint(b, side, r.inward);
-            if (!pa || !pb) continue;
-            // distância do ponto ao segmento pa-pb
-            const ex = pb.x - pa.x, ez = pb.z - pa.z;
-            const L2 = ex * ex + ez * ez;
-            let t = L2 > 1e-9 ? ((x - pa.x) * ex + (z - pa.z) * ez) / L2 : 0;
-            t = t < 0 ? 0 : t > 1 ? 1 : t;
-            const dx = x - (pa.x + ex * t), dz = z - (pa.z + ez * t);
-            const w = ridgeHalfWidth((a.age + b.age) * 0.5, r.width);
-            const q = (dx * dx + dz * dz) / (w * w);
-            if (q > 4) continue;
-            // segmentos vizinhos se sobrepõem nas pontas: pondera pela posição ao longo do segmento
-            const along = t <= 0 || t >= 1 ? 0.5 : 1;
-            h += r.sign * r.amp * env * Math.exp(-q) * along;
-          }
-        }
-      }
+    for (const sg of list) {
+      const a = sg.a, b = sg.b, r = sg.r;
+      if (a.age < WAKE_PHYSICS_MIN_AGE || a.age > WAKE_MAX_AGE) continue;
+      const env = (armEnvelope(a) + armEnvelope(b)) * 0.5;
+      if (env < 0.002) continue;
+      const pa = armPoint(a, sg.side, r.inward), pb = armPoint(b, sg.side, r.inward);
+      if (!pa || !pb) continue;
+      // distância do ponto ao segmento pa-pb
+      const ex = pb.x - pa.x, ez = pb.z - pa.z;
+      const L2 = ex * ex + ez * ez;
+      let t = L2 > 1e-9 ? ((x - pa.x) * ex + (z - pa.z) * ez) / L2 : 0;
+      t = t < 0 ? 0 : t > 1 ? 1 : t;
+      const dx = x - (pa.x + ex * t), dz = z - (pa.z + ez * t);
+      const w = ridgeHalfWidth((a.age + b.age) * 0.5, r.width);
+      const q = (dx * dx + dz * dz) / (w * w);
+      if (q > 4) continue;
+      // segmentos vizinhos se sobrepõem nas pontas: pondera pela posição ao longo do segmento
+      const along = t <= 0 || t >= 1 ? 0.5 : 1;
+      h += r.sign * r.amp * env * Math.exp(-q) * along;
     }
     return h;
   }

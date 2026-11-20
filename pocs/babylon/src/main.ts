@@ -6,6 +6,7 @@
 import {
   Engine, WebGPUEngine, Scene, Vector3, Quaternion, Color3, Color4, HemisphericLight, DirectionalLight, ShadowGenerator,
   MeshBuilder, ReflectionProbe, RenderTargetTexture, ImageProcessingConfiguration, Matrix, type AbstractEngine, type Mesh, type AbstractMesh, TransformNode,
+  SceneInstrumentation,
 } from "@babylonjs/core";
 import { SkyMaterial } from "@babylonjs/materials/sky/skyMaterial";
 
@@ -56,7 +57,7 @@ import { Hud } from "./presentation/hud.ts";
 import { EngineAudio } from "./presentation/audio.ts";
 
 installI18n(); // inglês: traduz o DOM, as escritas futuras e os letreiros 3D (antes de montar a cena e o HUD)
-const BUILD = "poc-babylon 0.73.0";
+const BUILD = "poc-babylon 0.73.1";
 /** Escala visual da rotação da hélice (proporcional ao RPM, abaixo do limite estroboscópico). */
 const PROP_VISUAL_SCALE = 0.12;
 
@@ -332,8 +333,8 @@ const boot = async () => {
   let depth = null;
   if (cfg.quality.depthEffects) {
     depth = scene.enableDepthRenderer(cam.cam, false, true);
-    const list: Mesh[] = [terrain, riverStrip, ...pierMeshes, ...staticExtras, ...allBoatMeshes];
-    depth.getDepthMap().renderList = list;
+    // (a lista é refeita em `setRenderLists` com só o barco ativo — v0.73.1)
+    depth.getDepthMap().renderList = [terrain, riverStrip, ...pierMeshes];
   }
 
   const fx = new WaterInteraction(scene, wakeField, { particles: cfg.quality.particles, wakeTexture: cfg.quality.wakeTexture });
@@ -343,17 +344,28 @@ const boot = async () => {
   });
   waterVis.sunDir = sunDir;
   waterVis.fogDensity = scene.fogDensity;
-  const reflList: AbstractMesh[] = [skybox, terrain, riverStrip, trees, ...pierMeshes, ...staticExtras, ...allBoatMeshes];
-  waterVis.setReflectionList(reflList);
+  let shadowGen: ShadowGenerator | null = null;
+  /**
+   * DESEMPENHO (v0.73.1): o reflexo da água, a sombra e o mapa de profundidade redesenham a cena — antes com TUDO (os 7
+   * conjuntos estacionados no pátio, a frota de exposição, o posto, as carretinhas: ~3100 malhas). Medido no navegador:
+   * só o reflexo custava ~15 ms por quadro (27 → 41 fps sem ele). Agora as três listas têm só o que aparece perto da água:
+   * o barco ativo (com as pessoas e a carretinha dele), os píeres, o terreno, as árvores e a boia. Refeitas a cada troca.
+   */
+  const setRenderLists = () => {
+    const active = [...V.vis.meshes.filter((m) => m.name !== "propDisc"), ...V.trailerMeshes, ...tubeVis.meshes];
+    waterVis.setReflectionList([skybox, terrain, riverStrip, trees, ...pierMeshes, ...active]);
+    if (depth) depth.getDepthMap().renderList = [terrain, riverStrip, ...pierMeshes, ...active];
+    if (shadowGen) shadowGen.getShadowMap()!.renderList = [...pierMeshes, trees, ...active.filter((m) => m.name !== "windshield")];
+  };
 
   if (cfg.quality.shadows > 0) {
     const sg = new ShadowGenerator(cfg.quality.shadows, sun);
+    shadowGen = sg;
     sg.usePercentageCloserFiltering = true;
     sg.bias = 0.002;
-    for (const m of allBoatMeshes) { if (m.name !== "windshield") sg.addShadowCaster(m); m.receiveShadows = true; }
-    for (const m of pierMeshes) sg.addShadowCaster(m);
-    for (const m of staticExtras) { sg.addShadowCaster(m); m.receiveShadows = true; }
-    sg.addShadowCaster(trees);
+    // (quem PROJETA sombra é definido em `setRenderLists`; aqui só quem RECEBE)
+    for (const m of allBoatMeshes) m.receiveShadows = true;
+    for (const m of staticExtras) m.receiveShadows = true;
     trees.receiveShadows = true;
     for (const m of pierMeshes) m.receiveShadows = true;
     sun.autoUpdateExtends = false;
@@ -666,6 +678,7 @@ const boot = async () => {
     lights = false; input.setLights(false);
     setNavLights(V.vis, false); V.dinghy?.setLantern(false);
     hud.setLights(false, isBote ? "LANTERNA" : "LUZES");
+    setRenderLists();
     resetBoat(false);
   };
 
@@ -1088,7 +1101,8 @@ const boot = async () => {
       // dirigindo: o veículo puxa a carretinha; o barco vai preso nela (pose fixa no referencial da carretinha)
       acc += dtReal;
       const cmd = input.drive(dtReal);
-      while (acc >= PHYSICS_DT) {
+      let nd = 0;
+      while (acc >= PHYSICS_DT && nd++ < MAX_SUBSTEPS) {
         prevPos.copyFrom(curPos); prevRot.copyFrom(curRot);
         water.time += PHYSICS_DT; simTime += PHYSICS_DT;
         V.rig.update(PHYSICS_DT, cmd);
@@ -1103,6 +1117,7 @@ const boot = async () => {
         snap(curPos, curRot);
         acc -= PHYSICS_DT;
       }
+      if (acc >= PHYSICS_DT) acc = 0; // (mesmo limite de passos da navegação: não tenta alcançar o atraso)
       placeRig();
       // a cinta do guincho anda com a carretinha (âncora no guincho)
       if (boat.winchStrap) boat.winchStrap.anchor = fromFrame(V.trailer.collider.pose, V.trailer.winchLocal);
@@ -1483,6 +1498,9 @@ const boot = async () => {
     if ((windHudT -= dtReal) <= 0) { windHudT = 0.25; hud.updateWind(wind.speed * MS_TO_KNOTS, wind.dirFrom - Math.atan2(boat.forward.x, boat.forward.z)); }
     hud.update(T, fpsSmooth, {
       "física (ms/frame)": physMs.toFixed(2),
+      "render (ms)": instr.renderTimeCounter.lastSecAverage.toFixed(1),
+      "reflexo+sombra (ms)": instr.renderTargetsRenderTimeCounter.lastSecAverage.toFixed(1),
+      "chamadas de desenho": instr.drawCallsCounter.lastSecAverage.toFixed(0),
       "resolução": `${engine.getRenderWidth()}×${engine.getRenderHeight()} (${pixelRatio.toFixed(2)}×)`,
       "malhas ativas": String(scene.getActiveMeshes().length),
       "input": input.lastDevice,
@@ -1504,6 +1522,27 @@ const boot = async () => {
   }, 4000);
   await scene.whenReadyAsync();
   clearTimeout(readyWatch);
+  // medição do quadro (F3 e `__aqua.perf()`): tempo de render da cena, das texturas de reflexo/sombra e chamadas de desenho
+  const instr = new SceneInstrumentation(scene);
+  instr.captureFrameTime = true; instr.captureRenderTime = true; instr.captureRenderTargetsRenderTime = true; instr.captureActiveMeshesEvaluationTime = true;
+  let logicMs = 0, logicT0 = 0;
+  // tempo da lógica do quadro (física + HUD + visual), medido em volta dos observadores do "antes do render"
+  scene.onBeforeRenderObservable.add(() => { logicT0 = performance.now(); }, undefined, true);
+  scene.onBeforeRenderObservable.add(() => { logicMs += (performance.now() - logicT0 - logicMs) * 0.05; });
+  const perf = () => ({
+    fps: Math.round(fpsSmooth),
+    "quadro (ms)": +instr.frameTimeCounter.lastSecAverage.toFixed(2),
+    "render (ms)": +instr.renderTimeCounter.lastSecAverage.toFixed(2),
+    "reflexo+sombra (ms)": +instr.renderTargetsRenderTimeCounter.lastSecAverage.toFixed(2),
+    "seleção de malhas (ms)": +instr.activeMeshesEvaluationTimeCounter.lastSecAverage.toFixed(2),
+    "física (ms)": +physMs.toFixed(2),
+    "lógica do quadro (ms)": +logicMs.toFixed(2),
+    "chamadas de desenho": Math.round(instr.drawCallsCounter.lastSecAverage),
+    "malhas ativas": scene.getActiveMeshes().length,
+    "malhas na cena": scene.meshes.length,
+    "partículas vivas": scene.particleSystems.reduce((a, p) => a + p.getActiveCount(), 0),
+  });
+  (window as unknown as Record<string, unknown>).__perf = perf;
   engine.runRenderLoop(() => scene.render());
   window.addEventListener("resize", () => engine.resize());
   document.getElementById("loading")?.classList.add("done");
