@@ -31,7 +31,7 @@ import { TowRig, TOW_SPECS, type Pose } from "./sim/towVehicle.ts";
 import { buildRamp, buildTrailerMesh, buildTowVehicle, type WheelNode } from "./presentation/ramp.ts";
 import { buildRoadAndLot, buildStation } from "./presentation/station.ts";
 import { buildFleet } from "./presentation/fleet.ts";
-import { buildMoorings, Ropes } from "./presentation/mooring.ts";
+import { buildMoorings, Ropes, START_GATE } from "./presentation/mooring.ts";
 import { pierBerthState, tieToPier, BuoyField, CANYON_END, berthStartPose, pierWaitSpots, pierBerth } from "./sim/mooring.ts";
 import { STATION, stationObstacles, fuelBayState, parkedStall } from "./sim/station.ts";
 import { WakeField, WaterWithWake } from "./sim/wake.ts";
@@ -58,7 +58,7 @@ import { Hud } from "./presentation/hud.ts";
 import { EngineAudio } from "./presentation/audio.ts";
 
 installI18n(); // inglês: traduz o DOM, as escritas futuras e os letreiros 3D (antes de montar a cena e o HUD)
-const BUILD = "poc-babylon 0.74.0";
+const BUILD = "poc-babylon 0.74.1";
 /** Escala visual da rotação da hélice (proporcional ao RPM, abaixo do limite estroboscópico). */
 const PROP_VISUAL_SCALE = 0.12;
 
@@ -1465,7 +1465,7 @@ const boot = async () => {
     // chegada ao fim do cânion (largada)
     if (mode === "game" && !driving && !carOnly) {
       const dEnd = Math.hypot(boat.pos.x - CANYON_END.x, boat.pos.z - CANYON_END.z);
-      if (dEnd < 30 && !reachedEnd) { reachedEnd = true; hud.showToast("EM BREVE: o jogo começa aqui — em breve vamos lançar as atualizações com as novas áreas!", true); }
+      if (START_GATE && dEnd < 30 && !reachedEnd) { reachedEnd = true; hud.showToast("EM BREVE: o jogo começa aqui — em breve vamos lançar as atualizações com as novas áreas!", true); }
       if (dEnd > 60) reachedEnd = false;
     }
     ropes.update(boat);

@@ -36,9 +36,16 @@ export class BoatCamera {
       if (e.pointerType === "touch") return; // no celular o arraste é dos controles
       this.dragging = true; this.lastX = e.clientX; this.lastY = e.clientY;
     });
-    window.addEventListener("pointerup", () => (this.dragging = false));
+    // fim do arraste: soltar o botão em qualquer lugar (inclusive fora da janela), cancelar, perder o foco
+    // (v0.74.1: sem isso, soltando fora da tela o "arrastando" ficava preso e a câmera não voltava sozinha)
+    const stop = () => { this.dragging = false; this.idle = 0; };
+    window.addEventListener("pointerup", stop, true); // (fase de captura: nenhum elemento da interface consegue engolir)
+    window.addEventListener("pointercancel", stop, true);
+    window.addEventListener("blur", stop);
+    canvas.addEventListener("lostpointercapture", stop);
     window.addEventListener("pointermove", (e) => {
       if (!this.dragging) return;
+      if (e.pointerType === "mouse" && e.buttons === 0) { stop(); return; } // o botão já foi solto (o pointerup se perdeu)
       this.orbitYaw += (e.clientX - this.lastX) * 0.006;
       this.orbitPitch = clamp(this.orbitPitch + (e.clientY - this.lastY) * 0.004, -0.75, 0.9); // < −0,25: abaixo da água
       this.lastX = e.clientX; this.lastY = e.clientY;

@@ -8,6 +8,8 @@ import type { PierLayout } from "../sim/world.ts";
 import type { Speedboat } from "../sim/boat.ts";
 import { signMat } from "./station.ts";
 import { comingSoonMaterial } from "./comingSoon.ts";
+/** Pórtico "EM BREVE" na saída do cânion: guardado (v0.74.1) — true volta a montá-lo */
+export const START_GATE = false;
 
 export const buildMoorings = (scene: Scene, pier: PierLayout): { meshes: Mesh[]; buoys: Mesh[] } => {
   const meshes: Mesh[] = [], buoys: Mesh[] = [];
@@ -47,8 +49,8 @@ export const buildMoorings = (scene: Scene, pier: PierLayout): { meshes: Mesh[];
     buoys.push(body);
     meshes.push(body, top, pole, band);
   }
-  // pórtico de LARGADA no fim do cânion (onde o jogo começa de verdade)
-  {
+  // pórtico de LARGADA no fim do cânion (onde o jogo começa de verdade) — v0.74.1: guardado (`START_GATE`), a pedido
+  if (START_GATE) {
     const g = CANYON_END;
     // (v0.66.1) faixa "EM BREVE": aqui começa o jogo de verdade — as novas áreas vêm nas próximas atualizações
     const startM = comingSoonMaterial(scene, "EM BREVE", "O JOGO COMEÇA AQUI · NOVAS ÁREAS NAS PRÓXIMAS ATUALIZAÇÕES", "startGateSoon");
