@@ -1813,8 +1813,20 @@ for (const [label, thr] of [["baixa", 0.25], ["alta", 1]] as const) {
   check("wakeboard", "pula só cortando para DENTRO da esteira (fração dos pulos)", measured ? inwardJ / measured : 0, 0.99, 1, "", 2);
   check("wakeboard", "andando sozinha: pula na esteira (pulos em 74 s)", r.wb.jumps, 3, 60, "", 0);
   check("wakeboard", "pulo mais alto (m)", r.wb.maxAir, 0.3, 2.0, "m", 2);
-  check("wakeboard", "manobras diferentes no ar", kinds.size, 2, 3, "", 0);
+  check("wakeboard", "manobras diferentes no ar (grab, 180, 360, backroll)", kinds.size, 2, 4, "", 0);
   check("wakeboard", "velocidade em pé (km/h)", (spd / Math.max(1, n)) * 3.6, 22, 42, "km/h", 0);
+  check("wakeboard", "em pé, a prancha deixa esteira própria", r.wb.state === "riding" || r.wb.state === "air" ? (r.wb.wakeSample() || r.wb.state === "air" ? 1 : 0) : 1, 1, 1, "", 0);
+  // a lancha desacelera: abaixo de ~15 km/h a prancha não plana e ela afunda (não só com o barco quase parado)
+  {
+    let tSlow = -1, tSunk = -1, tt = 0, vAtSink = 0;
+    go(r, 20, { throttle: 0.0 }, () => {
+      tt += DT;
+      if (tSlow < 0 && r.wb.speed < r.wb.p.sinkV) tSlow = tt;
+      if (tSunk < 0 && r.wb.state === "water") { tSunk = tt; vAtSink = Math.hypot(r.b.vel.x, r.b.vel.z); }
+    });
+    check("wakeboard", "desacelerando: ela afunda logo que a prancha deixa de planar (s depois de < 15 km/h)", tSunk - tSlow, 0.3, 2.5, "s", 1);
+    check("wakeboard", "desacelerando: afunda ainda com o barco andando (km/h do barco)", vAtSink * 3.6, 5, 16, "km/h", 0);
+  }
   // caiu: o barco volta em marcha lenta passando com o manete por ela — ela pega e sai de novo
   {
     const q = mk(); q.wb.hook(q.b); q.wb.state = "fallen"; q.wb.pos = v3(0, 0, 0);

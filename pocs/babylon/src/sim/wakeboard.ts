@@ -32,6 +32,8 @@ export interface WakeboardParams {
   edgeAcc: number;     // aceleração lateral máxima cantando a borda (m/s²)
   riseV: number;       // velocidade para começar a subir (m/s)
   riseS: number;       // tempo para ficar em pé (s)
+  sinkV: number;       // abaixo desta velocidade a prancha não plana mais e ela afunda (m/s)
+  sinkS: number;       // tempo para afundar de em pé até a água (s)
   popV: number;        // impulso das pernas no pulo (m/s)
   fallLandV: number;   // aterrissagem que derruba (m/s, para baixo)
   fallJerkN: number;   // tranco da corda que derruba (N)
@@ -42,7 +44,7 @@ export interface WakeboardParams {
 export const WAKEBOARD: WakeboardParams = {
   mass: 85, ropeLen: 20, ropeK: 2200, ropeC: 300,
   boardCd: 4.2, waterLin: 90, waterQuad: 45,
-  edgeAcc: 4.5, riseV: 3.5, riseS: 1.5, popV: 1.1,
+  edgeAcc: 4.5, riseV: 5.0, riseS: 2.4, sinkV: 4.2, sinkS: 0.9, popV: 1.1,
   fallLandV: 7.0, fallJerkN: 3800, grabR: 2.2, cutOffset: 7,
 };
 
@@ -153,6 +155,14 @@ export class Wakeboard {
   /** idade máxima da esteira somada por cima da água (no jogo a água da física já tem a esteira de ≥ 3 s: só falta a
    *  nova; nos testes, com a água sem esteira, soma tudo até 8 s) */
   wakeMaxAge = 8;
+  /** amostra de esteira da prancha: só planando na água (não no ar, nem afundada/caída) */
+  wakeSample(): import("./wake.ts").WakeSample | null {
+    if (this.docked || this.state !== "riding") return null;
+    const fx = Math.sin(this.yaw), fz = Math.cos(this.yaw), v = this.speed;
+    return { bx: this.pos.x + fx * 0.69, bz: this.pos.z + fz * 0.69, sx: this.pos.x - fx * 0.69, sz: this.pos.z - fz * 0.69, rx: fz, rz: -fx,
+      v, thr: Math.min(1, Math.hypot(this.edgeAx, this.edgeAz) / 4) * 0.8 + 0.2, boil: 0, exh: 0, wet: 1, air: 0, span: 0, age: 0, size: 0.18 };
+  }
+
   /** altura da superfície (água + esteira nova do barco) */
   private surf(water: IWaterSurface, wake: WakeField | null, x: number, z: number): number {
     return water.getHeight(x, z) + (wake ? wake.heightAtYoung(x, z, this.wakeMaxAge) : 0);
@@ -197,7 +207,8 @@ export class Wakeboard {
       F = add(F, v3(0, M * G * clamp(1 + depth * 2.5, 0, 2.2) - 260 * rel.y, 0));
       F = add(F, scale(vh, -(P.waterLin + P.waterQuad * sh)));
       // segurando o manete com o barco puxando rápido: começa a subir na prancha
-      if (this.state === "water" && this.tension > 200 && this.speed > P.riseV) { this.state = "rising"; this.rise = 0; }
+      // começa a sair com a corda puxando e ~14 km/h (a prancha ainda "ara" a água: o barco precisa vencer isso)
+      if (this.state === "water" && this.tension > 200 && this.speed > P.sinkV * 0.9) { this.state = "rising"; this.rise = 0; }
       // caída: nada até o píer se ele estiver perto e ninguém reboca
       this.swimming = false;
       // caída com a corda engatada: SEMPRE nada na direção do manete (para pegá-lo quando o barco passar devagar)
@@ -211,12 +222,16 @@ export class Wakeboard {
         else { this.dock(); return; }
       }
     } else if (this.state === "rising") {
-      // saindo da água: a prancha começa a planar e ela fica em pé
-      this.rise = Math.min(1, this.rise + dt / P.riseS);
+      // saindo da água (ou afundando): com velocidade para planar a prancha sobe e ela fica em pé; sem ela, afunda.
+      // A prancha atravessada ainda empurra muita água: o arrasto é alto até ela estar em pé (sair é DIFÍCIL)
+      if (this.speed >= P.riseV) this.rise = Math.min(1, this.rise + dt / P.riseS);
+      else if (this.speed >= P.sinkV * 0.9) this.rise = Math.min(1, this.rise + 0.4 * dt / P.riseS); // sofrendo: sobe devagar
+      else this.rise = Math.max(0, this.rise - dt / P.sinkS);
       const depth = sy - (this.pos.y - 0.2 * (1 - this.rise));
       F = add(F, v3(0, M * G * clamp(1 + depth * 3, 0, 2.5) - 300 * rel.y, 0));
-      F = add(F, scale(vh, -((P.waterLin * (1 - this.rise) + P.boardCd * sh) + P.waterQuad * (1 - this.rise) * sh)));
-      if (this.speed < P.riseV * 0.7) { this.state = "water"; this.rise = 0; }
+      const plow = 1 - this.rise; // prancha atravessada, "arado" de água
+      F = add(F, scale(vh, -(P.waterLin * plow * 1.6 + P.boardCd * sh + P.waterQuad * plow * 1.6 * sh)));
+      if (this.rise <= 0) { this.state = "water"; this.rise = 0; }
       else if (this.rise >= 1) { this.state = "riding"; this.lastSurfY = sy; this.dhdtPrev = 0; }
     } else if (this.state === "riding") {
       // planando: segue a superfície (a prancha não afunda) e anda para onde a borda leva
@@ -257,7 +272,7 @@ export class Wakeboard {
         this.trickT = 0; this.lastTrick = this.trick;
       }
       this.dhdtPrev = dhdt;
-      if (this.speed < P.riseV * 0.6) { this.state = "water"; this.rise = 0; } // o barco parou: ela afunda devagar
+      if (this.speed < P.sinkV) { this.state = "rising"; this.rise = 1; } // devagar demais: a prancha para de planar e ela vai afundando
     } else if (this.state === "air") {
       this.airT += dt;
       this.crouch += (0.55 - this.crouch) * Math.min(1, dt * 8); // encolhe as pernas no ar

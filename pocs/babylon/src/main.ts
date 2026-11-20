@@ -63,7 +63,7 @@ import { Hud } from "./presentation/hud.ts";
 import { EngineAudio } from "./presentation/audio.ts";
 
 installI18n(); // inglês: traduz o DOM, as escritas futuras e os letreiros 3D (antes de montar a cena e o HUD)
-const BUILD = "poc-babylon 0.77.2";
+const BUILD = "poc-babylon 0.77.3";
 /** Escala visual da rotação da hélice (proporcional ao RPM, abaixo do limite estroboscópico). */
 const PROP_VISUAL_SCALE = 0.12;
 
@@ -201,6 +201,9 @@ const boot = async () => {
   // esteira da BOIA rebocada (v0.76.2): uma segunda fonte, pequena, na mesma física e no mesmo mapa de esteira
   const tubeWake = new WakeField();
   physWater.extra.push(tubeWake);
+  // esteira da PRANCHA de wakeboard (v0.77.3): outra fonte pequena
+  const wkbWake = new WakeField();
+  physWater.extra.push(wkbWake);
 
   // ---------------- cena ----------------
   const terrain = buildTerrain(scene, { terrainSubdiv: cfg.quality.terrainSubdiv, trees: cfg.quality.trees });
@@ -360,7 +363,7 @@ const boot = async () => {
   }
 
   const fx = new WaterInteraction(scene, wakeField, { particles: cfg.quality.particles, wakeTexture: cfg.quality.wakeTexture });
-  fx.wakeMap.extra.push(tubeWake); // (a boia rebocada também desenha a esteira dela)
+  fx.wakeMap.extra.push(tubeWake, wkbWake); // (a boia e a prancha também desenham a esteira delas)
   const exhaustFx = new TurbineExhaustFx(scene); // fumaça e fogo do escape da turbina (AR-10)
   const waterVis = new WaterVisual(scene, {
     resolution: cfg.quality.waterResolution, innerExtent: 80, outerExtent: 3600, depth, wake: fx.wake, reflectionSize: cfg.quality.reflection,
@@ -737,7 +740,7 @@ const boot = async () => {
     if (driving) stopDriving();
     strapT = 0; moorArmed = true; moorWhere = ""; buoyField.reset(); manualBoat = false;
     if (carOnly) leaveCar(false);
-    input.setGear("N"); wakeField.reset(); tubeWake.reset();
+    input.setGear("N"); wakeField.reset(); tubeWake.reset(); wkbWake.reset();
     // largada amarrada na vaga do píer: é onde os passageiros esperam para embarcar
     const bs = berthStartPose(world.pier, V.P);
     b.reset(v3(bs.pos.x, bs.pos.y, bs.pos.z), bs.heading);
@@ -1248,6 +1251,7 @@ const boot = async () => {
         tubeWake.updateFrom(PHYSICS_DT, tube.wakeSample(), boat.pos.x, boat.pos.z);
         para.step(PHYSICS_DT, physWater, world);
         wkb.step(PHYSICS_DT, physWater, world, wakeField); // (sente a esteira NOVA do barco: é dela que sai o pulo)
+        wkbWake.updateFrom(PHYSICS_DT, wkb.wakeSample(), boat.pos.x, boat.pos.z);
         if (carCmd) V.rig.update(PHYSICS_DT, carCmd);
         wakeField.update(PHYSICS_DT, boat);
         snap(curPos, curRot);

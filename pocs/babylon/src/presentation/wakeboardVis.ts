@@ -3,7 +3,7 @@
 // sentada na água esperando, nadando), manobras no ar (giro, backroll, grab), manete e corda até o ponto de reboque.
 // Só lê a simulação (`sim/wakeboard.ts`).
 
-import { type Scene, Mesh, MeshBuilder, StandardMaterial, Color3, Vector3, TransformNode, Quaternion } from "@babylonjs/core";
+import { type Scene, Mesh, MeshBuilder, StandardMaterial, Color3, Color4, Vector3, TransformNode, Quaternion, DynamicTexture, ParticleSystem } from "@babylonjs/core";
 import { type PierLayout, groundHeight, fuelBerth } from "../sim/world.ts";
 import type { Wakeboard } from "../sim/wakeboard.ts";
 import { buildPassenger, type Pilot } from "./pilot.ts";
@@ -161,6 +161,8 @@ export class WakeboardVisual {
   private readonly bridle: TowBridleVis;
   private readonly handle: Mesh;
   private lastT = 0;
+  /** leque de água que a borda da prancha levanta cortando (só visual: lê a borda e a velocidade da sim) */
+  private readonly spray: ParticleSystem;
 
   constructor(scene: Scene) {
     this.boardRoot = new TransformNode("wkBoardRoot", scene);
@@ -179,6 +181,15 @@ export class WakeboardVisual {
     this.handle = MeshBuilder.CreateCylinder("wkHandleBar", { height: 0.34, diameter: 0.035, tessellation: 10 }, scene);
     this.handle.material = hm; this.handle.rotation.z = Math.PI / 2; this.handle.isPickable = false; this.meshes.push(this.handle);
     for (const m of this.meshes) m.isPickable = false;
+    const dot = new DynamicTexture("wkSprayTex", { width: 32, height: 32 }, scene, false);
+    const dc = dot.getContext() as unknown as CanvasRenderingContext2D, gr = dc.createRadialGradient(16, 16, 1, 16, 16, 15);
+    gr.addColorStop(0, "rgba(255,255,255,1)"); gr.addColorStop(1, "rgba(255,255,255,0)"); dc.fillStyle = gr; dc.fillRect(0, 0, 32, 32); dot.hasAlpha = true; dot.update();
+    const ps = new ParticleSystem("wkSpray", 700, scene);
+    ps.particleTexture = dot; ps.emitter = Vector3.Zero(); ps.minEmitBox = Vector3.Zero(); ps.maxEmitBox = Vector3.Zero();
+    ps.color1 = new Color4(1, 1, 1, 0.85); ps.color2 = new Color4(0.85, 0.93, 0.97, 0.6); ps.colorDead = new Color4(0.9, 0.95, 1, 0);
+    ps.minSize = 0.08; ps.maxSize = 0.42; ps.minLifeTime = 0.4; ps.maxLifeTime = 1.0; ps.gravity = new Vector3(0, -9.81, 0);
+    ps.emitRate = 0; ps.start();
+    this.spray = ps;
   }
 
   update(wb: Wakeboard, waterY: number, t: number): void {
@@ -245,6 +256,19 @@ export class WakeboardVisual {
       // manete: entre as mãos (no mundo)
       this.rider.group.computeWorldMatrix(true);
       handW = Vector3.TransformCoordinates(new Vector3(lx * 0.16, 0.5 - 0.18 * crouch, 0.24), this.rider.group.getWorldMatrix());
+    }
+    // ---- spray da borda: cortando, a borda que afunda joga um leque para FORA da curva (e um pouco para trás) ----
+    {
+      const riding = wb.state === "riding" && !wb.docked;
+      const ea = Math.hypot(wb.edgeAx, wb.edgeAz), sp = wb.speed;
+      const back = new Vector3(-Math.sin(fwdYaw), 0, -Math.cos(fwdYaw));
+      const out = ea > 0.2 ? new Vector3(-wb.edgeAx / ea, 0, -wb.edgeAz / ea) : Vector3.Zero(); // contra a força da borda
+      this.spray.emitter = new Vector3(p.x + back.x * 0.5 + out.x * 0.2, p.y + 0.02, p.z + back.z * 0.5 + out.z * 0.2);
+      this.spray.minEmitBox = new Vector3(-0.25, 0, -0.25); this.spray.maxEmitBox = new Vector3(0.25, 0.04, 0.25);
+      const k = Math.min(1.4, sp / 8);
+      this.spray.direction1 = out.scale(2.2 * k).add(back.scale(1.5 * k)).add(new Vector3(0, 1.4, 0));
+      this.spray.direction2 = out.scale(4.2 * k).add(back.scale(0.5 * k)).add(new Vector3(0, 2.8 * Math.min(1, ea / 3), 0));
+      this.spray.emitRate = riding && sp > 4 ? Math.min(600, 120 + ea * 130) : 0;
     }
     // ---- manete e corda ----
     const hand = wb.state === "fallen" ? new Vector3(wb.handle.x, wb.handle.y + 0.02, wb.handle.z)
