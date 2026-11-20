@@ -9,7 +9,9 @@
 //    fora da esteira e de volta, cruzando-a. Ela anda SOZINHA: escolhe um lado, corta para dentro, sobe a marola e
 //    PULA ("air"): a velocidade vertical da superfície ao passar a crista + o impulso das pernas lançam ela; no ar faz uma
 //    manobra (giro de 360°, backroll ou grab, conforme o tempo de voo esperado) e aterrissa do outro lado.
-//  • QUEDA ("fallen"): aterrissagem forte (vy < −`fallLandV`), manobra que não completou no ar, ou o barco dar um tranco.
+//  • QUEDA ("fallen"): aterrissagem forte (vy < −`fallLandV`), manobra que não completou no ar, ou um TRANCO de verdade
+//    na corda (estava frouxa e esticou de repente, ou passou muito do que dá para segurar) — puxada firme com a corda
+//    esticada ela aguenta (é assim que se sai da água).
 //    Ela solta o manete e fica boiando; o manete fica na ponta da corda, arrastado pelo barco. Para ela "pegar" de novo,
 //    passe com a corda por ela (manete a < `grabR` m dela e devagar): ela segura e sai de novo da água.
 //  • Píer próprio: engatando (G) no píer ela pula na água com o manete; soltando (G) perto do píer ela volta nadando.
@@ -36,7 +38,7 @@ export interface WakeboardParams {
   sinkS: number;       // tempo para afundar de em pé até a água (s)
   popV: number;        // impulso das pernas no pulo (m/s)
   fallLandV: number;   // aterrissagem que derruba (m/s, para baixo)
-  fallJerkN: number;   // tranco da corda que derruba (N)
+  fallJerkN: number;   // tranco: pico de tensão logo depois da corda frouxa que derruba (N); 1,9× isso derruba sempre
   grabR: number;       // distância para pegar o manete (m)
   cutOffset: number;   // até onde ela vai para os lados da esteira (m, do centro)
 }
@@ -102,6 +104,8 @@ export class Wakeboard {
   private lastSurfY = 0;
   private dhdtPrev = 0;
   private landVy = 0;
+  /** há quanto tempo a corda está esticada (s) — para saber se uma tensão alta é tranco ou puxada firme */
+  private slackT = 99;
   /** cortando para o centro da esteira (é só aí que ela pula) */
   private inward = false;
   /** tempo desde a queda (s): logo depois ela ainda está se recuperando e não pega o manete */
@@ -305,7 +309,13 @@ export class Wakeboard {
       }
     }
     this.landing = Math.max(0, this.landing - dt);
-    if (this.holding && this.tension > P.fallJerkN && this.state !== "water") this.fall("tranco");
+    // tranco: a corda estava frouxa há pouco (< 0,6 s) e esticou acima do limite, ou passou muito do que dá para segurar.
+    // Puxada firme com a corda esticada (saindo da água acelerando forte) NÃO derruba.
+    if (this.holding) {
+      if (this.tension < 80) this.slackT = 0; else this.slackT += dt;
+      const snap = this.slackT < 0.6 && this.tension > P.fallJerkN;
+      if ((snap || this.tension > P.fallJerkN * 1.9) && this.state !== "water") this.fall("tranco");
+    }
     // rumo da prancha: para onde ela anda (devagar, aponta para a corda)
     if (this.speed > 1.5) this.yaw = Math.atan2(this.vel.x, this.vel.z);
     else if (b && this.holding) this.yaw = Math.atan2(ropeDir.x, ropeDir.z);

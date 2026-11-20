@@ -1839,6 +1839,21 @@ for (const [label, thr] of [["baixa", 0.25], ["alta", 1]] as const) {
     check("wakeboard", "e sai da água de novo (s)", up, 1, 25, "s", 1);
   }
   {
+    // corda ESTICADA e acelerador a toda: puxada firme, sem tranco — ela segura e sai da água
+    const q = mk(); q.wb.hook(q.b);
+    let taut = 0, tt = 0;
+    for (let i = 0; i < 40 / DT && taut < 1; i++) { water.time += DT; q.b.step(DT, { ...emptyInput(), gear: "F", throttle: 0.03 }, water, openWater); q.f.update(DT, q.b); q.wb.step(DT, water, openWater, q.f); taut = q.wb.tension > 120 ? taut + DT : 0; }
+    let up = -1, maxT = 0;
+    for (let i = 0; i < 20 / DT && up < 0 && q.wb.falls === 0; i++) { water.time += DT; tt += DT; q.b.step(DT, { ...emptyInput(), gear: "F", throttle: 1 }, water, openWater); q.f.update(DT, q.b); q.wb.step(DT, water, openWater, q.f); maxT = Math.max(maxT, q.wb.tension); if (q.wb.state === "riding") up = tt; }
+    check("wakeboard", "corda esticada e acelerador a toda: não solta o manete (quedas)", q.wb.falls, 0, 0, "", 0);
+    check("wakeboard", "corda esticada e acelerador a toda: fica em pé (s)", up, 1, 12, "s", 1);
+    check("wakeboard", "corda esticada e acelerador a toda: puxada forte e firme (pico, N)", maxT, 2000, 7000, "N", 0);
+    // corda FROUXA e acelerador a toda: a corda estica de repente — tranco, ela solta
+    const j = mk(); j.wb.hook(j.b);
+    for (let i = 0; i < 12 / DT && j.wb.falls === 0; i++) { water.time += DT; j.b.step(DT, { ...emptyInput(), gear: "F", throttle: 1 }, water, openWater); j.f.update(DT, j.b); j.wb.step(DT, water, openWater, j.f); }
+    check("wakeboard", "corda frouxa e acelerador a toda: tranco, ela solta o manete", j.wb.falls === 1 && j.wb.lastFall === "tranco" ? 1 : 0, 1, 1, "", 0);
+  }
+  {
     // passando rápido o manete corre demais: ela não consegue pegar
     const q = mk(); q.wb.hook(q.b); q.wb.state = "fallen"; q.wb.pos = v3(0, 0, 0);
     q.b.pos = v3(1.5, 0.3, -45); q.wb.handle = v3(1.5, 0, -65);
