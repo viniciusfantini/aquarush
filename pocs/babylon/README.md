@@ -96,6 +96,42 @@ A lancha é um **corpo rígido 6DOF** (massa seca de 1030 kg + gasolina, ocupant
 
 > Referência completa da lógica elétrica e dos motores: [`docs/SISTEMAS_ELETRICOS_E_MOTORES.md`](../../docs/SISTEMAS_ELETRICOS_E_MOTORES.md).
 
+## Parasail, lago 3× maior, cânion até o mar, pátio e boia (v0.74)
+
+- **Parasail** (`sim/parasail.ts`, `Parasail`/`PARASAIL`; visual `presentation/parasailVis.ts`). Píer em x = 165, com
+  deck a 1,3 m, plataforma de decolagem azul na ponta, biruta e bacia dragada (`PARASAIL_BASIN`, que vai até
+  z ≈ −160: na frente do píer havia um banco de 1,5 m). Quem voa é um ponto de 98 kg (pessoa, cadeirinha e velame).
+  - **Forças**: peso; velame de 38 m² com sustentação CL 1,0 (perpendicular ao vento relativo, no plano vertical) e
+    arrasto CD 0,2 + 0,8 × `infl`, as duas × o quanto ele está aberto. `infl` abre em 0,8 s com vento relativo
+    > 3 m/s, devagar (2,5 s) quando sai da água rebocado a > 4,5 m/s, e murcha em 1,5 s. Na água: colete, "esqui" da
+    pessoa puxada e o velame murcho como âncora d'água. Apoio com atrito no deck e no chão.
+  - **Corda**: 45 m, mola só de tração (2,5 kN/m + 300 N·s/m), presa na popa (`TowTube.towLocal`), com a reação no
+    barco por `externalForces`.
+  - Decola acima de ~23 km/h (`√(m·g / (½ρ·S·CL))`); no píer a equipe segura o velame meio aberto (`infl` 0,6).
+  - **Medido** (`node tests/debug-parasail.ts`): AR-6 a 50 % → 31–32 km/h, altura 19 m, corda 1,9 kN (pico de 3,9 kN
+    ao esticar); a toda → 46 km/h, 28 m, 4,6 kN. Rebocando, a lancha anda 26 km/h mais devagar. Solto no ar, desce a
+    3,9 m/s e toca a água a −3,9 m/s. A 12 % (9 km/h) a corda arrasta a pessoa da plataforma para a água, o velame
+    murcha; acelerando a toda, decola de novo da água.
+  - **G** (mesma ação `tube`): solta o que estiver engatado, ou engata o parasail ou a boia, o que estiver perto (uma
+    atividade por vez). Soltando com a pessoa na plataforma, ou na água perto e devagar, ela volta a esperar; na água a
+    até 40 m do píer ela nada até ele (1,1 m/s) e sobe. Chip `#h-para` no HUD; R, troca de barco e ir para o carro
+    devolvem o parasail à plataforma.
+- **Cânion até o mar**: `RIVER.z1` 760 → 1720 (a costa do `OCEAN` começa em z ≈ 1580). Saíram a cachoeira (`FALLS`,
+  `FALLS_CURRENT`, o paredão em `buildWorld`, `buildWaterfall`, o som). A correnteza agora corre do lago para o mar
+  (`RIVER_CURRENT` vz +1,0). Balizamento a cada 120 m (13 pares). O pórtico de largada "EM BREVE" fica na saída para
+  o mar (`CANYON_END`).
+- **Lago 3,2× maior**: quatro lobos novos em `LAKE_LOBES` (NE, NO, SE, SO); o cânion passa entre os dois do norte.
+  Água do lago (sem o cânion e o mar): 1,35 → 4,32 km².
+- **Pátio do posto**: `LOT` 76 × 50 → 92 × 68 m (a borda leste, onde a estrada chega, e a borda norte não mudaram); 8
+  vagas de 4,1 m (antes 2,85); a cobertura do posto 4 m mais ao norte (5 m de folga até a última vaga).
+- **Boia mais difícil de cair**: `fallLatG` 0,85 → 1,2 g, `fallLatT` 0,25 → 0,4 s, pico 1,4× → 1,5× (1,8 g),
+  `fallLandV` 3,2 → 4,2 m/s, `fallJerkN` 5,2 → 7 kN. Volante todo a 60 % ela aguenta (1,0 g); a toda ela cai (3,3 g).
+- **Boia mais bonita**: vinil brilhante com a saia de baixo escura e uma faixa clara, capa do assento com gomos e
+  estrela (canvas, sem marca), costura, 6 alças de fita com punho acolchoado, argola em D de inox, válvula; spray
+  dos lados planando; a pessoa segura as duas alças da frente.
+- **Navegador**: decolagem da plataforma com a lancha a 50 % ("DECOLOU!", chip "NO AR · 17 m · 31 km/h · corda 1938 N"),
+  velame com gomos e 12 linhas até a borda, pátio novo visto de cima, a foz do cânion aberta para o mar.
+
 ## Desempenho: reflexo, sombra e física da esteira (v0.73.1)
 
 - Relato do usuário: às vezes o jogo fica bem lento com muitos elementos ao mesmo tempo. **Medição** (Chrome, WebGL2,
@@ -762,6 +798,7 @@ Limitação: é uma síntese aproximada, não uma gravação. Validar o timbre d
 | 5. Manete | de cruzeiro para N: empuxo 0 e < 1 km/h em 27 s; a hélice gira **solta** (~990 rpm 1,5 s depois do N) e para junto com a lancha. F em lenta: 5,0 km/h a 750 rpm. R em lenta: 2,8 km/h para trás. No navegador: 1 toque W = F a 4 km/h; segurar = 45 km/h; 1 toque S = N; 2º toque = R lenta; segurar S = ré acelerando |
 | 6. Ondas e correnteza | ondas fortes (×2,5): roll ≤ 30°, não emborca; deriva com correnteza de 1,6 m/s: 1,54 m/s |
 | Lago | flutua no spawn; a toda contra a margem, encalha e para sem atravessar o terreno |
+| Parasail, lago, cânion, pátio, boia (v0.74) | parasail: engata perto, não engata longe, espera na plataforma esticando a corda, decola a 50 % sem cair, 19,1 m, 1,9 kN, velame 100 %, sem bater no fundo, a lancha anda 26 km/h mais devagar, a toda 28,6 m, descida 3,86 m/s, pousa na água a 3,9 m/s, devagar cai da plataforma na água e o velame murcha, a toda decola da água, soltar na plataforma = volta, nada 15 m até o píer em 19 s; lago 3,20× o da v0.66; cânion: nenhum trecho raso, mar a −28 m depois da foz, correnteza +1,0 m/s, a lancha sai no mar sem bater; boia: curva fechada a 60 % aguenta, a toda cai (3,26 g) |
 | Desempenho (v0.73.1) | navegador (méd., 1569×1304): píer 27 → ~56 fps; boia em curva 40–51 fps; Node: passo da lancha na própria esteira 5,9 → 0,16 ms, mesma altura (Δ 0,000 mm); todos os critérios anteriores passam |
 | Boia rebocada (v0.73) | píer da boia: 2,30 m de fundo na ponta, 100 m do principal; longe não engata, perto engata e a pessoa vai na boia; reta a 60 %: boia 0,1 km/h da lancha, corda 932 N, 19,8 m, sem queda; a lancha anda 11,6 km/h mais devagar rebocando; curva 0,6: aguenta; curva fechada: cai ("curva"); nadou e subiu; passeio continua a 50 km/h; soltar longe = solta; pulo −4,5 m/s cai, −1,5 m/s não; soltar no píer = pessoa no píer; moto aquática e ekranoplano engatam |
 | Anfíbio AR-A (v0.72) | parado: roll 0,5°, borda 0,38 m; decolagem (2 pessoas) 24,1 s a 108 km/h no critério (rodando a 90 km/h); 60 s depois a 103 m subindo a 117 km/h, fora do efeito solo; degrau: pitch 10,8° molhado; LVL: 2,3° (ligado) × 68° (desligado); aileron 1 s: 36°, vira 113° à direita; puxar/soltar: mín. 11,1 m; planeio de 150 m: 62 s, toque −2,8 m/s, 0 % de avaria; estol avisado; partida a frio ok |
@@ -773,7 +810,7 @@ Limitação: é uma síntese aproximada, não uma gravação. Validar o timbre d
 | Lancha pantaneira AR-P (v0.69–0.69.2) | frio sem primer não pega (falha "prime"); 3 bombadas pega em 1,2 s; 9 bombadas afoga; mistura em corte não pega e apaga o motor ligado; um magneto: −103 rpm a pleno; mistura 0,8: −5,6 L/h; magnetos OFF param; trim sem ação (0°, 0 A); P frio pega; largada a 60 % pega em 2,2 s; lenta empurrando 4,5 km/h, sempre em F, borda 0,38 m; a toda 88,4 km/h a 2434 rpm, 0→40 4,4 s; sem cavitação/ventilação; pedindo R segue a 89 km/h para a frente; curva a toda derrapando 3,6 m/s, 11,1°/s, roll 3,2°, não vira; motor desligado com os lemes todos: 0,0°; partida sem N; 50 % + lemes quase parado: 20,2°/s; refrigerado a ar; barranco de lama/capim: 12,6 s no seco, avaria 2 %, 30 km/h; carretinha da caminhonete |
 | Moto aquática AR-J (v0.67–0.67.1) | compressor 1,04 bar a toda, 0,007 bar na lenta; luz do iBB: apagada em F, FREIO freando a toda, RÉ parada em R, NEUTRO em N; navegador: S segurado a 107 km/h → FREIO, 53 km/h em 1,5 s; soltar → F; toque → N; parada: CG −0,03 m da água, borda 0,25 m; a toda 108,3 km/h a 7880 rpm, 0→60 2,7 s, 0→100 7,1 s, 72 L/h; curva a toda 29,2°/s sem virar; iBB de 102 km/h a < 5 km/h em 4,2 s e depois ré; N com o guidão todo: 0,2° em 6 s; lenta + guidão 10,6°/s; N acelerado: empuxo 0, rotor a 7478 rpm; no ar: empuxo 0, giro 7951 rpm; ECO 55 % / 89,9 km/h; lotada 101,5 km/h; cordão solto não liga, puxado desliga; START pega em 1,5 s (60 %); central dorme em 30 s; casco selado 40 s lotada em ondas fortes: 0,0 L; sifão 6,1 L em 30 s (= contrato); virada: desvira em 4,5 s, piloto a bordo com o cordão, liga de novo; carretinha 3,9 m no carro |
 
-Resultado: **780/782 OK + 2 KNOWN** (v0.73.1). Na v0.10, o peso do piloto na posição real (boreste, acima do CG) aumentou o roll em curva com ondas fortes; o `bankCoef` foi para 1800 e o `rollDamping` para 15000, com 1 limitação conhecida (abaixo). Na v0.2 a hélice foi para 0,5 m atrás do espelho, como no modelo visual, e o esterço máximo em alta velocidade caiu de 13° para 11°.
+Resultado: **805/807 OK + 2 KNOWN** (v0.74.0). Na v0.10, o peso do piloto na posição real (boreste, acima do CG) aumentou o roll em curva com ondas fortes; o `bankCoef` foi para 1800 e o `rollDamping` para 15000, com 1 limitação conhecida (abaixo). Na v0.2 a hélice foi para 0,5 m atrás do espelho, como no modelo visual, e o esterço máximo em alta velocidade caiu de 13° para 11°.
 
 ### Navegador (Chrome, Windows 11, WebGL2, `q=med`, ~1370×896)
 

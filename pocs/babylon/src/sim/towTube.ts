@@ -8,7 +8,7 @@
 //  • arrasto da água (linear + quadrático; redonda, ela desliza de lado quase tão fácil quanto para a frente — é o que
 //    faz ela "chicotear" para fora da curva) e do ar; no ar (pulando a esteira) só o peso e o ar.
 // QUEDA de quem vai na boia ("a pessoa cai"), por limites de quanto ela aguenta segurar nas alças:
-//  • aceleração lateral (a chicotada para fora da curva) acima de `fallLatG`·g por `fallLatT` s, ou um pico de 1,4× isso;
+//  • aceleração lateral (a chicotada para fora da curva) acima de `fallLatG`·g por `fallLatT` s, ou um pico de 1,5× isso;
 //  • aterrissagem forte depois de voar (velocidade vertical ao tocar a água abaixo de −`fallLandV`);
 //  • tranco da corda (tensão acima de `fallJerkN`).
 // Na água a pessoa boia de colete; quando a boia está devagar ela nada até ela (`SWIM_MS`) e sobe (`climbS` s) — o passeio
@@ -43,7 +43,8 @@ export const TUBE: TubeParams = {
   mass: 12, riderMass: 80, radius: 0.8, height: 0.32, volume: 0.42,
   ropeLen: 16, ropeK: 3500, ropeC: 450,
   dragLin: 35, dragQuad: 6.5, planeLift: 14, airCdA: 0.5,
-  fallLatG: 0.85, fallLatT: 0.25, fallLandV: 3.2, fallJerkN: 5200,
+  // v0.74: mais difícil de cair (pedido do usuário) — antes 0,85 g / 0,25 s, 3,2 m/s, 5,2 kN
+  fallLatG: 1.2, fallLatT: 0.4, fallLandV: 4.2, fallJerkN: 7000,
   climbS: 2.2,
 };
 
@@ -189,7 +190,7 @@ export class TowTube {
     if (this.rider === "tube") {
       this.latT = Math.abs(this.latAcc) > P.fallLatG * G ? this.latT + dt : Math.max(0, this.latT - dt * 2);
       // chicotada: acima do limite por `fallLatT` s, ou um pico forte (1,4× o limite) que arranca na hora
-      const why: TowTube["lastFall"] = this.latT > P.fallLatT || Math.abs(this.latAcc) > 1.4 * P.fallLatG * G ? "curva" : landed && this.airVy < -P.fallLandV ? "pulo" : this.tension > P.fallJerkN ? "tranco" : "";
+      const why: TowTube["lastFall"] = this.latT > P.fallLatT || Math.abs(this.latAcc) > 1.5 * P.fallLatG * G ? "curva" : landed && this.airVy < -P.fallLandV ? "pulo" : this.tension > P.fallJerkN ? "tranco" : "";
       if (why) this.fall(why, right);
     }
     this.updateRider(dt, water);

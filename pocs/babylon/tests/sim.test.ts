@@ -12,11 +12,12 @@ import { SPEEDBOAT, DINGHY, RAPIDA, TURBINA, JETSKI, AIRBOAT, WIG, AMPHIB, PERSO
 import { groundLift, groundInduced } from "../src/sim/wing.ts";
 import { halfWidth } from "../src/sim/mooring.ts";
 import { TowTube, TUBE } from "../src/sim/towTube.ts";
+import { Parasail, PARASAIL } from "../src/sim/parasail.ts";
 import { activityPierLayout } from "../src/sim/world.ts";
 import { Turbine } from "../src/sim/turbine.ts";
 import { GerstnerWater, WAVE_PRESETS, type CurrentZone } from "../src/sim/water.ts";
 import type { PhysicsWorld } from "../src/sim/world.ts";
-import { buildWorld, RAMP, groundHeight, fromFrame, ROAD_SAMPLES, LOT, YARD, lotDistance, RIVER, RIVER_CURRENT, riverCenterX, LAKE_LOBES, CANYON_BOOM, FALLS, FALLS_CURRENT } from "../src/sim/world.ts";
+import { buildWorld, RAMP, groundHeight, fromFrame, ROAD_SAMPLES, LOT, YARD, lotDistance, RIVER, RIVER_CURRENT, riverCenterX, LAKE_LOBES, CANYON_BOOM, OCEAN } from "../src/sim/world.ts";
 import { STATION, stationObstacles, fuelBayState, parkedStall } from "../src/sim/station.ts";
 import { pierBerth, pierBerthState, tieToPier, buoyState, tieToBuoy, BUOYS, BuoyField, CANYON_END, CHANNEL_MARKERS, berthStartPose } from "../src/sim/mooring.ts";
 import { buildTrailer, trailerLoadState, attachWinch } from "../src/sim/trailer.ts";
@@ -1633,9 +1634,13 @@ for (const [label, thr] of [["baixa", 0.25], ["alta", 1]] as const) {
     go(b, tube, 6, { throttle: 0.6, steering: 0.6 });
     check("boia rebocada", "curva média (volante 0,6): a pessoa aguenta", tube.falls, 0, 0, "", 0);
     go(b, tube, 6, { throttle: 0.6, steering: 0 });
-    let latMax = 0; go(b, tube, 6, { throttle: 0.6, steering: 1 }, () => { latMax = Math.max(latMax, Math.abs(tube.latAcc)); });
-    check("boia rebocada", "curva fechada: a boia chicoteia (aceleração lateral, g)", latMax / 9.81, 0.85, 4, "g", 2);
-    check("boia rebocada", "curva fechada: a pessoa cai (motivo: curva)", tube.falls === 1 && tube.lastFall === "curva" ? 1 : 0, 1, 1, "", 0);
+    // v0.74 (mais difícil de cair): volante todo a 60 % ela ainda aguenta; só a toda a chicotada derruba
+    go(b, tube, 6, { throttle: 0.6, steering: 1 });
+    check("boia rebocada", "curva fechada a 60 %: a pessoa aguenta (v0.74)", tube.falls, 0, 0, "", 0);
+    go(b, tube, 8, { throttle: 1, steering: 0 });
+    let latMax = 0; go(b, tube, 6, { throttle: 1, steering: 1 }, () => { latMax = Math.max(latMax, Math.abs(tube.latAcc)); });
+    check("boia rebocada", "curva fechada A TODA: a boia chicoteia (aceleração lateral, g)", latMax / 9.81, 1.2, 5, "g", 2);
+    check("boia rebocada", "curva fechada a toda: a pessoa cai (motivo: curva)", tube.falls === 1 && tube.lastFall === "curva" ? 1 : 0, 1, 1, "", 0);
     check("boia rebocada", "caiu: está na água", tube.rider === "water" ? 1 : 0, 1, 1, "", 0);
     // parou: a pessoa nada até a boia e sobe; o passeio continua
     let tBack = -1, swam = false;
@@ -1673,6 +1678,82 @@ for (const [label, thr] of [["baixa", 0.25], ["alta", 1]] as const) {
       check("boia rebocada", `${P.kind}: também engata a boia`, tube.hook(b) ? 1 : 0, 1, 1, "", 0);
     }
   }
+}
+
+// ---------- Atividade: PARASAIL (píer com plataforma, decolagem rebocada, voo, descida, queda na água) ----------
+{
+  const w = buildWorld(), PP = w.parasailPier;
+  check("parasail", "píer do parasail: fundo na frente da plataforma (m)", groundHeight(PP.shoreX, PP.shoreZ + PP.length + 10), -3, -1.8, "m", 2);
+  check("parasail", "píer do parasail separado do píer da boia (m)", Math.abs(PP.shoreX - w.activityPier.shoreX), 40, 400, "m", 0);
+  const water = mkWater(0.2);
+  const mk = () => {
+    const ps = new Parasail(PP), L = ps.launchPos();
+    const b = new Speedboat(SPEEDBOAT, v3(L.x + 3, 0.25, L.z + 9)); b.systems.fuelL = 60; b.occupants = [{ seat: "helm", mass: PERSON_KG }];
+    return { ps, b };
+  };
+  // piloto: depois de sair da bacia, vai para o lobo leste (água funda e livre, longe da ilha)
+  const go = (b: Speedboat, ps: Parasail, s: number, inp: Partial<VehicleInput>, each?: () => void) => {
+    for (let i = 0; i < s / DT; i++) {
+      let steering = inp.steering ?? 0;
+      if (inp.steering === undefined && b.pos.z > PP.shoreZ + PP.length + 25) {
+        let err = Math.atan2(650 - b.pos.x, -40 - b.pos.z) - Math.atan2(b.forward.x, b.forward.z);
+        while (err > Math.PI) err -= 2 * Math.PI; while (err < -Math.PI) err += 2 * Math.PI;
+        steering = clampN(err * 1.2, -0.5, 0.5);
+      }
+      water.time += DT; b.step(DT, { ...emptyInput(), gear: "F", ...inp, steering }, water, w); ps.step(DT, water, w); each?.();
+    }
+  };
+  const clampN = (x: number, a: number, b2: number) => Math.max(a, Math.min(b2, x));
+  {
+    const { ps, b } = mk();
+    const far = new Speedboat(SPEEDBOAT, v3(ps.pos.x + 40, 0.25, ps.pos.z + 20));
+    check("parasail", "longe da plataforma: não engata", !ps.canHook(far) ? 1 : 0, 1, 1, "", 0);
+    check("parasail", "popa perto e parado: engata", ps.hook(b) ? 1 : 0, 1, 1, "", 0);
+    go(b, ps, 10, { throttle: 0.05 });
+    check("parasail", "esticando devagar: ela continua na plataforma", ps.state === "pier" ? 1 : 0, 1, 1, "", 0);
+    let tMax = 0, hit = 0;
+    go(b, ps, 25, { throttle: 0.5 }, () => { tMax = Math.max(tMax, ps.tension); hit = Math.max(hit, b.hullDamage); });
+    check("parasail", "acelerando a 50 %: decola da plataforma sem cair na água", ps.state === "air" && ps.splashes === 0 ? 1 : 0, 1, 1, "", 0);
+    go(b, ps, 10, { throttle: 0.5 });
+    check("parasail", "voo rebocado a ~32 km/h: altura (m)", ps.altitude, 12, 30, "m", 1);
+    check("parasail", "voo rebocado: tensão da corda (N)", ps.tension, 1200, 3000, "N", 0);
+    check("parasail", "voo rebocado: velame aberto (%)", ps.infl * 100, 95, 100, "%", 0);
+    check("parasail", "decolagem: sem bater no fundo (avaria do casco, %)", hit * 100, 0, 0.5, "%", 1);
+    // a corda pesa no barco: rebocando, ele anda mais devagar que sozinho
+    const solo = new Speedboat(SPEEDBOAT, v3(0, 0.25, 0)); solo.systems.fuelL = 60; solo.occupants = [{ seat: "helm", mass: PERSON_KG }];
+    run(solo, mkWater(0.2), 35, { ...emptyInput(), gear: "F", throttle: 0.5 }, openWater);
+    check("parasail", "rebocar o parasail freia o barco (km/h a menos)", solo.telemetry.speedKmh - b.telemetry.speedKmh, 4, 40, "km/h", 1);
+    // a toda ela sobe mais
+    go(b, ps, 20, { throttle: 1 });
+    check("parasail", "a toda: sobe mais (altura, m)", ps.altitude, 22, 45, "m", 1);
+    // solta no ar: desce de paraquedas até a água
+    check("parasail", "soltar no ar: fica livre", ps.unhook() === "free" ? 1 : 0, 1, 1, "", 0);
+    let sink = 0, n = 0;
+    go(b, ps, 25, { throttle: 0, gear: "N" }, () => { if (ps.state === "air" && ps.altitude < 15 && ps.altitude > 3) { sink -= ps.vel.y; n++; } });
+    check("parasail", "descida de paraquedas (m/s)", sink / Math.max(1, n), 2.5, 6, "m/s", 2);
+    check("parasail", "pousa na água", ps.state === "water" && ps.splashes === 1 ? 1 : 0, 1, 1, "", 0);
+    check("parasail", "toque na água sem impacto forte (m/s para baixo)", -ps.lastSplashV, 1, 6.5, "m/s", 1);
+  }
+  {
+    // devagar demais: a corda a tira da plataforma e ela cai na água; acelerando forte ela decola da água
+    const { ps, b } = mk(); ps.hook(b);
+    go(b, ps, 10, { throttle: 0.05 });
+    go(b, ps, 20, { throttle: 0.12 });
+    check("parasail", "rebocada devagar (~9 km/h): cai da plataforma na água", ps.state === "water" && ps.splashes === 1 ? 1 : 0, 1, 1, "", 0);
+    check("parasail", "na água devagar: o velame murcha (%)", ps.infl * 100, 0, 10, "%", 0);
+    go(b, ps, 25, { throttle: 1 });
+    check("parasail", "a toda: decola de novo da água", ps.state === "air" ? 1 : 0, 1, 1, "", 0);
+  }
+  {
+    // soltar parado perto do píer: ela volta para a plataforma; solta na água perto do píer, nada até ele
+    const { ps, b } = mk(); ps.hook(b);
+    check("parasail", "soltar na plataforma: volta a esperar", ps.unhook() === "pier" && ps.docked ? 1 : 0, 1, 1, "", 0);
+    const ps2 = new Parasail(PP); ps2.docked = false; ps2.state = "water";
+    const L = ps2.launchPos(); ps2.pos = v3(L.x + 6, 0.2, L.z + 14);
+    let t = -1; for (let i = 0; i < 60 / DT; i++) { water.time += DT; ps2.step(DT, water, w); if (ps2.docked) { t = i * DT; break; } }
+    check("parasail", "na água a 15 m do píer: nada até ele e sobe (s)", t, 5, 40, "s", 1);
+  }
+  check("parasail", "parâmetros: decola acima de ~24 km/h (velocidade mínima, km/h)", Math.sqrt(PARASAIL.mass * 9.81 / (0.6 * PARASAIL.area * PARASAIL.cl)) * 3.6, 20, 30, "km/h", 1);
 }
 
 // ---------- Oceano em volta do mundo: fora da malha do terreno o mar continua, com a mesma física ----------
@@ -2369,31 +2450,46 @@ for (const [label, thr] of [["baixa", 0.25], ["alta", 1]] as const) {
   }
 }
 
-// ---------- Lago ampliado (v0.66) e cânion fechado ("EM BREVE") ----------
+// ---------- Lago ampliado (v0.66 e v0.74), cânion fechado ("EM BREVE") e cânion até o mar (v0.74) ----------
 {
-  const waterArea = () => { let n = 0; for (let x = -1300; x <= 1300; x += 10) for (let z = -1100; z <= 1500; z += 10) {
-    if (groundHeight(x, z) < -0.3 && !(z > RIVER.z0 + 20 && Math.abs(x - riverCenterX(z)) < RIVER.width)) n++; } return n * 100; };
+  // área de água do lago (sem o cânion e sem o mar em volta do mundo)
+  const waterArea = () => { let n = 0; for (let x = -1800; x <= 1800; x += 10) for (let z = -1600; z <= 2000; z += 10) {
+    const ocean = Math.min(x - OCEAN.x0, OCEAN.x1 - x, z - OCEAN.z0, OCEAN.z1 - z) < OCEAN.coast1 + 10;
+    if (groundHeight(x, z) < -0.3 && !ocean && !(z > RIVER.z0 + 20 && Math.abs(x - riverCenterX(z)) < RIVER.width * 1.5)) n++; } return n * 100; };
   const big = waterArea();
-  const lobes = LAKE_LOBES.splice(0); const orig = waterArea(); LAKE_LOBES.push(...lobes);
-  check("cenário", "lago ampliado: área de água ÷ área original (sem o rio)", big / orig, 4, 7, "×", 2);
+  const all = LAKE_LOBES.splice(0);
+  const orig = waterArea();                                  // só o lago original (sem lobos)
+  LAKE_LOBES.push(all[0], all[1]); const v066 = waterArea();  // o lago da v0.66 (dois lobos)
+  LAKE_LOBES.splice(0); LAKE_LOBES.push(...all);
+  check("cenário", "lago ampliado (v0.66): área com 2 lobos ÷ original", v066 / orig, 4, 7, "×", 2);
+  check("cenário", "lago 3× maior (v0.74): área de água ÷ a da v0.66", big / v066, 2.8, 3.6, "×", 2);
   // a barreira flutuante na entrada do cânion segura o barco (só no jogo: buildWorld({ canyonClosed: true }))
   const wc = buildWorld({ canyonClosed: true });
   const bw = new Speedboat(SPEEDBOAT, v3(CANYON_BOOM.x, 0.3, CANYON_BOOM.z - 40)); bw.systems.fuelL = 60;
   let zMax = -1e9;
   run(bw, mkWater(0), 25, { ...emptyInput(), gear: "F", throttle: 0.5 }, wc, () => { zMax = Math.max(zMax, bw.pos.z); });
   check("cenário", "cânion fechado: a barreira EM BREVE segura o barco (passou dela, m)", zMax - CANYON_BOOM.z, -10, 4, "m", 1);
-  // cachoeira no fim do cânion: correnteza forte perto da queda e o paredão segura o barco
-  const fw = mkWater(0, [RIVER_CURRENT, FALLS_CURRENT]);
-  const cNear = fw.getCurrent(FALLS.x, FALLS.z - 8).z, cRiver = fw.getCurrent(riverCenterX(500), 500).z;
-  check("cenário", "cachoeira: correnteza perto da queda (m/s, para o sul)", -cNear, 4.5, 7, "m/s", 1);
-  check("cenário", "cachoeira: bem mais forte que no meio do rio (×)", cNear / cRiver, 2.5, 6, "×", 1);
-  const fb = new Speedboat(SPEEDBOAT, v3(FALLS.x, 0.3, FALLS.z - 60)); fb.systems.fuelL = 60;
-  let fz = -1e9;
-  run(fb, fw, 30, { ...emptyInput(), gear: "F", throttle: 0.6 }, buildWorld(), () => { fz = Math.max(fz, fb.pos.z); });
-  check("cenário", "cachoeira: o paredão segura o barco (não passa da queda, m)", fz - FALLS.z, -40, 2, "m", 1);
-  const dr = new Speedboat(SPEEDBOAT, v3(FALLS.x, 0.3, FALLS.z - 25)); dr.systems.fuelL = 60; dr.engine = "off";
-  run(dr, fw, 15, { ...emptyInput(), gear: "N" }, buildWorld());
-  check("cenário", "cachoeira: barco à deriva é levado rio abaixo em 15 s (m)", FALLS.z - 25 - dr.pos.z, 15, 120, "m", 1);
+  // o cânion desemboca no MAR ABERTO: fundo navegável até a costa, correnteza fraca do lago para o mar, e um barco
+  // subindo o cânion sai no oceano
+  let shallow = 0; for (let z = RIVER.z0 + 30; z <= RIVER.z1; z += 10) if (groundHeight(riverCenterX(z), z) > -1.5) shallow++;
+  check("cenário", "cânion até o mar: trechos rasos (< 1,5 m) no canal", shallow, 0, 0, "", 0);
+  check("cenário", "depois da foz: mar aberto (fundo, m)", groundHeight(riverCenterX(1900), 1900), -40, -20, "m", 1);
+  const rw = mkWater(0, [RIVER_CURRENT]);
+  check("cenário", "correnteza do cânion corre para o mar (m/s, para o norte)", rw.getCurrent(riverCenterX(900), 900).z, 0.6, 1.5, "m/s", 2);
+  {
+    const sb = new Speedboat(SPEEDBOAT, v3(riverCenterX(1550), 0.3, 1550), 0); sb.systems.fuelL = 60;
+    let zMax = -1e9, hit = 0;
+    const inp: VehicleInput = { ...emptyInput(), gear: "F", throttle: 0.4 };
+    run(sb, rw, 45, inp, buildWorld(), () => {
+      // piloto: segue o meio do canal 40 m à frente
+      let err = Math.atan2(riverCenterX(sb.pos.z + 40) - sb.pos.x, 40) - Math.atan2(sb.forward.x, sb.forward.z);
+      while (err > Math.PI) err -= 2 * Math.PI; while (err < -Math.PI) err += 2 * Math.PI;
+      inp.steering = Math.max(-1, Math.min(1, err * 1.5));
+      zMax = Math.max(zMax, sb.pos.z); hit = Math.max(hit, sb.hullDamage);
+    });
+    check("cenário", "barco sai do cânion no mar aberto (z máx.)", zMax, RIVER.z1 + 80, 4000, "m", 0);
+    check("cenário", "saída para o mar: sem bater (avaria do casco, %)", hit * 100, 0, 5, "%", 0);
+  }
 }
 
 // ---------- Poitas com física (boia + corrente) e vaga de estacionamento ----------
@@ -2498,7 +2594,7 @@ for (const [label, thr] of [["baixa", 0.25], ["alta", 1]] as const) {
 // ---------- Combustível inicial × fim do cânion ----------
 {
   const w = buildWorld();
-  const water = mkWater(0.35, [RIVER_CURRENT, FALLS_CURRENT]); // (como no jogo: rio + correnteza da cachoeira)
+  const water = mkWater(0.35, [RIVER_CURRENT]); // (como no jogo: a correnteza do cânion, que corre para o mar)
   const route: [number, number][] = [];
   for (let z = w.spawn.z; z <= RIVER.z0; z += 10) route.push([w.spawn.x + (riverCenterX(RIVER.z0) - w.spawn.x) * ((z - w.spawn.z) / (RIVER.z0 - w.spawn.z)), z]);
   for (let z = RIVER.z0; z <= CANYON_END.z + 30; z += 8) route.push([riverCenterX(z), z]);

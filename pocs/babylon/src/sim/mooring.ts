@@ -102,13 +102,13 @@ export const tieToBuoy = (b: Speedboat, buoy: { x: number; z: number }): void =>
 export interface BuoyBody { id: string; kind: "mooring" | "red" | "green"; x0: number; z0: number; x: number; z: number; vx: number; vz: number; chain: number }
 
 /**
- * Balizamento do canal do cânion (rio, da boca no lago até o fim): pares de boias laterais a cada 60 m,
+ * Balizamento do canal do cânion (rio, da boca no lago até o mar): pares de boias laterais a cada 120 m,
  * VERMELHA à direita de quem SOBE o rio (vindo do lago, sistema IALA B usado no Brasil) e VERDE à esquerda.
  */
 export const CHANNEL_MARKERS: { id: string; kind: "red" | "green"; x: number; z: number }[] = (() => {
   const out: { id: string; kind: "red" | "green"; x: number; z: number }[] = [];
   let n = 1;
-  for (let z = RIVER.z0 - 20; z <= RIVER.z1 - 20; z += 60) {
+  for (let z = RIVER.z0 - 20; z <= RIVER.z1 - 20; z += 120) { // (v0.74: cânion até o mar — a cada 120 m)
     const cx = riverCenterX(z);
     out.push({ id: "V" + n, kind: "red", x: cx + 10, z }, { id: "G" + n, kind: "green", x: cx - 10, z });
     n++;

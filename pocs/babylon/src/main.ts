@@ -22,8 +22,10 @@ import { buildWig, WIG_FLOOR } from "./presentation/wigMesh.ts";
 import { buildAmphib, AMPH_FLOOR } from "./presentation/anfibioMesh.ts";
 import { TowTube } from "./sim/towTube.ts";
 import { buildActivityPier, TowTubeVisual } from "./presentation/towTubeVis.ts";
+import { Parasail } from "./sim/parasail.ts";
+import { buildParasailPier, ParasailVisual } from "./presentation/parasailVis.ts";
 import { GerstnerWater, WAVE_PRESETS } from "./sim/water.ts";
-import { buildWorld, RIVER_CURRENT, FALLS_CURRENT, FALLS, RAMP, fromFrame } from "./sim/world.ts";
+import { buildWorld, RIVER_CURRENT, RAMP, fromFrame } from "./sim/world.ts";
 import { buildTrailer, trailerLoadState, attachWinch, seatedBoatLocal, type TrailerLayout } from "./sim/trailer.ts";
 import { TowRig, TOW_SPECS, type Pose } from "./sim/towVehicle.ts";
 import { buildRamp, buildTrailerMesh, buildTowVehicle, type WheelNode } from "./presentation/ramp.ts";
@@ -47,7 +49,6 @@ import { buildRapida } from "./presentation/rapidaMesh.ts";
 import { buildTurbina } from "./presentation/turbineMesh.ts";
 import { WaterInteraction } from "./presentation/waterInteraction.ts";
 import { TurbineExhaustFx } from "./presentation/exhaustFx.ts";
-import { buildWaterfall } from "./presentation/comingSoon.ts";
 import { GpuCart } from "./presentation/gpuCart.ts";
 import { TurbinePanel } from "./presentation/turbinePanel.ts";
 import { SystemsPanel } from "./presentation/systemsPanel.ts";
@@ -57,7 +58,7 @@ import { Hud } from "./presentation/hud.ts";
 import { EngineAudio } from "./presentation/audio.ts";
 
 installI18n(); // inglês: traduz o DOM, as escritas futuras e os letreiros 3D (antes de montar a cena e o HUD)
-const BUILD = "poc-babylon 0.73.1";
+const BUILD = "poc-babylon 0.74.0";
 /** Escala visual da rotação da hélice (proporcional ao RPM, abaixo do limite estroboscópico). */
 const PROP_VISUAL_SCALE = 0.12;
 
@@ -176,7 +177,7 @@ const boot = async () => {
 
   // ---------------- simulação ----------------
   const world = buildWorld(); // (a barreira "EM BREVE" da entrada do cânion ficou guardada: buildWorld({ canyonClosed: true }))
-  const water = new GerstnerWater({ waves: WAVE_PRESETS.lago, groundHeight: world.groundHeight, currents: [RIVER_CURRENT, FALLS_CURRENT] });
+  const water = new GerstnerWater({ waves: WAVE_PRESETS.lago, groundHeight: world.groundHeight, currents: [RIVER_CURRENT] });
   const spawnPos = () => v3(world.spawn.x, 0.25, world.spawn.z);
   const waitSpots = pierWaitSpots(world.pier);
   // GPU (fonte de solo de 28 V) parada no píer, à ré da vaga, com a saída do cabo virada para a água
@@ -203,6 +204,11 @@ const boot = async () => {
   const tube = new TowTube(world.activityPier);
   const tubeVis = new TowTubeVisual(scene);
   let tubeFalls = 0, tubeRider = tube.rider;
+  // ---- atividade: PARASAIL (píer com plataforma de decolagem, a leste do píer da boia) ----
+  pierMeshes.push(...buildParasailPier(scene, world.parasailPier));
+  const para = new Parasail(world.parasailPier);
+  const paraVis = new ParasailVisual(scene);
+  let paraSplashes = 0, paraState = para.state;
   const buoys = pierMeshes.filter((m) => m.name === "buoy");
   const moorVis = buildMoorings(scene, world.pier);
   const ropes = new Ropes(scene);
@@ -316,8 +322,7 @@ const boot = async () => {
   const isKind = (k: string | null): k is VesselKind => k === "lancha" || k === "bote" || k === "rapida" || k === "turbina" || k === "jetski" || k === "airboat" || k === "wig" || k === "anfibio";
   let V = vessels[isKind(urlKind) ? urlKind : "lancha"];
   const allBoatMeshes = allVessels.flatMap((x) => x.vis.meshes).filter((m) => m.name !== "propDisc");
-  const comingSoonMeshes = buildWaterfall(scene); // cachoeira do fim do cânion
-  const staticExtras = [...comingSoonMeshes, ...rampMeshes, ...stationMeshes, ...moorVis.meshes, ...gpuCart.meshes, ...allVessels.flatMap((x) => x.trailerMeshes)];
+  const staticExtras = [...rampMeshes, ...stationMeshes, ...moorVis.meshes, ...gpuCart.meshes, ...allVessels.flatMap((x) => x.trailerMeshes)];
 
   // ambiente para os materiais PBR (céu + margens, renderizado uma vez)
   const probe = new ReflectionProbe("envProbe", 128, scene);
@@ -352,7 +357,7 @@ const boot = async () => {
    * o barco ativo (com as pessoas e a carretinha dele), os píeres, o terreno, as árvores e a boia. Refeitas a cada troca.
    */
   const setRenderLists = () => {
-    const active = [...V.vis.meshes.filter((m) => m.name !== "propDisc"), ...V.trailerMeshes, ...tubeVis.meshes];
+    const active = [...V.vis.meshes.filter((m) => m.name !== "propDisc"), ...V.trailerMeshes, ...tubeVis.meshes, ...paraVis.meshes];
     waterVis.setReflectionList([skybox, terrain, riverStrip, trees, ...pierMeshes, ...active]);
     if (depth) depth.getDepthMap().renderList = [terrain, riverStrip, ...pierMeshes, ...active];
     if (shadowGen) shadowGen.getShadowMap()!.renderList = [...pierMeshes, trees, ...active.filter((m) => m.name !== "windshield")];
@@ -536,6 +541,7 @@ const boot = async () => {
     Matrix.ComposeToRef(Vector3.One(), Quaternion.RotationYawPitchRoll(Math.PI, 0, 0), new Vector3(0, seat.y, seat.z), boatOnTrailer);
     driving = true;
     if (tube.hooked) tube.dock(); // (rebocando a carretinha: a boia volta ao píer dela)
+    if (para.hooked) para.dock();
     if (b.params.wing && !b.wingFolded) { b.wingFolded = true; sysToast("Asa dobrada para a carretinha (as pontas sobem nas dobradiças)"); }
     setPeopleVisible(false);
     if (cam.mode === "cockpit") { cam.toggle(); hud.setCamera(cam.mode); setCockpitHead(false); }
@@ -686,6 +692,7 @@ const boot = async () => {
   const resetBoat = (toast = true) => {
     const b = V.boat;
     tube.dock(); // a boia volta amarrada no píer dela, com a pessoa esperando
+    para.dock(); // e quem voa de parasail volta à plataforma
     if (driving) stopDriving();
     strapT = 0; moorArmed = true; moorWhere = ""; buoyField.reset(); manualBoat = false;
     if (carOnly) leaveCar(false);
@@ -1000,15 +1007,24 @@ const boot = async () => {
     else if (a === "reset") resetBoat();
     else if (a === "wind") applyWind(wind.level + 1);
     else if (a === "tube") {
-      // BOIA REBOCADA: G engata a corda (devagar, com a popa perto da boia) ou solta
-      if (tube.hooked) {
+      // BOIA REBOCADA ou PARASAIL: G engata a corda (devagar, com a popa perto) ou solta — uma atividade por vez
+      if (para.hooked) {
+        const r = para.unhook();
+        hud.showToast(r === "pier" ? "Corda do parasail solta: a pessoa volta para a plataforma e espera a próxima decolagem"
+          : para.state === "air" ? "Corda solta no ar: ela desce de paraquedas até a água — perto do píer, ela nada até ele"
+          : "Corda do parasail solta: ela fica boiando — volte devagar com a popa perto dela e aperte G para engatar de novo");
+      } else if (!tube.hooked && !driving && !carOnly && para.canHook(V.boat)) {
+        para.hook(V.boat);
+        hud.showToast("Corda do parasail engatada! Saia DEVAGAR para esticar a corda e acelere (acima de ~25 km/h ela decola da plataforma)");
+      } else if (tube.hooked) {
         const r = tube.unhook();
         hud.showToast(r === "pier" ? "Boia desengatada no píer: a pessoa sobe no píer e espera a próxima volta"
           : "Boia desengatada: ela fica boiando — volte devagar com a popa perto dela e aperte G para engatar de novo");
       } else if (driving || carOnly) hud.showToast("A boia é rebocada pelo barco, não pelo carro");
       else if (tube.hook(V.boat)) hud.showToast(tube.rider === "tube" ? "Corda engatada! A pessoa está na boia — saia devagar para esticar a corda, depois acelere"
         : "Corda engatada na boia");
-      else hud.showToast("Para engatar a boia: chegue DEVAGAR com a popa perto dela (píer da boia, a leste do píer principal) e aperte G");
+      else if (para.hooked) hud.showToast("Solte a corda do parasail antes de engatar a boia");
+      else hud.showToast("Para engatar a boia ou o parasail: chegue DEVAGAR com a popa perto da boia ou da plataforma (píeres a leste do píer principal) e aperte G");
     }
     else if (a === "powerMult") {
       // MODO DE TESTE: cada * sobe o multiplicador da força (empuxo das embarcações e tração dos carros): ×1 → ×5 → ×1
@@ -1134,6 +1150,7 @@ const boot = async () => {
         boat.step(PHYSICS_DT, vin, physWater, world);
         buoyField.step(PHYSICS_DT, boat);
         tube.step(PHYSICS_DT, physWater, world); // (a corda empurra o barco no próximo passo, por externalForces)
+        para.step(PHYSICS_DT, physWater, world);
         if (carCmd) V.rig.update(PHYSICS_DT, carCmd);
         wakeField.update(PHYSICS_DT, boat);
         snap(curPos, curRot);
@@ -1178,6 +1195,29 @@ const boot = async () => {
         const txt = `BOIA ${tube.hooked ? "ENGATADA" : "SOLTA"}${st ? " · " + st : ""}`;
         if (ch.textContent !== txt) ch.textContent = txt;
         ch.classList.toggle("warn", tube.rider === "water");
+      }
+    }
+    // parasail: visual, avisos e o chip do HUD (tudo lido da sim)
+    paraVis.update(para, physWater.getHeight(para.pos.x, para.pos.z), performance.now() / 1000);
+    if (para.splashes !== paraSplashes) {
+      paraSplashes = para.splashes;
+      hud.showToast(para.hooked ? `O parasail CAIU na água (${(-para.lastSplashV).toFixed(1)} m/s)! Acelere forte para ela decolar de novo da água, ou pare e solte a corda (G)`
+        : `Ela pousou na água (${(-para.lastSplashV).toFixed(1)} m/s)`);
+    }
+    if (para.state !== paraState) {
+      if (para.state === "air" && paraState !== "air" && para.hooked) hud.showToast("DECOLOU! O parasail está no ar");
+      paraState = para.state;
+    }
+    {
+      const ch = document.getElementById("h-para")!;
+      const show = !para.docked;
+      ch.classList.toggle("show", show);
+      if (show) {
+        const st = para.state === "air" ? `NO AR · ${para.altitude.toFixed(0)} m · ${(para.airspeed * 3.6).toFixed(0)} km/h · corda ${para.tension.toFixed(0)} N`
+          : para.state === "water" ? (para.swimming ? "na água · nadando até o píer" : "na água") : "na plataforma";
+        const txt = `PARASAIL ${para.hooked ? "ENGATADO" : "SOLTO"} · ${st}`;
+        if (ch.textContent !== txt) ch.textContent = txt;
+        ch.classList.toggle("warn", para.state === "water");
       }
     }
     V.helm.update(dtReal, T, input.state, P.maxSteerLow * 180 / Math.PI);
@@ -1282,6 +1322,7 @@ const boot = async () => {
       else K.push(["T", `vento: ${wind.def.key}`, "wind"], ["P", V.kind === "bote" ? "corda (partida)" : "liga/desliga", "ignition"], ...(V.P.noAnchor ? [] : [["+ −", "âncora", null] as [string, string, Action | null]]), ["C", "câmera", "camera"], ["H", "ajuda", "help"]);
       // boia rebocada: G aparece engatada ou com a popa perto dela
       if (mode === "game" && !driving && !carOnly && (tube.hooked || tube.canHook(boat))) K.unshift(["G", tube.hooked ? "SOLTAR a boia" : "ENGATAR a boia", "tube"]);
+      else if (mode === "game" && !driving && !carOnly && (para.hooked || para.canHook(boat))) K.unshift(["G", para.hooked ? "SOLTAR o parasail" : "ENGATAR o parasail", "tube"]);
       // bateria zerada (lancha): botão para conectar o booster de partida
       if (mode === "game" && !T.capsized && !driving && !carOnly) K.unshift(["Y", boat.params.turbine ? (tpanel.isOpen ? "fechar painel" : "painel de partida") : spanel.isOpen ? "fechar sistemas" : "sistemas", "turbinePanel"]);
       if (mode === "game" && boat.params.turbine && !T.capsized && !driving && !carOnly && (T.gpu || (docked() && T.engine !== "running")))
@@ -1348,7 +1389,6 @@ const boot = async () => {
     // AR-10 manual: EXT PWR em ON sem a GPU conectada com o barco energizado — falha (alarme + EXT PWR vermelho)
     if (T.extPwrFault && !lastExtFault && mode === "game") sysToast("FALHA EXT PWR: chave em ON sem a GPU conectada — desligue o EXT PWR ou conecte a GPU (J, na doca)", true);
     lastExtFault = T.extPwrFault;
-    audio.setWaterfall(Math.hypot(boat.pos.x - FALLS.x, boat.pos.z - FALLS.z));
     if (boat.righted !== lastRighted) { if (mode === "game" && boat.righted > lastRighted) hud.showToast("Moto desvirada! Subam pela plataforma de popa"); lastRighted = boat.righted; capsizeWarned = false; }
     if (boat.reboarded !== lastReboarded) {
       if (mode === "game" && boat.reboarded > lastReboarded) hud.showToast(boat.swimmers.length ? `Voltou a bordo — ainda ${boat.swimmers.length} na água` : "Todos de volta a bordo");
@@ -1552,7 +1592,7 @@ const boot = async () => {
   // exposto para testes manuais/automatizados no console
   (window as unknown as Record<string, unknown>).__aqua = {
     get kind() { return V.kind; }, get boat() { return V.boat; }, get boatVis() { return V.vis; }, get mode() { return mode; },
-    vessels, water, waterVis, fx, audio, world, scene, engine, cam, input, loadMs, startGame, showMenu, gpuCart, tube,
+    vessels, water, waterVis, fx, audio, world, scene, engine, cam, input, loadMs, startGame, showMenu, gpuCart, tube, para,
     checkConvention: () => {
       const f = V.boat.forward;
       const bf = V.vis.root.forward;

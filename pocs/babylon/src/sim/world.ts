@@ -74,12 +74,18 @@ export const LAKE = { rx: 330, rz: 240 };
 export const LAKE_LOBES = [
   { cx: 650, cz: -10, rx: 480, rz: 390 },
   { cx: -670, cz: 90, rx: 450, rz: 350 },
+  // v0.74: lago ~3× maior — quatro lobos novos nos cantos (o cânion passa entre os dois do norte até o mar)
+  { cx: 820, cz: 760, rx: 520, rz: 520 },
+  { cx: -820, cz: 800, rx: 520, rz: 520 },
+  { cx: 820, cz: -720, rx: 500, rz: 420 },
+  { cx: -760, cz: -660, rx: 440, rz: 420 },
 ];
 /** união suave de dois campos de distância (k = largura da emenda) */
 const smin = (a: number, b: number, k: number): number => { const h = clamp(0.5 + 0.5 * (b - a) / k, 0, 1); return b + (a - b) * h - k * h * (1 - h); };
 export const ISLAND = { x: 140, z: 70, r: 48 };
-/** Canal de rio que desemboca no lago pelo norte (com correnteza). */
-export const RIVER = { z0: 170, z1: 760, width: 34 };
+/** Canal de rio (cânion) que liga o lago, ao norte, ao MAR ABERTO (v0.74: antes terminava numa cachoeira em z ≈ 780).
+ *  Lago e mar estão no mesmo nível; a correnteza corre devagar do lago para o mar. */
+export const RIVER = { z0: 170, z1: 1720, width: 34 };
 export const riverCenterX = (z: number): number => -60 + 38 * Math.sin(z / 95);
 
 /** Distância normalizada ao contorno do lago (1 = margem). */
@@ -149,8 +155,10 @@ export const onRamp = (x: number, z: number, margin = 0): boolean => {
 export const MARINA_BASIN = { cx: 27, cz: -226, hx: 35, hz: 22, depth: -2.3, blend: 8 };
 /** Bacia dragada em frente ao PÍER DA BOIA (atividade de boia rebocada, a leste do píer principal): a margem ali é rasa */
 export const ACTIVITY_BASIN = { cx: 100, cz: -222, hx: 22, hz: 26, depth: -2.3, blend: 8 };
+/** Bacia dragada em frente ao PÍER DO PARASAIL (v0.74, a leste do píer da boia) */
+export const PARASAIL_BASIN = { cx: 165, cz: -200, hx: 24, hz: 40, depth: -2.3, blend: 8 };
 const basin = (x: number, z: number, h: number): number => {
-  for (const B of [MARINA_BASIN, ACTIVITY_BASIN]) {
+  for (const B of [MARINA_BASIN, ACTIVITY_BASIN, PARASAIL_BASIN]) {
     const d = Math.hypot(Math.max(0, Math.abs(x - B.cx) - B.hx), Math.max(0, Math.abs(z - B.cz) - B.hz));
     if (d < B.blend) h = Math.min(h, h + (B.depth - h) * (1 - smoothstep(0, B.blend, d)));
   }
@@ -169,7 +177,8 @@ const terrainWithRamp = (x: number, z: number): number => {
 
 // ---------- estrada (rampa → pátio) e pátio de estacionamento / posto ----------
 /** Pátio do posto: retângulo plano (asfalto) com posto de combustível, loja, oficina, vagas e áreas de manobra. */
-export const LOT = { cx: -165, cz: -312, hx: 38, hz: 25, y: 0 };
+// v0.74: pátio maior (92 × 68 m) e as vagas dos conjuntos mais largas; a borda norte (estacionamento de cima) não mudou
+export const LOT = { cx: -173, cz: -321, hx: 46, hz: 34, y: 0 }; // (a borda leste, onde a estrada chega, não mudou)
 /** Pátio de manobra no alto da rampa: plano, na cota do topo da rampa (o carro vira e desce de ré). */
 export const YARD = { cx: RAMP.x, cz: RAMP.z0 + RAMP.sMin - 12, hx: 16, hz: 12, y: rampY(RAMP.sMin) };
 const rectDistance = (r: { cx: number; cz: number; hx: number; hz: number }, x: number, z: number): number =>
@@ -273,23 +282,11 @@ export const groundHeight = (x: number, z: number): number => {
 /** perto da estrada/pátio (para a vegetação e as rochas ficarem fora) */
 export const onRoadOrLot = (x: number, z: number, margin = 0): boolean => lotDistance(x, z) < margin + 1 || parkDistance(x, z) < margin + 1 || yardDistance(x, z) < margin + 1 || nearestRoad(x, z, ROAD.halfWidth + margin) !== null;
 
-/**
- * Cachoeira no FIM do cânion (v0.66.1): a água despenca ~13 m de um paredão de pedra logo depois do pórtico de
- * largada. O paredão é um colisor (o barco não sobe) e, chegando perto, a correnteza fica forte (`FALLS_CURRENT`,
- * soma com a do rio) e empurra o barco de volta.
- */
-export const FALLS = (() => {
-  const z = RIVER.z1 + 19, x = riverCenterX(z);
-  return { x, z, width: 30, top: 13.5 };
-})();
-export const FALLS_CURRENT: CurrentZone = {
-  // (a borda suavizada fica do lado do rio; o fim da zona passa por trás do paredão — na queda a força é total)
-  minX: FALLS.x - 30, maxX: FALLS.x + 30, minZ: RIVER.z1 - 25, maxZ: FALLS.z + 40, vx: 0, vz: -5.5, feather: 25,
-};
+// (v0.74: a cachoeira do fim do cânion saiu — o cânion desemboca no mar aberto, ver `OCEAN`)
 
 export const RIVER_CURRENT: CurrentZone = {
-  // aproximação retangular do trecho mais reto do rio próximo à foz; vazão para o sul
-  minX: -140, maxX: 20, minZ: RIVER.z0 + 10, maxZ: RIVER.z1, vx: 0, vz: -1.6, feather: 25,
+  // aproximação retangular do cânion; vazão do lago PARA O MAR (para o norte), mais fraca que a do antigo rio de serra
+  minX: -140, maxX: 20, minZ: RIVER.z0 + 10, maxZ: RIVER.z1 - 120, vx: 0, vz: 1.0, feather: 25,
 };
 
 // ---------- colisores ----------
@@ -327,7 +324,13 @@ export const activityPierLayout = (): PierLayout => {
   return { shoreX: x, shoreZ: shoreZAt(x) + 1, length: 28, width: 2.4, deckY: 0.55, dirX: 0, dirZ: 1 };
 };
 
-export const buildWorld = (opts: { canyonClosed?: boolean } = {}): PhysicsWorld & { pier: PierLayout; activityPier: PierLayout; rockList: SphereCollider[]; spawn: { x: number; z: number; heading: number } } => {
+/** PÍER DO PARASAIL (v0.74): mais alto (deck a 1,3 m), com a plataforma de decolagem na ponta */
+export const parasailPierLayout = (): PierLayout => {
+  const x = PARASAIL_BASIN.cx;
+  return { shoreX: x, shoreZ: shoreZAt(x) + 1, length: 30, width: 3.0, deckY: 1.3, dirX: 0, dirZ: 1 };
+};
+
+export const buildWorld = (opts: { canyonClosed?: boolean } = {}): PhysicsWorld & { pier: PierLayout; activityPier: PierLayout; parasailPier: PierLayout; rockList: SphereCollider[]; spawn: { x: number; z: number; heading: number } } => {
   const spheres: SphereCollider[] = [];
   const boxes: BoxCollider[] = [];
 
@@ -348,9 +351,16 @@ export const buildWorld = (opts: { canyonClosed?: boolean } = {}): PhysicsWorld 
     minZ: activityPier.shoreZ - 3, maxZ: activityPier.shoreZ + activityPier.length,
   });
 
+  // píer do parasail
+  const parasailPier = parasailPierLayout();
+  boxes.push({
+    minX: parasailPier.shoreX - parasailPier.width / 2, maxX: parasailPier.shoreX + parasailPier.width / 2,
+    minY: -6, maxY: parasailPier.deckY,
+    minZ: parasailPier.shoreZ - 3, maxZ: parasailPier.shoreZ + parasailPier.length,
+  });
+
   // (as rochas redondas foram removidas a pedido do usuário: lago e margens livres)
-  // paredão da cachoeira (fim do cânion)
-  boxes.push({ minX: FALLS.x - 32, maxX: FALLS.x + 32, minY: -4, maxY: FALLS.top, minZ: FALLS.z + 1, maxZ: FALLS.z + 30 });
+  // (v0.74: sem o paredão da cachoeira — o cânion segue até o mar)
   // (a barreira "EM BREVE" na entrada do cânion fica guardada para outro uso — v0.66.1: não é ligada no jogo)
   if (opts.canyonClosed) {
     const B = CANYON_BOOM;
@@ -358,7 +368,7 @@ export const buildWorld = (opts: { canyonClosed?: boolean } = {}): PhysicsWorld 
   }
 
   const spawn = { x: pier.shoreX + 9, z: pier.shoreZ + pier.length - 6, heading: 0 };
-  return { groundHeight, spheres, boxes, trailers: [], pier, activityPier, rockList: spheres, spawn };
+  return { groundHeight, spheres, boxes, trailers: [], pier, activityPier, parasailPier, rockList: spheres, spawn };
 };
 
 export const isWater = (x: number, z: number): boolean => groundHeight(x, z) < -0.3;
