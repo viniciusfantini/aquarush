@@ -156,7 +156,11 @@ export const MARINA_BASIN = { cx: 27, cz: -226, hx: 35, hz: 22, depth: -2.3, ble
 /** Bacia dragada em frente ao PÍER DA BOIA (atividade de boia rebocada, a leste do píer principal): a margem ali é rasa */
 export const ACTIVITY_BASIN = { cx: 100, cz: -222, hx: 22, hz: 26, depth: -2.3, blend: 8 };
 /** Bacia dragada em frente ao PÍER DO PARASAIL (v0.74, a leste do píer da boia) */
-export const PARASAIL_BASIN = { cx: 165, cz: -200, hx: 24, hz: 40, depth: -2.3, blend: 8 };
+// v0.75.4: bacia contínua do píer da boia até depois do píer do parasail (antes havia um banco de ~1 m entre as duas,
+// onde o barco batia chegando pela esquerda do píer do parasail) e transição mais suave para o lago (14 m)
+export const PARASAIL_BASIN = { cx: 160, cz: -190, hx: 50, hz: 50, depth: -2.3, blend: 14 };
+/** x do píer do parasail (fixo: a bacia em volta dele é maior que o píer) */
+export const PARASAIL_PIER_X = 165;
 const basin = (x: number, z: number, h: number): number => {
   for (const B of [MARINA_BASIN, ACTIVITY_BASIN, PARASAIL_BASIN]) {
     const d = Math.hypot(Math.max(0, Math.abs(x - B.cx) - B.hx), Math.max(0, Math.abs(z - B.cz) - B.hz));
@@ -326,7 +330,7 @@ export const activityPierLayout = (): PierLayout => {
 
 /** PÍER DO PARASAIL (v0.74): mais alto (deck a 1,3 m), com a plataforma de decolagem na ponta */
 export const parasailPierLayout = (): PierLayout => {
-  const x = PARASAIL_BASIN.cx;
+  const x = PARASAIL_PIER_X;
   return { shoreX: x, shoreZ: shoreZAt(x) + 1, length: 30, width: 3.0, deckY: 1.3, dirX: 0, dirZ: 1 };
 };
 

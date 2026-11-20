@@ -1684,6 +1684,11 @@ for (const [label, thr] of [["baixa", 0.25], ["alta", 1]] as const) {
 {
   const w = buildWorld(), PP = w.parasailPier;
   check("parasail", "píer do parasail: fundo na frente da plataforma (m)", groundHeight(PP.shoreX, PP.shoreZ + PP.length + 10), -3, -1.8, "m", 2);
+  { // v0.75.4: chegando pela esquerda (vindo do píer da boia) não há banco raso
+    let shallowest = -99;
+    for (let x = w.activityPier.shoreX; x <= PP.shoreX + 25; x += 2) for (let dz = -6; dz <= 25; dz += 3) shallowest = Math.max(shallowest, groundHeight(x, PP.shoreZ + PP.length + dz));
+    check("parasail", "entre o píer da boia e o do parasail, na frente das pontas: fundo mais raso (m)", shallowest, -3, -2, "m", 2);
+  }
   check("parasail", "píer do parasail separado do píer da boia (m)", Math.abs(PP.shoreX - w.activityPier.shoreX), 40, 400, "m", 0);
   const water = mkWater(0.2);
   const mk = () => {

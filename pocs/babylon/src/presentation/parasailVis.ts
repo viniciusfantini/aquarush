@@ -119,6 +119,16 @@ export class ParasailVisual {
     const dist = RISER_L * (0.45 + 0.55 * open);
     let cc = h.add(ax.scale(dist));
     if (cc.y < waterY + 0.25) { cc = new Vector3(cc.x, waterY + 0.25, cc.z); ax = cc.subtract(h).normalize(); }
+    if (!ps.docked && ps.state === "pier" && open >= 0.3) {
+      // na plataforma, antes de decolar: a equipe segura o velame EM PÉ atrás da pessoa (boca para o vento/barco),
+      // inteiro acima do deck — antes ele deitava na horizontal e atravessava a plataforma
+      const yw = ps.yaw, back = new Vector3(-Math.sin(yw), 0, -Math.cos(yw));
+      ax = back.scale(0.45).add(new Vector3(0, 0.9, 0)).normalize();
+      cc = h.add(ax.scale(dist));
+      const r = CANOPY_R * (0.35 + 0.65 * open), deckTop = ps.pos.y - HARNESS_H;
+      const minY = deckTop + 0.4 + r * Math.sqrt(Math.max(0, 1 - ax.y * ax.y));
+      if (cc.y < minY) { cc = new Vector3(cc.x, minY, cc.z); ax = cc.subtract(h).normalize(); }
+    }
     if (ps.docked || ps.state === "pier" && open < 0.3) {
       // dobrado na plataforma, atrás da pessoa (no deck)
       cc = new Vector3(ps.pos.x + 0.6, ps.pos.y - HARNESS_H, ps.pos.z - 1.8); ax = Vector3.Up();
@@ -126,7 +136,8 @@ export class ParasailVisual {
     this.canopyRoot.position.copyFrom(cc);
     const q = new Quaternion(); Quaternion.FromUnitVectorsToRef(Vector3.Up(), ax, q);
     this.canopyRoot.rotationQuaternion = q;
-    if (ps.docked) this.canopyRoot.scaling.set(0.17, 0.2, 0.17); // dobrado: um "fardo" de pano no deck
+    const bundled = ps.docked || ps.state === "pier" && open < 0.3;
+    if (bundled) this.canopyRoot.scaling.set(0.17, 0.2, 0.17); // dobrado: um "fardo" de pano no deck (também enquanto abre)
     else this.canopyRoot.scaling.set(0.35 + 0.65 * open, 0.12 + 0.88 * open, 0.35 + 0.65 * open);
     MeshBuilder.CreateLineSystem("psLines", { lines: this.linePts(h, ax, open, cc), instance: this.lines });
     this.lines.setEnabled(!ps.docked);
