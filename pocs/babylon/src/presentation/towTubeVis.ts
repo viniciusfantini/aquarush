@@ -124,6 +124,7 @@ export class TowTubeVisual {
   readonly rider: Pilot;
   private readonly rope: RopeTube;
   private readonly bridle: TowBridleVis;
+  private lastT = 0;
   private onTube = true;
   private readonly spray: ParticleSystem;
 
@@ -154,10 +155,17 @@ export class TowTubeVisual {
     // corda: da popa do veículo à argola da frente da boia
     const b: Speedboat | null = tube.hooked;
     this.rope.setEnabled(!!b);
-    if (b) this.bridle.update(TowTube.towEyes(b).map((e) => { const w = b.toWorld(e); return new Vector3(w.x, w.y, w.z); }), (() => { const w = b.toWorld(TowTube.towLocal(b)); return new Vector3(w.x, w.y, w.z); })(), true);
-    else this.bridle.update([], Vector3.Zero(), false);
+    let ringW: Vector3 | null = null;
     if (b) {
-      const tp = b.toWorld(TowTube.towLocal(b));
+      const front0 = new Vector3(tube.pos.x + Math.sin(tube.yaw) * 0.8, tube.pos.y, tube.pos.z + Math.cos(tube.yaw) * 0.8);
+      const eyes = TowTube.towEyes(b).map((e) => { const w = b.toWorld(e); return new Vector3(w.x, w.y, w.z); });
+      const ap = b.toWorld(TowTube.towLocal(b));
+      const dt = this.lastT ? t - this.lastT : 1 / 60;
+      ringW = this.bridle.update(eyes, new Vector3(ap.x, ap.y, ap.z), true, b.params.tow?.leg ?? 0, front0, tube.tension, tube.pos.y - 0.1, dt);
+    } else this.bridle.update([], Vector3.Zero(), false);
+    this.lastT = t;
+    if (b) {
+      const tp = ringW!;
       const front = new Vector3(tube.pos.x + Math.sin(tube.yaw) * 0.8, tube.pos.y, tube.pos.z + Math.cos(tube.yaw) * 0.8);
       // corda frouxa: um pouco de barriga (até a água); esticada: reta
       this.rope.update(new Vector3(tp.x, tp.y, tp.z), front, RopeTube.sagFor(tube.p.ropeLen, Vector3.Distance(new Vector3(tp.x, tp.y, tp.z), front), tube.tension, 0.05), tube.pos.y - 0.1);

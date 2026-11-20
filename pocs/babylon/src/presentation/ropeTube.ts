@@ -49,10 +49,18 @@ export class RopeTube {
   setEnabled(on: boolean): void { this.mesh.setEnabled(on); }
 }
 
-/** O "Y" de reboque no barco: dois braços dos olhais da popa até a argola (e as argolas de inox). Só visual. */
+/**
+ * O "Y" de reboque no barco, com movimento: a ARGOLA é uma pequena massa (gravidade, amortecimento) presa aos dois olhais
+ * por braços que só esticam (comprimento `leg`). Frouxa, ela cai e balança (pendurada, ou apoiada na água/deck); esticada,
+ * vai para onde a corda puxa: reto, os dois braços tensos; de lado, o braço desse lado tenso e o outro com barriga.
+ * Só visual — a força no barco é a da sim (`TowTube.applyTow`).
+ */
 export class TowBridleVis {
   private readonly legs: RopeTube[];
   private readonly rings: Mesh[] = [];
+  private ring = new Vector3();
+  private prev = new Vector3();
+  private init = false;
   constructor(scene: Scene, name: string, color: Color3) {
     this.legs = [new RopeTube(scene, name + "Leg0", color, 0.01), new RopeTube(scene, name + "Leg1", color, 0.01)];
     const steel = new StandardMaterial(name + "Steel", scene); steel.diffuseColor = new Color3(0.8, 0.81, 0.84); steel.specularColor = new Color3(0.9, 0.9, 0.9);
@@ -61,14 +69,61 @@ export class TowBridleVis {
       r.material = steel; r.isPickable = false; this.rings.push(r);
     }
   }
-  /** `eyes` (mundo, 1 ou 2) e `apex` (argola, mundo); `on` = engatado */
-  update(eyes: Vector3[], apex: Vector3, on: boolean): void {
-    const two = on && eyes.length === 2;
-    this.legs.forEach((l, k) => { l.setEnabled(two); if (two) l.update(eyes[k], apex, 0.02); });
-    this.rings.forEach((r, k) => {
-      const show = on && (k === 2 || two);
-      r.setEnabled(show);
-      if (show) r.position.copyFrom(k === 2 ? apex : eyes[k]);
+
+  /** ponto mais à frente na direção `dir` que a argola alcança com braços de `L` presos em `e1` e `e2` */
+  private static reach(e1: Vector3, e2: Vector3, L: number, dir: Vector3): Vector3 {
+    const cands: Vector3[] = [];
+    for (const [a, o] of [[e1, e2], [e2, e1]] as const) { const c = a.add(dir.scale(L)); if (Vector3.Distance(c, o) <= L + 1e-3) cands.push(c); }
+    const half = Vector3.Distance(e1, e2) / 2;
+    if (half < L) {
+      const m = Vector3.Center(e1, e2), n = e2.subtract(e1).normalize();
+      let t = dir.subtract(n.scale(Vector3.Dot(dir, n)));
+      if (t.lengthSquared() < 1e-6) t = Vector3.Up();
+      cands.push(m.add(t.normalize().scale(Math.sqrt(L * L - half * half))));
+    }
+    let best = cands[0] ?? Vector3.Center(e1, e2);
+    for (const c of cands) if (Vector3.Dot(c, dir) > Vector3.Dot(best, dir)) best = c;
+    return best;
+  }
+
+  /**
+   * `eyes` (mundo, 1 ou 2), `apex` (argola de repouso, mundo), `leg` (m), `pullTo` (para onde a corda vai), `tension`
+   * (N), `floorY` (água/deck: a argola não afunda), `dt` (s). Devolve a posição atual da argola (de onde sai a corda).
+   */
+  update(eyes: Vector3[], apex: Vector3, on: boolean, leg = 0, pullTo?: Vector3, tension = 0, floorY = -1e9, dt = 1 / 60): Vector3 {
+    const two = on && eyes.length === 2 && leg > 0;
+    if (!two) {
+      this.init = false;
+      this.legs.forEach((l) => l.setEnabled(false));
+      this.rings.forEach((r, k) => { const show = on && k === 2; r.setEnabled(show); if (show) r.position.copyFrom(apex); });
+      return apex.clone();
+    }
+    if (!this.init) { this.ring.copyFrom(apex); this.prev.copyFrom(apex); this.init = true; }
+    const h = Math.min(0.05, Math.max(1e-3, dt));
+    // integração (Verlet): gravidade e amortecimento — o barco arrasta a argola pelos braços
+    const vel = this.ring.subtract(this.prev).scale(0.985);
+    this.prev.copyFrom(this.ring);
+    this.ring.addInPlace(vel).addInPlace(new Vector3(0, -9.81 * h * h, 0));
+    // corda puxando: a argola vai (com mola) para o ponto mais à frente que alcança na direção da corda
+    if (pullTo && tension > 20) {
+      const dir = pullTo.subtract(this.ring).normalize();
+      const target = TowBridleVis.reach(eyes[0], eyes[1], leg, dir);
+      const k = 1 - Math.exp(-h * (6 + Math.min(30, tension / 60)));
+      this.ring.addInPlace(target.subtract(this.ring).scale(k));
+    }
+    // braços: só esticam (restrição de comprimento máximo), algumas iterações
+    for (let it = 0; it < 4; it++) for (const e of eyes) {
+      const d = this.ring.subtract(e), n = d.length();
+      if (n > leg) this.ring = e.add(d.scale(leg / n));
+    }
+    if (this.ring.y < floorY) { this.ring.y = floorY; this.prev.y = Math.min(this.prev.y, floorY); }
+    // desenho: braço tenso reto; frouxo com a barriga da folga
+    this.legs.forEach((l, k) => {
+      l.setEnabled(true);
+      const d = Vector3.Distance(eyes[k], this.ring);
+      l.update(eyes[k], this.ring, RopeTube.sagFor(leg, d, d > leg * 0.985 ? 100 : 0, 0.01), floorY);
     });
+    this.rings.forEach((r, k) => { r.setEnabled(true); r.position.copyFrom(k === 2 ? this.ring : eyes[k]); });
+    return this.ring.clone();
   }
 }

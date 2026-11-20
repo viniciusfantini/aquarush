@@ -65,6 +65,7 @@ export class ParasailVisual {
   private readonly lines: LinesMesh;
   private readonly rope: RopeTube;
   private readonly bridle: TowBridleVis;
+  private lastT = 0;
   private readonly flyerRoot: TransformNode;
   /** equipe da plataforma: dois ajudantes que seguram a borda do velame até a pessoa sair */
   private readonly crew: Pilot[] = [];
@@ -205,10 +206,16 @@ export class ParasailVisual {
     // corda até a popa
     const b = ps.hooked;
     this.rope.setEnabled(!!b);
-    if (b) this.bridle.update(TowTube.towEyes(b).map((e) => { const w = b.toWorld(e); return new Vector3(w.x, w.y, w.z); }), (() => { const w = b.toWorld(TowTube.towLocal(b)); return new Vector3(w.x, w.y, w.z); })(), true);
-    else this.bridle.update([], Vector3.Zero(), false);
+    let ringW: Vector3 | null = null;
     if (b) {
-      const tp = b.toWorld(TowTube.towLocal(b));
+      const eyes = TowTube.towEyes(b).map((e) => { const w = b.toWorld(e); return new Vector3(w.x, w.y, w.z); });
+      const ap = b.toWorld(TowTube.towLocal(b));
+      const dt = this.lastT ? t - this.lastT : 1 / 60;
+      ringW = this.bridle.update(eyes, new Vector3(ap.x, ap.y, ap.z), true, b.params.tow?.leg ?? 0, new Vector3(ps.pos.x, ps.pos.y, ps.pos.z), ps.tension, waterY - 0.02, dt);
+    } else this.bridle.update([], Vector3.Zero(), false);
+    this.lastT = t;
+    if (b) {
+      const tp = ringW!;
       // presa na frente da cadeirinha (abaixo dos olhos: em 1ª pessoa ela sai do peito e desce até o barco)
       const ring = new Vector3(ps.pos.x + Math.sin(yw) * 0.25, ps.pos.y + 0.05, ps.pos.z + Math.cos(yw) * 0.25);
       const a = new Vector3(tp.x, tp.y, tp.z), P = ps.pier;
