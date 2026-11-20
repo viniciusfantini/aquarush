@@ -159,12 +159,13 @@ export class Wakeboard {
   /** idade máxima da esteira somada por cima da água (no jogo a água da física já tem a esteira de ≥ 3 s: só falta a
    *  nova; nos testes, com a água sem esteira, soma tudo até 8 s) */
   wakeMaxAge = 8;
-  /** amostra de esteira da prancha: só planando na água (não no ar, nem afundada/caída) */
+  /** amostra de esteira da prancha: só planando na água (não no ar, nem afundada/caída) — um rastro só, de espuma */
   wakeSample(): import("./wake.ts").WakeSample | null {
     if (this.docked || this.state !== "riding") return null;
     const fx = Math.sin(this.yaw), fz = Math.cos(this.yaw), v = this.speed;
     return { bx: this.pos.x + fx * 0.69, bz: this.pos.z + fz * 0.69, sx: this.pos.x - fx * 0.69, sz: this.pos.z - fz * 0.69, rx: fz, rz: -fx,
-      v, thr: Math.min(1, Math.hypot(this.edgeAx, this.edgeAz) / 4) * 0.8 + 0.2, boil: 0, exh: 0, wet: 1, air: 0, span: 0, age: 0, size: 0.18 };
+      // (v0.77.5: `size` 0 = sem os braços do V — eram 3 rastros atrás da prancha; fica UM, o de espuma do meio)
+      v, thr: Math.min(1, Math.hypot(this.edgeAx, this.edgeAz) / 4) * 0.8 + 0.2, boil: 0, exh: 0, wet: 1, air: 0, span: 0, age: 0, size: 0 };
   }
 
   /** altura da superfície (água + esteira nova do barco) */
