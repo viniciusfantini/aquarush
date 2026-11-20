@@ -2,7 +2,7 @@
 // aponta para a resultante aerodinâmica `canopyDir`), as linhas de suspensão, a corda até a popa e a pessoa (em pé no
 // píer, pendurada na cadeirinha, ou boiando/nadando de colete). Só lê o estado da simulação (`sim/parasail.ts`).
 
-import { type Scene, Mesh, MeshBuilder, StandardMaterial, Color3, Vector3, TransformNode, Quaternion, VertexBuffer, type LinesMesh } from "@babylonjs/core";
+import { type Scene, Mesh, MeshBuilder, StandardMaterial, Color3, Vector3, TransformNode, Quaternion, VertexBuffer, DynamicTexture, type LinesMesh } from "@babylonjs/core";
 import type { PierLayout } from "../sim/world.ts";
 import { groundHeight } from "../sim/world.ts";
 import { Parasail, HARNESS_H } from "../sim/parasail.ts";
@@ -75,28 +75,38 @@ export class ParasailVisual {
     this.canopyRoot = new TransformNode("psCanopyRoot", scene);
     // velame: calota com gomos em três cores; o "topo" (+Y local) aponta para longe da pessoa, +Z local = bordo de
     // ataque (para o barco) e, atrás (−Z), as duas SAÍDAS DE AR (fendas abertas, com bainha escura) e o respiro do topo
-    const c = MeshBuilder.CreateSphere("psCanopy", { diameter: CANOPY_R * 2, segments: 44, slice: 0.42, sideOrientation: Mesh.DOUBLESIDE, updatable: true }, scene);
-    const cols = [new Color3(0.95, 0.2, 0.15), new Color3(1, 0.85, 0.15), new Color3(0.1, 0.4, 0.9)];
+    const c = MeshBuilder.CreateSphere("psCanopy", { diameter: CANOPY_R * 2, segments: 72, slice: 0.42, sideOrientation: Mesh.DOUBLESIDE, updatable: true }, scene);
+    // desenho do velame numa TEXTURA (bordas lisas): UV próprio — u = azimuto a partir de trás (0,5 = atrás), v = altura
+    // da boca (0) ao topo (1); gomos em três cores, as duas saídas de ar ovais atrás e o respiro do topo recortados (alfa)
     const pos = c.getVerticesData(VertexBuffer.PositionKind)!;
-    const rgba: number[] = [];
+    const EL0 = Math.asin(0.16), uv: number[] = [];
     for (let i = 0; i < pos.length; i += 3) {
       const x = pos[i] / CANOPY_R, y = pos[i + 1] / CANOPY_R, z = pos[i + 2] / CANOPY_R;
-      let col = cols[Math.floor(((Math.atan2(x, z) + Math.PI) / (2 * Math.PI)) * GORES) % GORES % 3], a = 1;
-      if (y > 0.985) { col = new Color3(1, 1, 1); a = 0; }                  // respiro do topo (aberto, pequeno)
-      else if (y > 0.965) col = new Color3(0.95, 0.95, 0.95);                 // bainha do respiro
-      // saídas de ar de trás: duas fendas (|x| 0,14–0,46 R, altura 0,3–0,62 R, só em z < 0)
-      const ax = Math.abs(x);
-      if (z < -0.2) {
-        const inV = ax > 0.14 && ax < 0.46 && y > 0.3 && y < 0.62;
-        const edge = ax > 0.1 && ax < 0.5 && y > 0.26 && y < 0.66;
-        if (inV) { a = 0; } else if (edge) col = new Color3(0.12, 0.12, 0.14);
-      }
-      rgba.push(col.r, col.g, col.b, a);
+      uv.push((Math.atan2(-x, -z) + Math.PI) / (2 * Math.PI), (Math.asin(Math.max(-1, Math.min(1, y))) - EL0) / (Math.PI / 2 - EL0));
     }
-    c.setVerticesData(VertexBuffer.ColorKind, rgba);
-    c.hasVertexAlpha = true;
+    c.setVerticesData(VertexBuffer.UVKind, uv);
+    const TW = 2048, TH = 1024, tex = new DynamicTexture("psCanopyTex", { width: TW, height: TH }, scene, true);
+    const g = tex.getContext() as unknown as CanvasRenderingContext2D;
+    const cols = ["#f2331f", "#ffd726", "#1a66e6"];
+    for (let k = 0; k < GORES; k++) { g.fillStyle = cols[k % 3]; g.fillRect((k / GORES) * TW, 0, TW / GORES + 1, TH); }
+    // (canvas: y = 0 em cima; a textura dinâmica inverte — v = 1 fica em cima do canvas)
+    const Y = (v: number) => (1 - v) * TH;
+    g.fillStyle = "#f4f4f4"; g.fillRect(0, Y(1), TW, Y(0.955) - Y(1));               // bainha do respiro do topo
+    g.fillStyle = "#cfcfcf"; g.fillRect(0, Y(0.04), TW, Y(0) - Y(0.04));             // bainha da boca
+    const cut = (draw: () => void, hem: string) => {
+      g.save(); draw(); g.lineWidth = 14; g.strokeStyle = hem; g.stroke(); g.restore();
+      g.save(); g.globalCompositeOperation = "destination-out"; draw(); g.fill(); g.restore();
+    };
+    for (const sgn of [-1, 1]) {
+      // saída de ar oval e inclinada, um pouco acima da boca, de cada lado do meio de trás
+      const cx = (0.5 + sgn * 0.42 / (2 * Math.PI)) * TW, cy = Y(0.25);
+      cut(() => { g.beginPath(); g.ellipse(cx, cy, 0.2 / (2 * Math.PI) * TW, 0.11 / (Math.PI / 2 - EL0) * TH, -sgn * 0.45, 0, Math.PI * 2); }, "#18181c");
+    }
+    cut(() => { g.beginPath(); g.rect(0, 0, TW, Y(0.975)); }, "#f4f4f4");            // respiro do topo (aberto)
+    tex.hasAlpha = true; tex.update();
     this.base = new Float32Array(pos); this.work = new Float32Array(pos);
     const cm = new StandardMaterial("psCanopyM", scene); cm.specularColor = new Color3(0.15, 0.15, 0.15); cm.backFaceCulling = false;
+    cm.diffuseTexture = tex; cm.emissiveColor = new Color3(0.12, 0.12, 0.12); // (alfa por teste: recorte nítido, sem ordenar)
     c.material = cm; c.parent = this.canopyRoot; c.position.y = -CANOPY_R * 0.16; // (o slice guarda a calota de cima: a boca fica na origem)
     this.canopy = c; this.meshes.push(c);
     this.lines = MeshBuilder.CreateLineSystem("psLines", { lines: this.linePts(Vector3.Zero(), Vector3.Up(), 1), updatable: true }, scene);
@@ -199,8 +209,15 @@ export class ParasailVisual {
       const ring = new Vector3(ps.pos.x + Math.sin(yw) * 0.25, ps.pos.y + 0.05, ps.pos.z + Math.cos(yw) * 0.25);
       const a = new Vector3(tp.x, tp.y, tp.z), P = ps.pier;
       // frouxa: a barriga vem da folga da corda (45 m) e ela fica por CIMA do deck do píer e da água, não dentro
-      const floorAt = (x: number, z: number) =>
-        Math.abs(x - P.shoreX) < P.width / 2 + 0.05 && z > P.shoreZ - 3 && z < P.shoreZ + P.length + 0.05 ? P.deckY : waterY - 0.02;
+      // chão da corda: o deck dentro do píer e, fora da borda, uma "dobra" que desce até a água em 1,2 m (ela escorrega
+      // pela quina em vez de cortar o píer)
+      const floorAt = (x: number, z: number) => {
+        const dx = Math.max(0, Math.abs(x - P.shoreX) - P.width / 2), dz = Math.max(0, z - (P.shoreZ + P.length), P.shoreZ - 3 - z);
+        const out = Math.hypot(dx, dz);
+        if (out >= 1.2) return waterY - 0.02;
+        const k = out / 1.2;
+        return P.deckY + 0.02 - (P.deckY - waterY) * k * k;
+      };
       this.rope.update(a, ring, RopeTube.sagFor(ps.p.ropeLen, Vector3.Distance(a, ring), ps.tension, 0.3), waterY - 0.02, floorAt);
     }
     // a pessoa

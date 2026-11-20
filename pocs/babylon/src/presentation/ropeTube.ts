@@ -3,7 +3,7 @@
 
 import { type Scene, Mesh, MeshBuilder, StandardMaterial, Color3, Vector3 } from "@babylonjs/core";
 
-const N = 14;
+const N = 48; // (muitos pontos: a corda dobra macia na borda do píer, sem "quinas")
 
 export class RopeTube {
   readonly mesh: Mesh;
@@ -16,7 +16,7 @@ export class RopeTube {
   constructor(scene: Scene, name: string, color: Color3, radius = 0.012) {
     this.scene = scene; this.radius = radius;
     for (let i = 0; i < N; i++) { this.pts.push(new Vector3(0, i * 0.1, 0)); this.radii.push(radius); }
-    this.mesh = MeshBuilder.CreateTube(name, { path: this.pts, radiusFunction: (i) => this.radii[i], tessellation: 6, updatable: true }, scene);
+    this.mesh = MeshBuilder.CreateTube(name, { path: this.pts, radiusFunction: (i) => this.radii[i], tessellation: 10, updatable: true }, scene);
     const m = new StandardMaterial(name + "Mat", scene);
     m.diffuseColor = color; m.emissiveColor = color.scale(0.55); m.specularColor = new Color3(0.1, 0.1, 0.1);
     this.mesh.material = m; this.mesh.isPickable = false;
