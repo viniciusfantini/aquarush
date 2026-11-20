@@ -156,7 +156,7 @@ export class TowTubeVisual {
       const tp = b.toWorld(TowTube.towLocal(b));
       const front = new Vector3(tube.pos.x + Math.sin(tube.yaw) * 0.8, tube.pos.y, tube.pos.z + Math.cos(tube.yaw) * 0.8);
       // corda frouxa: um pouco de barriga (até a água); esticada: reta
-      this.rope.update(new Vector3(tp.x, tp.y, tp.z), front, tube.tension > 30 ? 0.05 : 0.7, tube.pos.y - 0.1);
+      this.rope.update(new Vector3(tp.x, tp.y, tp.z), front, RopeTube.sagFor(tube.p.ropeLen, Vector3.Distance(new Vector3(tp.x, tp.y, tp.z), front), tube.tension, 0.05), tube.pos.y - 0.1);
     }
     // spray dos lados quando ela anda rápido encostada na água
     const sp = Math.hypot(tube.vel.x, tube.vel.z);

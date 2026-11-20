@@ -22,14 +22,23 @@ export class RopeTube {
     this.mesh.material = m; this.mesh.isPickable = false;
   }
 
-  /** de `a` a `b`; `sag` = barriga no meio (m); nenhum ponto abaixo de `minY` (a corda frouxa boia na água) */
-  update(a: Vector3, b: Vector3, sag: number, minY = -1e9): void {
+  /** Barriga de uma corda de comprimento `ropeLen` entre pontos a `d` m: a folga vira flecha (aprox. de corda frouxa,
+   *  2·√(L² − d²)/4), um resto pequeno quando esticada (`taut`). */
+  static sagFor(ropeLen: number, d: number, tension: number, taut = 0.15): number {
+    if (tension > 30) return taut;
+    return Math.min(8, Math.max(taut, 0.5 * Math.sqrt(Math.max(0, ropeLen * ropeLen - d * d))));
+  }
+
+  /** de `a` a `b`; `sag` = barriga no meio (m); nenhum ponto abaixo de `minY` (a corda frouxa boia na água) nem de
+   *  `floorAt(x, z)` (por exemplo o deck de um píer: a corda passa por cima, não por dentro) */
+  update(a: Vector3, b: Vector3, sag: number, minY = -1e9, floorAt?: (x: number, z: number) => number): void {
     const cam = this.scene.activeCamera?.globalPosition;
     for (let i = 0; i < N; i++) {
       const t = i / (N - 1);
       const p = this.pts[i];
       Vector3.LerpToRef(a, b, t, p);
       p.y = Math.max(minY, p.y - sag * 4 * t * (1 - t));
+      if (floorAt) p.y = Math.max(p.y, floorAt(p.x, p.z) + this.radius);
       // engrossa com a distância: ~0,0016 rad de largura aparente no mínimo (visível também de longe e em 1ª pessoa)
       const d = cam ? Vector3.Distance(cam, p) : 10;
       this.radii[i] = Math.max(this.radius, d * 0.0016);
