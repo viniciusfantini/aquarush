@@ -108,6 +108,12 @@
     .sw-cell { display: flex; flex-direction: column; align-items: center; gap: 5px; }
     .sw-cell .rd { font-size: 10.5px; color: var(--dim); font-variant-numeric: tabular-nums; text-align: center; min-height: 14px; padding: 1px 7px; border-radius: 4px; background: rgba(0,0,0,0.4); white-space: nowrap; }
     .sw-cell .rd.warn { color: #ffc23a; }
+    /* v0.79: painel Y de TAMANHO FIXO — a leitura nunca alarga a célula (texto longo corta com "…", o completo no title) */
+    #spanel .sw-cell { min-width: 112px; }
+    #tpanel .sw-cell .rd { width: 0; min-width: 100%; box-sizing: border-box; overflow: hidden; text-overflow: ellipsis; }
+    #spanel .sw-cell .rd { width: 0; min-width: 100%; box-sizing: border-box; overflow: hidden; text-overflow: ellipsis; }
+    .bal-g { display: flex; gap: 4px; justify-content: center; }
+    .bal-g .gauge.small { width: 74px; height: 74px; }
     .tg, .pp { position: relative; display: flex; flex-direction: column; align-items: center; gap: 3px; width: 80px; padding: 2px 2px 4px; border: none; background: none; border-radius: 8px; }
     .tg b, .pp b, .rot b { font-size: 10.5px; letter-spacing: 0.07em; color: #e9eef2; font-weight: 800; text-shadow: 0 1px 0 rgba(0,0,0,0.8); margin-top: 2px; }
     .tg small, .pp small, .rot small { font-size: 9px; color: var(--dim); line-height: 1.15; text-align: center; }

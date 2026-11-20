@@ -161,7 +161,16 @@ export class TurbinePanel {
   flash(msg: string): void { this.flashMsg = msg; this.flashT = performance.now(); }
 
   get isOpen(): boolean { return this.open; }
-  setOpen(on: boolean): void { this.open = on; this.el.classList.toggle("open", on); if (!on) this.ck.setOpen(false); }
+  setOpen(on: boolean): void {
+    this.open = on; this.el.classList.toggle("open", on); if (!on) this.ck.setOpen(false);
+    // TAMANHO FIXO (v0.79): na primeira abertura mede e trava largura e altura (ligar/desligar funções não mexe no tamanho)
+    if (on && !this.sizeLocked) requestAnimationFrame(() => {
+      const r = this.el.getBoundingClientRect();
+      if (!this.open || r.width < 50) return;
+      this.el.style.width = `${Math.ceil(r.width)}px`; this.el.style.height = `${Math.ceil(r.height)}px`; this.sizeLocked = true;
+    });
+  }
+  private sizeLocked = false;
 
   /** `fire` = há chama saindo do escape (o mesmo cálculo que desenha o fogo) */
   update(t: BoatTelemetry, fire = false): void {

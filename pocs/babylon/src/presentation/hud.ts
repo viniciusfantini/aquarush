@@ -2,6 +2,7 @@
 // Lê SOMENTE a telemetria real da simulação (BoatTelemetry).
 
 import type { BoatTelemetry } from "../sim/boat.ts";
+import { ballastGaugeOpts, setBallastGauges } from "./systemsPanel.ts";
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const SVG = "http://www.w3.org/2000/svg";
@@ -91,7 +92,7 @@ export class RoundGauge {
   }
 }
 
-export interface HudOpts { speedMax: number; temp: boolean; battery: boolean; trimPins: number; gear?: "bar" | "dial"; /** dois motores: um conta-giros por motor (BB / BE) */ twin?: boolean; /** turbina: N1, EGT, torque, N2, óleo e luzes da partida */ turbine?: boolean; /** fundo de escala do conta-giros (padrão 7000; moto aquática 9000) e início do vermelho */ rpmMax?: number; rpmRed?: number; /** moto aquática: manômetro do compressor (BOOST) e luz do iBB */ jet?: boolean; /** ekranoplano: TURBO, ALTURA da asa sobre a água, luz de voo/estol */ wig?: boolean; /** avião (anfíbio): ALTITUDE, VARIÔMETRO, luz de voo/estol e a barra do compensador */ plane?: boolean; /** barras que o barco não tem (airboat: sem âncora no HUD, sem marcha, sem calado, sem trim) */ hide?: ("anchor" | "gear" | "draft" | "trim")[] }
+export interface HudOpts { speedMax: number; temp: boolean; battery: boolean; trimPins: number; gear?: "bar" | "dial"; /** dois motores: um conta-giros por motor (BB / BE) */ twin?: boolean; /** turbina: N1, EGT, torque, N2, óleo e luzes da partida */ turbine?: boolean; /** fundo de escala do conta-giros (padrão 7000; moto aquática 9000) e início do vermelho */ rpmMax?: number; rpmRed?: number; /** moto aquática: manômetro do compressor (BOOST) e luz do iBB */ jet?: boolean; /** ekranoplano: TURBO, ALTURA da asa sobre a água, luz de voo/estol */ wig?: boolean; /** avião (anfíbio): ALTITUDE, VARIÔMETRO, luz de voo/estol e a barra do compensador */ plane?: boolean; /** barras que o barco não tem (airboat: sem âncora no HUD, sem marcha, sem calado, sem trim) */ hide?: ("anchor" | "gear" | "draft" | "trim")[]; /** lancha de wakeboard: um relógio de nível por tanque de lastro */ ballast?: boolean }
 
 export class Hud {
   private speedG!: RoundGauge;
@@ -110,6 +111,7 @@ export class Hud {
   private ampG: RoundGauge | null = null;
   /** moto aquática: pressão do compressor e a luz do iBB (caçamba: NEUTRO / FREIO / RÉ) */
   private boostG: RoundGauge | null = null;
+  private balG: RoundGauge[] = [];
   private altG: RoundGauge | null = null;
   private wigLamp: HTMLElement | null = null;
   private vsiG: RoundGauge | null = null;
@@ -246,6 +248,7 @@ export class Hud {
     this.egtG = this.tqG = this.n2G = this.oilG = this.oilTG = null;
     this.annun?.remove(); this.annun = null;
     this.boostG = null; this.ibbLamp?.remove(); this.ibbLamp = null;
+    this.balG = opts.ballast ? ["BB", "BE", "PROA"].map((n) => new RoundGauge(small, ballastGaugeOpts(n))) : [];
     this.altG = null; this.wigLamp?.remove(); this.wigLamp = null; this.vsiG = null;
     this.planeMode = !!opts.plane;
     if (opts.turbine) {
@@ -369,6 +372,7 @@ export class Hud {
     const amps = t.batteryA;
     this.ampG?.set(Math.max(-60, Math.min(30, amps)), `${amps > 0.5 ? "+" : ""}${amps.toFixed(0)} A`, amps > 0.5 ? "carga" : amps < -0.5 ? "consumo" : "", amps < -40);
     this.boostG?.set(Math.max(0, t.boostBar), `${t.boostBar.toFixed(2)}`, `${(t.boostBar * 14.5).toFixed(0)} psi`, t.boostBar > 1.2);
+    if (this.balG.length) setBallastGauges(this.balG, t);
     if (this.planeMode) {
       this.altG?.set(Math.max(0, Math.min(600, t.altitude)), t.airborne ? `${t.altitude.toFixed(0)} m` : "—", `prof. ${t.elevator > 0.005 ? "+" : ""}${Math.round(t.elevator * 100)}%`);
       this.vsiG?.set(Math.max(-6, Math.min(6, t.vsi)), `${t.vsi > 0.05 ? "+" : ""}${t.vsi.toFixed(1)}`, t.vsi > 0.3 ? "subida" : t.vsi < -0.3 ? "descida" : "nivelado", t.vsi < -3 && t.altitude < 30);

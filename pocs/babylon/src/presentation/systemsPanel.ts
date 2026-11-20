@@ -14,6 +14,7 @@
 
 import type { BoatTelemetry } from "../sim/boat.ts";
 import { makeDraggable } from "./dragPanel.ts";
+import { RoundGauge } from "./hud.ts";
 import { LeverControls, type LeverCmd, type LeverKind, type TrimOpts, type TrimState } from "./levers.ts";
 import { toggle, tri, rotary, pull, ignKey, rope, lantern, setToggle, setTri, setRotary, setPull, setKey, setRope, setRd, bindKeySpring } from "./switches.ts";
 
@@ -81,6 +82,14 @@ export interface SystemsPanelCaps {
 }
 
 const plate = (inner: string, cls = "") => `<div class="sw-plate ${cls}"><span class="screw s1"></span><span class="screw s2"></span><span class="screw s3"></span><span class="screw s4"></span>${inner}</div>`;
+
+/** relógio de nível de um tanque de lastro (0–100 %) — o mesmo no painel Y e no HUD */
+export const ballastGaugeOpts = (tank: string) => ({ title: `LASTRO ${tank}`, min: 0, max: 100, labels: [0, 50, 100], minor: 10 });
+/** atualiza os relógios do lastro pela telemetria (nível de cada tanque; embaixo: enchendo/esvaziando) */
+export const setBallastGauges = (gs: RoundGauge[], t: BoatTelemetry): void => {
+  const pump = t.ballastPump > 0 ? "enchendo" : t.ballastPump < 0 ? "esvaziando" : "%";
+  gs.forEach((g, i) => { const f = (t.ballastTanks[i] ?? 0) * 100; g.set(f, `${Math.round(f)}`, pump); });
+};
 
 export class SystemsPanel {
   readonly el: HTMLElement;
@@ -182,7 +191,9 @@ export class SystemsPanel {
     if (caps.ecoMode && !caps.startStop) cells.push(cell(toggle({ attr: "eco", val: "1", label: "MODO", sub: "ECO limita o gatilho", on: "ECO", off: "SPORT" }), "eco"));
     if (caps.choke) cells.push(cell(pull("choke", "1", "AFOGADOR", "partida a frio"), "choke"));
     if (caps.bilgePump) cells.push(cell(tri("bilge", "BOMBA PORÃO", "boia ou manual", { v: "on", l: "ON" }, { v: "off", l: "OFF" }, { v: "auto", l: "AUTO" }), "bilge"));
-    if (caps.ballast) cells.push(cell(tri("ballast", "LASTRO", "bombas dos 3 tanques", { v: "fill", l: "ENCHER" }, { v: "stop", l: "PARAR" }, { v: "drain", l: "ESVAZIAR" }), "ballast"));
+    // lastro: chave e, no lugar do texto, 3 relógios com o nível de cada tanque (BB, BE, PROA)
+    if (caps.ballast) cells.push(`<div class="sw-cell">${tri("ballast", "LASTRO", "bombas dos 3 tanques", { v: "fill", l: "ENCHER" }, { v: "stop", l: "PARAR" }, { v: "drain", l: "ESVAZIAR" })}</div>`
+      + `<div class="sw-cell"><div class="bal-g" data-bal></div></div>`);
     if (caps.cruise) cells.push(cell(toggle({ attr: "cruise", val: "1", label: "VELOCIDADE", sub: "controle automático" })
       + `<div class="cruise-set"><button data-cruise-set="-1" aria-label="velocidade −">−</button><span data-cruise-v>30,0</span><button data-cruise-set="1" aria-label="velocidade +">+</button></div>`, "cruise"));
     // bote: lanterna de mão a pilha (manual) — não é chave de painel
@@ -197,6 +208,10 @@ export class SystemsPanel {
         <div class="sp-grow"><div class="sp-sec">COMANDO</div>${plate("", "sp-lev")}</div></div>
       ${cells.length ? `<div class="sp-sec">SISTEMAS</div>${plate(cells.join(""))}` : ""}
       <div class="msg-rd" data-note><span></span></div>`;
+    this.balG = [];
+    const bg = this.body.querySelector<HTMLElement>("[data-bal]");
+    if (bg) for (const n of ["BB", "BE", "PROA"]) this.balG.push(new RoundGauge(bg, ballastGaugeOpts(n)));
+    this.unlockSize();
     this.levers = new LeverControls(caps.levers, (i, c) => this.act.setLever(i, c));
     this.body.querySelector<HTMLElement>(".sp-lev")!.appendChild(this.levers.el);
     this.levers.setTrim(caps.trim, (d) => this.act.setTrim(d));
@@ -226,7 +241,25 @@ export class SystemsPanel {
   lampTestOn = false;
 
   get isOpen(): boolean { return this.open; }
-  setOpen(on: boolean): void { this.open = on; this.el.classList.toggle("open", on); }
+  setOpen(on: boolean): void {
+    this.open = on; this.el.classList.toggle("open", on);
+    if (on && !this.sizeLocked) requestAnimationFrame(() => this.lockSize());
+  }
+  /** relógios do lastro (um por tanque) */
+  private balG: RoundGauge[] = [];
+  /**
+   * TAMANHO FIXO: na primeira abertura depois de montar, mede e trava largura e altura — ligar/desligar funções, textos
+   * e avisos não mexem mais no tamanho (o conteúdo é de células de largura fixa; se algo não couber, rola por dentro).
+   */
+  private sizeLocked = false;
+  private unlockSize(): void { this.sizeLocked = false; this.el.style.width = ""; this.el.style.height = ""; if (this.open) requestAnimationFrame(() => this.lockSize()); }
+  private lockSize(): void {
+    if (this.sizeLocked || !this.open) return;
+    const r = this.el.getBoundingClientRect();
+    if (r.width < 50) return;
+    this.el.style.width = `${Math.ceil(r.width)}px`; this.el.style.height = `${Math.ceil(r.height)}px`;
+    this.sizeLocked = true;
+  }
 
   /** Posição das manetes: o comando atual por motor (do InputManager). */
   updateLevers(cmds: LeverCmd[], trim: TrimState | null = null): void { if (this.open) { this.levers?.update(cmds); this.levers?.updateTrim(trim); } }
@@ -280,7 +313,7 @@ export class SystemsPanel {
     const info = (k: string, s: string, warn = false) => {
       const e = el.querySelector<HTMLElement>(`[data-info="${k}"]`);
       if (!e) return;
-      if (e.textContent !== s) e.textContent = s;
+      if (e.textContent !== s) { e.textContent = s; e.title = s; } // (texto cortado com "…": o completo no title)
       e.classList.toggle("warn", warn);
     };
     c.keys.forEach((_, i) => {
@@ -304,15 +337,12 @@ export class SystemsPanel {
       const sv = el.querySelector<HTMLElement>("[data-cruise-v]");
       const txt = `${t.cruiseKmh.toFixed(1).replace(".", ",")} km/h`;
       if (sv && sv.textContent !== txt) sv.textContent = txt;
-      info("cruise", t.cruiseOn ? `mantendo ${t.cruiseKmh.toFixed(1)} km/h · agora ${t.speedKmh.toFixed(1)} · acel. ${(t.cruiseThr * 100).toFixed(0)} %${t.cruiseLimited ? " · MANETE LIMITA" : ""}` : "desligado — a manete comanda", t.cruiseOn && t.cruiseLimited);
+      info("cruise", t.cruiseOn ? (t.cruiseLimited ? "MANETE LIMITA" : `agora ${t.speedKmh.toFixed(1)} · acel. ${(t.cruiseThr * 100).toFixed(0)} %`) : "desligado", t.cruiseOn && t.cruiseLimited);
     }
     if (c.ballast) {
       // chave na posição do que as bombas estão fazendo; LED aceso bombeando; nível: barra + % de cada tanque
       setTri(el, "ballast", t.ballastPump > 0 ? "fill" : t.ballastPump < 0 ? "drain" : "stop", powered, powered && t.ballastPump !== 0);
-      const f = t.ballastMaxL > 0 ? t.ballastL / t.ballastMaxL : 0, n = Math.round(f * 10);
-      const bar = "█".repeat(n) + "░".repeat(10 - n);
-      const tk = t.ballastTanks.map((v, i) => `${["BB", "BE", "PROA"][i] ?? i + 1} ${(v * 100).toFixed(0)}%`).join(" · ");
-      info("ballast", `${bar} ${(f * 100).toFixed(0)} % · ${t.ballastL.toFixed(0)} L${t.ballastPump > 0 ? " · enchendo" : t.ballastPump < 0 ? " · esvaziando" : ""} · ${tk}`);
+      setBallastGauges(this.balG, t);
     }
     if (c.leveler) {
       setToggle(el, "lvl", "1", t.leveler, t.leveler && hv > 6);
