@@ -54,6 +54,8 @@ const dropletTex = (scene: Scene): DynamicTexture => {
 interface PropFx { rooster: ParticleSystem; chop: ParticleSystem; mist: ParticleSystem; bubbles: ParticleSystem }
 interface PropState { prop: Vec3; imm: number; cavitation: number; ventilation: number; throttle: number; thrustN: number; propRpm: number; running: boolean   /** hélice no ar (airboat, ekranoplano) */
   airProp?: boolean;
+  /** hélice de eixo sob o casco: sem rooster tail */
+  shaftDrive?: boolean;
 }
 
 export class WaterInteraction {
@@ -252,6 +254,7 @@ export class WaterInteraction {
         propRpm: one ? T.propRpm : un.propRpmState,
         running: (one ? T.engine : un.engine) === "running",
         airProp: !!boat.params.airProp,
+        shaftDrive: !!boat.params.shaftDrive,
       });
     });
 
@@ -294,7 +297,8 @@ export class WaterInteraction {
     fx.rooster.direction2 = new Vector3(-fwd.x * 1.2 - right.x * 0.3, 1.7, -fwd.z * 1.2 - right.z * 0.3).scale(rv);
     // (hélice no ar: o vento dela só levanta água com a hélice perto da superfície — o ekranoplano voando, não)
     const nearSurf = h.airProp ? 1 - smoothstep(1.4, 2.6, prop.y - surf) : 1;
-    fx.rooster.emitRate = nearSurf * hasWater * smoothstep(0.5, 0.9, imm) * (h.thrustN > 500 ? smoothstep(6, 20, waterSpeed) * 600 * h.throttle + boil * 500 : boil * 300);
+    fx.rooster.emitRate = h.shaftDrive ? 0 // (hélice de eixo sob o casco: o jato fica embaixo d'água, nada voa)
+      : nearSurf * hasWater * smoothstep(0.5, 0.9, imm) * (h.thrustN > 500 ? smoothstep(6, 20, waterSpeed) * 600 * h.throttle + boil * 500 : boil * 300);
 
     // leque das pás "picando" a água: máximo com o disco pela metade (4·i·(1−i)), cresce com a rotação
     const spin = Math.min(Math.abs(h.propRpm) / 1500, 2);
@@ -313,7 +317,7 @@ export class WaterInteraction {
     fx.mist.minEmitBox = new Vector3(-0.5, 0, -0.5); fx.mist.maxEmitBox = new Vector3(0.5, 0.2, 0.5);
     fx.mist.direction1 = new Vector3(-fwd.x * 2 - 0.5, 0.8, -fwd.z * 2 - 0.5);
     fx.mist.direction2 = new Vector3(-fwd.x * 3 + 0.5, 2.0, -fwd.z * 3 + 0.5);
-    fx.mist.emitRate = boil * 140;
+    fx.mist.emitRate = boil * (h.shaftDrive ? 25 : 140); // (hélice de eixo: a fervura fica sob o casco, quase nada sobe)
 
     // bolhas logo atrás da hélice (visíveis através da água transparente)
     fx.bubbles.emitter = new Vector3(prop.x - fwd.x * 0.3, Math.min(prop.y, surf - 0.1), prop.z - fwd.z * 0.3);
