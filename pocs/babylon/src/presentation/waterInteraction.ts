@@ -74,6 +74,8 @@ export class WaterInteraction {
   private lastImpact = 0;
 
   private readonly field: WakeField;
+  /** o mapa de esteira (para somar outras fontes — a boia rebocada) */
+  get wakeMap(): WakeMap { return this.wake; }
 
   constructor(scene: Scene, field: WakeField, quality: { particles: number; wakeTexture: number }) {
     this.field = field;

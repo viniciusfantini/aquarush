@@ -24,6 +24,8 @@ export interface WakeSample {
   air: number;
   /** meia-envergadura (m) de quem gera o colchão de ar */
   span: number;
+  /** tamanho de quem gera a onda (1 = barco; a boia rebocada ≈ 0,3) — escala a altura das marolas */
+  size?: number;
   age: number;              // s
 }
 
@@ -46,7 +48,7 @@ export const kelvinTan = (v: number): number => {
 
 /** Envelope da onda de um braço: cresce logo atrás do casco, decai devagar e se espalha. */
 export const armEnvelope = (s: WakeSample): number =>
-  (waveAmp(s.v) * Math.max(s.wet, 0.12 * s.air) * Math.exp(-s.age / 45)) / Math.sqrt(1 + s.age / 6) * (1 - Math.exp(-s.age * 6 - 0.15));
+  (waveAmp(s.v) * (s.size ?? 1) * Math.max(s.wet, 0.12 * s.air) * Math.exp(-s.age / 45)) / Math.sqrt(1 + s.age / 6) * (1 - Math.exp(-s.age * 6 - 0.15));
 
 /** Cristas/cavados de cada braço (a partir da linha externa do V, para dentro). */
 export const WAKE_RIDGES = [
@@ -138,6 +140,24 @@ export class WakeField {
     if (this.sinceRebuild >= WakeField.REBUILD_S) { this.sinceRebuild = 0; this.rebuildIndex(boat.pos.x, boat.pos.z); }
   }
 
+  /** ponta viva de uma fonte que não é o barco (a boia rebocada) — o visual liga o rastro a ela */
+  live: WakeSample | null = null;
+  /**
+   * Avança a esteira de OUTRA fonte (v0.76.2: a boia rebocada). `live` = estado atual dela (null = fora d'água/parada
+   * no píer: não emite); o índice é centrado em (cx, cz) — o barco, que é quem consulta a esteira.
+   */
+  updateFrom(dt: number, live: WakeSample | null, cx: number, cz: number): void {
+    for (const s of this.samples) s.age += dt;
+    let drop = 0;
+    while (drop < this.samples.length && this.samples[drop].age > WAKE_MAX_AGE) drop++;
+    if (drop) this.samples.splice(0, drop);
+    this.live = live;
+    this.emitTimer -= dt;
+    if (live && this.emitTimer <= 0 && live.v > 0.4) { this.emitTimer = live.v > 2 ? EMIT_DT_FAST : EMIT_DT_SLOW; this.samples.push({ ...live }); }
+    this.sinceRebuild += dt;
+    if (this.sinceRebuild >= WakeField.REBUILD_S) { this.sinceRebuild = 0; this.rebuildIndex(cx, cz); }
+  }
+
   reset(): void { this.samples = []; this.buckets.clear(); this.sinceRebuild = Infinity; this.wetS = 1; }
 
   private static key(ix: number, iz: number): number { return (ix + 32768) * 65536 + (iz + 32768); }
@@ -209,8 +229,14 @@ export class WakeField {
 export class WaterWithWake implements IWaterSurface {
   private readonly base: IWaterSurface;
   private readonly wake: WakeField;
+  /** outras esteiras somadas (a da boia rebocada) */
+  readonly extra: WakeField[] = [];
   constructor(base: IWaterSurface, wake: WakeField) { this.base = base; this.wake = wake; }
-  getHeight(x: number, z: number): number { return this.base.getHeight(x, z) + this.wake.heightAt(x, z); }
+  getHeight(x: number, z: number): number {
+    let h = this.base.getHeight(x, z) + this.wake.heightAt(x, z);
+    for (const w of this.extra) h += w.heightAt(x, z);
+    return h;
+  }
   getNormal(x: number, z: number): Vec3 { return this.base.getNormal(x, z); }
   getCurrent(x: number, z: number): Vec3 { return this.base.getCurrent(x, z); }
   getDepth(x: number, z: number): number { return this.base.getDepth(x, z); }

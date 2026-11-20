@@ -152,6 +152,15 @@ export class TowTube {
     this.rider = "pier"; this.riderPos = this.waitPos(); this.riderVel = v3(); this.swimming = false; this.climbT = 0; this.latT = 0; this.latAcc = 0; this.bank = 0;
   }
 
+  /** amostra de esteira da boia (fonte pequena: `size` 0,3), ou null se ela não está na água andando */
+  wakeSample(): import("./wake.ts").WakeSample | null {
+    if (this.docked || this.airborne) return null;
+    const fx = Math.sin(this.yaw), fz = Math.cos(this.yaw), R = this.p.radius;
+    const v = Math.hypot(this.vel.x, this.vel.z);
+    return { bx: this.pos.x + fx * R, bz: this.pos.z + fz * R, sx: this.pos.x - fx * R, sz: this.pos.z - fz * R, rx: fz, rz: -fx,
+      v, thr: Math.min(1, v / 12) * 0.6, boil: 0, exh: 0, wet: 1, air: 0, span: 0, age: 0, size: 0.32 };
+  }
+
   /** massa atual (com a pessoa, se ela está na boia) */
   get massNow(): number { return this.p.mass + (this.rider === "tube" || this.rider === "climbing" ? this.p.riderMass : 0); }
 

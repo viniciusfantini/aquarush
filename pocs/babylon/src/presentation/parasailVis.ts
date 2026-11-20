@@ -208,11 +208,9 @@ export class ParasailVisual {
     this.rope.setEnabled(!!b);
     let ringW: Vector3 | null = null;
     if (b) {
-      const eyes = TowTube.towEyes(b).map((e) => { const w = b.toWorld(e); return new Vector3(w.x, w.y, w.z); });
-      const ap = b.toWorld(TowTube.towLocal(b));
       const dt = this.lastT ? t - this.lastT : 1 / 60;
-      ringW = this.bridle.update(eyes, new Vector3(ap.x, ap.y, ap.z), true, b.params.tow?.leg ?? 0, new Vector3(ps.pos.x, ps.pos.y, ps.pos.z), ps.tension, waterY - 0.02, dt);
-    } else this.bridle.update([], Vector3.Zero(), false);
+      ringW = this.bridle.update(b, new Vector3(ps.pos.x, ps.pos.y, ps.pos.z), ps.tension, waterY - 0.02, dt);
+    } else this.bridle.update(null);
     this.lastT = t;
     if (b) {
       const tp = ringW!;

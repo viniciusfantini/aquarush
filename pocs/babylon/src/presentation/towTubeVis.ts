@@ -158,11 +158,9 @@ export class TowTubeVisual {
     let ringW: Vector3 | null = null;
     if (b) {
       const front0 = new Vector3(tube.pos.x + Math.sin(tube.yaw) * 0.8, tube.pos.y, tube.pos.z + Math.cos(tube.yaw) * 0.8);
-      const eyes = TowTube.towEyes(b).map((e) => { const w = b.toWorld(e); return new Vector3(w.x, w.y, w.z); });
-      const ap = b.toWorld(TowTube.towLocal(b));
       const dt = this.lastT ? t - this.lastT : 1 / 60;
-      ringW = this.bridle.update(eyes, new Vector3(ap.x, ap.y, ap.z), true, b.params.tow?.leg ?? 0, front0, tube.tension, tube.pos.y - 0.1, dt);
-    } else this.bridle.update([], Vector3.Zero(), false);
+      ringW = this.bridle.update(b, front0, tube.tension, tube.pos.y - 0.1, dt);
+    } else this.bridle.update(null);
     this.lastT = t;
     if (b) {
       const tp = ringW!;

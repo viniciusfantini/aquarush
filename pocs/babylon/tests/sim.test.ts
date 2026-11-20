@@ -1670,6 +1670,25 @@ for (const [label, thr] of [["baixa", 0.25], ["alta", 1]] as const) {
     check("boia rebocada", "desengatar perto do píer: volta ao píer", tube.unhook() === "pier" ? 1 : 0, 1, 1, "", 0);
     check("boia rebocada", "a pessoa sobe no píer e espera", tube.rider === "pier" && tube.docked ? 1 : 0, 1, 1, "", 0);
   }
+  // a boia tem ESTEIRA própria (v0.76.2): marolas pequenas na mesma física, bem menores que as do barco
+  {
+    const { tube, b } = mkRig();
+    const tw = new WakeField(), bw = new WakeField();
+    tube.hook(b);
+    let hT = 0, hB = 0;
+    for (let i = 0; i < 25 / DT; i++) {
+      water.time += DT; b.step(DT, { ...emptyInput(), gear: "F", throttle: i * DT < 3 ? 0 : 0.4 }, water, openWater); tube.step(DT, water, openWater);
+      tw.updateFrom(DT, tube.wakeSample(), b.pos.x, b.pos.z); bw.update(DT, b);
+    }
+    // varre um quadrado em volta do caminho recente (atrás da boia)
+    for (let dx = -12; dx <= 12; dx += 0.5) for (let dz = -60; dz <= 0; dz += 0.5) {
+      const fx = Math.sin(tube.yaw), fz = Math.cos(tube.yaw);
+      const x = tube.pos.x + fx * dz + fz * dx, z = tube.pos.z + fz * dz - fx * dx;
+      hT = Math.max(hT, Math.abs(tw.heightAt(x, z))); hB = Math.max(hB, Math.abs(bw.heightAt(x, z)));
+    }
+    check("boia rebocada", "a boia deixa esteira (marola máx. atrás dela, cm)", hT * 100, 0.3, 8, "cm", 1);
+    check("boia rebocada", "esteira da boia bem menor que a do barco (×)", hT / Math.max(1e-6, hB), 0.05, 0.6, "×", 2);
+  }
   // qualquer veículo engata (moto aquática, ekranoplano)
   {
     for (const P of [JETSKI, WIG]) {

@@ -58,7 +58,7 @@ import { Hud } from "./presentation/hud.ts";
 import { EngineAudio } from "./presentation/audio.ts";
 
 installI18n(); // inglês: traduz o DOM, as escritas futuras e os letreiros 3D (antes de montar a cena e o HUD)
-const BUILD = "poc-babylon 0.76.1";
+const BUILD = "poc-babylon 0.76.2";
 /** Escala visual da rotação da hélice (proporcional ao RPM, abaixo do limite estroboscópico). */
 const PROP_VISUAL_SCALE = 0.12;
 
@@ -193,6 +193,9 @@ const boot = async () => {
   // a física enxerga a água + as marolas da esteira (o barco sente a esteira ao cruzá-la)
   const wakeField = new WakeField();
   const physWater = new WaterWithWake(water, wakeField);
+  // esteira da BOIA rebocada (v0.76.2): uma segunda fonte, pequena, na mesma física e no mesmo mapa de esteira
+  const tubeWake = new WakeField();
+  physWater.extra.push(tubeWake);
 
   // ---------------- cena ----------------
   const terrain = buildTerrain(scene, { terrainSubdiv: cfg.quality.terrainSubdiv, trees: cfg.quality.trees });
@@ -343,6 +346,7 @@ const boot = async () => {
   }
 
   const fx = new WaterInteraction(scene, wakeField, { particles: cfg.quality.particles, wakeTexture: cfg.quality.wakeTexture });
+  fx.wakeMap.extra.push(tubeWake); // (a boia rebocada também desenha a esteira dela)
   const exhaustFx = new TurbineExhaustFx(scene); // fumaça e fogo do escape da turbina (AR-10)
   const waterVis = new WaterVisual(scene, {
     resolution: cfg.quality.waterResolution, innerExtent: 80, outerExtent: 3600, depth, wake: fx.wake, reflectionSize: cfg.quality.reflection,
@@ -716,7 +720,7 @@ const boot = async () => {
     if (driving) stopDriving();
     strapT = 0; moorArmed = true; moorWhere = ""; buoyField.reset(); manualBoat = false;
     if (carOnly) leaveCar(false);
-    input.setGear("N"); wakeField.reset();
+    input.setGear("N"); wakeField.reset(); tubeWake.reset();
     // largada amarrada na vaga do píer: é onde os passageiros esperam para embarcar
     const bs = berthStartPose(world.pier, V.P);
     b.reset(v3(bs.pos.x, bs.pos.y, bs.pos.z), bs.heading);
@@ -1186,6 +1190,7 @@ const boot = async () => {
         boat.step(PHYSICS_DT, vin, physWater, world);
         buoyField.step(PHYSICS_DT, boat);
         tube.step(PHYSICS_DT, physWater, world); // (a corda empurra o barco no próximo passo, por externalForces)
+        tubeWake.updateFrom(PHYSICS_DT, tube.wakeSample(), boat.pos.x, boat.pos.z);
         para.step(PHYSICS_DT, physWater, world);
         if (carCmd) V.rig.update(PHYSICS_DT, carCmd);
         wakeField.update(PHYSICS_DT, boat);

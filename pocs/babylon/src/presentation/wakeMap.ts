@@ -37,23 +37,28 @@ export class WakeMap {
     this.texture.update(false); // pronta antes do 1º quadro (senão o material da água não fica "ready")
   }
 
+  /** outras esteiras (a da boia rebocada), desenhadas por cima no mesmo mapa */
+  readonly extra: WakeField[] = [];
+
   /** Redesenha o mapa centrado em (cx, cz); `live` = estado atual (liga o rastro à lancha). */
   update(cx: number, cz: number, live: WakeSample): void {
     const ppm = this.size / this.worldSize;
     this.originX = Math.round(cx * ppm) / ppm;
     this.originZ = Math.round(cz * ppm) / ppm;
-    this.draw([...this.field.samples, live], live);
+    const c = this.ctx;
+    c.globalCompositeOperation = "source-over";
+    c.fillStyle = "#000";
+    c.fillRect(0, 0, this.size, this.size);
+    this.draw([...this.field.samples, live], live, true);
+    for (const f of this.extra) if (f.samples.length || f.live) this.draw(f.live ? [...f.samples, f.live] : f.samples, f.live ?? f.samples[f.samples.length - 1], false);
     this.texture.update(false);
   }
 
-  private draw(pts: WakeSample[], live: WakeSample): void {
+  private draw(pts: WakeSample[], live: WakeSample, hull: boolean): void {
     const c = this.ctx, N = this.size, ppm = N / this.worldSize;
     const ox = this.originX, oz = this.originZ;
     const X = (x: number) => (x - ox) * ppm + N / 2;
     const Y = (z: number) => N / 2 + (z - oz) * ppm;
-    c.globalCompositeOperation = "source-over";
-    c.fillStyle = "#000";
-    c.fillRect(0, 0, N, N);
     c.globalCompositeOperation = "lighter";
     c.lineCap = "round";
     c.lineJoin = "round";
@@ -105,19 +110,19 @@ export class WakeMap {
     strokeChain((s) => ({ x: s.sx, z: s.sz }), (s) => {
       const lam = (2 * Math.PI * s.v * s.v) / 9.81;
       const phase = Math.sin((2 * Math.PI * s.v * s.age) / Math.max(lam, 0.5));
-      const a = waveAmp(s.v) * s.wet * 0.35 * Math.exp(-s.age / 8) * (1 - smoothstep(6, 10, s.v));
+      const a = waveAmp(s.v) * (s.size ?? 1) * s.wet * 0.35 * Math.exp(-s.age / 8) * (1 - smoothstep(6, 10, s.v));
       return { r: 0, g: phase > 0 ? (a * phase) / H : 0, b: phase < 0 ? (-a * phase) / H : 0, w: 2 + 0.6 * s.age };
     });
 
     // ---- água revolvida da hélice: espuma central que se abre e some devagar ----
     strokeChain((s) => ({ x: s.sx, z: s.sz }), (s) => {
       const f = (0.25 + 0.75 * s.thr) * smoothstep(0.3, 3, s.v + s.thr * 3) * s.wet * Math.exp(-s.age / 6);
-      return { r: f * 0.95, g: 0.02 * f, b: 0, w: 0.8 + 0.4 * s.age };
+      return { r: f * 0.95, g: 0.02 * f, b: 0, w: (0.8 + 0.4 * s.age) * (0.6 + 0.4 * (s.size ?? 1)) };
     });
     // rastro de água "lisa"/aerada que fica muito tempo visível (como na vida real)
     strokeChain((s) => ({ x: s.sx, z: s.sz }), (s) => {
       const f = smoothstep(0.5, 6, s.v) * Math.max(s.wet, 0.25 * s.air) * Math.exp(-s.age / 25) * 0.3;
-      return { r: f, g: 0, b: 0, w: Math.min(2.2 + 0.45 * s.age, 14) };
+      return { r: f, g: 0, b: 0, w: Math.min((2.2 + 0.45 * s.age) * (0.4 + 0.6 * (s.size ?? 1)), 14) };
     });
 
     // ---- colchão de ar da asa (ekranoplano rente à água): o ar empurrado sob a asa "corta" a água ----
@@ -154,7 +159,7 @@ export class WakeMap {
     }
 
     // ---- escape borbulhando na lenta: manchas de espuma fina que sobem atrás da hélice ----
-    if (live.exh > 0.05) {
+    if (hull && live.exh > 0.05) {
       const t = performance.now() / 1000;
       for (let k = 0; k < 7; k++) {
         const ph = (t * 1.7 + k * 0.37) % 1;              // cada "bolha" nasce, abre e some
@@ -174,7 +179,7 @@ export class WakeMap {
     }
 
     // ---- borda do casco: espuma/"bigode" na proa e ao longo do costado ----
-    const hullFoam = smoothstep(1.5, 9, live.v) * live.wet * 0.7;
+    const hullFoam = hull ? smoothstep(1.5, 9, live.v) * live.wet * 0.7 : 0;
     if (hullFoam > 0.02) {
       const fx = -live.rz, fz = live.rx; // frente no plano
       const outline: [number, number][] = [[0, 3.0], [0.75, 2.2], [1.12, 0.6], [1.12, -1.6], [1.0, -2.95]];
