@@ -1798,8 +1798,17 @@ for (const [label, thr] of [["baixa", 0.25], ["alta", 1]] as const) {
   let tUp = -1, t = 0;
   go(r, 14, { throttle: 0.5 }, () => { t += DT; if (tUp < 0 && r.wb.state === "riding") tUp = t; });
   check("wakeboard", "acelerando: ela levanta e fica em pé (s)", tUp, 2, 12, "s", 1);
-  const kinds = new Set<string>(); let lj = r.wb.jumps, spd = 0, n = 0;
-  go(r, 60, { throttle: 0.5 }, () => { if (r.wb.jumps !== lj) { lj = r.wb.jumps; kinds.add(r.wb.lastTrick); } if (r.wb.state === "riding") { spd += r.wb.speed; n++; } });
+  const kinds = new Set<string>(); let lj = r.wb.jumps, spd = 0, n = 0, inwardJ = 0;
+  go(r, 60, { throttle: 0.5 }, () => {
+    if (r.wb.jumps !== lj) {
+      lj = r.wb.jumps; kinds.add(r.wb.lastTrick);
+      // na decolagem: ela ia para o centro da esteira? (velocidade lateral em relação ao barco contra o lado em que está)
+      const rr = r.b.right, rl = Math.hypot(rr.x, rr.z), vl = ((r.wb.vel.x - r.b.vel.x) * rr.x + (r.wb.vel.z - r.b.vel.z) * rr.z) / rl;
+      if (vl * r.wb.offset < 0) inwardJ++;
+    }
+    if (r.wb.state === "riding") { spd += r.wb.speed; n++; }
+  });
+  check("wakeboard", "pula só cortando para DENTRO da esteira (fração dos pulos)", r.wb.jumps ? inwardJ / r.wb.jumps : 0, 0.99, 1, "", 2);
   check("wakeboard", "andando sozinha: pula na esteira (pulos em 74 s)", r.wb.jumps, 3, 60, "", 0);
   check("wakeboard", "pulo mais alto (m)", r.wb.maxAir, 0.3, 2.0, "m", 2);
   check("wakeboard", "manobras diferentes no ar", kinds.size, 2, 3, "", 0);

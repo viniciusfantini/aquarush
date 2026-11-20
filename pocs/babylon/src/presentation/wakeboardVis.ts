@@ -9,20 +9,58 @@ import type { Wakeboard } from "../sim/wakeboard.ts";
 import { buildPassenger, type Pilot } from "./pilot.ts";
 import { signMat } from "./station.ts";
 import { RopeTube, TowBridleVis } from "./ropeTube.ts";
+import { colorize } from "./boatMesh.ts";
 
 const mat = (scene: Scene, name: string, c: Color3, spec = 0.1) => { const m = new StandardMaterial(name, scene); m.diffuseColor = c; m.specularColor = new Color3(spec, spec, spec); return m; };
 
-/** prancha de wakeboard: casco fino com as pontas arredondadas e dois "bindings" (botas) */
+/** prancha: comprimento, largura, raio dos cantos, espessura e rocker (as pontas sobem) */
+const BL = 1.38, BW = 0.43, BR = 0.1, BT = 0.032, ROCK = 0.065;
+const rockerY = (z: number) => ROCK * Math.pow(Math.min(1, Math.abs(z) / (BL / 2)), 2.4);
+const boardW = (z: number) => { const a = Math.abs(z) - (BL / 2 - BR); return a <= 0 ? BW : BW - 2 * BR + 2 * Math.sqrt(Math.max(0, BR * BR - a * a)); };
+
+/**
+ * Prancha de wakeboard TWIN-TIP ("quadrada", bidirecional): retângulo com os cantos arredondados e as duas pontas
+ * iguais, rocker nas duas pontas, borda (rail) clara, fundo escuro, 4 quilhas (duas em cada ponta) e as botas em
+ * "pato" simétricas — anda igual para os dois lados. Eixo longo = Z local (para onde ela anda).
+ */
 const buildBoardMesh = (scene: Scene, name: string, parent: TransformNode, color: Color3): Mesh[] => {
-  const top = mat(scene, name + "Top", color, 0.4), base = mat(scene, name + "Base", new Color3(0.08, 0.08, 0.1), 0.3), boot = mat(scene, name + "Boot", new Color3(0.12, 0.12, 0.14));
-  const board = MeshBuilder.CreateCylinder(name, { height: 0.035, diameter: 1, tessellation: 28 }, scene);
-  board.scaling.set(0.42, 1, 1.38); board.material = top; board.parent = parent;
-  const rail = MeshBuilder.CreateCylinder(name + "Rail", { height: 0.02, diameter: 1, tessellation: 28 }, scene);
-  rail.scaling.set(0.43, 1, 1.39); rail.position.y = -0.022; rail.material = base; rail.parent = parent;
-  const out = [board, rail];
-  for (const z of [-0.26, 0.26]) {
-    const b = MeshBuilder.CreateBox(name + "Boot", { width: 0.13, height: 0.16, depth: 0.28 }, scene);
-    b.material = boot; b.parent = parent; b.position.set(0, 0.09, z); b.rotation.y = Math.PI / 2 + (z > 0 ? 0.25 : -0.25); out.push(b);
+  const N = 40, paths: Vector3[][] = [];
+  for (let k = -1; k <= N + 1; k++) {
+    const kk = Math.min(N, Math.max(0, k));
+    const z = -BL / 2 + (BL * kk) / N, w = (k < 0 || k > N ? 0 : boardW(z)) / 2, y = rockerY(z), h = k < 0 || k > N ? 0 : BT / 2;
+    // seção: topo (abaulado de leve), rail arredondado e fundo com canais — laço fechado
+    paths.push([
+      new Vector3(-w * 0.98, y + h * 0.9, z), new Vector3(0, y + h * 1.15, z), new Vector3(w * 0.98, y + h * 0.9, z),
+      new Vector3(w, y, z), new Vector3(w * 0.96, y - h, z), new Vector3(0, y - h * 1.1, z), new Vector3(-w * 0.96, y - h, z), new Vector3(-w, y, z),
+    ]);
+  }
+  const board = MeshBuilder.CreateRibbon(name, { pathArray: paths, closePath: true, sideOrientation: Mesh.DOUBLESIDE }, scene);
+  const dark = new Color3(0.07, 0.07, 0.09), rail = new Color3(0.93, 0.93, 0.92), accent = new Color3(1, 1, 1);
+  colorize(board, (x, y, z) => {
+    const yc = rockerY(z), w = boardW(z) / 2;
+    if (y < yc - BT * 0.2) return dark;                                   // fundo
+    if (Math.abs(x) > w * 0.9) return rail;                               // rail
+    const az = Math.abs(z);
+    if (az > 0.12 && az < 0.17) return accent;                            // faixas simétricas
+    if (az < 0.05) return color.scale(0.7);
+    return color;
+  });
+  const bm = new StandardMaterial(name + "M", scene); bm.specularColor = new Color3(0.35, 0.35, 0.35); bm.specularPower = 40; bm.backFaceCulling = false;
+  board.material = bm; board.parent = parent;
+  const out: Mesh[] = [board];
+  const finM = mat(scene, name + "Fin", new Color3(0.1, 0.1, 0.12), 0.3), boot = mat(scene, name + "Boot", new Color3(0.12, 0.12, 0.14), 0.15), bootIn = mat(scene, name + "BootIn", color.scale(0.85), 0.2);
+  // 4 quilhas: duas em cada ponta, perto das bordas
+  for (const sz of [-1, 1]) for (const sx of [-1, 1]) {
+    const z = sz * (BL / 2 - 0.11), f = MeshBuilder.CreateBox(name + "Fin", { width: 0.006, height: 0.035, depth: 0.075 }, scene);
+    f.material = finM; f.parent = parent; f.position.set(sx * (BW / 2 - 0.06), rockerY(z) - BT / 2 - 0.016, z); out.push(f);
+  }
+  // botas (bindings): pés afastados ao longo da prancha, ângulo em "pato" (±12°)
+  for (const sz of [-1, 1]) {
+    const n = new TransformNode(name + "Binding", scene); n.parent = parent; n.position.set(0, BT / 2 + 0.005, sz * 0.27); n.rotation.y = sz * 0.21;
+    const plate = MeshBuilder.CreateBox(name + "BindPlate", { width: 0.3, height: 0.018, depth: 0.12 }, scene); plate.material = boot; plate.parent = n; plate.position.y = 0.009;
+    const shell = MeshBuilder.CreateBox(name + "BindShell", { width: 0.28, height: 0.14, depth: 0.11 }, scene); shell.material = bootIn; shell.parent = n; shell.position.set(-0.01, 0.08, 0);
+    const heel = MeshBuilder.CreateCylinder(name + "BindHeel", { height: 0.2, diameter: 0.12, tessellation: 12 }, scene); heel.material = boot; heel.parent = n; heel.position.set(-0.12, 0.1, 0);
+    out.push(plate, shell, heel);
   }
   for (const m of out) m.isPickable = false;
   return out;
@@ -142,6 +180,7 @@ export class WakeboardVisual {
     const p = new Vector3(wb.pos.x, wb.pos.y, wb.pos.z);
     // ---- pessoa e prancha ----
     const fwdYaw = wb.yaw;
+    let handW: Vector3 | null = null;
     if (wb.state === "pier") {
       this.boardRoot.setEnabled(false);
       this.rider.stand(new Vector3(wb.pos.x, wb.pos.y, wb.pos.z), Math.PI, t);
@@ -154,31 +193,55 @@ export class WakeboardVisual {
       this.boardRoot.rotationQuaternion = Quaternion.FromEulerAngles(wb.state === "water" ? -1.2 : 0, fwdYaw + Math.PI / 2, 0);
       if (wb.state === "water") this.rider.update(new Vector3(-0.15, 0.85, 0.35), new Vector3(0.15, 0.85, 0.35));
     } else {
-      // em pé de LADO na prancha (pé da frente para o barco), joelhos dobrando; no ar com a manobra
+      // EM PÉ: de lado na prancha (prancha ao longo do rumo), pé da frente para o barco — base "regular" (esquerdo à
+      // frente) ou "switch" depois de um 180. Joelhos dobrados (agachamento da sim), corpo inclinado para trás contra a
+      // corda e para o lado da borda que corta; no ar, a manobra gira tudo em torno do centro do corpo.
       this.boardRoot.setEnabled(true);
-      const stance = fwdYaw - Math.PI / 2;
+      const travel = new Vector3(Math.sin(fwdYaw), 0, Math.cos(fwdYaw));
+      const faceYaw = fwdYaw + (wb.regular ? 1 : -1) * Math.PI / 2;
+      const facing = new Vector3(Math.sin(faceYaw), 0, Math.cos(faceYaw));
       const rise = wb.state === "rising" ? wb.rise : 1;
-      let q = Quaternion.FromEulerAngles(0, stance, 0);
-      if (wb.state === "air" && wb.trick) {
-        const k = wb.trickT * Math.PI * 2;
-        const trickQ = wb.trick === "360" ? Quaternion.RotationAxis(Vector3.Up(), k)
-          : wb.trick === "backroll" ? Quaternion.RotationAxis(new Vector3(Math.sin(fwdYaw), 0, Math.cos(fwdYaw)), -k)
-          : Quaternion.RotationAxis(new Vector3(Math.sin(fwdYaw), 0, Math.cos(fwdYaw)), -0.35 * Math.sin(Math.PI * wb.trickT));
-        q = trickQ.multiply(q);
+      const air = wb.state === "air";
+      // inclinações: contra a corda (para trás do rumo) e na borda (para os dedos = facing, ou para os calcanhares)
+      const ropeLean = air ? 0.12 : Math.min(0.42, (wb.tension / (wb.p.mass * 9.81)) * 0.55) * rise + 0.55 * (1 - rise);
+      const aF = wb.edgeAx * facing.x + wb.edgeAz * facing.z;
+      const edgeLean = air ? 0 : Math.max(-0.5, Math.min(0.5, aF / 9.81)) * rise;
+      const upB = Vector3.Up().add(travel.scale(-Math.tan(ropeLean))).add(facing.scale(Math.tan(edgeLean))).normalize();
+      const tiltQ = new Quaternion(); Quaternion.FromUnitVectorsToRef(Vector3.Up(), upB, tiltQ);
+      const bodyQ = tiltQ.multiply(Quaternion.FromEulerAngles(0, faceYaw, 0));
+      // prancha: a borda afunda no corte (inclina junto com o corpo) e, saindo da água, o bico sobe
+      const upP = Vector3.Up().add(facing.scale(Math.tan(edgeLean * 0.9))).add(travel.scale(-Math.tan(0.45 * (1 - rise)))).normalize();
+      const tiltP = new Quaternion(); Quaternion.FromUnitVectorsToRef(Vector3.Up(), upP, tiltP);
+      const boardQ = tiltP.multiply(Quaternion.FromEulerAngles(0, fwdYaw, 0));
+      // manobra no ar (em torno do centro do corpo, ~0,85 m acima dos pés)
+      let trickQ = Quaternion.Identity();
+      if (air && wb.trick) {
+        const k = wb.trickT;
+        trickQ = wb.trick === "360" ? Quaternion.RotationAxis(Vector3.Up(), (wb.regular ? 1 : -1) * k * Math.PI * 2)
+          : wb.trick === "180" ? Quaternion.RotationAxis(Vector3.Up(), (wb.regular ? 1 : -1) * k * Math.PI)
+          : wb.trick === "backroll" ? Quaternion.RotationAxis(travel, -(wb.regular ? 1 : -1) * k * Math.PI * 2)
+          : Quaternion.RotationAxis(travel, -(wb.regular ? 1 : -1) * 0.3 * Math.sin(Math.PI * k)); // grab: encolhe e "tweaka"
       }
-      // a pessoa: pés na prancha (de pé), inclinada para trás contra a corda
-      this.rider.stand(p.add(new Vector3(0, 0.06, 0)), stance, t);
-      const lean = Quaternion.RotationAxis(new Vector3(Math.cos(fwdYaw), 0, -Math.sin(fwdYaw)), -0.25 * rise);
-      this.rider.group.rotationQuaternion = lean.multiply(q); // (q já inclui a manobra no ar)
-      // mãos no manete, na frente da cintura (no grab, uma mão desce na prancha)
-      this.rider.update(new Vector3(-0.12, 0.95, 0.32), wb.trick === "grab" ? new Vector3(0.25, 0.25, 0.05) : new Vector3(0.12, 0.95, 0.32));
-      this.boardRoot.position.set(p.x, p.y + 0.02, p.z);
-      this.boardRoot.rotationQuaternion = (wb.state === "air" && wb.trick ? q : Quaternion.FromEulerAngles(0, stance, 0)).multiply(Quaternion.FromEulerAngles(0, Math.PI / 2, 0));
+      const center = p.add(new Vector3(0, 0.85, 0));
+      const qBody = trickQ.multiply(bodyQ), qBoard = trickQ.multiply(boardQ);
+      const feet = center.subtract(new Vector3(0, 0.85, 0).applyRotationQuaternion(trickQ));
+      const crouch = wb.state === "rising" ? 1 - 0.6 * rise : wb.crouch;
+      this.rider.ride!(feet.add(upP.scale(BT / 2 + 0.02)), qBody, 0.27, crouch);
+      // mãos no manete, baixo, na frente do quadril, puxado para o lado do barco (pé da frente); no grab a mão de trás
+      // desce na borda da prancha
+      const lx = wb.regular ? -1 : 1; // lado do barco no local da pessoa
+      const hl = new Vector3(lx * 0.16 - 0.08, 0.5 - 0.18 * crouch, 0.22), hr = new Vector3(lx * 0.16 + 0.08, 0.5 - 0.18 * crouch, 0.22);
+      const grab = air && wb.trick === "grab";
+      this.rider.update(grab && lx > 0 ? new Vector3(-0.18, -0.25, 0.12) : hl, grab && lx < 0 ? new Vector3(0.18, -0.25, 0.12) : hr);
+      this.boardRoot.position.copyFrom(feet);
+      this.boardRoot.rotationQuaternion = qBoard;
+      // manete: entre as mãos (no mundo)
+      this.rider.group.computeWorldMatrix(true);
+      handW = Vector3.TransformCoordinates(new Vector3(lx * 0.16, 0.5 - 0.18 * crouch, 0.24), this.rider.group.getWorldMatrix());
     }
     // ---- manete e corda ----
     const hand = wb.state === "fallen" ? new Vector3(wb.handle.x, wb.handle.y + 0.02, wb.handle.z)
-      : wb.state === "riding" || wb.state === "air" || wb.state === "rising" ? p.add(new Vector3(Math.sin(fwdYaw) * 0.35, 0.95, Math.cos(fwdYaw) * 0.35))
-      : new Vector3(p.x + Math.sin(fwdYaw) * 0.4, waterY + 0.25, p.z + Math.cos(fwdYaw) * 0.4);
+      : handW ?? new Vector3(p.x + Math.sin(fwdYaw) * 0.4, waterY + 0.25, p.z + Math.cos(fwdYaw) * 0.4);
     this.handle.setEnabled(!!b && wb.state !== "pier");
     this.handle.position.copyFrom(hand); this.handle.rotation.set(0, fwdYaw, Math.PI / 2);
     this.rope.setEnabled(!!b);

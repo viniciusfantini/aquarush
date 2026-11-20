@@ -15,6 +15,7 @@ const pbr = (scene: Scene, name: string, c: Color3, rough = 0.6): PBRMaterial =>
 };
 
 /** Cilindro de altura 1 orientado entre dois pontos (membro). */
+const clampN = (x: number, a: number, b: number) => (x < a ? a : x > b ? b : x);
 const setLimb = (m: Mesh, a: Vector3, b: Vector3) => {
   const d = b.subtract(a);
   const L = d.length();
@@ -50,6 +51,12 @@ export interface Pilot {
   stand(pos: Vector3, yaw: number, t: number): void;
   /** de volta ao banco */
   board(root: TransformNode): void;
+  /**
+   * Em pé numa prancha (wakeboard): centro dos pés em `feet` (mundo), o corpo virado para `rot` (inclui o rumo e as
+   * inclinações; giro em torno dos pés), pés afastados `spread` m para os lados (ao longo da prancha), agachado
+   * `crouch` (0 = em pé, 1 = bem agachado: joelhos dobram por IK e o corpo desce). As mãos: `update` depois.
+   */
+  ride?(feet: Vector3, rot: Quaternion, spread: number, crouch: number): void;
 }
 
 export interface PersonOpts {
@@ -192,6 +199,30 @@ export const buildPerson = (scene: Scene, root: TransformNode, o: PersonOpts): P
       group.position.copyFrom(pos.subtract(new Vector3(X, SOLE, -0.27 + DZ).applyRotationQuaternion(q)));
       const sw = 0.02 * Math.sin(t * 1.1);
       api.update(new Vector3(X - 0.25, FLOOR + 0.46 + sw, -0.25 + DZ), new Vector3(X + 0.25, FLOOR + 0.46 - sw, -0.25 + DZ));
+    },
+    ride(feet: Vector3, rot: Quaternion, spread: number, crouch: number) {
+      if (group.parent) group.parent = null;
+      const d = 0.3 * clampN(crouch, 0, 1);           // quanto o quadril desce
+      const LT = 0.44, LS = 0.44;                       // coxa e canela
+      for (const L of legs) {
+        const s = L.s;
+        const hip = new Vector3(X + s * 0.1, FLOOR + 0.5, -0.27 + DZ);
+        const ankle = new Vector3(X + s * spread, FLOOR - 0.38 + d, -0.27 + DZ);
+        // IK de 2 segmentos: o joelho dobra para a frente (+Z local, para onde a pessoa olha)
+        const ha = ankle.subtract(hip), dist = Math.min(ha.length(), LT + LS - 1e-3);
+        const dir = ha.normalize();
+        const a = (LT * LT - LS * LS + dist * dist) / (2 * dist), h = Math.sqrt(Math.max(0, LT * LT - a * a));
+        let bend = new Vector3(0, 0, 1).subtract(dir.scale(dir.z));
+        bend = bend.lengthSquared() < 1e-6 ? new Vector3(0, 0, 1) : bend.normalize();
+        const knee = hip.add(dir.scale(a)).add(bend.scale(h));
+        setLimb(L.thigh, knee, hip);
+        L.knee.position.copyFrom(knee);
+        setLimb(L.shin, knee, ankle);
+        L.foot.position.copyFrom(ankle.add(new Vector3(0, -0.04, 0.07)));
+      }
+      group.rotationQuaternion = rot.clone();
+      // os pés (sola, entre os dois) ficam em `feet`
+      group.position.copyFrom(feet.subtract(new Vector3(X, SOLE + d, -0.27 + DZ).applyRotationQuaternion(rot)));
     },
     board(root2: TransformNode) {
       setLegs(0);

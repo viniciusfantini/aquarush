@@ -30,11 +30,15 @@ varying vec3 vNormal;
 varying float vFoam;
 varying float vHeight;
 
+float wakeH1(vec2 uv) { vec4 t = texture2D(uWake, uv); return t.g - t.b; }
 float wakeH(vec2 xz) {
   vec2 uv = (xz - uWakeInfo.xy) / uWakeInfo.z + 0.5;
   vec2 e = smoothstep(0.0, 0.08, uv) * smoothstep(0.0, 0.08, 1.0 - uv);
-  vec4 t = texture2D(uWake, uv);
-  return (t.g - t.b) * uWakeHeight * e.x * e.y;
+  // média de 5 amostras (~0,8 m): a malha da água tem vértices mais espaçados que uma crista estreita — sem o
+  // filtro, uma esteira alta (lastro) virava "dentes de serra" (cada vértice pegava um ponto diferente da crista)
+  float o = 0.8 / uWakeInfo.z;
+  float h = 0.4 * wakeH1(uv) + 0.15 * (wakeH1(uv + vec2(o, 0.0)) + wakeH1(uv - vec2(o, 0.0)) + wakeH1(uv + vec2(0.0, o)) + wakeH1(uv - vec2(0.0, o)));
+  return h * uWakeHeight * e.x * e.y;
 }
 
 void main() {
@@ -306,6 +310,9 @@ export class WaterVisual {
       needAlphaBlending: true,
     });
     this.material.backFaceCulling = false;
+    // pré-passagem de profundidade: a água é transparente (alfa); com uma crista alta perto da câmera (esteira com
+    // lastro) os triângulos de trás da crista eram desenhados por cima, em "dentes" — com a profundidade antes, não
+    this.material.needDepthPrePass = true;
     this.material.alphaMode = Constants.ALPHA_COMBINE;
     this.mesh.material = this.material;
     if (this.depth) this.material.setTexture("uDepthMap", this.depth.getDepthMap());

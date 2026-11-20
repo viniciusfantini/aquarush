@@ -88,6 +88,9 @@ export class WakeMap {
           prevAge = pts[i].age;
         }
         if (!any) continue;
+        // pontas retas: os trechos se encontram num ponto comum; com pontas redondas, na composição aditiva a altura
+        // dobrava em cada emenda e a crista ficava cheia de "dentes" (bem visível na esteira grande do lastro)
+        c.lineCap = "butt";
         c.lineWidth = Math.max(1, st.w * ppm);
         c.strokeStyle = `rgb(${(clamp(st.r, 0, 1) * 255) | 0},${(clamp(st.g, 0, 1) * 255) | 0},${(clamp(st.b, 0, 1) * 255) | 0})`;
         c.stroke();
@@ -101,7 +104,8 @@ export class WakeMap {
         strokeChain((s) => armPoint(s, side, r.inward), (s) => {
           const a = (armEnvelope(s) * r.amp) / H;
           const foam = k === 0 ? smoothstep(5, 14, s.v) * s.wet * Math.exp(-s.age / 1.4) * 0.75 : 0;
-          return { r: foam, g: r.sign > 0 ? a : 0, b: r.sign < 0 ? a : 0, w: 2 * ridgeHalfWidth(s.age, r.width) * 0.85 };
+          // (esteira grande — lastro — desenhada mais larga: alta e estreita, a malha da água fazia "dentes de serra")
+          return { r: foam, g: r.sign > 0 ? a : 0, b: r.sign < 0 ? a : 0, w: 2 * ridgeHalfWidth(s.age, r.width) * 0.85 * Math.max(1, Math.sqrt(s.size ?? 1)) };
         });
       });
     }

@@ -47,7 +47,7 @@ export const WAKEBOARD: WakeboardParams = {
 };
 
 export type RiderState = "pier" | "water" | "rising" | "riding" | "air" | "fallen";
-export type TrickKind = "" | "360" | "backroll" | "grab";
+export type TrickKind = "" | "180" | "360" | "backroll" | "grab";
 const SWIM_MS = 1.1;
 
 /** RNG determinístico (os testes repetem o mesmo resultado) */
@@ -86,12 +86,22 @@ export class Wakeboard {
   lastTrick: TrickKind = "";
   maxAir = 0;
   swimming = false;
+  /** base: pé esquerdo à frente (true) ou "switch"/direito à frente (false) — a prancha é bidirecional: depois de um
+   *  180 ela segue andando com o outro pé na frente */
+  regular = true;
+  /** aceleração lateral da borda (m/s², mundo) — o visual inclina a prancha e o corpo por ela */
+  edgeAx = 0;
+  edgeAz = 0;
+  /** agachamento 0..1 (carrega antes da marola, estica no impulso, encolhe no ar, absorve na aterrissagem) */
+  crouch = 0.35;
   /** lado para onde ela está indo (+1/−1) */
   private side = 1;
   private sideT = 0;
   private lastSurfY = 0;
   private dhdtPrev = 0;
   private landVy = 0;
+  /** cortando para o centro da esteira (é só aí que ela pula) */
+  private inward = false;
   /** tempo desde a queda (s): logo depois ela ainda está se recuperando e não pega o manete */
   private fallenT = 0;
   /** altura de onde ela decolou e a superfície sob ela no passo anterior (para a aterrissagem relativa) */
@@ -217,26 +227,35 @@ export class Wakeboard {
         const r = b.right, rh = normalize(v3(r.x, 0, r.z));
         // (a velocidade lateral é medida em relação ao barco: ela corta a esteira, não "corre" do barco)
         const bl = dot(b.vel, rh), vLat = dot(this.vel, rh) - bl, want = clamp((this.side * P.cutOffset - this.offset) * 0.8, -4, 4);
-        F = add(F, scale(rh, M * clamp((want - vLat) * 1.8, -P.edgeAcc, P.edgeAcc)));
+        const ea = clamp((want - vLat) * 1.8, -P.edgeAcc, P.edgeAcc);
+        F = add(F, scale(rh, M * ea));
+        this.edgeAx += (rh.x * ea - this.edgeAx) * Math.min(1, dt * 6);
+        this.edgeAz += (rh.z * ea - this.edgeAz) * Math.min(1, dt * 6);
+        this.inward = vLat * this.offset < 0 && Math.abs(vLat) > 2; // cortando para o centro da esteira, com força
+        // agachamento: carrega cortando para dentro, perto da marola; senão a postura normal (joelhos meio dobrados)
+        const wantC = this.landing > 0 ? 0.85 : this.inward && Math.abs(this.offset) < 4 ? 0.65 : 0.35;
+        this.crouch += (wantC - this.crouch) * Math.min(1, dt * 5);
       }
       // PULO: cortando forte e passando a crista da marola (a superfície sobe e para de subir)
-      if (this.dhdtPrev > 1.0 && dhdt <= 0.2 && this.speed > 5 && this.landing <= 0) {
+      // (só cortando PARA DENTRO — saindo para fora ela passa por cima da marola sem pular, como na vida real)
+      if (this.dhdtPrev > 1.0 && dhdt <= 0.2 && this.speed > 5 && this.landing <= 0 && this.inward) {
         // (as pernas absorvem parte da rampa: a subida da marola entra pela metade, até ~4,5 m/s — pulo de ~1 m)
         const vy = Math.min(3.8, this.dhdtPrev * 0.55 + P.popV);
         this.vel = v3(this.vel.x, vy, this.vel.z);
-        this.state = "air"; this.airT = 0; this.jumps++; this.takeoffY = this.pos.y; this.airSurfPrev = sy;
+        this.state = "air"; this.airT = 0; this.jumps++; this.takeoffY = this.pos.y; this.airSurfPrev = sy; this.crouch = 0; // estica no impulso
         // tempo de voo esperado decide a manobra
         const tAir = (2 * vy) / G;
         const roll = this.rand();
-        // (escolhe a manobra que cabe no voo esperado, com margem: 360 leva 0,5 s, backroll 0,65 s, grab 0,3 s)
-        this.trick = tAir > 0.74 && roll < 0.45 ? "backroll" : tAir > 0.6 ? "360" : "grab";
-        this.trickDur = this.trick === "backroll" ? 0.65 : this.trick === "360" ? 0.5 : 0.3;
+        // (escolhe a manobra que cabe no voo esperado, com margem: backroll 0,65 s, 360 0,5 s, 180 0,36 s, grab 0,3 s)
+        this.trick = tAir > 0.74 && roll < 0.4 ? "backroll" : tAir > 0.6 && roll < 0.7 ? "360" : tAir > 0.45 && roll < 0.85 ? "180" : "grab";
+        this.trickDur = this.trick === "backroll" ? 0.65 : this.trick === "360" ? 0.5 : this.trick === "180" ? 0.36 : 0.3;
         this.trickT = 0; this.lastTrick = this.trick;
       }
       this.dhdtPrev = dhdt;
       if (this.speed < P.riseV * 0.6) { this.state = "water"; this.rise = 0; } // o barco parou: ela afunda devagar
     } else if (this.state === "air") {
       this.airT += dt;
+      this.crouch += (0.55 - this.crouch) * Math.min(1, dt * 8); // encolhe as pernas no ar
       this.trickT = Math.min(1, this.airT / Math.max(0.1, this.trickDur));
       F = add(F, scale(this.vel, -0.5 * 1.2 * 0.6 * len(this.vel))); // ar
     }
@@ -258,7 +277,10 @@ export class Wakeboard {
         const incomplete = this.trick !== "grab" && this.trickT < 0.92;
         if (this.landVy < -P.fallLandV) this.fall("aterrissagem");
         else if (incomplete) this.fall("manobra");
-        else { this.state = "riding"; this.pos = v3(this.pos.x, sy2, this.pos.z); this.vel = v3(this.vel.x, 0, this.vel.z); this.lastSurfY = sy2; this.dhdtPrev = 0; this.landing = 0.8; }
+        else {
+          if (this.trick === "180") this.regular = !this.regular; // pousou de "switch": segue com o outro pé na frente
+          this.state = "riding"; this.pos = v3(this.pos.x, sy2, this.pos.z); this.vel = v3(this.vel.x, 0, this.vel.z); this.lastSurfY = sy2; this.dhdtPrev = 0; this.landing = 0.8; this.crouch = 0.9;
+        }
         this.trick = ""; this.trickT = 0;
       }
     }
