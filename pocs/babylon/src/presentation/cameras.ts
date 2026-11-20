@@ -17,7 +17,11 @@ export class BoatCamera {
   private dragging = false;
   private lastX = 0;
   private lastY = 0;
-  private idle = 0;
+  /** v0.75.1: a câmera fica onde o piloto a deixou; um clique sem arrastar a traz de volta para trás do barco */
+  private returning = false;
+  private downX = 0;
+  private downY = 0;
+  private moved = false;
   private first = true;
   /** zoom da roda do mouse (multiplica a distância da câmera externa; no cockpit, o campo de visão) — não volta sozinho */
   zoom = 1;
@@ -37,11 +41,19 @@ export class BoatCamera {
     canvas.addEventListener("pointerdown", (e) => {
       if (e.pointerType === "touch") return; // no celular o arraste é dos controles
       this.dragging = true; this.lastX = e.clientX; this.lastY = e.clientY;
+      this.downX = e.clientX; this.downY = e.clientY; this.moved = false;
     });
     // fim do arraste: soltar o botão em qualquer lugar (inclusive fora da janela), cancelar, perder o foco
     // (v0.74.1: sem isso, soltando fora da tela o "arrastando" ficava preso e a câmera não voltava sozinha)
-    const stop = () => { this.dragging = false; this.idle = 0; };
-    window.addEventListener("pointerup", stop, true); // (fase de captura: nenhum elemento da interface consegue engolir)
+    const stop = () => { this.dragging = false; };
+    window.addEventListener("pointerup", (e) => {
+      // clique "seco" no jogo (sem arrastar): a câmera volta para trás do barco
+      if (this.dragging && !this.moved && e.target === canvas) {
+        this.returning = true;
+        this.orbitYaw = Math.atan2(Math.sin(this.orbitYaw), Math.cos(this.orbitYaw)); // (volta pelo lado mais curto)
+      }
+      stop();
+    }, true); // (fase de captura: nenhum elemento da interface consegue engolir)
     window.addEventListener("pointercancel", stop, true);
     window.addEventListener("blur", stop);
     canvas.addEventListener("lostpointercapture", stop);
@@ -53,10 +65,11 @@ export class BoatCamera {
     window.addEventListener("pointermove", (e) => {
       if (!this.dragging) return;
       if (e.pointerType === "mouse" && e.buttons === 0) { stop(); return; } // o botão já foi solto (o pointerup se perdeu)
+      if (!this.moved && Math.hypot(e.clientX - this.downX, e.clientY - this.downY) < 5) return; // (tremida do clique)
+      this.moved = true; this.returning = false;
       this.orbitYaw += (e.clientX - this.lastX) * 0.006;
       this.orbitPitch = clamp(this.orbitPitch + (e.clientY - this.lastY) * 0.004, -0.75, 0.9); // < −0,25: abaixo da água
       this.lastX = e.clientX; this.lastY = e.clientY;
-      this.idle = 0;
     });
   }
 
@@ -64,7 +77,6 @@ export class BoatCamera {
   spin(dt: number, yawRate: number, pitch: number): void {
     this.orbitYaw += yawRate * dt;
     this.orbitPitch += (pitch - this.orbitPitch) * Math.min(1, dt * 2);
-    this.idle = 0;
   }
   resetOrbit(): void { this.orbitYaw = 0; this.orbitPitch = 0; this.first = true; }
 
@@ -83,13 +95,12 @@ export class BoatCamera {
     const fwd = Vector3.TransformNormal(new Vector3(0, 0, 1), m);
     const up = Vector3.TransformNormal(new Vector3(0, 1, 0), m);
 
-    if (!this.dragging) {
-      this.idle += dt;
-      if (this.idle > 1.5) {
-        const k = 1 - Math.exp(-dt * 1.5);
-        this.orbitYaw += (0 - this.orbitYaw) * k;
-        this.orbitPitch += (0 - this.orbitPitch) * k;
-      }
+    // a órbita fica onde o piloto deixou; só volta para trás do barco depois de um clique sem arrastar
+    if (!this.dragging && this.returning) {
+      const k = 1 - Math.exp(-dt * 4);
+      this.orbitYaw += (0 - this.orbitYaw) * k;
+      this.orbitPitch += (0 - this.orbitPitch) * k;
+      if (Math.abs(this.orbitYaw) < 1e-3 && Math.abs(this.orbitPitch) < 1e-3) { this.orbitYaw = 0; this.orbitPitch = 0; this.returning = false; }
     }
 
     if (this.mode === "externa") {
