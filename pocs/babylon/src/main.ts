@@ -27,12 +27,13 @@ import { buildTowEyes } from "./presentation/ropeTube.ts";
 import { buildWakeboat } from "./presentation/wakeboatMesh.ts";
 import { buildFoiler, type FoilVisual } from "./presentation/foilMesh.ts";
 import { buildLongtail, type LongtailVisual } from "./presentation/longtailMesh.ts";
+import { buildInlet } from "./presentation/inletVis.ts";
 import { Wakeboard } from "./sim/wakeboard.ts";
 import { buildWakePier, buildFuelPier, WakeboardVisual } from "./presentation/wakeboardVis.ts";
 import { fuelDockState } from "./sim/fuelDock.ts";
 import { buildParasailPier, ParasailVisual } from "./presentation/parasailVis.ts";
 import { GerstnerWater, WAVE_PRESETS } from "./sim/water.ts";
-import { buildWorld, RIVER_CURRENT, RAMP, fromFrame } from "./sim/world.ts";
+import { buildWorld, RIVER_CURRENT, RAMP, fromFrame, INLET_CURRENTS, INLET_SEA } from "./sim/world.ts";
 import { buildTrailer, trailerLoadState, attachWinch, seatedBoatLocal, type TrailerLayout } from "./sim/trailer.ts";
 import { TowRig, TOW_SPECS, type Pose } from "./sim/towVehicle.ts";
 import { buildRamp, buildTrailerMesh, buildTowVehicle, type WheelNode } from "./presentation/ramp.ts";
@@ -65,7 +66,7 @@ import { Hud } from "./presentation/hud.ts";
 import { EngineAudio } from "./presentation/audio.ts";
 
 installI18n(); // inglês: traduz o DOM, as escritas futuras e os letreiros 3D (antes de montar a cena e o HUD)
-const BUILD = "poc-babylon 0.81.0";
+const BUILD = "poc-babylon 0.82.0";
 /** Escala visual da rotação da hélice (proporcional ao RPM, abaixo do limite estroboscópico). */
 const PROP_VISUAL_SCALE = 0.12;
 
@@ -186,7 +187,7 @@ const boot = async () => {
 
   // ---------------- simulação ----------------
   const world = buildWorld(); // (a barreira "EM BREVE" da entrada do cânion ficou guardada: buildWorld({ canyonClosed: true }))
-  const water = new GerstnerWater({ waves: WAVE_PRESETS.lago, groundHeight: world.groundHeight, currents: [RIVER_CURRENT] });
+  const water = new GerstnerWater({ waves: WAVE_PRESETS.lago, groundHeight: world.groundHeight, currents: [RIVER_CURRENT, ...INLET_CURRENTS], local: INLET_SEA });
   const spawnPos = () => v3(world.spawn.x, 0.25, world.spawn.z);
   const waitSpots = pierWaitSpots(world.pier);
   // GPU (fonte de solo de 28 V) parada no píer, à ré da vaga, com a saída do cabo virada para a água
@@ -236,6 +237,8 @@ const boot = async () => {
   const buoyField = new BuoyField(); // poitas com física (boia + corrente; o casco as afasta)
   const rampMeshes = [...buildRamp(scene), ...buildRoadAndLot(scene, cfg.quality.terrainSubdiv)];
   const stationMeshes = [...buildStation(scene), ...buildFleet(scene)];
+  const inletMeshes = buildInlet(scene); // molhes de pedra e as torres de sinalização da boca do cânion
+  void inletMeshes;
 
   /** Rabetas/motores visuais (a AR-9 tem duas; as outras, uma). */
   const drivesOf = (vis: BoatVisual) => vis.drives ?? [{ engine: vis.engine, propeller: vis.propeller, propBlur: vis.propBlur }];

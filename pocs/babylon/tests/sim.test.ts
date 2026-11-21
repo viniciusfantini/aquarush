@@ -20,7 +20,7 @@ import { activityPierLayout } from "../src/sim/world.ts";
 import { Turbine } from "../src/sim/turbine.ts";
 import { GerstnerWater, WAVE_PRESETS, type CurrentZone } from "../src/sim/water.ts";
 import type { PhysicsWorld } from "../src/sim/world.ts";
-import { buildWorld, RAMP, groundHeight, fromFrame, ROAD_SAMPLES, LOT, YARD, lotDistance, RIVER, RIVER_CURRENT, riverCenterX, LAKE_LOBES, CANYON_BOOM, OCEAN } from "../src/sim/world.ts";
+import { buildWorld, RAMP, groundHeight, fromFrame, ROAD_SAMPLES, LOT, YARD, lotDistance, RIVER, RIVER_CURRENT, riverCenterX, LAKE_LOBES, CANYON_BOOM, OCEAN, INLET, INLET_CURRENTS, INLET_SEA, jettyHeight } from "../src/sim/world.ts";
 import { STATION, stationObstacles, fuelBayState, parkedStall } from "../src/sim/station.ts";
 import { pierBerth, pierBerthState, tieToPier, buoyState, tieToBuoy, BUOYS, BuoyField, CANYON_END, CHANNEL_MARKERS, berthStartPose } from "../src/sim/mooring.ts";
 import { buildTrailer, trailerLoadState, attachWinch } from "../src/sim/trailer.ts";
@@ -1943,6 +1943,42 @@ for (const [label, thr] of [["baixa", 0.25], ["alta", 1]] as const) {
   }
 }
 
+// ---------- Boca do cânion no mar: molhes, barra, correnteza e mar mexido só ali (v0.82) ----------
+{
+  const T = "boca do cânion";
+  const J = INLET;
+  check(T, "molhes: crista acima d'água dos dois lados (m)", Math.min(groundHeight(J.cx - J.half, 1760), groundHeight(J.cx + J.half, 1760)), 0.8, 2.5, "m", 2);
+  check(T, "molhes: cabeças no mar (crista na ponta, m)", Math.min(jettyHeight(J.cx - J.half, J.z1), jettyHeight(J.cx + J.half, J.z1)), 0.6, 2.5, "m", 2);
+  check(T, "canal entre os molhes: fundo (m)", groundHeight(J.cx, 1760), -20, -4.5, "m", 1);
+  check(T, "barra depois das pontas: rasa (m)", groundHeight(J.cx, J.bar.z), -3.6, -1.8, "m", 2);
+  check(T, "mar aberto ao lado: fundo do mar (m)", groundHeight(J.cx + 400, J.bar.z), -40, -15, "m", 1);
+  const w = new GerstnerWater({ waves: WAVE_PRESETS.lago, groundHeight, currents: [RIVER_CURRENT, ...INLET_CURRENTS], local: INLET_SEA });
+  w.intensity = 0; // (lago espelhado: só o mar da boca mexe)
+  check(T, "correnteza no canal: vazante para o mar (m/s)", w.getCurrent(J.cx, 1760).z, 2.0, 3.0, "m/s", 2);
+  check(T, "correnteza abre em leque depois das pontas (m/s)", w.getCurrent(J.cx, J.bar.z).z, 0.5, 1.6, "m/s", 2);
+  check(T, "longe da boca no mar: sem correnteza (m/s)", Math.hypot(w.getCurrent(J.cx + 400, 1900).x, w.getCurrent(J.cx + 400, 1900).z), 0, 0.01, "m/s", 3);
+  const range = (x: number, z: number) => { let lo = 9, hi = -9; for (let i = 0; i < 400; i++) { w.time = i * 0.05; const h = w.getHeight(x, z); lo = Math.min(lo, h); hi = Math.max(hi, h); } w.time = 0; return hi - lo; };
+  check(T, "mar da boca: ondas entre as pontas dos molhes (altura crista-cavado, m)", range(J.cx, J.z1 + 10), 0.9, 2.5, "m", 2);
+  check(T, "mar da boca: na barra também (m)", range(J.cx, J.bar.z), 0.6, 2.5, "m", 2);
+  check(T, "fora da boca o mar fica como o lago (aqui espelho, m)", Math.max(range(J.cx + 400, 1900), range(0, 0), range(riverCenterX(1400), 1400)), 0, 0.005, "m", 3);
+  const sp = w.shaderParams();
+  check(T, "física e shader: o mesmo mar local (amplitude da 1ª onda, m)", sp.lb[0], INLET_SEA.waves[0].amplitude, INLET_SEA.waves[0].amplitude, "m", 2);
+  // lancha AR-6 saindo pela boca: joga (sente as ondas) mas não vira
+  {
+    const world = buildWorld();
+    const b = new Speedboat(SPEEDBOAT, v3(J.cx, 0.3, 1700)); b.systems.fuelL = 60;
+    let pMin = 99, pMax = -99, cap = false;
+    for (let i = 0; i < 25 / DT; i++) { w.time += DT; b.step(DT, { ...emptyInput(), gear: "F", throttle: 0.45 }, w, world); pMin = Math.min(pMin, b.telemetry.pitchDeg); pMax = Math.max(pMax, b.telemetry.pitchDeg); if (b.capsized) cap = true; }
+    check(T, "AR-6 saindo pela boca a 45 %: joga nas ondas (arfagem pico a pico, °)", pMax - pMin, 4, 40, "°", 1);
+    check(T, "AR-6 saindo pela boca a 45 %: não vira", cap ? 0 : 1, 1, 1, "", 0);
+    check(T, "AR-6 saindo pela boca: passa das pontas dos molhes (z, m)", b.pos.z, J.z1, 2400, "m", 0);
+    // batendo no molhe: as pedras seguram o barco
+    const c = new Speedboat(SPEEDBOAT, v3(J.cx + J.half - 12, 0.3, 1760), Math.PI / 2); c.systems.fuelL = 60;
+    for (let i = 0; i < 8 / DT; i++) { w.time += DT; c.step(DT, { ...emptyInput(), gear: "F", throttle: 0.4 }, w, world); }
+    check(T, "lancha jogada contra o molhe: as pedras seguram (não atravessa, x, m)", c.pos.x, J.cx, J.cx + J.half + 1, "m", 1);
+  }
+}
+
 // ---------- Long-tail tailandês AR-T: turbo diesel exposto, rabeta de cauda longa (v0.81) ----------
 {
   const T = "long-tail";
@@ -2933,8 +2969,9 @@ for (const [label, thr] of [["baixa", 0.25], ["alta", 1]] as const) {
     let zMax = -1e9, hit = 0;
     const inp: VehicleInput = { ...emptyInput(), gear: "F", throttle: 0.4 };
     run(sb, rw, 45, inp, buildWorld(), () => {
-      // piloto: segue o meio do canal 40 m à frente
-      let err = Math.atan2(riverCenterX(sb.pos.z + 40) - sb.pos.x, 40) - Math.atan2(sb.forward.x, sb.forward.z);
+      // piloto: segue o meio do canal 40 m à frente (v0.82: depois da foz o canal é o vão entre os molhes, em INLET.cx)
+      const zt = sb.pos.z + 40, wIn = Math.min(1, Math.max(0, (zt - (INLET.z0 - 40)) / 40));
+      let err = Math.atan2(riverCenterX(zt) * (1 - wIn) + INLET.cx * wIn - sb.pos.x, 40) - Math.atan2(sb.forward.x, sb.forward.z);
       while (err > Math.PI) err -= 2 * Math.PI; while (err < -Math.PI) err += 2 * Math.PI;
       inp.steering = Math.max(-1, Math.min(1, err * 1.5));
       zMax = Math.max(zMax, sb.pos.z); hit = Math.max(hit, sb.hullDamage);

@@ -7,7 +7,7 @@
 
 import {
   type Scene, type Camera, type AbstractMesh, Mesh, VertexData, ShaderMaterial, Effect, Vector2, Vector3, Color3,
-  type DepthRenderer, Constants, RenderTargetTexture, Matrix, Plane, Texture,
+  type DepthRenderer, Constants, RenderTargetTexture, Matrix, Plane, Texture, Vector4,
 } from "@babylonjs/core";
 import type { GerstnerWater } from "../sim/water.ts";
 import { type WakeMap, WAKE_HEIGHT_SCALE } from "./wakeMap.ts";
@@ -21,6 +21,11 @@ uniform vec2 uGridOffset;
 uniform float uTime;
 uniform vec4 wA[4];
 uniform vec4 wB[4];
+// mar LOCAL (boca do cânion): as mesmas ondas de sim/water.ts (LocalSea), × máscara elíptica
+uniform vec4 lA[3];
+uniform vec4 lB[3];
+uniform vec4 uLM;   // cx, cz, rx, rz
+uniform float uLF;  // borda suave (fração do raio)
 uniform vec2 uFade;
 uniform sampler2D uWake;
 uniform vec3 uWakeInfo; // originX, originZ, worldSize
@@ -29,6 +34,7 @@ varying vec3 vWorld;
 varying vec3 vNormal;
 varying float vFoam;
 varying float vHeight;
+varying float vBreak;
 
 float wakeH1(vec2 uv) { vec4 t = texture2D(uWake, uv); return t.g - t.b; }
 float wakeH(vec2 xz) {
@@ -59,6 +65,24 @@ void main() {
     dPdx += vec3(-qa * dir.x * dir.x * k * sf, amp * k * dir.x * cf, -qa * dir.x * dir.y * k * sf);
     dPdz += vec3(-qa * dir.x * dir.y * k * sf, amp * k * dir.y * cf, -qa * dir.y * dir.y * k * sf);
   }
+  // mar local: máscara no ponto de grade (como na física)
+  float lr = length((p0 - uLM.xy) / uLM.zw);
+  float lt = clamp((lr - (1.0 - uLF)) / uLF, 0.0, 1.0);
+  float lm = (1.0 - lt * lt * (3.0 - 2.0 * lt)) * fade;
+  float ly = 0.0, lamp = 0.0;
+  if (lm > 0.0) for (int i = 0; i < 3; i++) {
+    vec2 dir = lA[i].xy; float k = lA[i].z; float c = lA[i].w;
+    float amp = lB[i].x * lm; float qa = lB[i].y * lm; float ph = lB[i].z;
+    float f = k * (dot(dir, p0) - c * uTime) + ph;
+    float cf = cos(f); float sf = sin(f);
+    disp.x += qa * dir.x * cf;
+    disp.z += qa * dir.y * cf;
+    disp.y += amp * sf; ly += amp * sf; lamp += amp;
+    dPdx += vec3(-qa * dir.x * dir.x * k * sf, amp * k * dir.x * cf, -qa * dir.x * dir.y * k * sf);
+    dPdz += vec3(-qa * dir.x * dir.y * k * sf, amp * k * dir.y * cf, -qa * dir.y * dir.y * k * sf);
+  }
+  // arrebentação: espuma nas cristas altas do mar local
+  vBreak = lamp > 0.05 ? smoothstep(0.35, 0.8, ly / lamp) * smoothstep(0.15, 0.5, lm) : 0.0;
   vec3 world = vec3(p0.x + disp.x, disp.y, p0.y + disp.z);
   world.y += wakeH(world.xz);
   vNormal = normalize(cross(dPdz, dPdx));
@@ -102,6 +126,7 @@ varying vec3 vWorld;
 varying vec3 vNormal;
 varying float vFoam;
 varying float vHeight;
+varying float vBreak;
 
 float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
 float noise(vec2 p) {
@@ -203,7 +228,8 @@ void main() {
     wc *= (0.55 + 0.45 * noise(vWorld.xz * 4.5 + uTime * 0.8)) * (0.7 + 0.3 * streak);
     wc *= smoothstep(0.4, 1.6, thickness); // não na beira
   }
-  float foam = clamp(vFoam * smoothstep(0.25, 0.7, foamNoise * 1.6) + shoreFoam + wf + wc * 0.95, 0.0, 1.0);
+  float breakFoam = vBreak * smoothstep(0.2, 0.55, foamNoise * 1.4 + 0.25 * noise(vWorld.xz * 0.35 - uTime * 0.3));
+  float foam = clamp(vFoam * smoothstep(0.25, 0.7, foamNoise * 1.6) + shoreFoam + wf + wc * 0.95 + breakFoam, 0.0, 1.0);
   col = mix(col, vec3(0.96, 0.98, 1.0) * (0.78 + 0.22 * diffuse), foam * 0.9);
 
   float alpha = mix(clamp(1.0 - exp(-thickness * 1.3), 0.0, 1.0), 1.0, fres);
@@ -302,7 +328,7 @@ export class WaterVisual {
     this.material = new ShaderMaterial("waterMat", scene, { vertex: "aquaWater", fragment: "aquaWater" }, {
       attributes: ["position"],
       uniforms: [
-        "viewProjection", "uCamPos", "uGridOffset", "uTime", "wA", "wB", "uFade", "uSunDir", "uSunColor", "uDeep",
+        "viewProjection", "uCamPos", "uGridOffset", "uTime", "wA", "wB", "lA", "lB", "uLM", "uLF", "uFade", "uSunDir", "uSunColor", "uDeep",
         "uShallow", "uSkyHorizon", "uSkyZenith", "uFogColor", "uFogDensity", "uUseDepth", "uScreen", "uNearFar", "uCamFwd",
         "uRipple", "uUnder", "uWhitecaps", "uWindDir", "uWakeInfo", "uWakeHeight", "uWakeTexel", "uUseRefl", "uReflVP",
       ],
@@ -364,6 +390,10 @@ export class WaterVisual {
     m.setFloat("uTime", water.time);
     m.setArray4("wA", p.a);
     m.setArray4("wB", p.b);
+    m.setArray4("lA", p.la);
+    m.setArray4("lB", p.lb);
+    m.setVector4("uLM", new Vector4(p.lm[0], p.lm[1], p.lm[2], p.lm[3]));
+    m.setFloat("uLF", p.lf);
     m.setVector2("uFade", new Vector2(160, 420));
     m.setVector3("uSunDir", this.sunDir);
     m.setColor3("uSunColor", this.sunColor);

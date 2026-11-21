@@ -2,7 +2,7 @@
 // (rochas = esferas, píer = caixas) e zonas de correnteza. Determinístico (seed fixa),
 // compartilhado entre física e geração visual.
 
-import type { CurrentZone } from "./water.ts";
+import type { CurrentZone, LocalSea } from "./water.ts";
 import { clamp, smoothstep, v3, qMul, qFromAxisAngle, rotate, rotateInv, type Vec3, type Quat } from "./math.ts";
 
 export interface SphereCollider { x: number; y: number; z: number; r: number }
@@ -134,8 +134,43 @@ const baseGround = (x: number, z: number): number => {
   // continua infinito, com a mesma física (água de Gerstner e fundo a `OCEAN.floor`), igual à água visual
   const dEdge = Math.min(x - OCEAN.x0, OCEAN.x1 - x, z - OCEAN.z0, OCEAN.z1 - z);
   const land = smoothstep(OCEAN.coast0, OCEAN.coast1, dEdge);
-  return OCEAN.floor + (h - OCEAN.floor) * land;
+  let g = OCEAN.floor + (h - OCEAN.floor) * land;
+  // boca do cânion: canal dragado entre os molhes (~4,5 m), a barra rasa depois das pontas e os próprios molhes
+  const J = INLET;
+  if (z > J.z0 - 40 && z < J.bar.z + J.bar.len + 60 && Math.abs(x - J.cx) < J.bar.hx + 40) {
+    const inCh = (1 - smoothstep(J.half - 6, J.half - 1, Math.abs(x - J.cx))) * smoothstep(J.z0 - 30, J.z0, z) * (1 - smoothstep(J.z1, J.z1 + 25, z));
+    g = g + (Math.min(g, -4.5) - g) * inCh;
+    const bz = Math.abs(z - J.bar.z) / J.bar.len, bx = Math.abs(x - J.cx) / J.bar.hx;
+    const bar = (1 - smoothstep(0.4, 1, bz)) * (1 - smoothstep(0.5, 1, bx));
+    g = Math.max(g, g + (J.bar.depth + 0.4 * fbm(x / 12, z / 12, 2) - g) * bar);
+    g = Math.max(g, jettyHeight(x, z));
+  }
+  return g;
 };
+/**
+ * BOCA DO CÂNION NO MAR (v0.82), no estilo de uma barra com molhes ("inlet"): dois MOLHES de pedra paralelos (crista a
+ * `crestY` acima d'água, talude de enrocamento 1 : 1,5) saem dos paredões e entram `z1 − 1715` m no mar, com o canal
+ * de `2·half` m entre eles; logo depois das pontas, a BARRA (banco de areia da vazante, ~2,6 m). A correnteza do
+ * lago para o mar aperta no canal (`INLET_CURRENTS`) e o swell que entra contra ela fica curto e em pé (`INLET_SEA`).
+ */
+export const INLET = { cx: -86, z0: 1676, z1: 1808, half: 24, crestY: 1.6, crestW: 3.2, slope: 0.66, bar: { z: 1838, len: 34, hx: 70, depth: -2.6 } };
+/** altura do enrocamento dos molhes em (x, z) (−∞ fora deles) */
+export const jettyHeight = (x: number, z: number): number => {
+  const J = INLET;
+  if (z < J.z0 - 12 || z > J.z1 + 14) return -Infinity;
+  let best = -Infinity;
+  for (const s of [-1, 1]) {
+    const xs = J.cx + s * J.half;
+    const dx = Math.abs(x - xs) - J.crestW / 2;
+    // ponta arredondada (cabeça do molhe) e a raiz entrando no paredão
+    const dz = Math.max(0, z - J.z1, J.z0 - z);
+    const d = Math.max(0, Math.hypot(Math.max(0, dx), dz));
+    const rough = 0.35 * fbm(x / 2.2 + s * 9.1, z / 2.2, 2);
+    best = Math.max(best, J.crestY + rough - d * J.slope * 1.5);
+  }
+  return best;
+};
+
 /**
  * Oceano em volta do mundo (v0.71.1): a malha do terreno cobre x ∈ [−1800, 1800], z ∈ [−1600, 2000] (presentation/
  * environment.ts: 3,6 km centrados em z = +200). A água visual é infinita (segue a câmera); para a física bater com
@@ -308,6 +343,24 @@ export const onRoadOrLot = (x: number, z: number, margin = 0): boolean => lotDis
 export const RIVER_CURRENT: CurrentZone = {
   // aproximação retangular do cânion; vazão do lago PARA O MAR (para o norte), mais fraca que a do antigo rio de serra
   minX: -140, maxX: 20, minZ: RIVER.z0 + 10, maxZ: RIVER.z1 - 120, vx: 0, vz: 1.0, feather: 25,
+};
+
+/** correnteza da boca: o fluxo do cânion aperta entre os molhes (~2,4 m/s para o mar) e abre em leque depois das pontas */
+export const INLET_CURRENTS: CurrentZone[] = [
+  { minX: INLET.cx - INLET.half + 2, maxX: INLET.cx + INLET.half - 2, minZ: RIVER.z1 - 120, maxZ: INLET.z1 + 8, vx: 0, vz: 2.4, feather: 14 },
+  { minX: INLET.cx - 60, maxX: INLET.cx + 60, minZ: INLET.z1 - 10, maxZ: INLET.bar.z + 70, vx: 0, vz: 1.0, feather: 35 },
+];
+/**
+ * Mar da boca: o swell que vem do mar (para −Z, contra a vazante) fica CURTO e EM PÉ sobre a barra e entre as pontas
+ * dos molhes — só ali (máscara elíptica centrada logo depois das pontas, entrando um pouco no canal).
+ */
+export const INLET_SEA: LocalSea = {
+  cx: INLET.cx, cz: INLET.z1 + 12, rx: 95, rz: 120, feather: 0.55,
+  waves: [
+    { dirDeg: 186, wavelength: 16, amplitude: 0.38, steepness: 0.7, phase: 0.4 },
+    { dirDeg: 168, wavelength: 9.5, amplitude: 0.22, steepness: 0.65, phase: 2.2 },
+    { dirDeg: 205, wavelength: 5.2, amplitude: 0.1, steepness: 0.5, phase: 4.1 },
+  ],
 };
 
 // ---------- colisores ----------
