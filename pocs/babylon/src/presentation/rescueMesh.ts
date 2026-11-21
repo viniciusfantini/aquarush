@@ -7,7 +7,7 @@
 import { type Scene, Mesh, MeshBuilder, StandardMaterial, PBRMaterial, Color3, TransformNode, Vector3, PointLight, DynamicTexture } from "@babylonjs/core";
 import { RESCUE } from "../sim/params.ts";
 import type { BoatTelemetry } from "../sim/boat.ts";
-import { type BoatVisual, buildPropeller } from "./boatMesh.ts";
+import { type BoatVisual, buildPropeller, hpDecalMaterial } from "./boatMesh.ts";
 import { makeKit, makeMats, buildHull, type Kit, type Mats } from "./fleet.ts";
 
 export type RescueVisual = BoatVisual & { floor: number; updateRescue: (T: BoatTelemetry, time: number) => void };
@@ -17,7 +17,7 @@ const pbr = (scene: Scene, name: string, c: Color3, metal: number, rough: number
 };
 
 /** um motor de popa de 115 hp com o protetor de hélice (gaiola de inox) — tudo no pivô (gira com trim/tilt/direção) */
-const outboard = (K: Kit, M: Mats, root: TransformNode, x: number, name: string, cowlMat: PBRMaterial) => {
+const outboard = (K: Kit, M: Mats, root: TransformNode, x: number, name: string, cowlMat: PBRMaterial, decal: StandardMaterial) => {
   const P = RESCUE;
   const piv = K.node(name, root, P.drivePivot.x + x, P.drivePivot.y, P.drivePivot.z);
   const dz = P.propPos.z - P.drivePivot.z, dy = P.propPos.y - P.drivePivot.y;
@@ -25,6 +25,11 @@ const outboard = (K: Kit, M: Mats, root: TransformNode, x: number, name: string,
   K.rbox(0.18, 0.22, 0.16, 0.03, 0, -0.02, -0.05, M.black, piv);
   K.rbox(0.46, 0.5, 0.62, 0.14, 0, 0.42, -0.34, cowlMat, piv);
   K.rbox(0.48, 0.06, 0.64, 0.03, 0, 0.18, -0.34, M.black, piv);
+  // adesivo da potência nos dois lados do capô (sempre igual à potência da física: RESCUE.enginePowerHp)
+  for (const s of [-1, 1]) {
+    const pl = MeshBuilder.CreatePlane(name + "Hp", { width: 0.34, height: 0.21 }, K.scene);
+    pl.material = decal; pl.parent = piv; pl.position.set(s * 0.236, 0.46, -0.36); pl.rotation.y = -s * Math.PI / 2; K.out.push(pl);
+  }
   K.rbox(0.34, 0.3, 0.42, 0.08, 0, 0.0, -0.36, M.black, piv);
   const legTop = new Vector3(0, -0.12, -0.4), legBot = new Vector3(0, dy + 0.14, dz + 0.26);
   const L = Vector3.Distance(legTop, legBot);
@@ -132,8 +137,30 @@ export const buildRescue = (scene: Scene): RescueVisual => {
   K.box(0.05, 0.05, 0.1, 0.14, floor + 1.0, hz + 1.06, star, root);
   K.cyl(0.07, 0.06, "y", 0, topY + 0.26, zA + 0.15, stern, root);
   // ---- DOIS motores de popa com as gaiolas ----
-  const ds = (P.engines ?? []).map((e, i) => outboard(K, M, root, e.x, i === 0 ? "enginePivot" : "enginePivot2", i === 0 ? M.white as PBRMaterial : M.white as PBRMaterial));
+  const decal = hpDecalMaterial(scene, P.enginePowerHp);
+  const ds = (P.engines ?? []).map((e, i) => outboard(K, M, root, e.x, i === 0 ? "enginePivot" : "enginePivot2", M.white as PBRMaterial, decal));
   ds[0].skeg.name = "skeg";
+  // ---- GAIOLA DOS MOTORES: engradado de inox preso ao espelho envolvendo os dois motores (por cima, dos lados e atrás
+  // no alto) — a corda de quem está sendo puxado escorrega por cima sem pegar nos capôs. Aberta embaixo atrás: os
+  // motores levantam (tilt) por baixo da travessa traseira.
+  {
+    const zT = P.drivePivot.z + 0.1, zB = P.drivePivot.z - 1.05, yLo = tY + 0.12, yHi = P.drivePivot.y + 0.95, xW = 1.05;
+    const st = M.steel, r = 0.026;
+    // dois "U" invertidos (laterais) do espelho até trás, unidos no alto por travessas
+    for (const s of [-1, 1]) {
+      K.tube([new Vector3(s * xW, yLo, zT), new Vector3(s * xW, yHi - 0.12, zT), new Vector3(s * (xW - 0.06), yHi, zT - 0.12), new Vector3(s * (xW - 0.06), yHi, zB + 0.12), new Vector3(s * xW, yHi - 0.12, zB), new Vector3(s * xW, yLo + 0.25, zB)], r, st, root, 10);
+      for (const z of [zT - 0.35, zT - 0.7]) K.tube([new Vector3(s * xW, yLo + 0.05, z), new Vector3(s * xW, yHi - 0.05, z)], 0.018, st, root, 6);  // barras verticais do lado
+      K.tube([new Vector3(s * xW, (yLo + yHi) / 2, zT), new Vector3(s * xW, (yLo + yHi) / 2, zB)], 0.018, st, root, 6);                         // longarina do meio
+    }
+    for (const z of [zT - 0.12, zT - 0.5, zB + 0.12]) K.tube([new Vector3(-(xW - 0.06), yHi, z), new Vector3(xW - 0.06, yHi, z)], r, st, root, 8); // travessas de cima
+    for (const x of [-0.6, -0.2, 0.2, 0.6]) K.tube([new Vector3(x, yHi, zT - 0.12), new Vector3(x, yHi, zB + 0.12)], 0.016, st, root, 6);         // grade de cima
+    K.tube([new Vector3(-xW, yHi - 0.12, zB), new Vector3(xW, yHi - 0.12, zB)], r, st, root, 8);                                                     // travessa traseira (alta)
+    // escoras para o espelho/flutuadores e as sapatas
+    for (const s of [-1, 1]) {
+      K.tube([new Vector3(s * xW, yLo + 0.25, zB), new Vector3(s * (xW - 0.12), yLo, zT - 0.2)], 0.02, st, root, 6);
+      K.rbox(0.1, 0.03, 0.12, 0.01, s * xW, yLo, zT, M.black, root);
+    }
+  }
   // luzes projetadas pelo giroflex (iluminam a água e o casco à noite)
   const lr = new PointLight("rsBeaconR", new Vector3(-0.4, topY + 0.3, zA), scene); lr.parent = root; lr.diffuse = new Color3(1, 0.12, 0.05); lr.range = 28; lr.intensity = 0;
   const lb = new PointLight("rsBeaconB", new Vector3(0.4, topY + 0.3, zA), scene); lb.parent = root; lb.diffuse = new Color3(0.15, 0.35, 1); lb.range = 28; lb.intensity = 0;

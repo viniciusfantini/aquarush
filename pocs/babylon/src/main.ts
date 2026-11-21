@@ -67,7 +67,7 @@ import { Hud } from "./presentation/hud.ts";
 import { EngineAudio } from "./presentation/audio.ts";
 
 installI18n(); // inglês: traduz o DOM, as escritas futuras e os letreiros 3D (antes de montar a cena e o HUD)
-const BUILD = "poc-babylon 0.83.0";
+const BUILD = "poc-babylon 0.83.1";
 /** Escala visual da rotação da hélice (proporcional ao RPM, abaixo do limite estroboscópico). */
 const PROP_VISUAL_SCALE = 0.12;
 
@@ -958,6 +958,10 @@ const boot = async () => {
       V.boat.beacon = on;
       sysToast(on ? (V.boat.telemetry.houseV * 12 / V.boat.telemetry.nominalV > 9.5 ? "GIROFLEX ligado" : "GIROFLEX ligado, mas sem tensão na casa: não acende") : "Giroflex desligado");
     },
+    sirenHold: (mode, on) => {
+      const b = V.boat;
+      if (on) b.sirenHold = mode; else if (b.sirenHold === mode) b.sirenHold = "";
+    },
     setSiren: (mode) => {
       V.boat.siren = mode;
       sysToast(mode === "off" ? "Sirene desligada" : `SIRENE: ${mode === "hilo" ? "dois tons" : mode.toUpperCase()}`);
@@ -1209,7 +1213,7 @@ const boot = async () => {
       if (a === "beacon") { boat.beacon = !boat.beacon; sysToast(boat.beacon ? "GIROFLEX ligado" : "Giroflex desligado"); }
       else {
         const order = ["off", "wail", "yelp", "hilo"] as const;
-        boat.siren = order[(order.indexOf(boat.siren) + 1) % order.length];
+        boat.siren = order[(order.indexOf(boat.siren as typeof order[number]) + 1) % order.length];
         sysToast(boat.siren === "off" ? "Sirene desligada" : `SIRENE: ${boat.siren === "hilo" ? "dois tons" : boat.siren.toUpperCase()}`);
       }
     }
@@ -1396,7 +1400,7 @@ const boot = async () => {
       cb.classList.toggle("show", mode === "game" && !!T.rescue?.beacon);
       const sOn = mode === "game" && !!T.rescue && T.rescue.siren !== "off";
       cs.classList.toggle("show", sOn);
-      if (sOn) { const txt = `SIRENE · ${T.rescue!.siren === "hilo" ? "DOIS TONS" : T.rescue!.siren.toUpperCase()}`; if (cs.textContent !== txt) cs.textContent = txt; }
+      if (sOn) { const sv = T.rescue!.siren; const txt = `SIRENE · ${sv === "hilo" ? "DOIS TONS" : sv === "manual" ? "MANUAL" : sv === "airhorn" ? "BUZINA DE AR" : sv.toUpperCase()}`; if (cs.textContent !== txt) cs.textContent = txt; }
     }
     tubeVis.update(tube, performance.now() / 1000);
     if (tube.falls !== tubeFalls) {

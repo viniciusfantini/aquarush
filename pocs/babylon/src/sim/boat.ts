@@ -29,7 +29,7 @@ const RHO_AIR = 1.2;
 
 export type Gear = "F" | "N" | "R";
 /** sirene do bote de resgate: desligada, "wail" (sobe e desce lento), "yelp" (rápido) ou dois tons */
-export type SirenMode = "off" | "wail" | "yelp" | "hilo";
+export type SirenMode = "off" | "wail" | "yelp" | "hilo" | "manual" | "airhorn";
 export type EngineState = "off" | "cranking" | "running";
 
 export interface BoatTelemetry {
@@ -530,7 +530,11 @@ export class Speedboat {
   /** RESGATE: chave do giroflex e modo da sirene (consomem da casa de 12 V) */
   beacon = false;
   siren: SirenMode = "off";
-  private rescueA(): number { const R = this.params.rescue; return R ? (this.beacon ? R.beaconA : 0) + (this.siren !== "off" ? R.sirenA : 0) : 0; }
+  /** botões de SEGURAR do controlador: MAN (o tom sobe enquanto segura) e BUZINA DE AR — passam por cima do tom travado */
+  sirenHold: "" | "manual" | "airhorn" = "";
+  /** o que a sirene está tocando (o botão segurado vence o modo travado) */
+  get sirenNow(): SirenMode { return this.sirenHold || this.siren; }
+  private rescueA(): number { const R = this.params.rescue; return R ? (this.beacon ? R.beaconA : 0) + (this.sirenNow !== "off" ? R.sirenA : 0) : 0; }
   /** DIESEL: tempo de pré-aquecimento das velas com a chave em ON (s), rotação do turbo (0..1) e corrente das velas (A) */
   glowT = 0;
   turboS = 0;
@@ -1716,7 +1720,7 @@ export class Speedboat {
     if (this.params.rescue) {
       // giroflex e sirene só funcionam com tensão na casa (bateria / alternador)
       const live = (t.houseV * 12) / t.nominalV > 9.5;
-      t.rescue = { beaconSw: this.beacon, sirenSw: this.siren, beacon: this.beacon && live, siren: live ? this.siren : "off" };
+      t.rescue = { beaconSw: this.beacon, sirenSw: this.siren, beacon: this.beacon && live, siren: live ? this.sirenNow : "off" };
     }
     if (hv) {
       t.hv = { soc: hv.soc, kwhLeft: hv.kwhLeft, packV: hv.packV, linkV: hv.linkV, packA: hv.packA, kw: hv.kw, shaftKw: hv.shaftKw, availKw: hv.availKw, limited: hv.limited,

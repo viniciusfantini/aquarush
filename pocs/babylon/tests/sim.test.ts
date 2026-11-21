@@ -1967,6 +1967,13 @@ for (const [label, thr] of [["baixa", 0.25], ["alta", 1]] as const) {
   e.beacon = true; e.siren = "wail"; go(e, 2, { gear: "N" });
   check(T, "giroflex + sirene ligados: puxam corrente da bateria (A a mais)", a0 - e.telemetry.batteryA, (RESCUE.rescue!.beaconA + RESCUE.rescue!.sirenA) * 0.8, (RESCUE.rescue!.beaconA + RESCUE.rescue!.sirenA) * 1.3, "A", 1);
   check(T, "com tensão: giroflex piscando e sirene tocando", e.telemetry.rescue!.beacon && e.telemetry.rescue!.siren === "wail" ? 1 : 0, 1, 1, "", 0);
+  e.sirenHold = "manual"; go(e, 0.5, { gear: "N" });
+  const held = e.telemetry.rescue!.siren;
+  e.sirenHold = ""; go(e, 0.5, { gear: "N" });
+  check(T, "controlador: MAN segurado passa por cima do tom travado e, solto, volta ao WAIL", held === "manual" && e.telemetry.rescue!.siren === "wail" ? 1 : 0, 1, 1, "", 0);
+  e.siren = "off"; e.sirenHold = "airhorn"; go(e, 0.5, { gear: "N" });
+  check(T, "controlador: BUZINA DE AR toca mesmo com a sirene desligada (só enquanto segura)", e.telemetry.rescue!.siren === "airhorn" ? 1 : 0, 1, 1, "", 0);
+  e.sirenHold = ""; e.siren = "wail";
   e.batterySel = "off"; go(e, 1, { gear: "N" });
   check(T, "chave geral desligada: giroflex apaga e sirene cala (as chaves ficam onde estão)", !e.telemetry.rescue!.beacon && e.telemetry.rescue!.siren === "off" && e.telemetry.rescue!.beaconSw ? 1 : 0, 1, 1, "", 0);
 }

@@ -46,7 +46,8 @@ export interface SystemsPanelActions {
   setCruise(on: boolean): void;                    // controle de velocidade: liga/desliga
   adjustCruise(dKmh: number): void;                // controle de velocidade: ajusta a velocidade escolhida
   setBeacon(on: boolean): void;                    // resgate: giroflex
-  setSiren(mode: "off" | "wail" | "yelp" | "hilo"): void; // resgate: sirene
+  setSiren(mode: "off" | "wail" | "yelp" | "hilo"): void; // resgate: tom da sirene (travado)
+  sirenHold(mode: "manual" | "airhorn", on: boolean): void; // resgate: botões de segurar (MAN, BUZINA DE AR)
   setHv(on: boolean): void;                        // barco elétrico: chave HV (contatores com pré-carga)
   ready(): void;                                   // barco elétrico: botão READY (liga/desliga o inversor)
   setFoils(down: boolean): void;                   // hydrofoil: baixar / recolher os foils
@@ -145,8 +146,8 @@ export class SystemsPanel {
       else if (d.cruise) this.act.setCruise(!b.classList.contains("on"));
       else if (d.cruiseSet) this.act.adjustCruise(Number(d.cruiseSet) * 0.5);
       else if (d.hvsw) this.act.setHv(!b.classList.contains("on"));
-      else if (d.beacon) this.act.setBeacon(!b.classList.contains("on"));
-      else if (d.siren) this.act.setSiren(d.siren as "off" | "wail" | "yelp" | "hilo");
+      else if (d.sir === "beacon") this.act.setBeacon(!b.classList.contains("lit"));
+      else if (d.sir) this.act.setSiren(d.sir !== "off" && b.classList.contains("lit") ? "off" : d.sir as "off" | "wail" | "yelp" | "hilo");
       else if (d.ready) this.act.ready();
       else if (d.foils) this.act.setFoils(!b.classList.contains("on"));
       else if (d.fcs) this.act.setFcs(!b.classList.contains("on"));
@@ -155,6 +156,15 @@ export class SystemsPanel {
       else if (d.prime) { this.act.prime(); b.classList.remove("push"); void b.offsetWidth; b.classList.add("push"); }
     });
     bindKeySpring(el, (i, pos) => this.act.setKey(i, pos));
+    // controlador de sirene: MAN e BUZINA DE AR só tocam enquanto o botão está segurado (soltar em qualquer lugar solta)
+    let sirHeld: "" | "manual" | "airhorn" = "";
+    el.addEventListener("pointerdown", (e) => {
+      const b = (e.target as HTMLElement).closest<HTMLElement>("button[data-sirhold]");
+      if (!b) return;
+      sirHeld = b.dataset.sirhold as "manual" | "airhorn"; this.act.sirenHold(sirHeld, true); e.preventDefault();
+    });
+    const sirUp = () => { if (!sirHeld) return; this.act.sirenHold(sirHeld, false); sirHeld = ""; };
+    addEventListener("pointerup", sirUp); addEventListener("pointercancel", sirUp); addEventListener("blur", sirUp);
     // START da moto aquática: segurar = arranque (acorda a central e gira); soltar em qualquer lugar = solta
     let ssHeld = false;
     el.addEventListener("pointerdown", (e) => {
@@ -218,8 +228,11 @@ export class SystemsPanel {
     if (caps.ballast) cells.push(`<div class="sw-cell">${tri("ballast", "LASTRO", "bombas dos 3 tanques", { v: "fill", l: "ENCHER" }, { v: "stop", l: "PARAR" }, { v: "drain", l: "ESVAZIAR" })}</div>`
       + `<div class="sw-cell"><div class="bal-g" data-bal></div></div>`);
     if (caps.rescue) {
-      cells.push(cell(toggle({ attr: "beacon", val: "1", label: "GIROFLEX", sub: "luzes de resgate" }), "beacon"));
-      cells.push(cell(rotary("siren", "SIRENE", "eletrônica", [{ v: "off", l: "OFF" }, { v: "wail", l: "WAIL" }, { v: "yelp", l: "YELP" }, { v: "hilo", l: "2 TONS" }]), "siren"));
+      // CONTROLADOR DE SIRENE (caixa de botões com LED, como nos botes de resgate): giroflex, tons travados e os de segurar
+      const sb = (k: string, l: string, hold = false) => `<button class="sir${hold ? " hold" : ""}" ${hold ? `data-sirhold="${k}"` : `data-sir="${k}"`}><i></i><span>${l}</span></button>`;
+      cells.push(`<div class="sw-cell sir-cell"><div class="sir-ctl"><div class="sir-row">${sb("beacon", "GIROFLEX")}${sb("wail", "WAIL")}${sb("yelp", "YELP")}${sb("hilo", "2 TONS")}</div>`
+        + `<div class="sir-row">${sb("manual", "MAN", true)}${sb("airhorn", "BUZINA DE AR", true)}${sb("off", "DESL.")}</div>`
+        + `<b>CONTROLADOR DE SIRENE</b><small>MAN e BUZINA: segure</small></div><div class="rd" data-info="siren"></div></div>`);
     }
     if (caps.foil) {
       cells.push(cell(toggle({ attr: "foils", val: "1", label: "FOILS", sub: "baixar / recolher", on: "BAIXO", off: "RECOLH." }), "foils"));
@@ -367,11 +380,15 @@ export class SystemsPanel {
 
     }
     if (c.rescue && t.rescue) {
-      const R = t.rescue;
-      setToggle(el, "beacon", "1", R.beaconSw, R.beacon);
-      setRotary(el, "siren", R.sirenSw);
-      info("beacon", R.beaconSw ? (R.beacon ? "piscando" : "sem tensão") : "desligado", R.beaconSw && !R.beacon);
-      info("siren", R.sirenSw === "off" ? "desligada" : R.siren === "off" ? "sem tensão" : R.sirenSw === "hilo" ? "dois tons" : R.sirenSw.toUpperCase(), R.sirenSw !== "off" && R.siren === "off");
+      const R = t.rescue, blink = Math.floor(performance.now() / 250) % 2 === 0;
+      for (const b of el.querySelectorAll<HTMLElement>("button.sir")) {
+        const k = b.dataset.sir ?? b.dataset.sirhold ?? "";
+        const lit = k === "beacon" ? R.beaconSw && (R.beacon ? blink || true : false) : k === "off" ? R.sirenSw === "off" && powered : b.dataset.sirhold ? R.siren === k : R.sirenSw === k && powered;
+        b.classList.toggle("lit", lit);
+        b.classList.toggle("flash", k === "beacon" && R.beacon && blink);
+      }
+      const now = R.siren;
+      info("siren", !powered ? "sem tensão" : now === "off" ? (R.beacon ? "giroflex piscando · sirene desligada" : "desligado") : `tocando: ${now === "hilo" ? "dois tons" : now === "manual" ? "manual" : now === "airhorn" ? "buzina de ar" : now.toUpperCase()}${R.beacon ? " · giroflex" : ""}`, !powered && (R.beaconSw || R.sirenSw !== "off"));
     }
     if (c.electric && t.hv) {
       // HV: posição da chave; o LED acende com os contatores fechados (pisca na pré-carga). READY aceso = inversor ligado

@@ -171,17 +171,21 @@ export class EngineAudio {
   private alarmGain!: GainNode;
   private stallGain!: GainNode;
   /** sirene do bote de resgate (criada na primeira vez que toca) */
-  private sir: { a: OscillatorNode; b: OscillatorNode; g: GainNode } | null = null;
+  private sir: { a: OscillatorNode; b: OscillatorNode; g: GainNode; bg: GainNode; horn: BiquadFilterNode } | null = null;
+  /** sirene MANUAL: rotação do "rotor" (0..1) — sobe segurando o botão e cai devagar ao soltar */
+  private manF = 0;
+  private sirT = 0;
   /**
    * SIRENE eletrônica (bote de resgate): dois osciladores (dente de serra + quadrada levemente desafinada) por um
    * filtro de corneta. "wail" sobe e desce em ~4 s; "yelp" faz o mesmo em 0,3 s; "hilo" alterna dois tons (435/580 Hz).
    * Sem tensão na casa, cala (o jogo passa o modo já checado pela telemetria).
    */
-  setSiren(mode: "off" | "wail" | "yelp" | "hilo", cockpit = false): void {
+  setSiren(mode: "off" | "wail" | "yelp" | "hilo" | "manual" | "airhorn", cockpit = false): void {
     const ctx = this.ctx;
     if (!ctx) return;
     if (!this.sir && mode === "off") return;
     const t = ctx.currentTime;
+    const dt = Math.min(0.1, Math.max(0, t - this.sirT)); this.sirT = t;
     if (!this.sir) {
       const a = ctx.createOscillator(); a.type = "sawtooth"; a.start();
       const b = ctx.createOscillator(); b.type = "square"; b.start();
@@ -190,15 +194,23 @@ export class EngineAudio {
       const hp = ctx.createBiquadFilter(); hp.type = "highpass"; hp.frequency.value = 280;
       const g = ctx.createGain(); g.gain.value = 0;
       a.connect(horn); b.connect(bg).connect(horn); horn.connect(hp).connect(g).connect(this.master);
-      this.sir = { a, b, g };
+      this.sir = { a, b, g, bg, horn };
     }
     const s = this.sir;
+    // MANUAL: o tom sobe enquanto segura (~1,5 s até o topo) e cai devagar ao soltar (~3 s), como o rotor de uma sirene
+    this.manF = mode === "manual" ? Math.min(1, this.manF + dt / 1.5) : Math.max(0, this.manF - dt / 3);
+    const air = mode === "airhorn";
+    s.horn.frequency.setTargetAtTime(air ? 520 : 1100, t, 0.02); s.horn.Q.value = air ? 0.5 : 0.7;
+    s.bg.gain.setTargetAtTime(air ? 0.9 : 0.35, t, 0.02);
     let f = 0;
+    if (mode === "manual" || (mode === "off" && this.manF > 0.02)) f = 380 + 920 * this.manF;
+    else if (air) f = 172;
     if (mode === "wail") f = 620 + 680 * (0.5 - 0.5 * Math.cos((2 * Math.PI * t) / 4.2));
     else if (mode === "yelp") { const ph = (t % 0.32) / 0.32; f = 620 + 680 * (0.5 - 0.5 * Math.cos(Math.PI * ph)); }
     else if (mode === "hilo") f = Math.floor(t / 0.55) % 2 ? 435 : 580;
-    if (f > 0) { s.a.frequency.setTargetAtTime(f, t, 0.008); s.b.frequency.setTargetAtTime(f * 1.006, t, 0.008); }
-    s.g.gain.setTargetAtTime(mode === "off" || this.muted ? 0 : cockpit ? 0.11 : 0.085, t, 0.03);
+    if (f > 0) { s.a.frequency.setTargetAtTime(f, t, 0.008); s.b.frequency.setTargetAtTime(f * (air ? 1.26 : 1.006), t, 0.008); }
+    const level = mode === "off" ? (this.manF > 0.02 ? this.manF * 0.9 : 0) : air ? 1.5 : 1;
+    s.g.gain.setTargetAtTime(this.muted ? 0 : (cockpit ? 0.11 : 0.085) * level, t, air ? 0.01 : 0.03);
   }
 
   /** voz do motor elétrico (criada na primeira vez que um barco elétrico aparece) */

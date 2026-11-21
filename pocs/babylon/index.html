@@ -611,6 +611,19 @@
     @keyframes beaconChip { 50% { background: #1b4fd8; } }
     #h-siren.show { color: #2a0400; background: #ffd34d; }
     #h-wkb.show { color: #04222a; background: #5ee8d4; }
+    /* controlador de sirene (bote de resgate) */
+    #spanel .sir-cell { min-width: 300px; }
+    .sir-ctl { display: flex; flex-direction: column; align-items: center; gap: 5px; padding: 8px 8px 6px; border-radius: 8px; background: linear-gradient(180deg, #1d2227, #101418); box-shadow: inset 0 1px 0 rgba(255,255,255,0.08), 0 2px 6px rgba(0,0,0,0.5); }
+    .sir-row { display: flex; gap: 5px; }
+    .sir-ctl .sir { display: flex; flex-direction: column; align-items: center; gap: 3px; min-width: 62px; padding: 5px 6px 4px; border-radius: 5px; border: 1px solid rgba(255,255,255,0.18); background: linear-gradient(180deg, #2c333a, #1a1f24); color: #cfd8de; font-size: 9.5px; font-weight: 800; letter-spacing: 0.05em; }
+    .sir-ctl .sir.hold { background: linear-gradient(180deg, #3a2f22, #241c13); }
+    .sir-ctl .sir i { width: 18px; height: 5px; border-radius: 3px; background: #2a1a12; box-shadow: inset 0 1px 2px #000; }
+    .sir-ctl .sir.lit i { background: #ff3b2a; box-shadow: 0 0 8px 2px rgba(255,59,42,0.8); }
+    .sir-ctl .sir[data-sir="beacon"].lit i { background: #ff3b2a; }
+    .sir-ctl .sir[data-sir="beacon"].lit.flash i { background: #2f6bff; box-shadow: 0 0 8px 2px rgba(47,107,255,0.9); }
+    .sir-ctl .sir:active { transform: translateY(1px); }
+    .sir-ctl b { font-size: 10px; letter-spacing: 0.12em; color: #e9eef2; }
+    .sir-ctl small { font-size: 9px; color: rgba(255,255,255,0.45); }
     .cruise-set { display: flex; align-items: center; justify-content: center; gap: 6px; margin-top: 4px; }
     .cruise-set button { width: 26px; height: 22px; border-radius: 5px; border: 1px solid rgba(255,255,255,0.35); background: #1b2630; color: #e8f0f4; font: inherit; font-weight: 800; cursor: pointer; }
     .cruise-set button:active { background: #2b3a46; }
