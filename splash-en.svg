@@ -1,0 +1,205 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1920 1080" preserveAspectRatio="xMidYMid slice">
+  <!-- AQUA RUSH — arte da tela de abertura (pôr do sol num cânion com lago: AR-10 em primeiro plano, AR-9,
+       moto aquática AR-J, wakeboard, parasail, banana boat, bote e boias). Ilustração vetorial; sem texto além da marca. -->
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#0b2346"/>
+      <stop offset="0.38" stop-color="#2f4f7a"/>
+      <stop offset="0.62" stop-color="#d9825a"/>
+      <stop offset="0.74" stop-color="#ffc173"/>
+    </linearGradient>
+    <radialGradient id="sun" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#fff6d6"/>
+      <stop offset="0.35" stop-color="#ffd98a" stop-opacity="0.95"/>
+      <stop offset="1" stop-color="#ff9a4a" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="water" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#e3a06d"/>
+      <stop offset="0.06" stop-color="#3f7f96"/>
+      <stop offset="0.45" stop-color="#14566f"/>
+      <stop offset="1" stop-color="#062b3c"/>
+    </linearGradient>
+    <linearGradient id="cliffL" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#3a1f1b"/><stop offset="1" stop-color="#8a4a2f"/>
+    </linearGradient>
+    <linearGradient id="cliffR" x1="1" y1="0" x2="0" y2="0">
+      <stop offset="0" stop-color="#2d1917"/><stop offset="1" stop-color="#7a3f2a"/>
+    </linearGradient>
+    <linearGradient id="far" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#9a5a5a"/><stop offset="1" stop-color="#c47a5f"/>
+    </linearGradient>
+    <linearGradient id="hull10" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#58636e"/><stop offset="1" stop-color="#2a3138"/>
+    </linearGradient>
+    <linearGradient id="chrome" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#ffffff"/><stop offset="0.5" stop-color="#b9c1c9"/><stop offset="1" stop-color="#eef1f4"/>
+    </linearGradient>
+    <linearGradient id="canopy" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#cfefff" stop-opacity="0.95"/><stop offset="1" stop-color="#4f8db0" stop-opacity="0.85"/>
+    </linearGradient>
+    <linearGradient id="logo" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0.25" stop-color="#ffffff"/><stop offset="1" stop-color="#7fe9dd"/>
+    </linearGradient>
+    <linearGradient id="vign" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0.55" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity="0.55"/>
+    </linearGradient>
+    <filter id="soft" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="6"/></filter>
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="18"/></filter>
+  </defs>
+
+  <!-- céu e sol -->
+  <rect width="1920" height="1080" fill="url(#sky)"/>
+  <circle cx="1000" cy="590" r="190" fill="url(#sun)"/>
+  <circle cx="1000" cy="600" r="62" fill="#fff3cf"/>
+  <g fill="#ffffff" opacity="0.18">
+    <ellipse cx="420" cy="250" rx="220" ry="26"/><ellipse cx="560" cy="275" rx="160" ry="18"/>
+    <ellipse cx="1500" cy="210" rx="260" ry="28"/><ellipse cx="1350" cy="240" rx="140" ry="16"/>
+  </g>
+
+  <!-- serras ao fundo e paredes do cânion -->
+  <path d="M0 640 L180 560 L320 600 L470 520 L640 590 L780 545 L900 610 L1100 600 L1240 540 L1380 590 L1560 520 L1720 585 L1920 545 L1920 660 L0 660 Z" fill="url(#far)" opacity="0.75"/>
+  <path d="M0 330 L120 300 L210 360 L260 420 L330 470 L360 540 L420 600 L470 650 L0 700 Z" fill="url(#cliffL)"/>
+  <path d="M0 470 L140 455 L230 520 L300 560 L360 620 L420 660 L0 700 Z" fill="#2a1513" opacity="0.6"/>
+  <g stroke="#a65c39" stroke-width="3" opacity="0.5"><path d="M40 380 L180 395"/><path d="M60 450 L230 470"/><path d="M90 520 L300 545"/></g>
+  <path d="M1920 300 L1810 290 L1700 350 L1620 430 L1560 500 L1500 580 L1440 650 L1920 700 Z" fill="url(#cliffR)"/>
+  <path d="M1920 460 L1780 450 L1680 520 L1600 580 L1520 650 L1920 700 Z" fill="#241210" opacity="0.6"/>
+  <g stroke="#9a5233" stroke-width="3" opacity="0.5"><path d="M1880 360 L1720 380"/><path d="M1860 440 L1660 470"/><path d="M1840 520 L1600 560"/></g>
+  <!-- pinheiros na crista -->
+  <g fill="#1d2a22">
+    <path d="M70 312 l10 -34 l10 34 Z"/><path d="M96 306 l12 -40 l12 40 Z"/><path d="M128 300 l9 -30 l9 30 Z"/>
+    <path d="M1760 296 l11 -36 l11 36 Z"/><path d="M1790 292 l9 -30 l9 30 Z"/><path d="M1824 300 l12 -40 l12 40 Z"/>
+  </g>
+
+  <!-- lago -->
+  <rect y="650" width="1920" height="430" fill="url(#water)"/>
+  <!-- reflexo do sol -->
+  <g fill="#ffe2a8" opacity="0.75">
+    <rect x="960" y="662" width="80" height="4" rx="2"/><rect x="935" y="680" width="130" height="5" rx="2.5"/>
+    <rect x="955" y="702" width="95" height="4" rx="2"/><rect x="920" y="726" width="160" height="5" rx="2.5" opacity="0.7"/>
+    <rect x="948" y="756" width="110" height="5" rx="2.5" opacity="0.55"/><rect x="900" y="792" width="200" height="6" rx="3" opacity="0.4"/>
+  </g>
+  <!-- marolas -->
+  <g stroke="#7fc9da" stroke-width="3" fill="none" opacity="0.28" stroke-linecap="round">
+    <path d="M120 760 q40 -10 80 0"/><path d="M300 820 q50 -12 100 0"/><path d="M640 900 q60 -14 120 0"/>
+    <path d="M1300 780 q40 -10 80 0"/><path d="M1550 860 q60 -14 120 0"/><path d="M180 980 q70 -16 140 0"/>
+    <path d="M860 1010 q70 -16 140 0"/><path d="M1600 1000 q70 -16 140 0"/>
+  </g>
+
+  <!-- PARASAIL: velame no céu, cabo até a lancha AR-6 ao longe -->
+  <g>
+    <path d="M1380 330 Q1440 270 1500 330 Q1440 312 1380 330 Z" fill="#ff5a4e"/>
+    <path d="M1400 322 Q1440 296 1480 322" stroke="#ffd34d" stroke-width="7" fill="none"/>
+    <g stroke="#2b2b2b" stroke-width="1.5" opacity="0.8"><path d="M1384 330 L1438 378"/><path d="M1496 330 L1442 378"/><path d="M1420 322 L1440 378"/><path d="M1460 322 L1440 378"/></g>
+    <circle cx="1440" cy="384" r="6" fill="#2b2b2b"/><path d="M1440 390 L1436 404 M1440 390 L1446 404" stroke="#2b2b2b" stroke-width="3"/>
+    <path d="M1440 392 Q1360 520 1270 640" stroke="#f2efe6" stroke-width="2" fill="none" opacity="0.85"/>
+    <!-- AR-6 rebocando o parasail -->
+    <path d="M1222 640 H1300 Q1316 639 1328 632 L1322 645 Q1310 652 1288 652 H1228 Q1222 651 1222 646 Z" fill="#f4f6f8"/>
+    <path d="M1224 646 H1316 L1312 649 H1224 Z" fill="#1b4d8c"/>
+    <path d="M1262 640 l6 -6 h9 l-4 6 Z" fill="#9fd3ea"/>
+    <rect x="1214" y="634" width="9" height="9" rx="2" fill="#2a2f35"/>
+    <path d="M1180 652 Q1200 648 1220 652" stroke="#ffffff" stroke-width="3" opacity="0.6" fill="none"/>
+  </g>
+
+  <!-- BANANA BOAT rebocado pelo bote, perto da margem esquerda -->
+  <g>
+    <path d="M486 712 Q520 724 556 708 Q552 702 546 706 Q520 716 492 706 Z" fill="#ffd21a" stroke="#c99a00" stroke-width="1.5"/>
+    <g fill="#e94b3c"><circle cx="503" cy="701" r="5"/><circle cx="519" cy="704" r="5"/><circle cx="535" cy="701" r="5"/></g>
+    <g fill="#ff7b2e"><rect x="499" y="705" width="8" height="7" rx="2"/><rect x="515" y="708" width="8" height="7" rx="2"/><rect x="531" y="705" width="8" height="7" rx="2"/></g>
+    <path d="M556 708 Q590 700 620 704" stroke="#f2efe6" stroke-width="1.5" fill="none"/>
+    <!-- bote AR-3 -->
+    <rect x="620" y="698" width="58" height="10" rx="5" fill="#56616e"/><path d="M672 698 Q690 698 692 704 Q690 708 676 708 Z" fill="#56616e"/>
+    <rect x="612" y="692" width="8" height="8" rx="2" fill="#2a2f35"/>
+    <circle cx="640" cy="694" r="4" fill="#e9b07c"/><rect x="636" y="697" width="8" height="5" fill="#ff8c1a"/>
+    <path d="M560 712 Q590 709 612 712" stroke="#ffffff" stroke-width="2" opacity="0.5" fill="none"/>
+  </g>
+
+  <!-- AR-9 (lancha rápida) a meia distância, puxando o WAKEBOARD -->
+  <g>
+    <path d="M610 820 Q680 806 760 812" stroke="#ffffff" stroke-width="6" opacity="0.5" fill="none" stroke-linecap="round"/>
+    <path d="M760 790 H930 Q966 789 990 776 L980 800 Q954 812 906 812 H770 Q760 811 760 803 Z" fill="#f4f6f8"/>
+    <path d="M761 799 H984 L980 803 H761 Z" fill="#c8102e"/><path d="M761 803 H980 L976 807 Q954 812 906 812 H770 Q762 811 761 807 Z" fill="#ffc21a"/>
+    <path d="M846 790 l12 -9 h22 l-5 9 Z" fill="#9fd3ea" stroke="#20262c" stroke-width="2"/>
+    <path d="M776 790 H830 Q830 783 820 783 H784 Q776 783 776 790 Z" fill="#20262c"/>
+    <circle cx="866" cy="782" r="5" fill="#e9b07c"/><circle cx="890" cy="782" r="5" fill="#a87a55"/>
+    <!-- rastro + cabo de reboque -->
+    <path d="M760 806 Q700 816 610 818" stroke="#e8f6fb" stroke-width="10" opacity="0.35" fill="none" stroke-linecap="round"/>
+    <path d="M776 794 Q690 790 600 770" stroke="#f2efe6" stroke-width="2" fill="none"/>
+    <!-- wakeboarder saltando -->
+    <g transform="rotate(-14 586 760)">
+      <path d="M560 790 L618 782" stroke="#1d2a33" stroke-width="7" stroke-linecap="round"/>
+      <path d="M575 786 L584 760 L596 784" stroke="#1b4d8c" stroke-width="7" stroke-linecap="round" fill="none"/>
+      <path d="M584 760 L588 738" stroke="#ffd21a" stroke-width="12" stroke-linecap="round"/>
+      <circle cx="589" cy="728" r="8" fill="#e9b07c"/>
+      <path d="M588 744 L602 768" stroke="#e9b07c" stroke-width="5" stroke-linecap="round"/>
+    </g>
+    <g fill="#ffffff" opacity="0.55"><circle cx="556" cy="798" r="5"/><circle cx="570" cy="806" r="4"/><circle cx="545" cy="806" r="3"/></g>
+  </g>
+
+  <!-- AR-J (moto aquática) cruzando, com o jato d'água levantando o spray atrás -->
+  <g>
+    <path d="M1300 768 Q1340 742 1386 756" stroke="#ffffff" stroke-width="10" opacity="0.35" fill="none" stroke-linecap="round"/>
+    <g fill="#ffffff" opacity="0.6"><circle cx="1352" cy="748" r="7"/><circle cx="1336" cy="744" r="5"/><circle cx="1366" cy="752" r="5"/><circle cx="1322" cy="752" r="4"/></g>
+    <path d="M1386 760 H1452 Q1472 758 1482 748 L1478 764 Q1468 770 1440 770 H1392 Q1386 769 1386 764 Z" fill="#f4f6f8"/>
+    <path d="M1387 760 H1480 L1478 764 H1387 Z" fill="#0b2a6b"/><path d="M1440 752 Q1462 748 1480 748 L1474 756 H1440 Z" fill="#ff7a12"/>
+    <rect x="1400" y="750" width="34" height="8" rx="4" fill="#15181b"/>
+    <path d="M1436 750 l10 -12" stroke="#20262c" stroke-width="3" stroke-linecap="round"/>
+    <path d="M1416 750 L1428 732" stroke="#ff8c1a" stroke-width="11" stroke-linecap="round"/>
+    <circle cx="1431" cy="722" r="7" fill="#e9b07c"/><path d="M1426 736 L1446 738" stroke="#e9b07c" stroke-width="4" stroke-linecap="round"/>
+    <path d="M1384 770 Q1350 772 1300 770" stroke="#ffffff" stroke-width="2" opacity="0.5" fill="none"/>
+  </g>
+
+  <!-- boias do canal -->
+  <g>
+    <rect x="1104" y="700" width="12" height="20" rx="3" fill="#ff5a1f"/><rect x="1104" y="707" width="12" height="4" fill="#fff"/>
+    <rect x="300" y="742" width="14" height="22" rx="3" fill="#2fa84f"/><rect x="300" y="750" width="14" height="4" fill="#fff"/>
+  </g>
+
+  <!-- AR-10 (turbina) em primeiro plano, planando, com o rabo de galo da hélice de superfície -->
+  <g>
+    <!-- rooster tail -->
+    <g fill="#ffffff">
+      <path d="M1080 930 Q980 800 860 820 Q960 850 1000 930 Z" opacity="0.55" filter="url(#soft)"/>
+      <path d="M1090 935 Q1020 860 930 880 Q1000 900 1030 945 Z" opacity="0.8" filter="url(#soft)"/>
+    </g>
+    <g fill="#ffffff" opacity="0.85">
+      <circle cx="905" cy="835" r="6"/><circle cx="930" cy="822" r="4"/><circle cx="880" cy="850" r="5"/><circle cx="960" cy="858" r="5"/>
+      <circle cx="940" cy="880" r="7"/><circle cx="985" cy="905" r="6"/><circle cx="870" cy="826" r="3"/>
+    </g>
+    <!-- esteira -->
+    <path d="M1100 952 Q900 975 560 1000" stroke="#d7f0f7" stroke-width="22" opacity="0.35" fill="none" stroke-linecap="round"/>
+    <path d="M1110 958 Q900 990 640 1050" stroke="#d7f0f7" stroke-width="12" opacity="0.3" fill="none" stroke-linecap="round"/>
+    <!-- casco -->
+    <path d="M1100 900 H1600 Q1700 896 1800 862 L1770 918 Q1700 958 1560 960 H1124 Q1100 958 1100 940 Z" fill="url(#hull10)"/>
+    <path d="M1102 924 H1770 L1760 934 H1102 Z" fill="#ffc21a"/>
+    <path d="M1102 934 H1760 L1748 944 Q1680 960 1560 960 H1124 Q1104 958 1102 948 Z" fill="#0e1114"/>
+    <path d="M1102 900 H1610 Q1700 897 1800 862" stroke="#ffffff" stroke-width="3" opacity="0.35" fill="none"/>
+    <!-- tampa da turbina e tomadas de ar -->
+    <path d="M1140 900 H1380 Q1380 870 1350 866 H1170 Q1140 868 1140 900 Z" fill="#2a3138"/>
+    <rect x="1250" y="856" width="70" height="20" rx="6" fill="#ffc21a"/><rect x="1316" y="860" width="8" height="14" fill="#111"/>
+    <!-- canopy -->
+    <path d="M1400 900 Q1410 836 1480 834 Q1548 836 1560 900 Z" fill="url(#canopy)" stroke="#20262c" stroke-width="4"/>
+    <path d="M1452 838 L1446 900 M1508 838 L1514 900" stroke="#20262c" stroke-width="3" opacity="0.7"/>
+    <circle cx="1480" cy="868" r="11" fill="#1b2a3a"/><rect x="1466" y="878" width="28" height="18" rx="4" fill="#ffd21a"/>
+    <path d="M1420 860 Q1450 842 1500 842" stroke="#ffffff" stroke-width="5" opacity="0.6" fill="none" stroke-linecap="round"/>
+    <!-- escape de inox a 45° e o calor -->
+    <path d="M1150 884 H1112 Q1092 884 1080 864 L1060 834" stroke="url(#chrome)" stroke-width="26" fill="none" stroke-linecap="round"/>
+    <ellipse cx="1058" cy="830" rx="14" ry="9" fill="#1a1a1a" transform="rotate(-50 1058 830)"/>
+    <g fill="#9aa3ad" opacity="0.35" filter="url(#soft)"><circle cx="1036" cy="800" r="16"/><circle cx="1012" cy="772" r="22"/><circle cx="984" cy="742" r="28"/></g>
+    <!-- transmissão de superfície e hélice meio fora d'água -->
+    <path d="M1100 940 L1062 948" stroke="#9aa3ad" stroke-width="8"/>
+    <ellipse cx="1056" cy="946" rx="6" ry="22" fill="#c9ced4"/>
+    <!-- número de corrida -->
+    <circle cx="1650" cy="900" r="20" fill="#ffffff"/><text x="1650" y="908" font-family="Segoe UI, Arial, sans-serif" font-weight="800" font-size="22" text-anchor="middle" fill="#0e1114">10</text>
+  </g>
+
+  <!-- vinheta embaixo (o botão JOGAR fica por cima) -->
+  <rect width="1920" height="1080" fill="url(#vign)"/>
+
+  <!-- marca -->
+  <g text-anchor="middle" font-family="Segoe UI, Arial, sans-serif">
+    <text x="960" y="190" font-size="150" font-weight="800" letter-spacing="34" fill="#0b2346" opacity="0.45" filter="url(#glow)">AQUA RUSH</text>
+    <text x="960" y="180" font-size="150" font-weight="800" letter-spacing="34" fill="url(#logo)">AQUA RUSH</text>
+    <rect x="720" y="210" width="480" height="8" rx="4" fill="#29d3c2"/>
+    <text x="960" y="262" font-size="30" font-weight="600" letter-spacing="9" fill="#e9f7fb" opacity="0.92">LAKES · RIVERS · CANYONS</text>
+  </g>
+</svg>
