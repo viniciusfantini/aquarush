@@ -45,6 +45,8 @@ export interface SystemsPanelActions {
   setBallast(cmd: "fill" | "stop" | "drain"): void; // lancha de wakeboard: bombas do lastro
   setCruise(on: boolean): void;                    // controle de velocidade: liga/desliga
   adjustCruise(dKmh: number): void;                // controle de velocidade: ajusta a velocidade escolhida
+  setBeacon(on: boolean): void;                    // resgate: giroflex
+  setSiren(mode: "off" | "wail" | "yelp" | "hilo"): void; // resgate: sirene
   setHv(on: boolean): void;                        // barco elétrico: chave HV (contatores com pré-carga)
   ready(): void;                                   // barco elétrico: botão READY (liga/desliga o inversor)
   setFoils(down: boolean): void;                   // hydrofoil: baixar / recolher os foils
@@ -84,6 +86,8 @@ export interface SystemsPanelCaps {
   ballast?: boolean;
   /** controle de velocidade (lancha de wakeboard): chave ON/OFF, − / + e a velocidade escolhida */
   cruise?: boolean;
+  /** resgate: chave do GIROFLEX e seletor da SIRENE (OFF / WAIL / YELP / 2 TONS) */
+  rescue?: boolean;
   /** propulsão elétrica: chave HV + botão READY na partida (no lugar da chave de ignição) */
   electric?: boolean;
   /** hydrofoil: chave dos foils (baixar/recolher), computador de voo e a altura de voo (− / +) */
@@ -141,6 +145,8 @@ export class SystemsPanel {
       else if (d.cruise) this.act.setCruise(!b.classList.contains("on"));
       else if (d.cruiseSet) this.act.adjustCruise(Number(d.cruiseSet) * 0.5);
       else if (d.hvsw) this.act.setHv(!b.classList.contains("on"));
+      else if (d.beacon) this.act.setBeacon(!b.classList.contains("on"));
+      else if (d.siren) this.act.setSiren(d.siren as "off" | "wail" | "yelp" | "hilo");
       else if (d.ready) this.act.ready();
       else if (d.foils) this.act.setFoils(!b.classList.contains("on"));
       else if (d.fcs) this.act.setFcs(!b.classList.contains("on"));
@@ -211,6 +217,10 @@ export class SystemsPanel {
     // lastro: chave e, no lugar do texto, 3 relógios com o nível de cada tanque (BB, BE, PROA)
     if (caps.ballast) cells.push(`<div class="sw-cell">${tri("ballast", "LASTRO", "bombas dos 3 tanques", { v: "fill", l: "ENCHER" }, { v: "stop", l: "PARAR" }, { v: "drain", l: "ESVAZIAR" })}</div>`
       + `<div class="sw-cell"><div class="bal-g" data-bal></div></div>`);
+    if (caps.rescue) {
+      cells.push(cell(toggle({ attr: "beacon", val: "1", label: "GIROFLEX", sub: "luzes de resgate" }), "beacon"));
+      cells.push(cell(rotary("siren", "SIRENE", "eletrônica", [{ v: "off", l: "OFF" }, { v: "wail", l: "WAIL" }, { v: "yelp", l: "YELP" }, { v: "hilo", l: "2 TONS" }]), "siren"));
+    }
     if (caps.foil) {
       cells.push(cell(toggle({ attr: "foils", val: "1", label: "FOILS", sub: "baixar / recolher", on: "BAIXO", off: "RECOLH." }), "foils"));
       cells.push(cell(toggle({ attr: "fcs", val: "1", label: "VOO", sub: "computador de voo" })
@@ -355,6 +365,13 @@ export class SystemsPanel {
       info("ss", (t.driveMode === "eco" ? "ECO · " : "") + (t.engine === "running" ? `ligada · ${Math.round(t.rpm)} rpm · ${t.boostBar.toFixed(2)} bar` : t.engine === "cranking" ? `arranque · ${Math.round(t.rpm)} rpm`
         : !t.lanyard ? "cordão SOLTO: não liga" : awake ? "central acordada" : "desligada"), !t.lanyard || (t.startFail !== "" && t.engine === "off" && awake));
 
+    }
+    if (c.rescue && t.rescue) {
+      const R = t.rescue;
+      setToggle(el, "beacon", "1", R.beaconSw, R.beacon);
+      setRotary(el, "siren", R.sirenSw);
+      info("beacon", R.beaconSw ? (R.beacon ? "piscando" : "sem tensão") : "desligado", R.beaconSw && !R.beacon);
+      info("siren", R.sirenSw === "off" ? "desligada" : R.siren === "off" ? "sem tensão" : R.sirenSw === "hilo" ? "dois tons" : R.sirenSw.toUpperCase(), R.sirenSw !== "off" && R.siren === "off");
     }
     if (c.electric && t.hv) {
       // HV: posição da chave; o LED acende com os contatores fechados (pisca na pré-carga). READY aceso = inversor ligado

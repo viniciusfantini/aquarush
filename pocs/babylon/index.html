@@ -607,6 +607,9 @@
     #h-para.show { color: #04222a; background: #8fd3ff; }
     #h-ballast.show { color: #04222a; background: #7fd0ff; }
     #h-cruise.show { color: #04222a; background: #b8f27a; }
+    #h-beacon.show { color: #fff; background: #c0182a; animation: beaconChip 0.5s steps(2) infinite; }
+    @keyframes beaconChip { 50% { background: #1b4fd8; } }
+    #h-siren.show { color: #2a0400; background: #ffd34d; }
     #h-wkb.show { color: #04222a; background: #5ee8d4; }
     .cruise-set { display: flex; align-items: center; justify-content: center; gap: 6px; margin-top: 4px; }
     .cruise-set button { width: 26px; height: 22px; border-radius: 5px; border: 1px solid rgba(255,255,255,0.35); background: #1b2630; color: #e8f0f4; font: inherit; font-weight: 800; cursor: pointer; }
@@ -632,7 +635,7 @@
     #status .chip.linger { display: inline-block !important; animation: none; color: var(--dim); background: var(--panel); opacity: 0.85; transition: opacity 1.5s; }
     #status .chip.linger.fade { opacity: 0; }
     body.sunk-quiet #status .chip.linger { display: none !important; }
-    #h-trailer:not(.show), #h-dmg-hull:not(.warn), #h-dmg-eng:not(.warn), #h-hot:not(.warn), #h-lowfuel:not(.warn), #h-charge:not(.warn), #h-bilge:not(.warn), #h-anchor:not(.show), #h-tube:not(.show), #h-para:not(.show), #h-ballast:not(.show), #h-cruise:not(.show), #h-wkb:not(.show), #h-cav:not(.warn), #h-vent:not(.warn) { display: none; }
+    #h-trailer:not(.show), #h-dmg-hull:not(.warn), #h-dmg-eng:not(.warn), #h-hot:not(.warn), #h-lowfuel:not(.warn), #h-charge:not(.warn), #h-bilge:not(.warn), #h-anchor:not(.show), #h-tube:not(.show), #h-para:not(.show), #h-ballast:not(.show), #h-cruise:not(.show), #h-beacon:not(.show), #h-siren:not(.show), #h-wkb:not(.show), #h-cav:not(.warn), #h-vent:not(.warn) { display: none; }
     /* embaixo d'água: leve tom verde-azulado e vinheta escura nas bordas (luz que vem de cima) */
     #underwater { position: fixed; inset: 0; pointer-events: none; opacity: 0; transition: opacity 0.15s; z-index: 1;
       background: radial-gradient(ellipse at 50% 20%, rgba(40, 140, 140, 0.10), rgba(0, 35, 40, 0.55) 85%); }
@@ -704,6 +707,7 @@
         <button class="pick-b" data-kind="lancha"><b>Lancha AR-6</b><span>6 m · 150 hp · até 4 pessoas · tanque 120 L (começa com 5 L)</span><span>volante, manete, power trim elétrico, partida na chave, luzes de navegação</span></button>
         <button class="pick-b" data-kind="wake"><b>Lancha de wakeboard AR-8</b><span>6 m · motor de centro 350 hp · até 4 pessoas · tanque 200 L (começa com 15 L)</span><span>hélice sob o casco e leme (nada na popa), torre targa com o reboque no alto, 3 tanques de lastro (tecla 4: enche / esvazia) que afundam o casco e aumentam a onda para o wakeboard</span></button>
         <button class="pick-b" data-kind="foil"><b>Barco elétrico com foils AR-E</b><span>9,5 m · elétrico 140 kW · bateria 126 kWh / 400 V · piloto + 12 passageiros</span><span>foils com computador de voo (decola a ~29 km/h e voa sem tocar na água, inclinando nas curvas), sistemas de 12 V e HV (pré-carga, READY), foils que recolhem (tecla 5) para atracar e na água rasa; carrega no posto náutico (F)</span></button>
+        <button class="pick-b" data-kind="resgate"><b>Bote de resgate AR-R</b><span>6,5 m · RIB · 2 × 115 hp de popa · até 5 (piloto + equipe) · tanque 230 L (começa com 40 L)</span><span>flutuadores laranja, dois motores com protetor de hélice (gaiola de inox) e o arco de inox com o giroflex (tecla 6), farol de busca e radar; sirene wail/yelp/dois tons (tecla 7) e buzina; gira no lugar com os dois motores (Z/X); reboque no alto do arco</span></button>
         <button class="pick-b" data-kind="longtail"><b>Long-tail tailandês AR-T</b><span>11 m · turbo diesel 6 cilindros ~420 hp exposto · piloto + 3 · tanque 60 L (começa com 15 L)</span><span>rabeta de cauda longa: o motor inteiro gira na cana e o eixo de 4,6 m sobe e desce à mão (E/Q); sem embreagem nem ré; velas de pré-aquecimento, turbo com atraso e fumaça preta, escape aberto; passa dos 100 km/h</span></button>
         <button class="pick-b" data-kind="airboat"><b>Lancha pantaneira AR-P</b><span>4,9 m · airboat com motor de avião de 260 hp · até 3 pessoas · tanque 80 L (começa com 10 L)</span><span>hélice pusher no ar numa gaiola, lemes de ar no bastão, acelerador de pé, sem embreagem nem ré, fundo chato que derrapa nas curvas e passa por cima de lama e capim; banco alto do piloto</span></button>
         <button class="pick-b" data-kind="jetski"><b>Moto aquática AR-J</b><span>3,45 m · 300 hp com compressor · até 3 pessoas montadas · tanque 70 L (começa com 8 L)</span><span>jato d'água (sem hélice): guidão gira o bocal, gatilho, freio/ré iBB, trim VTS, START/STOP com cordão de segurança, modo ECO; virou, o piloto desvira</span></button>
@@ -736,6 +740,8 @@
         <div class="chip" id="h-para">PARASAIL</div>
         <div class="chip" id="h-ballast">LASTRO</div>
         <div class="chip" id="h-cruise">VELOCIDADE</div>
+        <div class="chip" id="h-beacon">GIROFLEX</div>
+        <div class="chip" id="h-siren">SIRENE</div>
         <div class="chip" id="h-wkb">WAKEBOARD</div>
         <div class="chip warn steady" id="h-power" style="display:none" title="modo de teste: * sobe até ×5 e volta ao normal">FORÇA ×2</div>
         <div class="chip btn" id="h-wind">VENTO: NENHUM</div>

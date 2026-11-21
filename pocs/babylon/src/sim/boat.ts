@@ -28,6 +28,8 @@ const RHO = 1000;     // água doce, kg/m³
 const RHO_AIR = 1.2;
 
 export type Gear = "F" | "N" | "R";
+/** sirene do bote de resgate: desligada, "wail" (sobe e desce lento), "yelp" (rápido) ou dois tons */
+export type SirenMode = "off" | "wail" | "yelp" | "hilo";
 export type EngineState = "off" | "cranking" | "running";
 
 export interface BoatTelemetry {
@@ -198,6 +200,8 @@ export interface BoatTelemetry {
   /** propulsão elétrica (AR-E): bateria HV, contatores, READY, potência, temperaturas, carregador */
   hv: { soc: number; kwhLeft: number; packV: number; linkV: number; packA: number; kw: number; shaftKw: number; availKw: number; limited: boolean;
     phase: HvPhase; hvSwitch: boolean; ready: boolean; motorC: number; packC: number; shore: boolean; charging: boolean; fault: "" | "12v" | "empty" } | null;
+  /** equipamento de resgate: giroflex e sirene (chaves) e o que está funcionando (com tensão na casa) */
+  rescue: { beaconSw: boolean; sirenSw: SirenMode; beacon: boolean; siren: SirenMode } | null;
   /** motor DIESEL (long-tail): velas de aquecimento (luz), pré-aquecimento (s), turbo (0..1), fumaça preta e branca (0..1) */
   diesel: { glow: boolean; glowT: number; glowNeed: number; turbo: number; soot: number; white: number } | null;
   /** hydrofoil (AR-E): recolhimento, computador de voo, altura e flaps */
@@ -523,6 +527,10 @@ export class Speedboat {
   private F: Vec3 = v3();
   private T: Vec3 = v3();
 
+  /** RESGATE: chave do giroflex e modo da sirene (consomem da casa de 12 V) */
+  beacon = false;
+  siren: SirenMode = "off";
+  private rescueA(): number { const R = this.params.rescue; return R ? (this.beacon ? R.beaconA : 0) + (this.siren !== "off" ? R.sirenA : 0) : 0; }
   /** DIESEL: tempo de pré-aquecimento das velas com a chave em ON (s), rotação do turbo (0..1) e corrente das velas (A) */
   glowT = 0;
   turboS = 0;
@@ -588,7 +596,7 @@ export class Speedboat {
       rpms: [params.idleRpm], gears: ["N"], throttles: [0], thrusts: [0], engines: ["running"], keys: ["on"], houseV: 12.6, propRpms: [0], coolants: [45], batteryVs: [12.6], batterySocs: [0.92], batteryAs: [0], turbine: null, nominalV: 12, gpu: false, gpuState: "off", gpuT: 0, gpuKw: 0, busBattery: true, busGen: false, extPwr: false, extPwrClosed: false, extPwrFault: false, gpuA: 0, coolingLps: 0, fuelValveOpen: true, fuelLineFrac: 1, bilgeMode: "auto", batterySel: "ind", choke: false,
       lanyard: true, driveMode: "normal", righting: false, magnetos: "both", mixture: 1, prime: 0, boostBar: 0, ibb: "off",
       ecuA: false, ecuB: false, pump1: false, pump2: false, fuelPressBar: 0, wingH: 0, altitude: 0, vsi: 0, airspeed: 0, aoaDeg: 0, groundEffect: 1, wingLoad: 0, elevator: 0, elevTrim: 0, aileron: 0, leveler: false, stallWarn: false, airborne: false,
-      hv: null, foil: null, diesel: null,
+      hv: null, foil: null, diesel: null, rescue: null,
     };
   }
 
@@ -995,7 +1003,7 @@ export class Speedboat {
     t.thrusts = this.units.map((x) => x.lastThrust); t.engines = this.units.map((x) => x.engine); t.keys = this.units.map((x) => x.key); t.propRpms = this.units.map((x) => x.propRpmState);
     // sistemas do motor: combustível, temperatura, bateria, horímetro
     const sys = this.systems;
-    this.runSystems(dt, { lightsOn: input.navigationLights, trimMotorA: this.trimMotorA, auxA: this.anchor.motorA + this.bilgePumpA + this.turbinePeripheralA() + this.foilA + this.glowA, intakeSubmerged });
+    this.runSystems(dt, { lightsOn: input.navigationLights, trimMotorA: this.trimMotorA, auxA: this.anchor.motorA + this.bilgePumpA + this.turbinePeripheralA() + this.foilA + this.glowA + this.rescueA(), intakeSubmerged });
     if (P.diesel) this.updateDiesel(dt);
     this.updateBilge(dt, water, input);
     this.updateBallast(dt);
@@ -1705,6 +1713,11 @@ export class Speedboat {
   /** Telemetria da propulsão elétrica e dos foils (o HUD/painel só leem isto). */
   private electricTelemetry(): void {
     const t = this.telemetry, hv = this.hv;
+    if (this.params.rescue) {
+      // giroflex e sirene só funcionam com tensão na casa (bateria / alternador)
+      const live = (t.houseV * 12) / t.nominalV > 9.5;
+      t.rescue = { beaconSw: this.beacon, sirenSw: this.siren, beacon: this.beacon && live, siren: live ? this.siren : "off" };
+    }
     if (hv) {
       t.hv = { soc: hv.soc, kwhLeft: hv.kwhLeft, packV: hv.packV, linkV: hv.linkV, packA: hv.packA, kw: hv.kw, shaftKw: hv.shaftKw, availKw: hv.availKw, limited: hv.limited,
         phase: hv.phase, hvSwitch: hv.hvSwitch, ready: hv.ready, motorC: hv.motorC, packC: hv.packC, shore: hv.shore, charging: hv.charging, fault: hv.fault };

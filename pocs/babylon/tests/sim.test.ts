@@ -8,7 +8,7 @@ import { Speedboat } from "../src/sim/boat.ts";
 import { JUMP_AH } from "../src/sim/engineSystems.ts";
 import { Wind, WIND_LEVELS } from "../src/sim/wind.ts";
 import { jetStreakLocal } from "../src/sim/bilgeJet.ts";
-import { VESSELS, FOILER, LONGTAIL, WAKEBOAT, SPEEDBOAT, DINGHY, RAPIDA, TURBINA, JETSKI, AIRBOAT, WIG, AMPHIB, PERSON_KG, smallTow, type Occupant, type SeatId } from "../src/sim/params.ts";
+import { VESSELS, FOILER, LONGTAIL, RESCUE, WAKEBOAT, SPEEDBOAT, DINGHY, RAPIDA, TURBINA, JETSKI, AIRBOAT, WIG, AMPHIB, PERSON_KG, smallTow, type Occupant, type SeatId } from "../src/sim/params.ts";
 import { groundLift, groundInduced } from "../src/sim/wing.ts";
 import { halfWidth } from "../src/sim/mooring.ts";
 import { TowTube, TUBE } from "../src/sim/towTube.ts";
@@ -1941,6 +1941,34 @@ for (const [label, thr] of [["baixa", 0.25], ["alta", 1]] as const) {
     check("emborcamento", "barco virou com o parasail no ar: ela desceu na água", flew && ps.state === "water" && !ps.hooked ? 1 : 0, 1, 1, "", 0);
     check("emborcamento", "parasail: ela nadou até o barco virado (m dele)", Math.hypot(ps.pos.x - b.pos.x, ps.pos.z - b.pos.z), 0, 4.5, "m", 1);
   }
+}
+
+// ---------- Bote de resgate AR-R: RIB com dois motores engaiolados, giroflex e sirene (v0.83) ----------
+{
+  const T = "resgate";
+  const water = mkWater(0.35);
+  const mk = (seats: SeatId[] = ["helm"]) => { const b = new Speedboat(RESCUE, v3(0, 0.3, 0)); b.occupants = seats.map((seat) => ({ seat, mass: PERSON_KG })); b.systems.fuelL = 200; return b; };
+  const go = (b: Speedboat, s: number, inp: Partial<VehicleInput>, each?: () => void) => { for (let i = 0; i < s / DT; i++) { water.time += DT; b.step(DT, { ...emptyInput(), gear: "F", ...inp }, water, openWater); each?.(); } };
+  check(T, "dois motores de popa (um de cada lado)", RESCUE.engines!.length === 2 && RESCUE.engines![0].x < 0 && RESCUE.engines![1].x > 0 ? 1 : 0, 1, 1, "", 0);
+  const a = mk(); go(a, 35, { throttle: 1 });
+  check(T, "a toda, só o piloto (km/h)", a.telemetry.speedKmh, 70, 95, "km/h", 0);
+  const f = mk(["helm", "passenger", "rearLeft", "rearRight", "p1"]); go(f, 35, { throttle: 1 });
+  check(T, "a toda com a equipe completa (5) (km/h)", f.telemetry.speedKmh, 65, 90, "km/h", 0);
+  let roll = 0; go(f, 10, { throttle: 1, steering: 1 }, () => { roll = Math.max(roll, Math.abs(f.telemetry.rollDeg)); });
+  check(T, "curva fechada a toda, lotado: os flutuadores seguram (rolagem máx., °)", f.capsized ? 99 : roll, 0, 20, "°", 1);
+  // empuxo diferencial: BB em frente e BE em ré giram o bote quase no lugar
+  const s = mk(); const y0 = Math.atan2(s.forward.x, s.forward.z);
+  go(s, 8, { engineCmd: [{ gear: "F", throttle: 0.4 }, { gear: "R", throttle: 0.4 }] });
+  let dy = Math.atan2(s.forward.x, s.forward.z) - y0; while (dy > Math.PI) dy -= 2 * Math.PI; while (dy < -Math.PI) dy += 2 * Math.PI;
+  check(T, "BB em frente e BE em ré: gira para boreste (°)", (dy * 180) / Math.PI, 15, 180, "°", 0);
+  // giroflex e sirene: consomem da casa de 12 V e só funcionam com tensão
+  const e = mk(); e.engine = "off"; go(e, 2, { gear: "N" });
+  const a0 = e.telemetry.batteryA;
+  e.beacon = true; e.siren = "wail"; go(e, 2, { gear: "N" });
+  check(T, "giroflex + sirene ligados: puxam corrente da bateria (A a mais)", a0 - e.telemetry.batteryA, (RESCUE.rescue!.beaconA + RESCUE.rescue!.sirenA) * 0.8, (RESCUE.rescue!.beaconA + RESCUE.rescue!.sirenA) * 1.3, "A", 1);
+  check(T, "com tensão: giroflex piscando e sirene tocando", e.telemetry.rescue!.beacon && e.telemetry.rescue!.siren === "wail" ? 1 : 0, 1, 1, "", 0);
+  e.batterySel = "off"; go(e, 1, { gear: "N" });
+  check(T, "chave geral desligada: giroflex apaga e sirene cala (as chaves ficam onde estão)", !e.telemetry.rescue!.beacon && e.telemetry.rescue!.siren === "off" && e.telemetry.rescue!.beaconSw ? 1 : 0, 1, 1, "", 0);
 }
 
 // ---------- Boca do cânion no mar: molhes, barra, correnteza e mar mexido só ali (v0.82) ----------

@@ -34,7 +34,7 @@ export const STATION = {
   workshop: { x: L.cx - 25, z: L.cz - 11, w: 12, d: 12, h: 5.0 },     // oficina (portões para +X)
   /** vagas dos outros seis conjuntos (veículo + carretinha, de frente para a saída, +X): vagas 0, 2, 3, 4, 5, 6 e 7 */
   parking: [...PARKED_STALLS.map((k) => ({ x: L.cx + 22, z: L.cz + STALL_Z0 + k * STALL_W, yaw: Math.PI / 2 })),
-    { x: L.cx - 4, z: L.cz + STALL_Z0, yaw: Math.PI / 2 }], // (v0.81: o 10º conjunto fora de uso fica a oeste das vagas)
+    { x: L.cx - 4, z: L.cz + STALL_Z0, yaw: Math.PI / 2 }, { x: L.cx - 4, z: L.cz + STALL_Z0 + 6.5, yaw: Math.PI / 2 }], // (v0.81/v0.83: 10º e 11º conjuntos fora de uso a oeste das vagas)
   /** vagas longas (carro + carretinha), lado a lado ao sul; 0, 2, 3, 4, 5, 6 e 7 são dos outros conjuntos, a 1 fica livre */
   stalls: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map((k) => ({ x: L.cx + 15, z: L.cz + STALL_Z0 + k * STALL_W, len: 24, w: STALL_W })),
 };

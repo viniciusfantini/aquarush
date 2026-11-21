@@ -31,7 +31,7 @@ export interface BuoyancyPoint {
   incidence: number;
 }
 
-export type VesselKind = "lancha" | "bote" | "rapida" | "turbina" | "jetski" | "airboat" | "wig" | "anfibio" | "wake" | "foil" | "longtail";
+export type VesselKind = "lancha" | "bote" | "rapida" | "turbina" | "jetski" | "airboat" | "wig" | "anfibio" | "wake" | "foil" | "longtail" | "resgate";
 
 export interface SpeedboatParams {
   kind: VesselKind;
@@ -271,6 +271,11 @@ export interface SpeedboatParams {
    * preta quando o acelerador vai à frente do turbo.
    */
   diesel?: { glowS: number; glowA: number; turboBar: number; spoolUpS: number; spoolDownS: number; naFrac: number };
+  /**
+   * EQUIPAMENTO DE RESGATE (bote de resgate): GIROFLEX (barra de luzes vermelha/azul piscando) e SIRENE (wail, yelp,
+   * dois tons), alimentados pela casa de 12 V (`beaconA` / `sirenA` A); sem tensão, apagam/calam.
+   */
+  rescue?: { beaconA: number; sirenA: number };
   /** atrito do fundo do casco no chão (padrão 0,45). Airboat: fundo de alumínio com polímero desliza em lama/capim */
   groundMu?: number;
   /** compressor mecânico (supercharger), acionado pelo virabrequim: pressão máxima de sobrealimentação (bar) a giro
@@ -1542,4 +1547,79 @@ export const LONGTAIL: SpeedboatParams = {
   windage: { sideCdA: 3.2, center: v3(0, 0.5, -0.5) },
 };
 
-export const VESSELS: Record<VesselKind, SpeedboatParams> = { lancha: SPEEDBOAT, bote: DINGHY, rapida: RAPIDA, turbina: TURBINA, jetski: JETSKI, airboat: AIRBOAT, wig: WIG, anfibio: AMPHIB, wake: WAKEBOAT, foil: FOILER, longtail: LONGTAIL };
+// ---------------------------------------------------------------------------------------------
+// BOTE DE RESGATE AR-R (RIB de 6,5 m: casco rígido em V + flutuadores laranja, piloto + 4): DOIS motores de popa de
+// 115 hp (±0,42 m) com PROTETORES DE HÉLICE (gaiola de inox em volta de cada pé — não corta quem está na água) e o
+// ARCO de inox sobre os motores, com o GIROFLEX, o farol de busca e a antena; sirene e buzina. Usado para socorrer
+// barcos encalhados, quebrados ou adernados. Origem = CG do barco seco. X boreste, Y cima, Z proa. Sem marca.
+// ---------------------------------------------------------------------------------------------
+const rsl = 0.82; // meia-distância transversal dos pontos (fundo + flutuadores)
+export const RESCUE: SpeedboatParams = {
+  ...SPEEDBOAT,
+  kind: "resgate",
+  name: "Bote de resgate AR-R",
+  engines: [{ x: -0.42 }, { x: 0.42 }],
+  rescue: { beaconA: 6, sirenA: 14 },
+  tankLiters: 230,
+  fuelIdleLph: 2.2,          // por motor
+  fuelMaxLph: 42,            // por motor
+  cylinders: 4,
+  maxPeople: 5,
+  length: 6.5,
+  beam: 2.5,
+  mass: 1050,                // casco + flutuadores + 2 × 115 hp (~190 kg cada) + arco, luzes e equipamento
+  fuelTankPos: v3(0, -0.25, -0.6),
+  seats: {
+    helm: v3(0, 0.42, 0.15),          // piloto: banco de montar (jockey) atrás do console central
+    passenger: v3(0, 0.45, -0.7),     // tripulante na garupa do banco
+    rearLeft: v3(-0.6, 0.42, -1.95),  // tripulantes na popa (bombordo/boreste)
+    rearRight: v3(0.6, 0.42, -1.95),
+    p1: v3(0, 0.38, 1.75),            // proeiro (sentado no flutuador da proa)
+  },
+  inertia: v3(4300, 4800, 1350),
+  waterplaneArea: 11.5,
+  buoyancyPoints: [
+    { p: v3(-rsl, -0.33, 2.7), areaWeight: 0.6, liftWeight: 0.8, incidence: 6 * DEG },
+    { p: v3(rsl, -0.33, 2.7), areaWeight: 0.6, liftWeight: 0.8, incidence: 6 * DEG },
+    { p: v3(-rsl, -0.33, 0.4), areaWeight: 1.1, liftWeight: 1.0, incidence: 3 * DEG },
+    { p: v3(rsl, -0.33, 0.4), areaWeight: 1.1, liftWeight: 1.0, incidence: 3 * DEG },
+    { p: v3(-rsl, -0.33, -1.9), areaWeight: 1.4, liftWeight: 0.2, incidence: 1.5 * DEG },
+    { p: v3(rsl, -0.33, -1.9), areaWeight: 1.4, liftWeight: 0.2, incidence: 1.5 * DEG },
+  ],
+  contactPoints: [
+    v3(0, 0.3, 3.35), v3(0, -0.4, 2.3), v3(0, -0.45, 0), v3(0, -0.45, -2.8),
+    v3(-1.2, 0.2, 1.3), v3(1.2, 0.2, 1.3), v3(-1.25, 0.2, -1.0), v3(1.25, 0.2, -1.0),
+    v3(-1.15, 0.2, -3.05), v3(1.15, 0.2, -3.05), v3(-0.7, 0.25, 2.6), v3(0.7, 0.25, 2.6),
+  ],
+  bunkPoints: [-2.8, -1.4, 0, 1.4].flatMap((z) => [v3(0, -0.45, z), v3(-0.55, -0.35, z), v3(0.55, -0.35, z)]),
+  gunwaleY: 0.48,
+  // RIB: convés autodrenante (drenos grandes na popa); flutuadores seguram mesmo alagado
+  bilge: { ...SPEEDBOAT.bilge, transomW: 1.2, scupperM2: 4 * 1.14e-3, capsizeAirFrac: 0, floodHalfW: 0.85 },
+  anchor: { roller: v3(0, 0.55, 3.25), rodeMax: 40, rateOut: 0.8, rateIn: 0.5, motorA: 0, holdN: 3200 },
+  // reboque: argola no alto do arco de inox — a corda passa por cima dos dois motores e das gaiolas
+  tow: { eyeX: 0, eyeY: 1.75, eyeZ: -3.0, leg: 0 },
+  // 12 V: um banco por motor (70 Ah), arranque 150 A, alternador 40 A em cada; a casa (luzes, giroflex, sirene) no BB
+  systems: { batteryAh: 70, starterA: 150, altMaxA: 40, altIdleFrac: 0.27 },
+  enginePowerHp: 115,
+  maxThrust: 6600,           // por motor
+  propPitchSpeed: 30,
+  propPos: v3(0, -0.72, -3.85),
+  propRadius: 0.18,
+  drivePivot: v3(0, 0.3, -3.22),
+  intakePos: v3(0, -0.6, -3.6),
+  yawDampingLowSpeed: 0.5,   // (dois motores: gira no lugar com um em F e outro em R)
+  tiltMaxThrust: 1600,
+  dragFrictionQuad: 12,
+  dragLinear: 48,
+  lateralQuad: 1200,
+  lateralLinear: 1000,
+  keelLift: 1700,
+  yawDamping: 19000,
+  heaveDamping: 1900,
+  bankCoef: 1900,
+  rollDamping: 21000,        // flutuadores: rola pouco
+  airDragCdA: 1.9,
+  windage: { sideCdA: 4.8, center: v3(0, 0.9, -0.4) },
+};
+
+export const VESSELS: Record<VesselKind, SpeedboatParams> = { lancha: SPEEDBOAT, bote: DINGHY, rapida: RAPIDA, turbina: TURBINA, jetski: JETSKI, airboat: AIRBOAT, wig: WIG, anfibio: AMPHIB, wake: WAKEBOAT, foil: FOILER, longtail: LONGTAIL, resgate: RESCUE };

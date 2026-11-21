@@ -181,7 +181,7 @@ export class Hud {
   // indicador para de piscar, fica apagado alguns segundos e esmaece até sumir.
   private static readonly STATUS_CHIPS = ["h-cam", "h-engine", "h-planing", "h-lights", "h-water", "h-wind", "h-occ"];
   private static readonly EVENT_CHIPS = ["h-cav", "h-vent", "h-hot", "h-lowfuel", "h-trailer", "h-dmg-hull", "h-dmg-eng", "h-charge",
-    "h-bilge", "h-anchor", "h-tube", "h-para", "h-ballast", "h-cruise", "h-wkb"];
+    "h-bilge", "h-anchor", "h-tube", "h-para", "h-ballast", "h-cruise", "h-beacon", "h-siren", "h-wkb"];
   private chipEndT = new Map<HTMLElement, number>();
   private chipLast = new Map<HTMLElement, string>();
   private setupChips(): void {

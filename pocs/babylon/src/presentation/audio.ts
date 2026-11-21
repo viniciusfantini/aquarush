@@ -170,6 +170,37 @@ export class EngineAudio {
   private pumpGain!: GainNode;
   private alarmGain!: GainNode;
   private stallGain!: GainNode;
+  /** sirene do bote de resgate (criada na primeira vez que toca) */
+  private sir: { a: OscillatorNode; b: OscillatorNode; g: GainNode } | null = null;
+  /**
+   * SIRENE eletrônica (bote de resgate): dois osciladores (dente de serra + quadrada levemente desafinada) por um
+   * filtro de corneta. "wail" sobe e desce em ~4 s; "yelp" faz o mesmo em 0,3 s; "hilo" alterna dois tons (435/580 Hz).
+   * Sem tensão na casa, cala (o jogo passa o modo já checado pela telemetria).
+   */
+  setSiren(mode: "off" | "wail" | "yelp" | "hilo", cockpit = false): void {
+    const ctx = this.ctx;
+    if (!ctx) return;
+    if (!this.sir && mode === "off") return;
+    const t = ctx.currentTime;
+    if (!this.sir) {
+      const a = ctx.createOscillator(); a.type = "sawtooth"; a.start();
+      const b = ctx.createOscillator(); b.type = "square"; b.start();
+      const bg = ctx.createGain(); bg.gain.value = 0.35;
+      const horn = ctx.createBiquadFilter(); horn.type = "bandpass"; horn.frequency.value = 1100; horn.Q.value = 0.7;
+      const hp = ctx.createBiquadFilter(); hp.type = "highpass"; hp.frequency.value = 280;
+      const g = ctx.createGain(); g.gain.value = 0;
+      a.connect(horn); b.connect(bg).connect(horn); horn.connect(hp).connect(g).connect(this.master);
+      this.sir = { a, b, g };
+    }
+    const s = this.sir;
+    let f = 0;
+    if (mode === "wail") f = 620 + 680 * (0.5 - 0.5 * Math.cos((2 * Math.PI * t) / 4.2));
+    else if (mode === "yelp") { const ph = (t % 0.32) / 0.32; f = 620 + 680 * (0.5 - 0.5 * Math.cos(Math.PI * ph)); }
+    else if (mode === "hilo") f = Math.floor(t / 0.55) % 2 ? 435 : 580;
+    if (f > 0) { s.a.frequency.setTargetAtTime(f, t, 0.008); s.b.frequency.setTargetAtTime(f * 1.006, t, 0.008); }
+    s.g.gain.setTargetAtTime(mode === "off" || this.muted ? 0 : cockpit ? 0.11 : 0.085, t, 0.03);
+  }
+
   /** voz do motor elétrico (criada na primeira vez que um barco elétrico aparece) */
   private ev: { a: OscillatorNode; aG: GainNode; b: OscillatorNode; bG: GainNode; c: OscillatorNode; cG: GainNode } | null = null;
   /**
