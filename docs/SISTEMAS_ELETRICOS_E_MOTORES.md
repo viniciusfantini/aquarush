@@ -34,7 +34,7 @@ para continuar o trabalho em outra IA/ferramenta ou portar para Unity/Unreal sem
 
 ## 2. As embarcações (o que muda nos sistemas)
 
-(O ekranoplano AR-W — 7ª, v0.70 — e o anfíbio AR-A — 8ª, v0.72 — estão na seção 10e; o barco elétrico com foils AR-E — 10ª, v0.80 — na seção 10f; a tabela abaixo cobre as outras.)
+(O ekranoplano AR-W — 7ª, v0.70 — e o anfíbio AR-A — 8ª, v0.72 — estão na seção 10e; o barco elétrico com foils AR-E — 10ª, v0.80 — na seção 10f; o long-tail AR-T — 11ª, v0.81 — na seção 10g; a tabela abaixo cobre as outras.)
 
 | | AR-6 lancha (`lancha`) | AR-3 bote (`bote`) | AR-J moto aquática (`jetski`) | AR-9 rápida (`rapida`) | AR-10 turbina (`turbina`) |
 |---|---|---|---|---|---|
@@ -487,6 +487,23 @@ flapRear, liftFrac, minDepth, vent, fcs, fcsSw, grounded }`. Para o HUD genéric
 não gira; DC-DC carrega os 12 V; motor desligado por fora tira o READY; foils em 12 s, travados andando, param no fundo
 raso; decolagem, altura, arfagem, cruzeiro, potência, energia = potência × tempo, Wh/km voando ≈ metade do casco,
 curva inclinada, pouso, a toda, carga assimétrica, 12 V caindo abre os contatores, ritmo de carga no cais.
+
+## 10g. Long-tail tailandês AR-T: turbo diesel com velas e turbo, sem embreagem (v0.81)
+
+- **12 V:** bateria de 100 Ah, chave geral, arranque de diesel (280 A), alternador de 70 A na correia (30 % na lenta),
+  registro de combustível; luzes de aviso `annunciators: "diesel"` (VELAS, PARTIDA, ALTERNADOR, ÓLEO, TEMP CAB., COMB.).
+- **Velas de aquecimento** (`diesel.glowS` 5 s, `glowA` 60 A): com a chave em ON e o motor parado, `glowT` soma; a luz
+  VELAS fica acesa até `glowT ≥ glowNeed` (frio < 40 °C: 5 s; morno < 60 °C: 35 %; quente: 0). O P faz o autoteste pelo
+  tempo de pré-aquecimento e só então gira o arranque. Sem pré-aquecimento o diesel frio precisa de +14 voltas
+  (morno +5) — pela chave segurada em START pega em ~4 s, soltando fumaça branca; pelo P (4 s de limite) pode falhar.
+- **Turbo:** rotação `turboS` segue a energia do escape `(rpm/máx)^1,6 × (0,2 + 0,8·acelerador)`, enchendo em
+  `spoolUpS` 1,4 s e esvaziando em 0,8 s, limitada pela wastegate; pressão = 1,8 bar × turboS². A força do motor é
+  `naFrac` (50 %) sem pressão e cresce com o turbo (`engineLoad`) — o "turbo lag". Fumaça PRETA = acelerador à frente
+  do turbo; BRANCA = motor frio ou partindo. Telemetria `diesel { glow, glowT, glowNeed, turbo, soot, white }`, `boostBar`.
+- **Sem embreagem nem ré** (`directDrive`): a marcha é sempre F (a partida não pede N); com o motor ligado a hélice gira
+  e empurra (lenta: 5 %). Para parar, o piloto **levanta o eixo** (E) até a hélice sair d'água.
+- **Arrefecimento:** água puxada no fim do eixo (`intakePos`): com o eixo levantado o motor esquenta (critério: +25 °C em
+  30 s), como num motor de popa fora d'água.
 
 ## 11. Telemetria relevante (`BoatTelemetry`)
 

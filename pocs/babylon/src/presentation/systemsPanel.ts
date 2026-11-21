@@ -73,7 +73,7 @@ export interface SystemsPanelCaps {
   /** buzina elétrica ou apito de bolinha (bote, moto aquática). Ausente = buzina com bateria, apito sem */
   horn?: "buzina" | "apito";
   /** fileira de luzes de aviso (anunciadores, como na AR-10) — motor a pistão; "efi" = as da injeção eletrônica */
-  annunciators?: boolean | "efi";
+  annunciators?: boolean | "efi" | "diesel";
   /** motor de avião com INJEÇÃO ELETRÔNICA: LANE A/B + START na partida, bombas de combustível 1/2 nos sistemas */
   efi?: boolean;
   /** avião: chave do nivelador de asas (LVL) */
@@ -223,7 +223,7 @@ export class SystemsPanel {
     this.title.textContent = `⠿ SISTEMAS — ${caps.title}`;
     // anunciadores (como no painel da AR-10): apagado = normal ("cockpit escuro"); TESTE acende todos + alarme
     const ann = caps.annunciators
-      ? `<div class="sp-ann-row"><div class="tp-ann sp-ann">${(caps.annunciators === "efi" ? SystemsPanel.ANN_EFI : SystemsPanel.ANN).map((k) => `<span data-a="${k}">${k}</span>`).join("")}</div></div>`
+      ? `<div class="sp-ann-row"><div class="tp-ann sp-ann">${(caps.annunciators === "efi" ? SystemsPanel.ANN_EFI : caps.annunciators === "diesel" ? SystemsPanel.ANN_DIESEL : SystemsPanel.ANN).map((k) => `<span data-a="${k}">${k}</span>`).join("")}</div></div>`
       : "";
     this.body.innerHTML = ann + `
       <div class="sp-top"><div><div class="sp-sec">PARTIDA</div>${plate(start, "sp-start")}</div>
@@ -257,6 +257,8 @@ export class SystemsPanel {
 
   /** luzes de aviso do motor a pistão (ordem do painel) */
   static readonly ANN = ["IGNIÇÃO", "PARTIDA", "ALTERNADOR", "ÓLEO", "TEMP CAB.", "COMB. BAIXO"];
+  /** luzes do turbo diesel (long-tail): VELAS = pré-aquecimento (apaga quando pode dar a partida) */
+  static readonly ANN_DIESEL = ["VELAS", "PARTIDA", "ALTERNADOR", "ÓLEO", "TEMP CAB.", "COMB. BAIXO"];
   /** luzes da injeção eletrônica (ekranoplano) */
   static readonly ANN_EFI = ["LANE A", "LANE B", "PRESS. COMB.", "ALTERNADOR", "ÓLEO", "COMB. BAIXO"];
   /** (sem botão TESTE no painel de sistemas — mantido para o main, sempre falso) */
@@ -314,6 +316,7 @@ export class SystemsPanel {
         "LANE A": lit && (keyOn || t.ecuA || t.ecuB) && !t.ecuA ? "a" : "",
         "LANE B": lit && (keyOn || t.ecuA || t.ecuB) && !t.ecuB ? "a" : "",
         "PRESS. COMB.": lit && (keyOn || t.ecuA || t.ecuB) && t.fuelPressBar < 2 ? "r" : "",
+        VELAS: lit && !!t.diesel?.glow ? "a" : "",
       };
       if (c.annunciators === "efi") L["ÓLEO"] = lit && (keyOn || t.ecuA || t.ecuB) && t.engine !== "running" ? "r" : "";
       for (const s of this.el.querySelectorAll<HTMLElement>(".sp-ann [data-a]")) { const v = L[s.dataset.a ?? ""] ?? ""; if (s.className !== v) s.className = v; }

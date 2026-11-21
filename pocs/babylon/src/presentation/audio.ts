@@ -89,6 +89,8 @@ export interface AudioState {
   rpm2?: number;
   throttle2?: number;
   engine2?: "off" | "cranking" | "running";
+  /** TURBO DIESEL de 6 cilindros com escape aberto (long-tail): voz própria (combustão, batida, turbo, flutter) */
+  diesel?: { turbo: number; cold: number };
   /** motor ELÉTRICO (barco AR-E): giro, potência (kW) e READY — zumbido do motor e o apito do inversor, sem combustão */
   electric?: { rpm: number; kw: number; ready: boolean };
   /** turbina a gás (lancha de turbina): substitui o som do motor a pistão */
@@ -146,6 +148,8 @@ export class EngineAudio {
   // motor por síntese física (AudioWorklet); osciladores antigos ficam como reserva
   private worklet: AudioWorkletNode | null = null;
   private worklet2: AudioWorkletNode | null = null;
+  private dieselNode: AudioWorkletNode | null = null;
+  private dieselGain: GainNode | null = null;
   private worklet2Gain!: GainNode;
   private tv: TurbineVoice | null = null;
   /** diesel da GPU (gerador da doca): pulsos de combustão, batida de diesel, zunido do gerador e o starter */
@@ -569,6 +573,12 @@ export class EngineAudio {
       this.worklet = node;
       const node2 = new AudioWorkletNode(ctx, "aqua-engine", { numberOfInputs: 0, outputChannelCount: [1], processorOptions: { seed: 7654321 } });
       node2.connect(this.worklet2Gain);
+      // turbo diesel (long-tail): voz própria, sem abafador — vai direto ao master com um leve realce de graves
+      const dn = new AudioWorkletNode(ctx, "aqua-diesel", { numberOfInputs: 0, outputChannelCount: [1] });
+      const dg = ctx.createGain(); dg.gain.value = 0;
+      const low = ctx.createBiquadFilter(); low.type = "lowshelf"; low.frequency.value = 160; low.gain.value = 4;
+      dn.connect(dg).connect(low).connect(this.master);
+      this.dieselNode = dn; this.dieselGain = dg;
       this.worklet2 = node2;
       console.info("[AquaRush] áudio do motor: síntese física (AudioWorklet)");
     }).catch((e) => console.warn("[AquaRush] AudioWorklet indisponível, usando síntese simples", e));
@@ -592,7 +602,7 @@ export class EngineAudio {
       const cut = st.revLimiter && Math.floor(t * 16) % 2 === 1;
       this.worklet.port.postMessage({ cylinders: this.cylinders, rpm: st.rpm, load: st.revLimiter ? 0.3 : load, combustion: running && !cut ? 1 : 0, wet: st.propInWater ? 1 : 0, volume: 1 });
       const twin = st.rpm2 !== undefined;
-      this.workletGain.gain.setTargetAtTime(st.turbine || st.electric ? 0 : m * dist * (twin ? 0.4 : 0.55), t, 0.05);
+      this.workletGain.gain.setTargetAtTime(st.turbine || st.electric || st.diesel ? 0 : m * dist * (twin ? 0.4 : 0.55), t, 0.05);
       if (this.worklet2) {
         if (twin) {
           const run2 = st.engine2 === "running";
@@ -602,7 +612,12 @@ export class EngineAudio {
         this.worklet2Gain.gain.setTargetAtTime(twin ? m * dist * 0.4 : 0, t, 0.05);
       }
     }
-    const legacy = useW || !running || st.turbine || st.electric ? 0 : 1; // osciladores antigos só sem worklet (e nunca na turbina nem no elétrico)
+    const legacy = useW || !running || st.turbine || st.electric || st.diesel ? 0 : 1;
+    if (this.dieselNode && this.dieselGain) {
+      // turbo diesel: combustão só ligado; girando no arranque soa só a compressão
+      if (st.diesel) this.dieselNode.port.postMessage({ rpm: st.rpm, load: Math.min(Math.max(st.throttle, 0), 1), combustion: running ? 1 : 0, volume: 1, turbo: st.diesel.turbo, cold: st.diesel.cold });
+      this.dieselGain.gain.setTargetAtTime(st.diesel && st.engine !== "off" ? m * dist * 0.7 : 0, t, st.engine === "off" ? 0.25 : 0.05);
+    } // osciladores antigos só sem worklet (e nunca na turbina nem no elétrico)
     this.updateTurbine(st, t, m, dist);
     this.updateElectric(st, t, m, dist);
     // arranque: volume e tom acompanham a rotação (bateria fraca = "rrr… rrr…" lento e grave);

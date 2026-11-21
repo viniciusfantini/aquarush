@@ -8,7 +8,7 @@ import { Speedboat } from "../src/sim/boat.ts";
 import { JUMP_AH } from "../src/sim/engineSystems.ts";
 import { Wind, WIND_LEVELS } from "../src/sim/wind.ts";
 import { jetStreakLocal } from "../src/sim/bilgeJet.ts";
-import { VESSELS, FOILER, WAKEBOAT, SPEEDBOAT, DINGHY, RAPIDA, TURBINA, JETSKI, AIRBOAT, WIG, AMPHIB, PERSON_KG, smallTow, type Occupant, type SeatId } from "../src/sim/params.ts";
+import { VESSELS, FOILER, LONGTAIL, WAKEBOAT, SPEEDBOAT, DINGHY, RAPIDA, TURBINA, JETSKI, AIRBOAT, WIG, AMPHIB, PERSON_KG, smallTow, type Occupant, type SeatId } from "../src/sim/params.ts";
 import { groundLift, groundInduced } from "../src/sim/wing.ts";
 import { halfWidth } from "../src/sim/mooring.ts";
 import { TowTube, TUBE } from "../src/sim/towTube.ts";
@@ -1940,6 +1940,69 @@ for (const [label, thr] of [["baixa", 0.25], ["alta", 1]] as const) {
     for (let i = 0; i < 150 / DT; i++) { water.time += DT; b.step(DT, { ...emptyInput(), gear: "N" }, water, w); ps.step(DT, water, w); }
     check("emborcamento", "barco virou com o parasail no ar: ela desceu na água", flew && ps.state === "water" && !ps.hooked ? 1 : 0, 1, 1, "", 0);
     check("emborcamento", "parasail: ela nadou até o barco virado (m dele)", Math.hypot(ps.pos.x - b.pos.x, ps.pos.z - b.pos.z), 0, 4.5, "m", 1);
+  }
+}
+
+// ---------- Long-tail tailandês AR-T: turbo diesel exposto, rabeta de cauda longa (v0.81) ----------
+{
+  const T = "long-tail";
+  const water = mkWater(0);
+  const crew = (n: number): Occupant[] => (["helm", ...Array.from({ length: n - 1 }, (_, i) => `p${i + 1}`)] as SeatId[]).map((seat) => ({ seat, mass: PERSON_KG }));
+  const mk = (n = 1) => { const b = new Speedboat(LONGTAIL, v3(0, 0.15, 0)); b.occupants = crew(n); return b; };
+  const stepN = (b: Speedboat, s: number, inp: Partial<VehicleInput>, each?: () => void) => {
+    for (let i = 0; i < s / DT; i++) { water.time += DT; b.step(DT, { ...emptyInput(), gear: "F", ...inp }, water, openWater); each?.(); }
+  };
+  // ---- partida a frio: velas de pré-aquecimento ----
+  {
+    const b = mk(); b.engine = "off"; b.coldEngines(); b.systems.coolantC = 22;
+    const r = b.toggleIgnition();
+    let glowSeen = false, tRun = -1, t = 0;
+    stepN(b, 12, {}, () => { t += DT; if (b.telemetry.diesel?.glow) glowSeen = true; if (tRun < 0 && b.engine === "running") tRun = t; });
+    check(T, "P a frio, engatado (sem embreagem): a luz VELAS pré-aquece e então o arranque gira", r === "starting" && glowSeen ? 1 : 0, 1, 1, "", 0);
+    check(T, "P a frio: pega depois do pré-aquecimento (s)", tRun, 5, 8.5, "s", 1);
+    const c = mk(); c.engine = "off"; c.coldEngines(); c.systems.coolantC = 22;
+    c.setKey(0, "on"); c.setKey(0, "start");
+    let t2 = -1, white = 0; t = 0;
+    stepN(c, 12, {}, () => { t += DT; white = Math.max(white, c.telemetry.diesel?.white ?? 0); if (t2 < 0 && c.engine === "running") t2 = t; });
+    check(T, "chave direto em START a frio (sem as velas): gira mais até pegar (s de arranque)", t2, 3.5, 12, "s", 1);
+    check(T, "partida a frio: fumaça branca", white, 0.4, 1, "", 2);
+  }
+  // ---- turbo lag, fumaça preta, velocidade ----
+  {
+    const b = mk(); b.engine = "running"; b.systems.coolantC = 80;
+    let boost1 = 0, soot1 = 0, t = 0;
+    stepN(b, 40, { throttle: 1 }, () => { t += DT; if (t <= 1) { boost1 = Math.max(boost1, b.telemetry.boostBar); soot1 = Math.max(soot1, b.telemetry.diesel!.soot); } });
+    const D = LONGTAIL.diesel!;
+    check(T, "turbo lag: 1 s depois de acelerar a fundo a pressão ainda é baixa (bar)", boost1, 0, D.turboBar * 0.35, "bar", 2);
+    check(T, "acelerando com o turbo atrasado: fumaça preta", soot1, 0.5, 1, "", 2);
+    check(T, "a toda: turbo cheio (bar)", b.telemetry.boostBar, D.turboBar * 0.8, D.turboBar * 1.25, "bar", 2);
+    check(T, "a toda: sem fumaça preta no regime (turbo cheio)", b.telemetry.diesel!.soot, 0, 0.1, "", 2);
+    check(T, "a toda, só o piloto (km/h)", b.telemetry.speedKmh, 95, 118, "km/h", 0);
+    check(T, "a toda: sem bater no corte de giro (rpm)", b.telemetry.rpm, 3500, LONGTAIL.revLimitRpm - 50, "rpm", 0);
+    check(T, "sem ré: a marcha é sempre à frente", b.telemetry.gear === "F" ? 1 : 0, 1, 1, "", 0);
+    // curva a toda: a cana gira o motor e a hélice anda de lado; não vira
+    const p0 = b.propWorld;
+    const r0 = b.right;
+    let maxRoll = 0, yaw0 = Math.atan2(b.forward.x, b.forward.z);
+    stepN(b, 6, { throttle: 1, steering: 0.7 }, () => { maxRoll = Math.max(maxRoll, Math.abs(b.telemetry.rollDeg)); });
+    const lat = (b.propWorld.x - b.pos.x) * b.right.x + (b.propWorld.z - b.pos.z) * b.right.z;
+    void p0; void r0;
+    check(T, "curva: a cana gira o motor inteiro — a hélice anda de lado (m do eixo do barco)", Math.abs(lat), 0.4, 2.5, "m", 2);
+    const dyaw = Math.abs(Math.atan2(b.forward.x, b.forward.z) - yaw0);
+    check(T, "curva a toda: vira (rumo mudou, °)", (Math.min(dyaw, 2 * Math.PI - dyaw) * 180) / Math.PI, 20, 360, "°", 0);
+    check(T, "curva a toda: não emborca (rolagem máx., °)", b.capsized ? 99 : maxRoll, 0, 25, "°", 1);
+  }
+  {
+    const b = mk(4); b.engine = "running"; b.systems.coolantC = 80;
+    stepN(b, 40, { throttle: 1 });
+    check(T, "a toda com 4 a bordo (km/h)", b.telemetry.speedKmh, 88, 115, "km/h", 0);
+    // levantar o eixo (E): a hélice sai d'água — sem empuxo e sem a água de resfriamento (o motor esquenta)
+    stepN(b, 2.5, { throttle: 0.3, trim: 1 });
+    check(T, "eixo levantado: a hélice sai d'água (imersão)", b.telemetry.propImmersion, 0, 0.1, "", 2);
+    const c0 = b.systems.coolantC;
+    stepN(b, 30, { throttle: 0.3 });
+    check(T, "eixo levantado: sem empuxo (N)", Math.abs(b.telemetry.thrustN), 0, 50, "N", 0);
+    check(T, "eixo levantado: a tomada d'água no fim do eixo fica fora — o motor esquenta (°C em 30 s)", b.systems.coolantC - c0, 8, 80, "°C", 1);
   }
 }
 

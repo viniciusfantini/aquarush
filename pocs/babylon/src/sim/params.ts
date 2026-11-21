@@ -31,7 +31,7 @@ export interface BuoyancyPoint {
   incidence: number;
 }
 
-export type VesselKind = "lancha" | "bote" | "rapida" | "turbina" | "jetski" | "airboat" | "wig" | "anfibio" | "wake" | "foil";
+export type VesselKind = "lancha" | "bote" | "rapida" | "turbina" | "jetski" | "airboat" | "wig" | "anfibio" | "wake" | "foil" | "longtail";
 
 export interface SpeedboatParams {
   kind: VesselKind;
@@ -254,6 +254,23 @@ export interface SpeedboatParams {
    * O pod da hélice fica no strut de trás e sobe junto ao recolher.
    */
   hydrofoil?: HydrofoilParams;
+  /**
+   * RABETA DE CAUDA LONGA (long-tail tailandês): o motor inteiro fica num pivô no alto da popa e o eixo comprido sai
+   * dele até a hélice, bem atrás do barco. A cana gira o conjunto todo em torno do eixo vertical (direção: a hélice
+   * anda de lado) e o piloto sobe/desce o eixo à mão (E/Q: `tilt` de `down` a `up` rad, a `liftRate` rad/s) — mais
+   * fundo empurra mais e arrasta mais; levantado a hélice sai d'água ("neutro"). O empuxo sai AO LONGO do eixo
+   * (inclinado: também levanta a popa).
+   */
+  longTail?: { liftRate: number; down: number; up: number };
+  /** transmissão direta, sem embreagem e sem ré (long-tail): a hélice gira sempre com o motor; a partida não exige N */
+  directDrive?: boolean;
+  /**
+   * MOTOR DIESEL turbo: velas de aquecimento (frio precisa de `glowS` s de pré-aquecimento com a chave em ON, puxando
+   * `glowA` A; sem isso gira muito para pegar e solta fumaça branca), turbo (pressão até `turboBar`, enche em
+   * `spoolUpS` s e esvazia em `spoolDownS`; sem pressão o motor só dá `naFrac` da força — o "turbo lag") e fumaça
+   * preta quando o acelerador vai à frente do turbo.
+   */
+  diesel?: { glowS: number; glowA: number; turboBar: number; spoolUpS: number; spoolDownS: number; naFrac: number };
   /** atrito do fundo do casco no chão (padrão 0,45). Airboat: fundo de alumínio com polímero desliza em lama/capim */
   groundMu?: number;
   /** compressor mecânico (supercharger), acionado pelo virabrequim: pressão máxima de sobrealimentação (bar) a giro
@@ -1424,4 +1441,105 @@ export const FOILER: SpeedboatParams = {
   windage: { sideCdA: 9, center: v3(0, 1.0, 0.3) },
 };
 
-export const VESSELS: Record<VesselKind, SpeedboatParams> = { lancha: SPEEDBOAT, bote: DINGHY, rapida: RAPIDA, turbina: TURBINA, jetski: JETSKI, airboat: AIRBOAT, wig: WIG, anfibio: AMPHIB, wake: WAKEBOAT, foil: FOILER };
+// ---------------------------------------------------------------------------------------------
+// LONG-TAIL tailandês de corrida AR-T (11 m × 1,25 m, casco de madeira longo e estreito, piloto + até 3 tripulantes)
+// com um TURBO DIESEL de 6 cilindros em linha (6,7 L, ~420 hp a 3400 rpm) EXPOSTO num pivô no alto da popa: polias e
+// correias abertas, turbo grande e a chaminé do escape à vista. O eixo de ~4,6 m vai direto (sem embreagem, sem ré)
+// até uma hélice pequena de 2 pás; a cana gira o motor inteiro (direção) e o piloto sobe/desce o eixo à mão. Água de
+// resfriamento puxada perto da hélice (com a hélice fora d'água o motor esquenta). Passa dos 100 km/h.
+// Origem = CG do barco seco. X boreste, Y cima, Z proa. Sem marca de fabricante.
+// ---------------------------------------------------------------------------------------------
+const ltl = 0.3;
+export const LONGTAIL: SpeedboatParams = {
+  ...DINGHY,
+  kind: "longtail",
+  name: "Long-tail tailandês AR-T",
+  steering: "tiller",
+  trimMode: "none",
+  trimPins: [],
+  electricStart: true,
+  carbureted: false,
+  directDrive: true,
+  longTail: { liftRate: 0.22, down: -0.06, up: 0.32 }, // (~1,5 s de baixo até a hélice começar a sair, a toda)
+  diesel: { glowS: 5, glowA: 60, turboBar: 1.8, spoolUpS: 1.4, spoolDownS: 0.8, naFrac: 0.5 },
+  tankLiters: 60,
+  fuelIdleLph: 2.0,
+  fuelMaxLph: 95,
+  cylinders: 6,
+  maxPeople: 4,
+  length: 11,
+  beam: 1.25,
+  mass: 1050,                 // casco de madeira ~400 kg + motor, pivô e eixo ~650 kg
+  fuelTankPos: v3(0, 0.0, -3.2),
+  fuelDensity: 0.84,          // diesel
+  seats: {
+    helm: v3(0, 0.32, -3.15),  // piloto: banquinho à frente do motor (o 6 cilindros ocupa ~1,3 m sobre o pivô); a cana vem até ele
+    passenger: v3(0, 0.12, 2.4),
+    rearLeft: v3(0, 0.12, 1.2),
+    rearRight: v3(0, 0.12, 0),
+    p1: v3(0, 0.12, 2.4), p2: v3(0, 0.12, 1.2), p3: v3(0, 0.12, 0),
+  },
+  inertia: v3(11000, 11500, 520),
+  waterplaneArea: 8.6,
+  pointMaxDepth: 0.6,
+  wetDepth: 0.08,
+  buoyancyPoints: [
+    { p: v3(-ltl, -0.3, 4.0), areaWeight: 0.55, liftWeight: 0.8, incidence: 6 * DEG },
+    { p: v3(ltl, -0.3, 4.0), areaWeight: 0.55, liftWeight: 0.8, incidence: 6 * DEG },
+    { p: v3(-ltl, -0.3, 0.5), areaWeight: 1.1, liftWeight: 1.0, incidence: 3 * DEG },
+    { p: v3(ltl, -0.3, 0.5), areaWeight: 1.1, liftWeight: 1.0, incidence: 3 * DEG },
+    { p: v3(-ltl, -0.3, -3.6), areaWeight: 1.25, liftWeight: 0.3, incidence: 1.5 * DEG },
+    { p: v3(ltl, -0.3, -3.6), areaWeight: 1.25, liftWeight: 0.3, incidence: 1.5 * DEG },
+  ],
+  contactPoints: [
+    v3(0, 0.75, 5.5), v3(0, -0.28, 4.3), v3(0, -0.36, 0), v3(0, -0.34, -4.2), v3(0, 0.4, -5.5),
+    v3(-0.6, 0.3, 2.0), v3(0.6, 0.3, 2.0), v3(-0.62, 0.3, -1.5), v3(0.62, 0.3, -1.5), v3(-0.45, 0.32, -4.4), v3(0.45, 0.32, -4.4),
+  ],
+  bunkPoints: [-4.0, -1.5, 1.0, 3.5].flatMap((z) => [v3(0, -0.36, z), v3(-0.32, -0.28, z), v3(0.32, -0.28, z)]),
+  gunwaleY: 0.32,
+  bilge: { pos: v3(0, -0.2, -1.0), maxL: 2600, pumpLph: 3000, pumpA: 4, outlet: v3(0.62, 0.2, -2.5), areaM2: 7.5, holeMaxM2: 0.003, bowRise: 0.3, transomY: 0.35, transomW: 0,
+    sumpL: 60, floorY: -0.18, floodCenter: v3(0, -0.1, -0.5), floodLen: 7.5, floodHalfW: 0.45, scupperM2: 0, scupperFromStern: 0.4, shutoffHeadM: 2, outletAreaM2: 6e-4, capsizeAirFrac: 0, ventM2: 0 },
+  anchor: { roller: v3(0, 0.6, 5.3), rodeMax: 25, rateOut: 0.8, rateIn: 0.4, motorA: 0, holdN: 2200 },
+  tow: { eyeX: 0, eyeY: 1.75, eyeZ: -5.45, leg: 0 }, // reboque: argola no alto de um poste no bico da popa — a corda passa por cima do eixo e da hélice
+  // 12 V: bateria de 100 Ah, arranque de diesel (forte), alternador na correia; diesel trabalha mais quente
+  systems: { batteryAh: 100, starterA: 280, altMaxA: 70, altIdleFrac: 0.3, thermostatC: 80, warnC: 98, protectC: 105, shutdownC: 120, protectRpm: 2000, lineL: 0.15 },
+  enginePowerHp: 420,
+  maxThrust: 10500,
+  reverseThrustFactor: 0,
+  propPitchSpeed: 40,
+  propPos: v3(0, -0.59, -9.44),   // eixo de 4,6 m a 15° para baixo (motor no pivô a y 0,6, z −5,0)
+  propRadius: 0.16,
+  propGear: 1,                    // direto: a hélice gira com o motor
+  revLimitRpm: 4250,              // (a toda, com a hélice aliviando, ~3800–3900 rpm sem bater no corte)
+  engineResponse: 0.3,
+  idleRpm: 750,
+  maxRpm: 3800,
+  shiftTime: 0,
+  idleThrustFraction: 0.05,
+  maxSteerLow: 35 * DEG,
+  maxSteerHigh: 14 * DEG,
+  steerRate: 1.8,
+  gearcaseRudder: 0.03,
+  trimUp: 0, trimDown: 0, tiltMax: 0.32, tiltRate: 0.5, tiltMaxThrust: 99999, tiltMaxSpeed: 99, tiltMaxRpm: 99999, trimRate: 0.4,
+  drivePivot: v3(0, 0.6, -5.0),
+  intakePos: v3(0, -0.5, -9.0),   // tomada d'água no fim do eixo
+  driveLiftArea: 0.02,
+  planingLiftCoef: 0.55,
+  maxAoa: 14 * DEG,
+  dragFrictionQuad: 7,
+  dragLinear: 30,
+  lateralQuad: 1000,
+  lateralLinear: 700,
+  keelLift: 2000,
+  yawDamping: 16000,
+  heaveDamping: 2400,
+  waveDragPeakRatio: 0.06,
+  sternTrough: 0.1,
+  bowWave: 0.07,
+  bankCoef: 900,
+  rollDamping: 3500,
+  airDragCdA: 0.9,
+  windage: { sideCdA: 3.2, center: v3(0, 0.5, -0.5) },
+};
+
+export const VESSELS: Record<VesselKind, SpeedboatParams> = { lancha: SPEEDBOAT, bote: DINGHY, rapida: RAPIDA, turbina: TURBINA, jetski: JETSKI, airboat: AIRBOAT, wig: WIG, anfibio: AMPHIB, wake: WAKEBOAT, foil: FOILER, longtail: LONGTAIL };

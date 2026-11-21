@@ -170,3 +170,127 @@ class EngineProcessor extends AudioWorkletProcessor {
 }
 
 registerProcessor("aqua-engine", EngineProcessor);
+
+// =====================================================================================================================
+// TURBO DIESEL de 6 cilindros em linha com escape ABERTO (long-tail tailandês): síntese própria.
+//  • combustão: 6 explosões por ciclo de 720° (a cada 120°, ordem 1-5-3-6-2-4), cada uma um pulso de pressão forte;
+//  • BATIDA do diesel ("clatter"): a ignição por compressão bate seco — um estalo largo filtrado na ressonância do
+//    bloco (~1,5–2,5 kHz), forte na lenta e com o motor frio, mais escondido com carga;
+//  • tique dos bicos injetores (agudo, curtíssimo) a cada injeção;
+//  • escape RETO e aberto (chaminé curta): guia de onda com pouca perda e saída direta — grave, alto e "rasgado";
+//    o turbo no caminho do gás abafa um pouco os agudos quando está cheio;
+//  • TURBO: assobio do compressor (frequência ∝ rotação do turbo, com leve batimento), sopro do ar na admissão e,
+//    ao soltar o acelerador com pressão, o "tchu-tchu-tchu" (surge/flutter do compressor);
+//  • correias e polias: um chiado fino que acompanha o giro.
+// Parâmetros: { rpm, load, combustion, volume, turbo (0..1), cold (0..1) }
+// =====================================================================================================================
+const FIRE6 = [0, 120, 240, 360, 480, 600];
+
+class DieselProcessor extends AudioWorkletProcessor {
+  constructor() {
+    super();
+    this.sr = sampleRate;
+    this.T = { rpm: 750, load: 0, combustion: 1, volume: 0, turbo: 0, cold: 0 };
+    this.rpm = 750; this.load = 0; this.comb = 1; this.vol = 0; this.turbo = 0; this.cold = 0;
+    this.theta = 0; this.seed = 98765431;
+    this.pT = new Array(6).fill(1e9); this.pA = new Array(6).fill(0);
+    this.kT = 1e9; this.kA = 0; this.iT = 1e9;
+    this.d1 = new Delay(Math.max(8, Math.round(this.sr * 2 * 0.6 / 520)));   // coletor
+    this.d2 = new Delay(Math.max(8, Math.round(this.sr * 2 * 1.3 / 500)));   // chaminé
+    this.lp1 = 0; this.lp2 = 0;
+    this.knockF = new SVF(); this.knockF2 = new SVF(); this.injF = new SVF(); this.hissF = new SVF(); this.beltF = new SVF(); this.exLP = new SVF(); this.body = new SVF();
+    this.wPh = 0; this.w2Ph = 0; this.flutT = 1e9; this.prevLoad = 0; this.flutPh = 0;
+    this.dcX = 0; this.dcY = 0;
+    this.port.onmessage = (e) => Object.assign(this.T, e.data);
+  }
+  rnd() { let x = this.seed; x ^= x << 13; x ^= x >>> 17; x ^= x << 5; this.seed = x >>> 0; return (this.seed / 4294967295) * 2 - 1; }
+  gauss() { return (this.rnd() + this.rnd() + this.rnd()) / 1.7; }
+  process(_in, outputs) {
+    const out = outputs[0][0];
+    if (!out) return true;
+    const sr = this.sr, T = this.T, kS = 1 - Math.exp(-1 / (sr * 0.03));
+    for (let n = 0; n < out.length; n++) {
+      this.rpm += (T.rpm - this.rpm) * kS; this.load += (T.load - this.load) * kS; this.comb += (T.combustion - this.comb) * kS;
+      this.vol += (T.volume - this.vol) * kS; this.turbo += (T.turbo - this.turbo) * kS * 0.5; this.cold += (T.cold - this.cold) * kS;
+      const rpm = Math.max(this.rpm, 0);
+      // ---- ciclo e disparos ----
+      const prev = this.theta;
+      this.theta += (rpm / 60) * 360 / sr;
+      let wrapped = false;
+      if (this.theta >= 720) { this.theta -= 720; wrapped = true; }
+      for (let c = 0; c < 6; c++) {
+        const a = FIRE6[c] + FIRE_ERR[c] + this.gauss() * 0.4;
+        const crossed = wrapped ? (prev < a || this.theta >= a) : (prev < a && this.theta >= a);
+        if (crossed && rpm > 30) {
+          const burn = this.comb * (0.45 + 0.55 * this.load) * (1 + 0.06 * this.gauss());
+          this.pA[c] = (burn + 0.12 * Math.min(rpm / 300, 1)) * CYL_GAIN[c];
+          this.pT[c] = 0;
+          // batida (só com combustão): forte na lenta/sem carga e a frio
+          this.kA = this.comb * (0.55 - 0.3 * this.load + 0.5 * this.cold) * (0.8 + 0.4 * Math.random());
+          this.kT = 0;
+          this.iT = -Math.round(sr * 0.0012); // bico: logo antes da explosão
+        }
+      }
+      // ---- pulsos no escape (subida rápida, explosão "dura") ----
+      const lowRev = 1 - Math.min(Math.max((rpm - 700) / 2600, 0), 1);
+      const tau = sr * (0.0032 + 0.005 * lowRev);
+      const att = sr * 0.00018;
+      let p = 0;
+      for (let c = 0; c < 6; c++) {
+        const t = this.pT[c];
+        if (t < tau * 8) { const env = Math.exp(-t / tau) * (1 - Math.exp(-t / att)); p += this.pA[c] * env * (0.7 + 0.3 * this.rnd()); this.pT[c] = t + 1; }
+      }
+      // ---- escape reto e aberto (pouca perda, ressoa) ----
+      const r1 = this.d1.read(); this.lp1 += (r1 - this.lp1) * 0.5;
+      const y1 = p - 0.5 * this.lp1; this.d1.write(y1);
+      const r2 = this.d2.read(); this.lp2 += (r2 - this.lp2) * 0.42;
+      const y2 = y1 + 0.55 * this.lp2; this.d2.write(y2);
+      // o turbo cheio abafa um pouco os agudos do escape (a turbina no caminho do gás)
+      this.exLP.run(y2, 0.12 - 0.06 * this.turbo, 0.7);
+      const exhaust = this.exLP.low * 2.6 + y2 * 0.35;
+      // corpo grave do bloco (vibração do motor de 6 cilindros)
+      this.body.run(p, 0.012 + 0.012 * (1 - lowRev), 1.2);
+      const bodyOut = this.body.low * 1.6;
+      // ---- batida do diesel ----
+      let knock = 0;
+      if (this.kT < sr * 0.006) { knock = this.kA * Math.exp(-this.kT / (sr * 0.0011)) * this.rnd(); this.kT += 1; }
+      this.knockF.run(knock, 0.34, 0.22); this.knockF2.run(knock, 0.55, 0.3);
+      const knockOut = (this.knockF.band * 0.9 + this.knockF2.band * 0.45) * (0.5 + 0.5 * lowRev);
+      // ---- tique do bico injetor ----
+      let inj = 0;
+      if (this.iT >= 0 && this.iT < sr * 0.0006) inj = Math.exp(-this.iT / (sr * 0.00012)) * this.rnd();
+      this.iT += 1;
+      this.injF.run(inj, 0.85, 0.2);
+      const injOut = this.injF.band * 0.12 * (0.4 + 0.6 * lowRev) * this.comb;
+      // ---- turbo: assobio, sopro e flutter ----
+      const tb = this.turbo;
+      const wf = 600 + 6400 * Math.pow(tb, 1.25);
+      this.wPh += (wf * (1 + 0.004 * Math.sin(this.flutPh * 0.7))) / sr; if (this.wPh > 1) this.wPh -= 1;
+      this.w2Ph += (wf * 1.012) / sr; if (this.w2Ph > 1) this.w2Ph -= 1;
+      const whistle = (Math.sin(2 * Math.PI * this.wPh) + 0.6 * Math.sin(2 * Math.PI * this.w2Ph)) * Math.pow(tb, 1.6) * (0.25 + 0.75 * this.load) * 0.07;
+      this.hissF.run(this.rnd(), Math.min(0.9, 0.08 + 0.5 * tb), 0.9);
+      let hiss = this.hissF.band * tb * (0.2 + 0.8 * this.load) * 0.18;
+      // soltou o acelerador com o turbo cheio: o compressor "engasga" (tchu-tchu-tchu) por ~0,6 s
+      if (this.prevLoad - this.load > 0.0025 && tb > 0.45 && this.flutT > sr * 0.4) this.flutT = 0;
+      this.prevLoad = this.load;
+      this.flutPh += 1 / sr;
+      if (this.flutT < sr * 0.65) {
+        const e = Math.exp(-this.flutT / (sr * 0.3));
+        const am = 0.5 + 0.5 * Math.sign(Math.sin(2 * Math.PI * 17 * this.flutT / sr));
+        hiss += this.hissF.band * e * am * tb * 0.55;
+        this.flutT += 1;
+      }
+      // ---- correias / polias ----
+      this.beltF.run(this.rnd(), Math.min(0.6, 0.05 + rpm / 12000), 0.12);
+      const belt = this.beltF.band * 0.012 * Math.min(rpm / 2000, 1.5);
+      // ---- mistura ----
+      // (com o giro os pulsos ficam mais densos e a energia cresce: compensa para a lenta e o pleno ficarem equilibrados)
+      let y = (exhaust * (0.9 + 0.4 * this.load) + bodyOut) / (1 + rpm / 2200) + knockOut + injOut + whistle + hiss + belt;
+      const dc = y - this.dcX + 0.995 * this.dcY; this.dcX = y; this.dcY = dc;
+      out[n] = Math.tanh(dc * 0.8) * this.vol; // (pouca saturação: o escape aberto é alto, mas não "estourado")
+    }
+    for (let ch = 1; ch < outputs[0].length; ch++) outputs[0][ch].set(out);
+    return true;
+  }
+}
+registerProcessor("aqua-diesel", DieselProcessor);

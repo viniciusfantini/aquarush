@@ -5,7 +5,8 @@ const SR = 48000;
 let Proc = null;
 globalThis.sampleRate = SR;
 globalThis.AudioWorkletProcessor = class { constructor() { this.port = { onmessage: null }; } };
-globalThis.registerProcessor = (_n, c) => { Proc = c; };
+const Procs = {};
+globalThis.registerProcessor = (n, c) => { Procs[n] = c; if (n === "aqua-engine") Proc = c; };
 new Function(readFileSync(new URL("../src/presentation/engineWorklet.js", import.meta.url), "utf8"))();
 
 const render = (params, seconds) => {
@@ -70,3 +71,31 @@ for (const [name, p] of cases) {
 }
 console.log(ok ? "OK" : "FALHA");
 process.exitCode = ok ? 0 : 1;
+
+// ---- turbo diesel de 6 cilindros (long-tail): lenta fria, a toda com turbo, soltando (flutter) ----
+{
+  const D = Procs["aqua-diesel"];
+  const renderD = (steps) => {
+    const p = new D(); const out = [];
+    const push = (buf) => { for (const x of buf) out.push(x); };
+    for (const [params, seconds] of steps) {
+      p.port.onmessage({ data: { volume: 1, combustion: 1, ...params } });
+      for (let i = 0; i < SR * seconds; i += 128) { const buf = new Float32Array(128); p.process([], [[buf]]); push(buf); }
+    }
+    return Float32Array.from(out);
+  };
+  const cases = {
+    "diesel-lenta-fria": [[{ rpm: 750, load: 0, turbo: 0, cold: 1 }, 3]],
+    "diesel-a-toda": [[{ rpm: 3800, load: 1, turbo: 0.95, cold: 0 }, 3]],
+    "diesel-arrancada-e-solta": [[{ rpm: 900, load: 0, turbo: 0 }, 0.6], [{ rpm: 3600, load: 1, turbo: 0.7 }, 2.2], [{ rpm: 1200, load: 0, turbo: 0.6 }, 1.5]],
+  };
+  mkdirSync(new URL("./out/", import.meta.url), { recursive: true });
+  for (const [name, steps] of Object.entries(cases)) {
+    const a = renderD(steps);
+    const bad = a.some((x) => !Number.isFinite(x));
+    console.log(`${name}: rms ${rms(a).toFixed(3)} · pico ${a.reduce((m, x) => Math.max(m, Math.abs(x)), 0).toFixed(2)}${bad ? " · NaN!" : ""}`);
+    const pcm = new Int16Array(a.length); for (let i = 0; i < a.length; i++) pcm[i] = Math.max(-1, Math.min(1, a[i])) * 32767;
+    const hdr = Buffer.alloc(44); hdr.write("RIFF", 0); hdr.writeUInt32LE(36 + pcm.byteLength, 4); hdr.write("WAVE", 8); hdr.write("fmt ", 12); hdr.writeUInt32LE(16, 16); hdr.writeUInt16LE(1, 20); hdr.writeUInt16LE(1, 22); hdr.writeUInt32LE(SR, 24); hdr.writeUInt32LE(SR * 2, 28); hdr.writeUInt16LE(2, 32); hdr.writeUInt16LE(16, 34); hdr.write("data", 36); hdr.writeUInt32LE(pcm.byteLength, 40);
+    writeFileSync(new URL(`./out/${name}.wav`, import.meta.url), Buffer.concat([hdr, Buffer.from(pcm.buffer)]));
+  }
+}

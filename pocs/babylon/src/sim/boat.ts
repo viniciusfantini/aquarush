@@ -198,6 +198,8 @@ export interface BoatTelemetry {
   /** propulsão elétrica (AR-E): bateria HV, contatores, READY, potência, temperaturas, carregador */
   hv: { soc: number; kwhLeft: number; packV: number; linkV: number; packA: number; kw: number; shaftKw: number; availKw: number; limited: boolean;
     phase: HvPhase; hvSwitch: boolean; ready: boolean; motorC: number; packC: number; shore: boolean; charging: boolean; fault: "" | "12v" | "empty" } | null;
+  /** motor DIESEL (long-tail): velas de aquecimento (luz), pré-aquecimento (s), turbo (0..1), fumaça preta e branca (0..1) */
+  diesel: { glow: boolean; glowT: number; glowNeed: number; turbo: number; soot: number; white: number } | null;
   /** hydrofoil (AR-E): recolhimento, computador de voo, altura e flaps */
   foil: { deploy: number; down: boolean; moving: boolean; blocked: "" | "speed" | "power" | "shallow"; rideH: number; target: number; foilborne: boolean;
     flapL: number; flapR: number; flapRear: number; liftFrac: number; minDepth: number; vent: boolean; fcs: boolean; fcsSw: boolean; grounded: boolean } | null;
@@ -521,6 +523,17 @@ export class Speedboat {
   private F: Vec3 = v3();
   private T: Vec3 = v3();
 
+  /** DIESEL: tempo de pré-aquecimento das velas com a chave em ON (s), rotação do turbo (0..1) e corrente das velas (A) */
+  glowT = 0;
+  turboS = 0;
+  private glowA = 0;
+  /** pré-aquecimento necessário agora (frio: o tempo todo; morno: um pouco; quente: nada) */
+  get glowNeed(): number { const D = this.params.diesel; if (!D) return 0; const c = this.systems.coolantC; return c < 40 ? D.glowS : c < 60 ? D.glowS * 0.35 : 0; }
+  /** voltas a mais para pegar sem pré-aquecimento (diesel frio pega pela compressão: sem vela, demora) */
+  private dieselExtraRevs(): number { const D = this.params.diesel; if (!D) return 0; return this.glowT >= this.glowNeed * 0.8 ? 0 : this.systems.coolantC < 40 ? 14 : 5; }
+  /** rotação da RABETA DE CAUDA LONGA: direção (eixo vertical) POR FORA e a subida do eixo por dentro */
+  private longTailRot(): Quat { return qMul(qFromAxisAngle(v3(0, 1, 0), -this.steer), qFromAxisAngle(v3(1, 0, 0), this.tilt)); }
+
   /** propulsão elétrica (AR-E); null nos barcos a combustão */
   hv: ElectricDrive | null = null;
   /** potência pedida no eixo pela hélice no último passo (kW) */
@@ -575,7 +588,7 @@ export class Speedboat {
       rpms: [params.idleRpm], gears: ["N"], throttles: [0], thrusts: [0], engines: ["running"], keys: ["on"], houseV: 12.6, propRpms: [0], coolants: [45], batteryVs: [12.6], batterySocs: [0.92], batteryAs: [0], turbine: null, nominalV: 12, gpu: false, gpuState: "off", gpuT: 0, gpuKw: 0, busBattery: true, busGen: false, extPwr: false, extPwrClosed: false, extPwrFault: false, gpuA: 0, coolingLps: 0, fuelValveOpen: true, fuelLineFrac: 1, bilgeMode: "auto", batterySel: "ind", choke: false,
       lanyard: true, driveMode: "normal", righting: false, magnetos: "both", mixture: 1, prime: 0, boostBar: 0, ibb: "off",
       ecuA: false, ecuB: false, pump1: false, pump2: false, fuelPressBar: 0, wingH: 0, altitude: 0, vsi: 0, airspeed: 0, aoaDeg: 0, groundEffect: 1, wingLoad: 0, elevator: 0, elevTrim: 0, aileron: 0, leveler: false, stallWarn: false, airborne: false,
-      hv: null, foil: null,
+      hv: null, foil: null, diesel: null,
     };
   }
 
@@ -736,8 +749,11 @@ export class Speedboat {
     this.eachUnit(() => {
       const off = v3(this.u.offsetX, 0, 0); // rabeta deste motor (deslocada em X)
       const lift = v3(0, this.podLift(), 0); // (hydrofoil: o pod sobe com os foils recolhidos)
-      const propW = this.toWorld(add(add(add(P.drivePivot, off), rotate(tiltRot, sub(P.propPos, P.drivePivot))), lift));
-      const intakeW = this.toWorld(add(add(add(P.drivePivot, off), rotate(tiltRot, sub(P.intakePos, P.drivePivot))), lift));
+      // (long-tail: o conjunto inteiro gira na direção — a hélice anda de lado — e o empuxo sai ao longo do eixo)
+      const rotP = P.longTail ? this.longTailRot() : tiltRot;
+      const propL = add(add(add(P.drivePivot, off), rotate(rotP, sub(P.propPos, P.drivePivot))), lift);
+      const propW = this.toWorld(propL);
+      const intakeW = this.toWorld(add(add(add(P.drivePivot, off), rotate(rotP, sub(P.intakePos, P.drivePivot))), lift));
       // (airboat: motor de avião refrigerado a AR — não depende de tomada d'água)
       const intakeSubmerged = !!P.airProp || water.getHeight(intakeW.x, intakeW.z) - intakeW.y > 0.02;
       if (this.u.index === 0) this.propWorld = propW;
@@ -764,7 +780,8 @@ export class Speedboat {
       this.immersion = immersion;
       // Direção do empuxo: esterçar à direita gira a rabeta e empurra a popa para a esquerda.
       // Trim positivo inclina o empuxo para baixo (eleva a proa); negativo, para cima.
-      const tDirLocal = P.airProp ? v3(0, 0, 1) : rotate(driveRot, v3(0, 0, 1)); // = (−sen δ, −cos δ·sen θ, cos δ·cos θ); airboat: sempre para a frente
+      const shaft = sub(P.drivePivot, propL);
+      const tDirLocal = P.airProp ? v3(0, 0, 1) : P.longTail ? scale(shaft, 1 / len(shaft)) : rotate(driveRot, v3(0, 0, 1)); // = (−sen δ, −cos δ·sen θ, cos δ·cos θ); airboat: sempre para a frente
       const tDir = rotate(this.rot, tDirLocal);
       const vProp = rotateInv(this.rot, sub(this.pointVelocity(propW), water.getCurrent(propW.x, propW.z)));
       const axial = dot(vProp, tDirLocal);
@@ -978,7 +995,8 @@ export class Speedboat {
     t.thrusts = this.units.map((x) => x.lastThrust); t.engines = this.units.map((x) => x.engine); t.keys = this.units.map((x) => x.key); t.propRpms = this.units.map((x) => x.propRpmState);
     // sistemas do motor: combustível, temperatura, bateria, horímetro
     const sys = this.systems;
-    this.runSystems(dt, { lightsOn: input.navigationLights, trimMotorA: this.trimMotorA, auxA: this.anchor.motorA + this.bilgePumpA + this.turbinePeripheralA() + this.foilA, intakeSubmerged });
+    this.runSystems(dt, { lightsOn: input.navigationLights, trimMotorA: this.trimMotorA, auxA: this.anchor.motorA + this.bilgePumpA + this.turbinePeripheralA() + this.foilA + this.glowA, intakeSubmerged });
+    if (P.diesel) this.updateDiesel(dt);
     this.updateBilge(dt, water, input);
     this.updateBallast(dt);
     this.updateSlosh(dt);
@@ -1256,7 +1274,8 @@ export class Speedboat {
       this.pitchIn = approach(this.pitchIn, clamp(input.pitch ?? 0, -1, 1), 7 * dt);
       this.rollIn = input.roll === undefined ? null : approach(this.rollIn ?? 0, clamp(input.roll, -1, 1), 7 * dt);
     }
-    if (P.trimMode === "none") { this.trimMotorA = 0; this.trim = 0; this.tilt = 0; } // (airboat: não tem trim — o botão não faz nada)
+    if (P.longTail) { const L = P.longTail; this.trimMotorA = 0; this.trim = 0; this.tilt = clamp(this.tilt + trimIn * L.liftRate * dt, L.down, L.up); } // (à mão: E sobe o eixo, Q afunda)
+    else if (P.trimMode === "none") { this.trimMotorA = 0; this.trim = 0; this.tilt = 0; } // (airboat: não tem trim — o botão não faz nada)
     else if (P.trimMode === "manual") { this.updateManualTrim(dt, trimIn, input.throttle); this.trimMotorA = 0; }
     else {
     // bomba elétrica do power trim: velocidade cai com a tensão da bateria (motor DC); com a bateria
@@ -1293,7 +1312,7 @@ export class Speedboat {
     this.eachUnit(() => {
       const ec = input.engineCmd?.[this.u.index];
       // (airboat: sem embreagem nem ré — a hélice está sempre acoplada e empurra para a frente)
-      const desired: Gear = P.airProp ? "F" : ec ? ec.gear : input.gear;
+      const desired: Gear = P.airProp || P.directDrive ? "F" : ec ? ec.gear : input.gear;
       // modo ECO (moto aquática): o gatilho pleno só abre até ecoThrottle
       const cmd = clamp(ec ? ec.throttle : input.throttle, 0, 1) * (this.driveMode === "eco" && P.ecoThrottle ? P.ecoThrottle : 1);
       if (desired !== this.wantGear) {
@@ -1328,7 +1347,7 @@ export class Speedboat {
     const trimAngle = P.trimMode === "manual" ? this.manualAngle : this.trim >= 0 ? this.trim * P.trimUp : -this.trim * P.trimDown;
     const q = qFromAxisAngle(v3(1, 0, 0), trimAngle + this.tilt);
     const tip = v3(P.propPos.x, P.propPos.y - P.propRadius - 0.06, P.propPos.z + 0.15);
-    const local = add(add(P.drivePivot, rotate(q, sub(tip, P.drivePivot))), v3(0, this.podLift(), 0));
+    const local = add(add(P.drivePivot, rotate(P.longTail ? this.longTailRot() : q, sub(tip, P.drivePivot))), v3(0, this.podLift(), 0));
     // com duas rabetas, a que estiver mais baixa (barco adernado) é a que bate primeiro
     let best = this.toWorld(add(local, v3(this.units[0].offsetX, 0, 0)));
     for (let i = 1; i < this.units.length; i++) { const w = this.toWorld(add(local, v3(this.units[i].offsetX, 0, 0))); if (w.y < best.y) best = w; }
@@ -1658,6 +1677,31 @@ export class Speedboat {
    * (ω×r: a cauda amortece a arfagem e a guinada, as pontas a rolagem) — e os flutuadores das pontas das asas
    * (empuxo + arrasto quando tocam a água: seguram o casco estreito de pé parado).
    */
+  /**
+   * DIESEL turbo: velas de aquecimento (com a chave em ON e o motor parado esquentam a câmara; a luz apaga quando
+   * está pronto), turbo (a rotação dele segue a energia do escape — giro e carga — com atraso) e a fumaça.
+   */
+  private updateDiesel(dt: number): void {
+    const D = this.params.diesel!, t = this.telemetry, u0 = this.units[0];
+    const keyOn = u0.key !== "off", powered = this.systems.supplyV(5) > 9;
+    if (u0.engine === "running") this.glowT = Math.max(this.glowT, this.glowNeed);
+    else if (keyOn && powered) this.glowT += dt;
+    else if (!keyOn) this.glowT = 0;
+    const glowing = keyOn && powered && u0.engine !== "running" && this.glowT < this.glowNeed;
+    this.glowA = glowing || (u0.engine === "cranking" && this.systems.coolantC < 40) ? D.glowA : 0;
+    // turbo: energia do escape ∝ (giro)^1,6 × carga; enche devagar ("lag") e esvazia mais rápido
+    const run = u0.engine === "running";
+    const exh = run ? Math.pow(clamp(u0.rpm / this.params.maxRpm, 0, 1.1), 1.6) * (0.2 + 0.8 * u0.throttleActual) : 0;
+    this.turboS += (exh - this.turboS) * (1 - Math.exp(-dt / (exh > this.turboS ? D.spoolUpS : D.spoolDownS)));
+    this.turboS = Math.min(this.turboS, 1); // (wastegate: acima da pressão de projeto o gás desvia da turbina)
+    t.boostBar = D.turboBar * this.turboS * this.turboS;
+    // fumaça: PRETA com o acelerador à frente do turbo (falta ar); BRANCA com o motor frio (partida e aquecendo)
+    const soot = run ? clamp((u0.throttleActual - this.turboS) * 2.2, 0, 1) * (0.3 + 0.7 * u0.throttleActual) : 0;
+    const cold = clamp(1 - (this.systems.coolantC - 26) / 30, 0, 1);
+    const white = (run ? 0.6 * cold : 0) + (u0.engine === "cranking" ? 0.5 + 0.5 * cold : 0);
+    t.diesel = { glow: glowing, glowT: this.glowT, glowNeed: this.glowNeed, turbo: this.turboS, soot, white };
+  }
+
   /** Telemetria da propulsão elétrica e dos foils (o HUD/painel só leem isto). */
   private electricTelemetry(): void {
     const t = this.telemetry, hv = this.hv;
@@ -2003,7 +2047,7 @@ export class Speedboat {
       return "starting";
     }
     if (this.engine === "cranking") return "busy";
-    if (this.gear !== "N" && !this.params.airProp) return "needNeutral"; // (airboat: não há neutro — a hélice já gira na partida)
+    if (this.gear !== "N" && !this.params.airProp && !this.params.directDrive) return "needNeutral"; // (airboat / long-tail: não há neutro — a hélice já gira na partida)
     // cada motor parte pelo banco que o alimenta (na AR-9 em BE é o de boreste: o BB está isolado);
     // sem combustível a partida é permitida (o arranque gira / a corda é puxada), mas o motor não pega
     const whys = this.units.map((x) => this.bankFor(x.index).canStart());
@@ -2023,7 +2067,7 @@ export class Speedboat {
     }
     // chave em ON: autoteste com o apito característico; o arranque gira quando ele termina
     for (const x of this.units) x.key = "on";
-    this.selfTestT = 1.1;
+    this.selfTestT = Math.max(1.1, this.glowNeed); // (diesel: a luz das velas apaga e então o arranque gira)
     return "starting";
   }
 
@@ -2058,7 +2102,7 @@ export class Speedboat {
     if (!this.occupants.some((o) => o.seat === "helm")) return "noPilot";
     if (x.engine === "running" || x.engine === "cranking") { if (x.key !== "off") x.key = "start"; return ""; }
     if (this.engineDamage >= 0.95) return "broken";
-    if (x.gear !== "N" && !this.params.airProp) return "needNeutral";
+    if (x.gear !== "N" && !this.params.airProp && !this.params.directDrive) return "needNeutral";
     if (!this.lanyard) { this.telemetry.startFail = "lanyard"; return "noLanyard"; }
     x.key = "start"; x.testT = 0;
     x.engine = "cranking"; x.manualCrank = true; x.crankTimer = 0; x.crankRevs = 0; x.crankNeed = 3 + Math.random() * 2; x.crankWait = 0;
@@ -2201,7 +2245,9 @@ export class Speedboat {
   private engineLoad(): number {
     if (this.u.turb) return Math.min(1.4, this.u.turb.torque / 100); // turbina: torque absorvido pela hélice
     const f = this.params.idleThrustFraction;
-    return (f + (1 - f) * this.throttleActual) * this.aeroPower();
+    const D = this.params.diesel;
+    const turbo = D ? D.naFrac + (1 - D.naFrac) * this.turboS : 1; // (diesel turbo: sem pressão só a parte aspirada — "turbo lag")
+    return (f + (1 - f) * this.throttleActual) * this.aeroPower() * turbo;
   }
 
   private updateRpm(dt: number, axial: number, ventilation: number): number {
@@ -2299,7 +2345,7 @@ export class Speedboat {
       this.crankRevs += (this.rpm / 60) * dt * clamp((this.rpm - 60) / 100, 0, 1);
       // motor de avião: girar o arranque com o motor afogado tira o excesso aos poucos
       if (P.aircraft) this.prime = Math.max(0, this.prime - (this.rpm / 60) * dt * 0.08);
-      if (this.crankRevs >= this.crankNeed + this.aeroExtraRevs() && this.usys.fuelFeed && this.aeroCanCatch()) { this.engine = "running"; this.rpm = 1150; this.u.manualCrank = false; this.prime = 0; }
+      if (this.crankRevs >= this.crankNeed + this.aeroExtraRevs() + this.dieselExtraRevs() && this.usys.fuelFeed && this.aeroCanCatch()) { this.engine = "running"; this.rpm = 1150; this.u.manualCrank = false; this.prime = 0; }
       else if (this.crankTimer > 4 && !this.u.manualCrank) { // o piloto solta a chave: não pegou
         this.engine = "off";
         this.telemetry.startFail = this.aeroFail() || (!this.usys.fuelFeed && this.rpm >= 40 ? "fuel" : this.rpm < 40 ? "dead" : "weak");

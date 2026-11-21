@@ -92,7 +92,7 @@ export class RoundGauge {
   }
 }
 
-export interface HudOpts { speedMax: number; temp: boolean; battery: boolean; trimPins: number; gear?: "bar" | "dial"; /** dois motores: um conta-giros por motor (BB / BE) */ twin?: boolean; /** turbina: N1, EGT, torque, N2, óleo e luzes da partida */ turbine?: boolean; /** fundo de escala do conta-giros (padrão 7000; moto aquática 9000) e início do vermelho */ rpmMax?: number; rpmRed?: number; /** moto aquática: manômetro do compressor (BOOST) e luz do iBB */ jet?: boolean; /** ekranoplano: TURBO, ALTURA da asa sobre a água, luz de voo/estol */ wig?: boolean; /** avião (anfíbio): ALTITUDE, VARIÔMETRO, luz de voo/estol e a barra do compensador */ plane?: boolean; /** barras que o barco não tem (airboat: sem âncora no HUD, sem marcha, sem calado, sem trim) */ hide?: ("anchor" | "gear" | "draft" | "trim")[]; /** lancha de wakeboard: um relógio de nível por tanque de lastro */ ballast?: boolean; /** barco elétrico com foils: POTÊNCIA kW no lugar do conta-giros, BATERIA HV, MOTOR °C, ALTURA de voo e a luz dos foils */ electric?: boolean }
+export interface HudOpts { speedMax: number; temp: boolean; battery: boolean; trimPins: number; gear?: "bar" | "dial"; /** dois motores: um conta-giros por motor (BB / BE) */ twin?: boolean; /** turbina: N1, EGT, torque, N2, óleo e luzes da partida */ turbine?: boolean; /** fundo de escala do conta-giros (padrão 7000; moto aquática 9000) e início do vermelho */ rpmMax?: number; rpmRed?: number; /** moto aquática: manômetro do compressor (BOOST) e luz do iBB */ jet?: boolean; /** ekranoplano: TURBO, ALTURA da asa sobre a água, luz de voo/estol */ wig?: boolean; /** avião (anfíbio): ALTITUDE, VARIÔMETRO, luz de voo/estol e a barra do compensador */ plane?: boolean; /** barras que o barco não tem (airboat: sem âncora no HUD, sem marcha, sem calado, sem trim) */ hide?: ("anchor" | "gear" | "draft" | "trim")[]; /** lancha de wakeboard: um relógio de nível por tanque de lastro */ ballast?: boolean; /** turbo diesel (long-tail): manômetro do TURBO e a luz das VELAS (pré-aquecimento) */ diesel?: boolean; /** barco elétrico com foils: POTÊNCIA kW no lugar do conta-giros, BATERIA HV, MOTOR °C, ALTURA de voo e a luz dos foils */ electric?: boolean }
 
 export class Hud {
   private speedG!: RoundGauge;
@@ -114,6 +114,7 @@ export class Hud {
   private balG: RoundGauge[] = [];
   private altG: RoundGauge | null = null;
   private elecMode = false;
+  private dieselMode = false;
   private wigLamp: HTMLElement | null = null;
   private vsiG: RoundGauge | null = null;
   private planeMode = false;
@@ -253,6 +254,7 @@ export class Hud {
     this.altG = null; this.wigLamp?.remove(); this.wigLamp = null; this.vsiG = null;
     this.planeMode = !!opts.plane;
     this.elecMode = !!opts.electric;
+    this.dieselMode = false;
     if (opts.electric) {
       // motor elétrico: potência no eixo (verde até a contínua, amarelo até a máxima)
       this.rpmG = new RoundGauge(big, { title: "POTÊNCIA kW", min: 0, max: 150, labels: [0, 30, 60, 90, 120, 150], minor: 10, big: true, bands: [{ from: 0, to: 90, c: "g" }, { from: 90, to: 140, c: "y" }, { from: 140, to: 150, c: "r" }] });
@@ -301,6 +303,16 @@ export class Hud {
       l.innerHTML = `<span class="ibb-dot"></span><b>iBB</b><em>FRENTE</em>`;
       small.parentElement?.insertBefore(l, this.fuelAut);
       this.ibbLamp = l;
+    }
+    if (opts.diesel) {
+      // turbo: verde até ~1,8 bar (pleno), vermelho acima; luz das velas (âmbar enquanto pré-aquece)
+      this.boostG = new RoundGauge(small, { title: "TURBO bar", min: 0, max: 2.5, labels: [0, 1, 2], minor: 0.25, bands: [{ from: 0.1, to: 1.9, c: "g" }, { from: 1.9, to: 2.2, c: "y" }, { from: 2.2, to: 2.5, c: "r" }] });
+      const l = document.createElement("div");
+      l.id = "g-wig";
+      l.innerHTML = `<span class="ibb-dot"></span><b>VELAS</b><em>APAGADAS</em>`;
+      small.parentElement?.insertBefore(l, this.fuelAut);
+      this.wigLamp = l;
+      this.dieselMode = true;
     }
     if (opts.plane) {
       // avião: altitude do casco sobre a água/chão e velocidade vertical (sobe +, desce −; vermelho descendo forte perto do chão)
@@ -389,7 +401,7 @@ export class Hud {
     }
     const amps = t.batteryA;
     this.ampG?.set(Math.max(-60, Math.min(30, amps)), `${amps > 0.5 ? "+" : ""}${amps.toFixed(0)} A`, amps > 0.5 ? "carga" : amps < -0.5 ? "consumo" : "", amps < -40);
-    this.boostG?.set(Math.max(0, t.boostBar), `${t.boostBar.toFixed(2)}`, `${(t.boostBar * 14.5).toFixed(0)} psi`, t.boostBar > 1.2);
+    this.boostG?.set(Math.max(0, t.boostBar), `${t.boostBar.toFixed(2)}`, `${(t.boostBar * 14.5).toFixed(0)} psi`, t.boostBar > (this.dieselMode ? 2.2 : 1.2));
     if (this.balG.length) setBallastGauges(this.balG, t);
     if (this.elecMode && t.foil) {
       const F = t.foil;
@@ -403,7 +415,10 @@ export class Hud {
       this.altG?.set(Math.max(0, Math.min(600, t.altitude)), t.airborne ? `${t.altitude.toFixed(0)} m` : "—", `prof. ${t.elevator > 0.005 ? "+" : ""}${Math.round(t.elevator * 100)}%`);
       this.vsiG?.set(Math.max(-6, Math.min(6, t.vsi)), `${t.vsi > 0.05 ? "+" : ""}${t.vsi.toFixed(1)}`, t.vsi > 0.3 ? "subida" : t.vsi < -0.3 ? "descida" : "nivelado", t.vsi < -3 && t.altitude < 30);
     } else if (this.altG) this.altG.set(Math.max(0, Math.min(6, t.wingH)), t.airborne ? `${t.wingH.toFixed(1)} m` : "—", `prof. ${t.elevator > 0.005 ? "+" : ""}${Math.round(t.elevator * 100)}%`, t.wingH > 3);
-    if (this.wigLamp && !this.elecMode) {
+    if (this.wigLamp && this.dieselMode) {
+      const D = t.diesel, st = D?.glow ? "high" : "water", txt = D?.glow ? "PRÉ-AQUECENDO" : t.engine === "running" ? "APAGADAS" : D && D.glowNeed > 0 && D.glowT >= D.glowNeed ? "PRONTO" : "APAGADAS";
+      if (this.wigLamp.dataset.t !== txt) { this.wigLamp.dataset.s = st; this.wigLamp.dataset.t = txt; this.wigLamp.querySelector("em")!.textContent = txt; }
+    } else if (this.wigLamp && !this.elecMode) {
       const st = t.stallWarn ? "stall" : t.airborne ? (this.planeMode ? "ge" : t.wingH > 3 ? "high" : "ge") : "water";
       const txt = st === "stall" ? "ESTOL" : st === "high" ? "FORA DO SOLO" : st === "ge" ? (this.planeMode ? "VOANDO" : "EFEITO SOLO") : "NA ÁGUA";
       if (this.wigLamp.dataset.s !== st) { this.wigLamp.dataset.s = st; this.wigLamp.querySelector("em")!.textContent = txt; }
