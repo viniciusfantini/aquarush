@@ -20,6 +20,8 @@ const NO_PILOT: VehicleInput = emptyInput();
 import { EngineSystems } from "./engineSystems.ts";
 import { AnchorGear, type AnchorState } from "./anchor.ts";
 import { panelForce } from "./wing.ts";
+import { ElectricDrive, type HvPhase } from "./electric.ts";
+import { foilForce, strutForce, fcsStep, type FcsState } from "./hydrofoil.ts";
 
 const RHO = 1000;     // água doce, kg/m³
 /** Rotação máxima em neutro (a central do motor limita o giro sem carga na hélice). */
@@ -193,6 +195,12 @@ export interface BoatTelemetry {
   batteryAs: number[];
   /** tensão nominal do sistema elétrico (12 V; turbina: 24 V). batteryV/batteryA já vêm em volts/ampères reais */
   nominalV: number;
+  /** propulsão elétrica (AR-E): bateria HV, contatores, READY, potência, temperaturas, carregador */
+  hv: { soc: number; kwhLeft: number; packV: number; linkV: number; packA: number; kw: number; shaftKw: number; availKw: number; limited: boolean;
+    phase: HvPhase; hvSwitch: boolean; ready: boolean; motorC: number; packC: number; shore: boolean; charging: boolean; fault: "" | "12v" | "empty" } | null;
+  /** hydrofoil (AR-E): recolhimento, computador de voo, altura e flaps */
+  foil: { deploy: number; down: boolean; moving: boolean; blocked: "" | "speed" | "power" | "shallow"; rideH: number; target: number; foilborne: boolean;
+    flapL: number; flapR: number; flapRear: number; liftFrac: number; minDepth: number; vent: boolean; fcs: boolean; fcsSw: boolean; grounded: boolean } | null;
 }
 
 /**
@@ -271,13 +279,15 @@ export class Speedboat {
       x.engine = v;
       // turbina: "desligar" = corta o combustível (spool-down); "ligar" (testes) = marcha lenta
       if (x.turb) { if (v === "off" && x.turb.phase !== "off") x.turb.cutFuel(); else if (v === "running") x.turb.idle(); }
+      // elétrico: "desligar" (corta-circuito, emborcar, afundar) tira o READY; "ligar" (testes) = HV + READY na hora
+      if (this.hv) { if (v === "off") this.hv.setReady(false); else if (v === "running") this.hv.forceReady(); }
     };
     if (this.inUnit) apply(this.u); else for (const x of this.units) apply(x);
   }
   /** Corrente dos periféricos da turbina (bomba, velas, solenoide, FADEC) no barramento — entra no amperímetro. */
   private turbinePeripheralA(): number { return this.units.reduce((a, x) => a + (x.turb?.peripheralA ?? 0), 0); }
   /** Turbinas paradas e frias (reposicionar no píer); os motores a pistão só desligam. */
-  coldEngines(): void { for (const x of this.units) { x.engine = "off"; x.rpm = 0; x.key = "off"; x.manualCrank = false; x.testT = 0; x.turb?.cold(); } }
+  coldEngines(): void { for (const x of this.units) { x.engine = "off"; x.rpm = 0; x.key = "off"; x.manualCrank = false; x.testT = 0; x.turb?.cold(); } this.hv?.setHv(false); }
   get gear(): Gear { return this.u.gear; }
   set gear(v: Gear) { if (this.inUnit) this.u.gear = v; else for (const x of this.units) x.gear = v; }
   private get wantGear(): Gear { return this.u.wantGear; }
@@ -511,11 +521,44 @@ export class Speedboat {
   private F: Vec3 = v3();
   private T: Vec3 = v3();
 
+  /** propulsão elétrica (AR-E); null nos barcos a combustão */
+  hv: ElectricDrive | null = null;
+  /** potência pedida no eixo pela hélice no último passo (kW) */
+  private elecShaftKw = 0;
+  /** HYDROFOIL: posição dos foils (0 recolhidos … 1 baixados), o comando, bloqueio, altura pedida e o computador de voo */
+  foilDeploy = 0;
+  foilDown = false;
+  foilBlocked: "" | "speed" | "power" | "shallow" = "";
+  rideTarget = 0.5;
+  /** computador de voo ligado (com READY ele segura a altura; desligado os flaps ficam neutros) */
+  fcsOn = true;
+  private fcs: FcsState = { integ: 0, integP: 0, integR: 0, flapL: 0, flapR: 0, flapRear: 0 };
+  private foilA = 0;
+  private foilHit = false;
+  /** baixa/recolhe os foils (o atuador só anda devagar e com o barco quase parado) */
+  setFoils(down: boolean): "" | "speed" | "power" {
+    if (!this.params.hydrofoil) return "";
+    this.foilDown = down;
+    if (Math.hypot(this.vel.x, this.vel.z) > this.params.hydrofoil.retractMaxSpeed && Math.abs((down ? 1 : 0) - this.foilDeploy) > 1e-3) return "speed";
+    if (this.systems.supplyV(this.params.hydrofoil.actuatorA) < 10) return "power";
+    return "";
+  }
+  /** ajusta a altura de voo pedida (m) */
+  setRide(d: number): number {
+    const H = this.params.hydrofoil; if (!H) return 0;
+    this.rideTarget = clamp(Math.round((this.rideTarget + d) / H.ride.step) * H.ride.step, H.ride.min, H.ride.max);
+    return this.rideTarget;
+  }
+  /** posição local do pod (a hélice): sobe `podRise` com os foils recolhidos */
+  private podLift(): number { const H = this.params.hydrofoil; return H ? (1 - this.foilDeploy) * H.podRise : 0; }
+
   constructor(params: SpeedboatParams, pos: Vec3, headingRad = 0) {
     this.params = params;
     this.units = (params.engines ?? [{ x: 0 }]).map((e, i) => new EngineUnit(i, e.x));
     if (params.turbine) for (const x of this.units) { x.turb = new Turbine(params.turbine); x.rpm = params.idleRpm; }
     this.u = this.units[0];
+    if (params.electric) { this.hv = new ElectricDrive(params.electric, 0.6); this.hv.forceReady(); for (const x of this.units) x.rpm = 0; }
+    if (params.hydrofoil) this.rideTarget = params.hydrofoil.ride.def;
     this.anchor = new AnchorGear(params.anchor);
     this.systems = new EngineSystems({ ...ENGINE_SYSTEMS, ...params.systems, tankLiters: params.tankLiters, hasBattery: params.electricStart });
     this.systems2 = this.units.length > 1 ? new EngineSystems(this.systems.p) : null;
@@ -532,6 +575,7 @@ export class Speedboat {
       rpms: [params.idleRpm], gears: ["N"], throttles: [0], thrusts: [0], engines: ["running"], keys: ["on"], houseV: 12.6, propRpms: [0], coolants: [45], batteryVs: [12.6], batterySocs: [0.92], batteryAs: [0], turbine: null, nominalV: 12, gpu: false, gpuState: "off", gpuT: 0, gpuKw: 0, busBattery: true, busGen: false, extPwr: false, extPwrClosed: false, extPwrFault: false, gpuA: 0, coolingLps: 0, fuelValveOpen: true, fuelLineFrac: 1, bilgeMode: "auto", batterySel: "ind", choke: false,
       lanyard: true, driveMode: "normal", righting: false, magnetos: "both", mixture: 1, prime: 0, boostBar: 0, ibb: "off",
       ecuA: false, ecuB: false, pump1: false, pump2: false, fuelPressBar: 0, wingH: 0, altitude: 0, vsi: 0, airspeed: 0, aoaDeg: 0, groundEffect: 1, wingLoad: 0, elevator: 0, elevTrim: 0, aileron: 0, leveler: false, stallWarn: false, airborne: false,
+      hv: null, foil: null,
     };
   }
 
@@ -553,6 +597,7 @@ export class Speedboat {
     this.manualAngle = this.params.trimPins[this.trimPin] ?? 0;
     this.gear = this.wantGear = "N";
     this.shiftTimer = 0;
+    if (this.params.hydrofoil) { this.foilDeploy = 0; this.foilDown = false; this.foilBlocked = ""; this.fcs = { integ: 0, integP: 0, integR: 0, flapL: 0, flapR: 0, flapRear: 0 }; }
   }
 
   get forward(): Vec3 { return rotate(this.rot, v3(0, 0, 1)); }
@@ -690,8 +735,9 @@ export class Speedboat {
     // o eixo de direção real fica logo à frente do pé)
     this.eachUnit(() => {
       const off = v3(this.u.offsetX, 0, 0); // rabeta deste motor (deslocada em X)
-      const propW = this.toWorld(add(add(P.drivePivot, off), rotate(tiltRot, sub(P.propPos, P.drivePivot))));
-      const intakeW = this.toWorld(add(add(P.drivePivot, off), rotate(tiltRot, sub(P.intakePos, P.drivePivot))));
+      const lift = v3(0, this.podLift(), 0); // (hydrofoil: o pod sobe com os foils recolhidos)
+      const propW = this.toWorld(add(add(add(P.drivePivot, off), rotate(tiltRot, sub(P.propPos, P.drivePivot))), lift));
+      const intakeW = this.toWorld(add(add(add(P.drivePivot, off), rotate(tiltRot, sub(P.intakePos, P.drivePivot))), lift));
       // (airboat: motor de avião refrigerado a AR — não depende de tomada d'água)
       const intakeSubmerged = !!P.airProp || water.getHeight(intakeW.x, intakeW.z) - intakeW.y > 0.02;
       if (this.u.index === 0) this.propWorld = propW;
@@ -763,6 +809,20 @@ export class Speedboat {
         const cavTarget = immersion > 0.9 && this.engine === "running" ? clamp((load * slip - 0.55) / 0.25, 0, 1) : 0;
         this.cavitation += (cavTarget - this.cavitation) * (1 - Math.exp(-dt / 0.15));
         thrust *= Math.pow(immersion, 1.5) * (1 - 0.5 * aeration) * (1 - 0.3 * this.cavitation) * (1 - 0.7 * this.engineDamage); // pé/hélice avariados
+      }
+      if (P.electric && this.hv) {
+        // MOTOR ELÉTRICO: a potência no eixo que a hélice pede vem da teoria do disco atuador, P = T·(Va + vi)/η,
+        // vi = ½(−Va + √(Va² + 2T/(ρA))); o inversor entrega no máximo `availKw` (motor, bateria, temperatura)
+        const E = P.electric, A = E.propDiskM2, Va = Math.max(0, Math.abs(axial));
+        const shaftKw = (T: number) => (T * (Va + 0.5 * (-Va + Math.sqrt(Va * Va + (2 * T) / (RHO * A))))) / E.etaProp / 1000;
+        const avail = this.hv.availKw;
+        let need = shaftKw(Math.abs(thrust));
+        if (need > avail) {
+          let k = 1;
+          for (let it = 0; it < 4 && need > avail * 1.01; it++) { k *= avail <= 0 ? 0 : Math.pow(avail / need, 0.8); need = shaftKw(Math.abs(thrust) * k); }
+          thrust *= k;
+        }
+        this.elecShaftKw = shaftKw(Math.abs(thrust));
       }
       thrust *= Speedboat.powerMult; // (modo de teste "*": força ×1…×5 em todas as embarcações)
       if (thrust !== 0) this.addForceAt(scale(tDir, thrust), propW, "thrust");
@@ -841,6 +901,8 @@ export class Speedboat {
     }
     // ---------------- ASA COM EFEITO SOLO (ekranoplano) ----------------
     if (P.wing) this.applyWing(dt, water, world, wetFraction);
+    // ---------------- HYDROFOIL (foils submersos + computador de voo) ----------------
+    if (P.hydrofoil) this.applyFoils(dt, water, world, wetFraction, u);
 
     // ---------------- âncora (o cabo entra como mola em collide) ----------------
     {
@@ -916,7 +978,7 @@ export class Speedboat {
     t.thrusts = this.units.map((x) => x.lastThrust); t.engines = this.units.map((x) => x.engine); t.keys = this.units.map((x) => x.key); t.propRpms = this.units.map((x) => x.propRpmState);
     // sistemas do motor: combustível, temperatura, bateria, horímetro
     const sys = this.systems;
-    this.runSystems(dt, { lightsOn: input.navigationLights, trimMotorA: this.trimMotorA, auxA: this.anchor.motorA + this.bilgePumpA + this.turbinePeripheralA(), intakeSubmerged });
+    this.runSystems(dt, { lightsOn: input.navigationLights, trimMotorA: this.trimMotorA, auxA: this.anchor.motorA + this.bilgePumpA + this.turbinePeripheralA() + this.foilA, intakeSubmerged });
     this.updateBilge(dt, water, input);
     this.updateBallast(dt);
     this.updateSlosh(dt);
@@ -924,6 +986,7 @@ export class Speedboat {
     t.anchorTension = this.anchor.tension; t.anchorRelay = this.anchor.relay; t.windlassA = this.anchor.motorA;
     t.trimMotorA = this.trimMotorA; t.jumper = sys.jumper; t.jumpCharge = sys.jumpCharge; t.neutralRev = this.neutralRev;
     this.banksTelemetry();
+    this.electricTelemetry();
     t.buzzer = this.selfTestT > 0 || this.units.some((x) => x.testT > 0);
     t.starterRpm = this.engine === "cranking" ? this.rpm : 0;
     t.batterySoc = sys.batterySoc;
@@ -1265,7 +1328,7 @@ export class Speedboat {
     const trimAngle = P.trimMode === "manual" ? this.manualAngle : this.trim >= 0 ? this.trim * P.trimUp : -this.trim * P.trimDown;
     const q = qFromAxisAngle(v3(1, 0, 0), trimAngle + this.tilt);
     const tip = v3(P.propPos.x, P.propPos.y - P.propRadius - 0.06, P.propPos.z + 0.15);
-    const local = add(P.drivePivot, rotate(q, sub(tip, P.drivePivot)));
+    const local = add(add(P.drivePivot, rotate(q, sub(tip, P.drivePivot))), v3(0, this.podLift(), 0));
     // com duas rabetas, a que estiver mais baixa (barco adernado) é a que bate primeiro
     let best = this.toWorld(add(local, v3(this.units[0].offsetX, 0, 0)));
     for (let i = 1; i < this.units.length; i++) { const w = this.toWorld(add(local, v3(this.units[i].offsetX, 0, 0))); if (w.y < best.y) best = w; }
@@ -1407,6 +1470,7 @@ export class Speedboat {
     t.trimPin = P.trimMode === "manual" ? (this.tiltWanted ? P.trimPins.length + 1 : this.trimPin + 1) : 0;
     t.trimMotorA = this.trimMotorA; t.jumper = sys.jumper; t.jumpCharge = sys.jumpCharge;
     this.banksTelemetry();
+    this.electricTelemetry();
     t.buzzer = this.selfTestT > 0 || this.units.some((x) => x.testT > 0); t.starterRpm = this.engine === "cranking" ? this.rpm : 0;
     t.intakeSubmerged = intakeSubmerged; t.propImmersion = this.immersion; t.propRpm = this.propRpmState;
     t.hullDamage = this.hullDamage; t.engineDamage = this.engineDamage;
@@ -1594,6 +1658,120 @@ export class Speedboat {
    * (ω×r: a cauda amortece a arfagem e a guinada, as pontas a rolagem) — e os flutuadores das pontas das asas
    * (empuxo + arrasto quando tocam a água: seguram o casco estreito de pé parado).
    */
+  /** Telemetria da propulsão elétrica e dos foils (o HUD/painel só leem isto). */
+  private electricTelemetry(): void {
+    const t = this.telemetry, hv = this.hv;
+    if (hv) {
+      t.hv = { soc: hv.soc, kwhLeft: hv.kwhLeft, packV: hv.packV, linkV: hv.linkV, packA: hv.packA, kw: hv.kw, shaftKw: hv.shaftKw, availKw: hv.availKw, limited: hv.limited,
+        phase: hv.phase, hvSwitch: hv.hvSwitch, ready: hv.ready, motorC: hv.motorC, packC: hv.packC, shore: hv.shore, charging: hv.charging, fault: hv.fault };
+      // (o que os relógios genéricos leem: "combustível" = energia; consumo em kW; temperatura = motor)
+      t.fuelL = hv.kwhLeft; t.fuelFrac = hv.soc; t.fuelLph = Math.max(0, hv.kw); t.lowFuel = hv.soc < 0.12;
+      t.coolantC = hv.motorC; t.overheatWarn = hv.motorC > 110; t.coolants = [hv.motorC];
+    }
+  }
+
+  /**
+   * HYDROFOIL: atuadores de recolhimento, computador de voo (flaps) e as forças dos foils, dos struts e do pod.
+   * Os foils só sustentam baixados e travados (deploy ≈ 1); recolhidos ficam encaixados no fundo.
+   */
+  private applyFoils(dt: number, water: IWaterSurface, world: PhysicsWorld, wetFraction: number, u: number): void {
+    const H = this.params.hydrofoil!;
+    const t = this.telemetry;
+    const sp = Math.hypot(this.vel.x, this.vel.z);
+    // ---- atuadores (12 V): só mexem devagar e com o barco quase parado ----
+    const want = this.foilDown ? 1 : 0;
+    let moving = false;
+    this.foilBlocked = "";
+    if (Math.abs(want - this.foilDeploy) > 1e-4) {
+      if (sp > H.retractMaxSpeed) this.foilBlocked = "speed";
+      else if (this.systems.supplyV(H.actuatorA) < 10) this.foilBlocked = "power";
+      else {
+        const before = this.foilDeploy;
+        this.foilDeploy = approach(this.foilDeploy, want, dt / H.retractS);
+        if (Math.abs(want - this.foilDeploy) < 2e-4) this.foilDeploy = want; // (fim de curso)
+        moving = true;
+        // baixando com um foil encostando no fundo: o atuador para (água rasa)
+        if (this.foilDeploy > before && this.foilTipsHitGround(world)) { this.foilDeploy = before; moving = false; this.foilBlocked = "shallow"; }
+      }
+    }
+    this.foilA = (moving ? H.actuatorA : 0) + (this.hv?.ready ? H.fcsA : 0);
+    const dep = this.foilDeploy, locked = dep > 0.97;
+    // ---- computador de voo ----
+    const sw = this.toWorld(H.sensor);
+    const hMeas = sw.y - water.getHeight(sw.x, sw.z);
+    const angL = rotateInv(this.rot, this.angVel);
+    const fwd = this.forward, right = this.right;
+    const pitch = Math.asin(clamp(fwd.y, -1, 1)), roll = -Math.asin(clamp(right.y, -1, 1));
+    const flapMaxF = Math.min(...H.foils.filter((f) => f.role === "front").map((f) => f.flapMax));
+    const flapMaxR = H.foils.find((f) => f.role === "rear")?.flapMax ?? 0;
+    const active = locked && this.fcsOn && !!this.hv?.ready && !this.capsized;
+    this.fcs = fcsStep(this.fcs, { h: hMeas, hDot: this.pointVelocity(sw).y, target: this.rideTarget, pitch, pitchRate: -angL.x, roll, rollRate: -angL.z,
+      u, yawRate: angL.y, active }, H, flapMaxF, flapMaxR, dt);
+    // ---- forças ----
+    const drop = (1 - dep) * H.rise;
+    let lift = 0, minDepth = Infinity, vent = false, grounded = false;
+    for (const f of H.foils) {
+      const posL = add(f.pos, v3(0, drop, 0));
+      const wp = this.toWorld(posL);
+      const depth = water.getHeight(wp.x, wp.z) - wp.y;
+      const lr = rotateInv(this.rot, sub(this.pointVelocity(wp), water.getCurrent(wp.x, wp.z)));
+      if (locked) {
+        const flap = f.role === "rear" ? this.fcs.flapRear : f.side < 0 ? this.fcs.flapL : this.fcs.flapR;
+        const r = foilForce(f, posL, lr, depth, flap);
+        const fw = rotate(this.rot, r.force);
+        this.addForceAt(fw, wp, "lift");
+        lift += fw.y;
+        minDepth = Math.min(minDepth, depth);
+        if (r.vent > 0.5 && depth > -0.05 && Math.abs(lr.z) > 3) vent = true; // (rompendo a superfície andando; parado não conta)
+      }
+      // strut: do foil até o casco; a parte dentro d'água arrasta e "agarra" de lado (o de trás gira com o pod: leme)
+      const strutLen = f.strutTopY - posL.y;
+      if (strutLen > 0.05) {
+        const imm = clamp(depth, 0, strutLen);
+        if (imm > 0) {
+          const mid = add(posL, v3(0, imm * 0.5, 0));
+          const mw = this.toWorld(mid);
+          let lrs = rotateInv(this.rot, sub(this.pointVelocity(mw), water.getCurrent(mw.x, mw.z)));
+          if (f.role === "rear") { const c = Math.cos(this.steer), s = Math.sin(this.steer); lrs = v3(lrs.x * c + lrs.z * s, lrs.y, lrs.z * c - lrs.x * s); }
+          this.addForceAt(rotate(this.rot, strutForce(f.strutChord, imm, lrs)), mw, "lift");
+        }
+      }
+      // foil no fundo (água rasa, banco de areia): contato + avaria
+      for (const dx of [-f.span / 2, 0, f.span / 2]) {
+        const tp = this.toWorld(add(posL, v3(dx, -0.04, 0)));
+        const gh = world.groundHeight(tp.x, tp.z);
+        if (tp.y < gh) {
+          grounded = true;
+          const vp = this.pointVelocity(tp);
+          this.applyContact(tp, vp, v3(0, 1, 0), gh - tp.y, 60000 * clamp(this.totalMass / 1300, 0.5, 4), 9000, 0.5);
+          if (Math.hypot(vp.x, vp.z) > 1.2) this.addDamage("hull", (this.foilHit ? 0 : 0.05) + 0.25 * dt * Math.hypot(vp.x, vp.z), "Avaria: os foils bateram no fundo — recolha os foils em água rasa");
+        }
+      }
+    }
+    this.foilHit = grounded;
+    // pod (motor + hélices) no fim do strut de trás
+    const pw = this.propWorld;
+    const pd = water.getHeight(pw.x, pw.z) - pw.y;
+    if (pd > 0) {
+      const lp = rotateInv(this.rot, sub(this.pointVelocity(pw), water.getCurrent(pw.x, pw.z)));
+      this.addForceAt(rotate(this.rot, v3(0, 0, -0.5 * RHO * H.podCdA * Math.abs(lp.z) * lp.z)), pw, "lift");
+    }
+    const W = this.totalMass * G;
+    const flyingNow = locked && wetFraction <= 0.02 && hMeas > 0.08;
+    t.foil = { deploy: dep, down: this.foilDown, moving, blocked: this.foilBlocked, rideH: hMeas, target: this.rideTarget, foilborne: flyingNow,
+      flapL: this.fcs.flapL, flapR: this.fcs.flapR, flapRear: this.fcs.flapRear, liftFrac: lift / W, minDepth: Number.isFinite(minDepth) ? minDepth : 0, vent, fcs: active, fcsSw: this.fcsOn, grounded };
+  }
+  /** algum foil encostando no fundo (para o atuador não baixar contra o chão) */
+  private foilTipsHitGround(world: PhysicsWorld): boolean {
+    const H = this.params.hydrofoil!;
+    const drop = (1 - this.foilDeploy) * H.rise;
+    for (const f of H.foils) for (const dx of [-f.span / 2, 0, f.span / 2]) {
+      const tp = this.toWorld(add(f.pos, v3(dx, drop - 0.04, 0)));
+      if (tp.y < world.groundHeight(tp.x, tp.z) + 0.02) return true;
+    }
+    return false;
+  }
+
   private applyWing(dt: number, water: IWaterSurface, world: PhysicsWorld, wetFraction: number): void {
     const W = this.params.wing!;
     const t = this.telemetry;
@@ -1783,6 +1961,20 @@ export class Speedboat {
     if (!this.occupants.some((o) => o.seat === "helm")) return "noPilot";
     if (!this.lanyard && this.engine === "off") { this.telemetry.startFail = "lanyard"; return "noLanyard"; }
     if (this.engine !== "running" && this.engineDamage >= 0.95) return "broken";
+    if (this.hv) {
+      // ELÉTRICO: o P é o botão de partida — liga a HV (pré-carga) e, com ela pronta, o READY; de novo desliga o READY.
+      // O BMS precisa dos 12 V (bateria da casa) para fechar os contatores
+      const hv = this.hv;
+      if (hv.ready) { hv.setReady(false); return "stopped"; }
+      if (hv.phase === "precharge" || hv.autoReady) { hv.setHv(false); return "stopped"; }
+      if (this.gear !== "N") return "needNeutral";
+      if (this.batterySel === "off" || this.systems.supplyV(5) < this.params.electric!.minV12) { this.telemetry.startFail = "dead"; return "lowBattery"; }
+      if (hv.soc <= 0.001) { this.telemetry.startFail = "fuel"; return "noFuel"; }
+      this.telemetry.startFail = ""; this.telemetry.stall = "";
+      if (hv.phase === "on") { hv.setReady(true); return "starting"; }
+      hv.setHv(true); hv.autoReady = true;
+      return "starting";
+    }
     if (this.engine === "running") { this.engine = "off"; for (const x of this.units) { x.key = "off"; x.manualCrank = false; } if (this.params.aircraft) this.magnetos = "off"; if (this.params.efi) { this.ecuA = this.ecuB = false; this.pump1 = this.pump2 = false; } return "stopped"; }
     if (this.params.efi && this.engine === "off") {
       // P = a sequência do piloto: LANE A e B ligadas, as duas bombas (decolagem), autoteste e partida (a pressão
@@ -1910,6 +2102,20 @@ export class Speedboat {
       x.sleepT = this.params.startStop && x.key === "on" && x.engine === "off" ? x.sleepT + dt : 0;
       if (x.sleepT > 30) { x.key = "off"; x.sleepT = 0; }
     }
+    if (this.hv && this.params.electric) {
+      // ELÉTRICO: a casa de 12 V é carregada pelo DC-DC com a HV ligada (o "alternador"); a HV atende o eixo, o DC-DC,
+      // as bombas de arrefecimento e o carregador do cais
+      const sys = this.systems, hv = this.hv;
+      sys.batteryOn = this.batterySel !== "off";
+      const hvOn = hv.phase === "on";
+      sys.update(dt, { engine: hvOn ? "running" : "off", rpm: 3000, load: 0, starterLoad: 0, alternators: 1, fuelLph: 0, intakeSubmerged: true,
+        lightsOn: h.lightsOn, trimMotorA: h.trimMotorA, auxA: h.auxA + (hv.hvSwitch ? 3 : 0) });
+      sys.fuelL = this.params.tankLiters; // (sem combustível)
+      const wasReady = hv.ready;
+      hv.update(dt, { v12: sys.batteryOn ? sys.supplyV(3) : 0, shaftKw: this.elecShaftKw, auxKw: (sys.alternatorA * 13.8) / 1000 / 0.92, cooled: this.units[0].immersion > 0.3 });
+      if (wasReady && !hv.ready) t.stall = hv.fault === "empty" ? "fuel" : "broken";
+      return;
+    }
     if (!this.systems2) {
       const sys = this.systems;
       if (!this.units[0].turb) sys.batteryOn = this.batterySel !== "off";
@@ -2000,6 +2206,22 @@ export class Speedboat {
 
   private updateRpm(dt: number, axial: number, ventilation: number): number {
     const P = this.params;
+    if (this.hv && P.electric) {
+      // MOTOR ELÉTRICO: estado pelo inversor (READY = "ligado"; pré-carga = "partindo"); sem marcha lenta: o giro vem da
+      // hélice — disco atuador: a água sai a Va + 2·vi e a hélice gira para isso (passo ~0,45 m); no ar dispara
+      const hv = this.hv;
+      this.u.engine = hv.ready ? "running" : hv.phase === "precharge" || hv.autoReady ? "cranking" : "off";
+      this.revLimiting = false;
+      const T = Math.abs(this.u.lastThrust), Va = Math.abs(axial), A = P.electric.propDiskM2;
+      const vi = 0.5 * (-Va + Math.sqrt(Va * Va + (2 * T) / (RHO * A)));
+      const engaged = this.u.engine === "running" && this.gear !== "N";
+      const wet = (60 * (Va + 2 * vi)) / 0.45;
+      const dry = P.maxRpm * this.throttleActual;
+      const target = engaged ? Math.min(P.revLimitRpm, lerp(dry, wet, clamp(this.immersion * 1.5, 0, 1))) : 0;
+      this.rpm += (target - this.rpm) * (1 - Math.exp(-dt / 0.15));
+      if (this.rpm < 2) this.rpm = 0;
+      return this.rpm;
+    }
     const tb = this.u.turb;
     if (tb) {
       // turbina: o eixo de saída gira com a turbina livre (N2); o estado do "motor" segue a fase da turbina

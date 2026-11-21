@@ -2,7 +2,8 @@
 // lancha rápida AR-9 (RAPIDA, dois V8), lancha de turbina AR-10 (TURBINA; a turbina em turbine.ts), a moto
 // aquática AR-J (JETSKI, 300 hp com jato d'água), a lancha pantaneira AR-P (AIRBOAT, motor de avião com hélice
 // pusher no ar), o ekranoplano AR-W (WIG, asa com efeito solo e motor de avião turbo injetado) e o anfíbio AR-A
-// (AMPHIB, avião anfíbio leve de asa alta que voa de verdade).
+// (AMPHIB, avião anfíbio leve de asa alta que voa de verdade), a lancha de wakeboard AR-8 (WAKEBOAT) e o barco
+// elétrico com foils AR-E (FOILER: bateria de 400 V em electric.ts, foils e computador de voo em hydrofoil.ts).
 // Estes valores são o "contrato" entre as POCs (Babylon, Unity, Unreal):
 // a mesma massa, dimensões, potência e coeficientes devem ser usados nas três.
 
@@ -11,8 +12,11 @@ import { floodTable } from "./hullShape.ts";
 import type { EngineSystemsParams } from "./engineSystems.ts";
 import type { TurbineParams } from "./turbine.ts";
 import type { WingParams } from "./wing.ts";
+import type { ElectricParams } from "./electric.ts";
+import type { HydrofoilParams } from "./hydrofoil.ts";
 
-export type SeatId = "helm" | "passenger" | "rearLeft" | "rearRight";
+/** bancos: os quatro de sempre e, nos barcos de passageiros, `p1`…`pN` (`seats` traz só os que o barco tem) */
+export type SeatId = "helm" | "passenger" | "rearLeft" | "rearRight" | `p${number}`;
 export interface Occupant { seat: SeatId; mass: number }
 export const PERSON_KG = 80;
 
@@ -27,7 +31,7 @@ export interface BuoyancyPoint {
   incidence: number;
 }
 
-export type VesselKind = "lancha" | "bote" | "rapida" | "turbina" | "jetski" | "airboat" | "wig" | "anfibio" | "wake";
+export type VesselKind = "lancha" | "bote" | "rapida" | "turbina" | "jetski" | "airboat" | "wig" | "anfibio" | "wake" | "foil";
 
 export interface SpeedboatParams {
   kind: VesselKind;
@@ -239,6 +243,17 @@ export interface SpeedboatParams {
    * dela sai embaixo d'água — não há "rooster tail" (o leque de água do motor de popa/rabeta que voa para trás). Só visual.
    */
   shaftDrive?: boolean;
+  /**
+   * PROPULSÃO ELÉTRICA (barco AR-E): no lugar do motor a combustão, bateria de alta tensão (HV) com contatores e
+   * pré-carga, inversor + motor no pod da hélice, DC-DC para a casa de 12 V e carregador de cais (sim/electric.ts).
+   * Sem combustível, sem marcha lenta (o motor só gira com acelerador), sem partida (READY).
+   */
+  electric?: ElectricParams;
+  /**
+   * HYDROFOIL (barco AR-E): foils submersos com flaps, struts, recolhimento e o computador de voo (sim/hydrofoil.ts).
+   * O pod da hélice fica no strut de trás e sobe junto ao recolher.
+   */
+  hydrofoil?: HydrofoilParams;
   /** atrito do fundo do casco no chão (padrão 0,45). Airboat: fundo de alumínio com polímero desliza em lama/capim */
   groundMu?: number;
   /** compressor mecânico (supercharger), acionado pelo virabrequim: pressão máxima de sobrealimentação (bar) a giro
@@ -1279,4 +1294,134 @@ export const WAKEBOAT: SpeedboatParams = {
   },
 };
 
-export const VESSELS: Record<VesselKind, SpeedboatParams> = { lancha: SPEEDBOAT, bote: DINGHY, rapida: RAPIDA, turbina: TURBINA, jetski: JETSKI, airboat: AIRBOAT, wig: WIG, anfibio: AMPHIB, wake: WAKEBOAT };
+// ---------------------------------------------------------------------------------------------
+// Barco ELÉTRICO com FOILS AR-E (9,5 m, piloto + 12 passageiros em cabine com teto). Casco de compósito com fundo em
+// V moderado; bateria de 126 kWh a 400 V (108 células NMC em série) no fundo, no centro; pod elétrico de 140 kW
+// (dois motores, duas hélices contrarrotativas) no strut de trás, que também gira para dar a direção; dois foils
+// dianteiros com flaps e um traseiro. Decola a ~29 km/h, voa a ~40 km/h com ~50 kW e a casa é de 12 V (DC-DC).
+// Origem = CG do barco seco. X boreste, Y cima, Z proa. Sem marca de fabricante.
+// ---------------------------------------------------------------------------------------------
+const el = 0.9; // meia-distância transversal dos pontos de flutuação
+const ezk = 9.5 / 8.6;
+const FOIL_FRONT = (side: -1 | 1) => ({
+  name: side < 0 ? "foil BB" : "foil BE", pos: v3(side * 0.95, -1.6, 1.35), span: 1.6, chord: 0.31,
+  cla: 4.6, incidence: 2.5 * DEG, stall: 13 * DEG, cd0: 0.009, arEff: 4.6, flapMax: 14 * DEG, flapTau: 0.5,
+  role: "front" as const, side, strutTopY: -0.45, strutChord: 0.26,
+});
+
+export const FOILER: SpeedboatParams = {
+  ...TURBINA,
+  kind: "foil",
+  name: "Barco elétrico com foils AR-E",
+  steering: "remote",
+  trimMode: "none",
+  trimPins: [],
+  electricStart: true,
+  tankLiters: 1,          // (sem combustível: o "tanque" não existe — a energia é a bateria HV)
+  fuelIdleLph: 0,
+  fuelMaxLph: 0,
+  cylinders: 0,
+  maxPeople: 13,
+  length: 9.5,
+  beam: 2.8,
+  mass: 2700,             // casco + bateria de 126 kWh (~750 kg) + pod + foils
+  fuelTankPos: v3(0, -0.4, 0),
+  fuelDensity: 0,
+  seats: {
+    helm: v3(0, 0.3, 2.3),
+    passenger: v3(0.55, 0.3, 2.3), // (não usados: os passageiros vão de p1 a p12)
+    rearLeft: v3(0, 0.3, 0), rearRight: v3(0, 0.3, 0),
+    // 3 fileiras de 4 (2 + corredor + 2): z = 1,1 / 0,05 / −1,0
+    ...Object.fromEntries([1.1, 0.05, -1.0].flatMap((z, r) => [-1.02, -0.47, 0.47, 1.02].map((x, c) => [`p${r * 4 + c + 1}`, v3(x, 0.3, z)]))),
+  },
+  inertia: v3(24000, 26000, 4200),
+  waterplaneArea: 18.5,
+  pointMaxDepth: 0.9,
+  wetDepth: 0.13,
+  buoyancyPoints: [
+    { p: v3(-el, -0.42, 3.4 * ezk), areaWeight: 0.6, liftWeight: 0.8, incidence: 6 * DEG },
+    { p: v3(el, -0.42, 3.4 * ezk), areaWeight: 0.6, liftWeight: 0.8, incidence: 6 * DEG },
+    { p: v3(-el, -0.42, 0.5 * ezk), areaWeight: 1.1, liftWeight: 1.0, incidence: 3 * DEG },
+    { p: v3(el, -0.42, 0.5 * ezk), areaWeight: 1.1, liftWeight: 1.0, incidence: 3 * DEG },
+    { p: v3(-el, -0.42, -2.6 * ezk), areaWeight: 1.4, liftWeight: 0.25, incidence: 1.5 * DEG },
+    { p: v3(el, -0.42, -2.6 * ezk), areaWeight: 1.4, liftWeight: 0.25, incidence: 1.5 * DEG },
+  ],
+  contactPoints: [
+    v3(0, 0.3, 4.75), v3(0, -0.45, 3.4), v3(0, -0.55, 0), v3(0, -0.55, -4.0),
+    v3(-1.33, 0.4, 2.0), v3(1.33, 0.4, 2.0), v3(-1.38, 0.4, -1.6), v3(1.38, 0.4, -1.6),
+    v3(-1.33, 0.4, -4.55), v3(1.33, 0.4, -4.55), v3(-0.7, 0.4, 3.75), v3(0.7, 0.4, 3.75),
+  ],
+  bunkPoints: [-4.0, -2.0, 0, 2.0].flatMap((z) => [v3(0, -0.55, z), v3(-0.65, -0.43, z), v3(0.65, -0.43, z)]),
+  gunwaleY: 0.55,
+  // cabine com teto e popa fechada; o piso fica acima d'água (porão pequeno sob o piso)
+  bilge: { pos: v3(0, -0.4, -1.5), maxL: 9000, pumpLph: 9500, pumpA: 8, outlet: v3(1.38, 0.25, -3.0), areaM2: 6.0, holeMaxM2: 0.005, bowRise: 0.25, transomY: 0.55, transomW: 0,
+    sumpL: 900, floorY: -0.05, floodCenter: v3(0, -0.05, -0.2), floodLen: 5.0, floodHalfW: 1.05, scupperM2: 0, scupperFromStern: 0.6, shutoffHeadM: 2.7, outletAreaM2: 1.14e-3, capsizeAirFrac: 0.5, ventM2: 3e-5 },
+  anchor: { roller: v3(0, 0.75, 4.6), rodeMax: 40, rateOut: 0.8, rateIn: 0.5, motorA: 40, holdN: 4500 },
+  tow: { eyeX: 1.05, eyeY: 0.35, eyeZ: -4.72, leg: 1.6 },
+  enclosedCockpit: false,
+  hydraulicShift: false,
+  surfacePiercing: false,
+  propWalk: 0,
+  cooling: undefined,
+  turbine: undefined,
+  propGear: 1,            // motores ligados direto às hélices
+  shaftDrive: true,       // hélices no pod, fundas: sem "rooster tail"
+  enginePowerHp: 188,     // 140 kW
+  // casa de 12 V: bateria AGM de 100 Ah; o "alternador" é o DC-DC (70 A com a HV ligada, em qualquer rotação)
+  systems: { nominalV: 12, batteryAh: 100, starterA: 0, altMaxA: 70, altIdleFrac: 1, thermostatC: 40, warnC: 999, protectC: 999, shutdownC: 999, lineL: 0.001 },
+  electric: {
+    packKwh: 126, nominalV: 400, cellsS: 108, packR: 0.06, motorKw: 140, contKw: 90, etaDrive: 0.93, etaProp: 0.72,
+    propDiskM2: 0.25, prechargeS: 1.2, prechargeTau: 0.3, minV12: 10.5, idleKw: 0.35, chargerKw: 60, chargeTimeScale: 20,
+  },
+  hydrofoil: {
+    foils: [
+      FOIL_FRONT(-1), FOIL_FRONT(1),
+      { name: "foil de popa", pos: v3(0, -1.62, -4.15), span: 1.45, chord: 0.34, cla: 4.5, incidence: 3 * DEG, stall: 13 * DEG, cd0: 0.009, arEff: 3.9,
+        flapMax: 12 * DEG, flapTau: 0.45, role: "rear", side: 0, strutTopY: -0.45, strutChord: 0.32 },
+    ],
+    rise: 1.05, podRise: 0.65, retractS: 12, retractMaxSpeed: 2.0, actuatorA: 28, fcsA: 4,
+    ride: { min: 0.3, max: 0.8, def: 0.5, step: 0.05 },
+    sensor: v3(0, -0.5, 3.6),
+    flapRate: 0.6,
+    fcs: { kH: 0.5, kHd: 0.25, kHi: 0.25, kP: 1.5, kPr: 0.5, kPi: 0.6, kR: 1.2, kRr: 0.45, kRi: 0.5, pitchDeg: 0.5, maxBankDeg: 14 },
+    podCdA: 0.035,
+  },
+  maxThrust: 11000,
+  reverseThrustFactor: 0.6,
+  propPitchSpeed: 30,
+  propPos: v3(0, -1.5, -4.1),     // pod com os foils baixados (sobe `podRise` ao recolher)
+  propRadius: 0.2,
+  revLimitRpm: 2300,
+  engineResponse: 0.15,
+  idleRpm: 0,
+  maxRpm: 2000,
+  shiftTime: 0.2,
+  idleThrustFraction: 0,
+  maxSteerLow: 28 * DEG,
+  maxSteerHigh: 6 * DEG,
+  steerRate: 1.2,
+  gearcaseRudder: 0.12,
+  trimUp: 0, trimDown: 0, tiltMax: 0, tiltRate: 0.1, tiltMaxThrust: 99999, tiltMaxSpeed: 99, tiltMaxRpm: 99999,
+  drivePivot: v3(0, -0.3, -4.1),  // eixo de giro do pod (vertical)
+  intakePos: v3(0, -1.4, -4.1),
+  trimRate: 0.4,
+  driveLiftArea: 0,
+  planingLiftCoef: 0.55,
+  maxAoa: 14 * DEG,
+  dragFrictionQuad: 26,
+  dragLinear: 110,
+  lateralQuad: 2800,
+  lateralLinear: 2300,
+  keelLift: 4000,
+  yawDamping: 70000,
+  heaveDamping: 5200,
+  waveDragPeakRatio: 0.14,
+  sternTrough: 0.32,
+  bowWave: 0.14,
+  bankCoef: 3000,
+  rollDamping: 40000,
+  airDragCdA: 3.2,
+  windage: { sideCdA: 9, center: v3(0, 1.0, 0.3) },
+};
+
+export const VESSELS: Record<VesselKind, SpeedboatParams> = { lancha: SPEEDBOAT, bote: DINGHY, rapida: RAPIDA, turbina: TURBINA, jetski: JETSKI, airboat: AIRBOAT, wig: WIG, anfibio: AMPHIB, wake: WAKEBOAT, foil: FOILER };

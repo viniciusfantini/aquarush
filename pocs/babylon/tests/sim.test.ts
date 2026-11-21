@@ -8,7 +8,7 @@ import { Speedboat } from "../src/sim/boat.ts";
 import { JUMP_AH } from "../src/sim/engineSystems.ts";
 import { Wind, WIND_LEVELS } from "../src/sim/wind.ts";
 import { jetStreakLocal } from "../src/sim/bilgeJet.ts";
-import { VESSELS, WAKEBOAT, SPEEDBOAT, DINGHY, RAPIDA, TURBINA, JETSKI, AIRBOAT, WIG, AMPHIB, PERSON_KG, smallTow, type Occupant } from "../src/sim/params.ts";
+import { VESSELS, FOILER, WAKEBOAT, SPEEDBOAT, DINGHY, RAPIDA, TURBINA, JETSKI, AIRBOAT, WIG, AMPHIB, PERSON_KG, smallTow, type Occupant, type SeatId } from "../src/sim/params.ts";
 import { groundLift, groundInduced } from "../src/sim/wing.ts";
 import { halfWidth } from "../src/sim/mooring.ts";
 import { TowTube, TUBE } from "../src/sim/towTube.ts";
@@ -1940,6 +1940,112 @@ for (const [label, thr] of [["baixa", 0.25], ["alta", 1]] as const) {
     for (let i = 0; i < 150 / DT; i++) { water.time += DT; b.step(DT, { ...emptyInput(), gear: "N" }, water, w); ps.step(DT, water, w); }
     check("emborcamento", "barco virou com o parasail no ar: ela desceu na água", flew && ps.state === "water" && !ps.hooked ? 1 : 0, 1, 1, "", 0);
     check("emborcamento", "parasail: ela nadou até o barco virado (m dele)", Math.hypot(ps.pos.x - b.pos.x, ps.pos.z - b.pos.z), 0, 4.5, "m", 1);
+  }
+}
+
+// ---------- Barco elétrico com foils AR-E: HV 400 V + 12 V, foils e computador de voo (v0.80) ----------
+{
+  const T = "hydrofoil elétrico";
+  const water = mkWater(0);
+  const people = (n: number): Occupant[] => (["helm", ...Array.from({ length: n - 1 }, (_, i) => `p${i + 1}`)] as SeatId[]).map((seat) => ({ seat, mass: PERSON_KG }));
+  const mk = (n = 13, foils = true) => { const b = new Speedboat(FOILER, v3(0, 0.2, 0)); b.occupants = people(n); b.foilDeploy = foils ? 1 : 0; b.foilDown = foils; return b; };
+  const stepN = (b: Speedboat, s: number, inp: Partial<VehicleInput>, w: PhysicsWorld = openWater, each?: () => void) => {
+    for (let i = 0; i < s / DT; i++) { water.time += DT; b.step(DT, { ...emptyInput(), gear: "F", ...inp }, water, w); each?.(); }
+  };
+  // ---- partida: 12 V, pré-carga, READY ----
+  {
+    const b = mk(1, false); b.engine = "off"; b.coldEngines();
+    b.batterySel = "off";
+    const r0 = b.toggleIgnition();
+    check(T, "12 V desligada: o BMS não acorda, a HV não liga (lowBattery)", r0 === "lowBattery" && b.hv!.phase === "off" ? 1 : 0, 1, 1, "", 0);
+    b.batterySel = "ind";
+    const r1 = b.toggleIgnition();
+    let tReady = -1, cranking = false, t = 0;
+    stepN(b, 4, { gear: "N" }, openWater, () => { t += DT; if (b.engine === "cranking") cranking = true; if (tReady < 0 && b.hv!.ready) tReady = t; });
+    check(T, "P liga a HV: pré-carga antes do READY (s)", r1 === "starting" && cranking ? tReady : -1, 1.1, 2.5, "s", 2);
+    stepN(b, 3, { gear: "F", throttle: 0 });
+    check(T, "READY parado com o acelerador zero: o motor não gira (sem marcha lenta, rpm)", b.telemetry.rpm, 0, 5, "rpm", 0);
+    check(T, "com a HV ligada o DC-DC carrega a bateria de 12 V (A)", b.telemetry.batteryA, 3, 80, "A", 1);
+    b.engine = "off";
+    check(T, "corta-circuito/emborcar (motor desligado por fora) tira o READY", b.hv!.ready ? 0 : 1, 1, 1, "", 0);
+  }
+  // ---- foils: recolhimento ----
+  {
+    const b = mk(1, false); b.engine = "running";
+    b.setFoils(true);
+    let t = 0;
+    stepN(b, 20, { gear: "N" }, openWater, () => { if (b.foilDeploy < 1) t += DT; });
+    check(T, "baixar os foils leva ~12 s (s)", t, 10, 14, "s", 1);
+    const c = mk(1, false); c.engine = "running";
+    stepN(c, 6, { gear: "F", throttle: 0.5 });
+    c.setFoils(true);
+    stepN(c, 4, { gear: "F", throttle: 0.5 });
+    check(T, "andando (> 7 km/h) os foils não mexem (travados)", c.foilDeploy < 0.01 && c.foilBlocked === "speed" ? 1 : 0, 1, 1, "", 0);
+    // água rasa (1,2 m): baixando, o foil encosta no fundo e o atuador para
+    const shallow: PhysicsWorld = { groundHeight: () => -1.2, spheres: [], boxes: [] };
+    const d = mk(1, false); d.engine = "running"; d.setFoils(true);
+    stepN(d, 15, { gear: "N" }, shallow);
+    check(T, "água rasa (1,2 m): o foil encosta no fundo e o atuador para (fração baixada)", d.foilDeploy, 0.2, 0.95, "", 2);
+    check(T, "água rasa: a luz diz NO FUNDO (bloqueio 'shallow')", d.foilBlocked === "shallow" ? 1 : 0, 1, 1, "", 0);
+  }
+  // ---- decolagem, altura, potência (13 pessoas, acelerador 70 %) ----
+  {
+    const b = mk(13); b.engine = "running";
+    let tUp = -1, vUp = 0, t = 0;
+    // decolar = os foils passam a sustentar o barco (≥ 95 % do peso); "voando" (casco fora d'água) vem logo depois
+    stepN(b, 45, { throttle: 0.7 }, openWater, () => { t += DT; if (tUp < 0 && b.telemetry.foil!.liftFrac >= 0.95) { tUp = t; vUp = b.telemetry.speedKmh; } });
+    const F = b.telemetry.foil!, H = b.telemetry.hv!;
+    check(T, "lotado (13), acelerador 70 %: decola (s)", tUp, 8, 35, "s", 1);
+    check(T, "velocidade de decolagem: foils sustentando ≥ 95 % do peso (km/h)", vUp, 24, 33, "km/h", 0);
+    check(T, "voando: segura a altura pedida de 0,50 m (m)", F.rideH, 0.44, 0.56, "m", 2);
+    check(T, "voando: casco nivelado (arfagem, °)", b.telemetry.pitchDeg, -1.5, 1.5, "°", 1);
+    check(T, "voando: o casco não toca a água (fração molhada)", b.telemetry.wetFraction, 0, 0.02, "", 2);
+    check(T, "cruzeiro voando a 70 % (km/h)", b.telemetry.speedKmh, 34, 46, "km/h", 0);
+    check(T, "potência elétrica no cruzeiro voando (kW)", H.kw, 45, 110, "kW", 0);
+    check(T, "motor frio no cruzeiro (refrigerado pela água, °C)", H.motorC, 20, 80, "°C", 0);
+    // energia: a bateria cai exatamente o que a potência gastou
+    const soc0 = b.hv!.soc; let kwh = 0;
+    stepN(b, 60, { throttle: 0.7 }, openWater, () => { kwh += (b.hv!.kw * DT) / 3600; });
+    check(T, "energia: queda da bateria = potência × tempo (kWh medidos ÷ kWh contados)", ((soc0 - b.hv!.soc) * FOILER.electric!.packKwh) / kwh, 0.97, 1.03, "", 3);
+    // a mesma marcha voando gasta muito menos energia por km que no casco
+    const whkmFly = (H.kw * 1000) / b.telemetry.speedKmh;
+    const h = mk(13, false); h.engine = "running"; stepN(h, 45, { throttle: 0.7 });
+    const whkmHull = (h.telemetry.hv!.kw * 1000) / Math.max(1, h.telemetry.speedKmh);
+    check(T, "voando gasta menos energia por km que no casco (Wh/km voando ÷ casco)", whkmFly / whkmHull, 0.2, 0.75, "", 2);
+    check(T, "foils recolhidos: o pod ainda empurra (modo casco, km/h)", h.telemetry.speedKmh, 15, 32, "km/h", 0);
+    // curva: inclina para dentro e continua voando
+    let minH = 9, maxRoll = 0, wet = 0;
+    stepN(b, 12, { throttle: 0.7, steering: 0.6 }, openWater, () => { minH = Math.min(minH, b.telemetry.foil!.rideH); maxRoll = Math.max(maxRoll, b.telemetry.rollDeg); wet = Math.max(wet, b.telemetry.wetFraction); });
+    check(T, "curva voando: inclina para dentro (rolagem, °)", maxRoll, 7, 17, "°", 1);
+    check(T, "curva voando: o casco não toca a água (menor altura, m)", minH, 0.1, 0.6, "m", 2);
+    // pouso: soltando o acelerador ele desce na água, sem virar
+    stepN(b, 15, { throttle: 0 });
+    check(T, "soltando o acelerador: pousa na água (casco molhado) sem virar", !b.telemetry.foil!.foilborne && !b.capsized && b.telemetry.wetFraction > 0.2 ? 1 : 0, 1, 1, "", 0);
+  }
+  // ---- a toda e carga assimétrica ----
+  {
+    const b = mk(13); b.engine = "running"; stepN(b, 60, { throttle: 1 });
+    check(T, "a toda voando, lotado (km/h)", b.telemetry.speedKmh, 42, 58, "km/h", 0);
+    check(T, "a toda: potência no eixo até o limite do motor (kW)", b.telemetry.hv!.shaftKw, 80, 140.5, "kW", 0);
+    const c = mk(7); c.engine = "running"; stepN(c, 50, { throttle: 0.7 });
+    check(T, "7 pessoas (mais de um lado): voa nivelado (rolagem, °)", c.telemetry.rollDeg, -1, 1, "°", 2);
+    const d = mk(1); d.engine = "running"; stepN(d, 40, { throttle: 0.6 });
+    check(T, "só o piloto: voa e segura a altura (m)", d.telemetry.foil!.foilborne ? d.telemetry.foil!.rideH : -1, 0.42, 0.58, "m", 2);
+  }
+  // ---- 12 V morre com a HV ligada: o BMS abre os contatores ----
+  {
+    const b = mk(1, false); b.engine = "running";
+    stepN(b, 1, { gear: "N" });
+    b.systems.batterySoc = 0; b.batterySel = "off";
+    stepN(b, 1, { gear: "N" });
+    check(T, "12 V cai com a HV ligada: os contatores abrem (HV desligada)", b.hv!.phase === "off" && !b.hv!.ready ? 1 : 0, 1, 1, "", 0);
+  }
+  // ---- carga no cais (READY desligado) ----
+  {
+    const b = mk(1, false); b.engine = "off"; b.hv!.soc = 0.3; b.hv!.shore = true;
+    stepN(b, 10, { gear: "N" });
+    const E = FOILER.electric!;
+    check(T, "carga no cais: ritmo (fração de bateria por s ÷ esperado)", (b.hv!.soc - 0.3) / 10 / ((E.chargerKw * E.chargeTimeScale) / 3600 / E.packKwh), 0.9, 1.1, "", 3);
   }
 }
 

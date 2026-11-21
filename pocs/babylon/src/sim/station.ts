@@ -12,12 +12,12 @@ export interface Pump { x: number; z: number; lanes: number[] /* z do centro de 
 
 const L = LOT;
 /** vagas ocupadas pelos conjuntos que não estão em uso */
-const PARKED_STALLS = [0, 2, 3, 4, 5, 6, 7, 8]; // (8 conjuntos fora de uso; a vaga 1 fica livre)
+const PARKED_STALLS = [0, 2, 3, 4, 5, 6, 7, 8, 9]; // (9 conjuntos fora de uso; a vaga 1 fica livre)
 /** passo entre as vagas (m) — 8 vagas lado a lado entre o fundo do pátio e a cobertura do posto (v0.74: pátio maior,
  *  vagas de 4,1 m: cabem a asa dobrada do ekranoplano e o anfíbio sem encostar no vizinho) */
-const STALL_W = 4.1;
+const STALL_W = 3.9; // (v0.80: 10 vagas — a 10ª embarcação, o AR-E, cabe antes da cobertura do posto)
 /** z da primeira vaga, relativo ao centro do pátio */
-const STALL_Z0 = -31;
+const STALL_Z0 = -32.3;
 const CAN = { x: L.cx + 15, z: L.cz + 14 }; // (v0.74: 5 m de folga até a última vaga)
 /**
  * Pátio grande (92 × 68 m, v0.74): posto perto da entrada (leste), loja e oficina no fundo (oeste), vaga do outro
@@ -35,7 +35,7 @@ export const STATION = {
   /** vagas dos outros seis conjuntos (veículo + carretinha, de frente para a saída, +X): vagas 0, 2, 3, 4, 5, 6 e 7 */
   parking: PARKED_STALLS.map((k) => ({ x: L.cx + 22, z: L.cz + STALL_Z0 + k * STALL_W, yaw: Math.PI / 2 })),
   /** vagas longas (carro + carretinha), lado a lado ao sul; 0, 2, 3, 4, 5, 6 e 7 são dos outros conjuntos, a 1 fica livre */
-  stalls: [0, 1, 2, 3, 4, 5, 6, 7, 8].map((k) => ({ x: L.cx + 15, z: L.cz + STALL_Z0 + k * STALL_W, len: 24, w: STALL_W })),
+  stalls: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map((k) => ({ x: L.cx + 15, z: L.cz + STALL_Z0 + k * STALL_W, len: 24, w: STALL_W })),
 };
 
 /** O veículo (com a carretinha) está estacionado dentro de uma vaga livre, alinhado e parado? (índice ou −1) */

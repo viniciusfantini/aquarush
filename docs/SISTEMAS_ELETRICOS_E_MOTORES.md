@@ -32,9 +32,9 @@ para continuar o trabalho em outra IA/ferramenta ou portar para Unity/Unreal sem
 
 ---
 
-## 2. As 8 embarcações (o que muda nos sistemas)
+## 2. As embarcações (o que muda nos sistemas)
 
-(O ekranoplano AR-W — 7ª, v0.70 — e o anfíbio AR-A — 8ª, v0.72 — estão na seção 10e; a tabela abaixo cobre as outras.)
+(O ekranoplano AR-W — 7ª, v0.70 — e o anfíbio AR-A — 8ª, v0.72 — estão na seção 10e; o barco elétrico com foils AR-E — 10ª, v0.80 — na seção 10f; a tabela abaixo cobre as outras.)
 
 | | AR-6 lancha (`lancha`) | AR-3 bote (`bote`) | AR-J moto aquática (`jetski`) | AR-9 rápida (`rapida`) | AR-10 turbina (`turbina`) |
 |---|---|---|---|---|---|
@@ -443,6 +443,50 @@ girando → `"busy"`.
   De pé (`up.y > 0,8`), `capsized = false`, `righted++`, todos sobem pela popa (a ≤ 3 km/h) e o piloto prende o
   cordão. Aproximação: os 6 pontos dão ao casco de cabeça para baixo a mesma estabilidade de pé, por isso o binário é
   calibrado para desvirar em 2–3 s, não pela força de uma pessoa.
+
+## 10f. Barco elétrico com foils AR-E: HV de 400 V, casa de 12 V e foils (v0.80)
+
+Arquivos: `sim/electric.ts` (`ElectricDrive`), `sim/hydrofoil.ts` (forças e computador de voo), `boat.ts` (ramos
+`this.hv` e `P.hydrofoil`), `systemsPanel.ts` (`electric`, `foil`), `hud.ts` (`electric`).
+
+**Duas redes elétricas:**
+- **HV (400 V nominais):** bateria de 126 kWh (108 células NMC em série: 3,0 V vazia → 4,15 V cheia, ~324–448 V;
+  `packR` 0,06 Ω). Isolada por dois contatores. A tensão do barramento DC (`linkV`) é a do capacitor do inversor.
+- **Casa de 12 V:** bateria AGM de 100 Ah no mesmo `EngineSystems` dos outros barcos (chave geral BATERIA, luzes,
+  bomba de porão, molinete, buzina). Quem a carrega é o **DC-DC** (70 A) — entra como o "alternador" do modelo, com a
+  HV ligada (`phase === "on"`), em qualquer rotação. A energia do DC-DC sai da HV (13,8 V × A ÷ 0,92).
+
+**Ligar (chave HV no Y, ou o P):**
+1. O **BMS** vive nos 12 V: sem a chave geral, ou com a bateria de 12 V abaixo de `minV12` (10,5 V sob 3 A), ele não
+   acorda — a HV não liga (P devolve `lowBattery`; J = jump start nos 12 V). Se os 12 V caírem com a HV ligada, os
+   contatores **abrem** (`fault "12v"`).
+2. **Pré-carga:** o contator auxiliar com resistor carrega o capacitor (τ 0,3 s); com ≥ 95 % da tensão da bateria e
+   pelo menos `prechargeS` (1,2 s) o contator principal fecha (`phase "on"`, "clac" no som). Telemetria: "cranking".
+3. **READY** (botão no Y, ou o P de novo/automático): o inversor habilita o motor — "running". Só em N. Sem marcha
+   lenta: parado em READY o motor não gira e não empurra (`idleThrustFraction` 0, `idleRpm` 0).
+
+**Potência:** a física calcula o empuxo da hélice como nos outros barcos e, no elétrico, a potência no eixo pela teoria
+do disco atuador: `P = T·(Va + vi)/ηprop`, `vi = ½(−Va + √(Va² + 2T/(ρA)))` (A = 0,25 m², duas hélices). Se passar de
+`availKw` (140 kW, cai a 30 % abaixo de 6 % de bateria — modo tartaruga — e com o motor acima de 105 °C) o empuxo é
+reduzido até caber. Elétrica = eixo ÷ 0,93 + DC-DC + 0,35 kW fixos (bombas/BMS). Corrente da HV = P ÷ tensão. O giro
+do motor vem da água que a hélice acelera (Va + 2·vi, passo ~0,45 m; no ar dispara). Motor refrigerado pela água em
+volta do pod (`motorC`; fora d'água esquenta).
+
+**Carga:** no posto náutico (F, READY desligado) o carregador de 60 kW alimenta a HV (CC até 80 %, depois cai);
+`chargeTimeScale` 20 acelera o tempo de jogo (126 kWh em ~6 min). A descarga é em tempo real.
+
+**Foils (12 V):** os atuadores (28 A) baixam/recolhem em ~12 s, só com o barco abaixo de 2 m/s (`foilBlocked "speed"`)
+e com 12 V; baixando contra o fundo, param (`"shallow"`). O computador de voo (4 A) só age com READY e foils travados.
+
+**Telemetria:** `hv { soc, kwhLeft, packV, linkV, packA, kw, shaftKw, availKw, limited, phase, hvSwitch, ready, motorC,
+packC, shore, charging, fault }` e `foil { deploy, down, moving, blocked, rideH, target, foilborne, flapL, flapR,
+flapRear, liftFrac, minDepth, vent, fcs, fcsSw, grounded }`. Para o HUD genérico: `fuelL` = kWh, `fuelFrac` = SOC,
+`fuelLph` = kW (a "autonomia" fica em horas), `coolantC` = motor, `lowFuel` = HV < 12 %.
+
+**Critérios** (grupo "hydrofoil elétrico"): 12 V desligada → não liga; pré-carga 1,2 s antes do READY; READY parado
+não gira; DC-DC carrega os 12 V; motor desligado por fora tira o READY; foils em 12 s, travados andando, param no fundo
+raso; decolagem, altura, arfagem, cruzeiro, potência, energia = potência × tempo, Wh/km voando ≈ metade do casco,
+curva inclinada, pouso, a toda, carga assimétrica, 12 V caindo abre os contatores, ritmo de carga no cais.
 
 ## 11. Telemetria relevante (`BoatTelemetry`)
 

@@ -92,7 +92,7 @@ export class RoundGauge {
   }
 }
 
-export interface HudOpts { speedMax: number; temp: boolean; battery: boolean; trimPins: number; gear?: "bar" | "dial"; /** dois motores: um conta-giros por motor (BB / BE) */ twin?: boolean; /** turbina: N1, EGT, torque, N2, óleo e luzes da partida */ turbine?: boolean; /** fundo de escala do conta-giros (padrão 7000; moto aquática 9000) e início do vermelho */ rpmMax?: number; rpmRed?: number; /** moto aquática: manômetro do compressor (BOOST) e luz do iBB */ jet?: boolean; /** ekranoplano: TURBO, ALTURA da asa sobre a água, luz de voo/estol */ wig?: boolean; /** avião (anfíbio): ALTITUDE, VARIÔMETRO, luz de voo/estol e a barra do compensador */ plane?: boolean; /** barras que o barco não tem (airboat: sem âncora no HUD, sem marcha, sem calado, sem trim) */ hide?: ("anchor" | "gear" | "draft" | "trim")[]; /** lancha de wakeboard: um relógio de nível por tanque de lastro */ ballast?: boolean }
+export interface HudOpts { speedMax: number; temp: boolean; battery: boolean; trimPins: number; gear?: "bar" | "dial"; /** dois motores: um conta-giros por motor (BB / BE) */ twin?: boolean; /** turbina: N1, EGT, torque, N2, óleo e luzes da partida */ turbine?: boolean; /** fundo de escala do conta-giros (padrão 7000; moto aquática 9000) e início do vermelho */ rpmMax?: number; rpmRed?: number; /** moto aquática: manômetro do compressor (BOOST) e luz do iBB */ jet?: boolean; /** ekranoplano: TURBO, ALTURA da asa sobre a água, luz de voo/estol */ wig?: boolean; /** avião (anfíbio): ALTITUDE, VARIÔMETRO, luz de voo/estol e a barra do compensador */ plane?: boolean; /** barras que o barco não tem (airboat: sem âncora no HUD, sem marcha, sem calado, sem trim) */ hide?: ("anchor" | "gear" | "draft" | "trim")[]; /** lancha de wakeboard: um relógio de nível por tanque de lastro */ ballast?: boolean; /** barco elétrico com foils: POTÊNCIA kW no lugar do conta-giros, BATERIA HV, MOTOR °C, ALTURA de voo e a luz dos foils */ electric?: boolean }
 
 export class Hud {
   private speedG!: RoundGauge;
@@ -113,6 +113,7 @@ export class Hud {
   private boostG: RoundGauge | null = null;
   private balG: RoundGauge[] = [];
   private altG: RoundGauge | null = null;
+  private elecMode = false;
   private wigLamp: HTMLElement | null = null;
   private vsiG: RoundGauge | null = null;
   private planeMode = false;
@@ -251,7 +252,19 @@ export class Hud {
     this.balG = opts.ballast ? ["BB", "BE", "PROA"].map((n) => new RoundGauge(small, ballastGaugeOpts(n))) : [];
     this.altG = null; this.wigLamp?.remove(); this.wigLamp = null; this.vsiG = null;
     this.planeMode = !!opts.plane;
-    if (opts.turbine) {
+    this.elecMode = !!opts.electric;
+    if (opts.electric) {
+      // motor elétrico: potência no eixo (verde até a contínua, amarelo até a máxima)
+      this.rpmG = new RoundGauge(big, { title: "POTÊNCIA kW", min: 0, max: 150, labels: [0, 30, 60, 90, 120, 150], minor: 10, big: true, bands: [{ from: 0, to: 90, c: "g" }, { from: 90, to: 140, c: "y" }, { from: 140, to: 150, c: "r" }] });
+      this.rpmG2 = null;
+      // altura de voo (quilha sobre a água): verde na faixa de voo; a luz diz o estado dos foils
+      this.altG = new RoundGauge(small, { title: "ALTURA m", min: 0, max: 1, labels: [0, 0.5, 1], minor: 0.1, bands: [{ from: 0.3, to: 0.8, c: "g" }, { from: 0.8, to: 1, c: "y" }] });
+      const l = document.createElement("div");
+      l.id = "g-wig";
+      l.innerHTML = `<span class="ibb-dot"></span><b>FOILS</b><em>RECOLHIDOS</em>`;
+      small.parentElement?.insertBefore(l, this.fuelAut);
+      this.wigLamp = l;
+    } else if (opts.turbine) {
       // turbina: N1 (gerador de gás, %) e EGT (gases de escape, °C) grandes; vermelho no limite de partida/operação
       this.rpmG = new RoundGauge(big, { title: "N1 %", min: 0, max: 110, labels: [0, 20, 40, 60, 80, 100], minor: 5, big: true, bands: [{ from: 60, to: 101, c: "g" }, { from: 102, to: 110, c: "r" }] });
       this.egtG = new RoundGauge(big, { title: "EGT °C", min: 0, max: 900, labels: [0, 300, 600, 900], minor: 50, big: true, bands: [{ from: 300, to: 700, c: "g" }, { from: 700, to: 780, c: "y" }, { from: 780, to: 900, c: "r" }] });
@@ -309,10 +322,10 @@ export class Hud {
       small.parentElement?.insertBefore(l, this.fuelAut);
       this.wigLamp = l;
     }
-    this.fuelG = new RoundGauge(small, { title: "COMBUST.", min: 0, max: 1, labels: [0, 0.5, 1], minor: 0.125, redFrom: 0, redTo: 0.12, labelFmt: (v) => (v === 0 ? "E" : v === 1 ? "F" : "½") });
+    this.fuelG = new RoundGauge(small, { title: opts.electric ? "BATERIA HV" : "COMBUST.", min: 0, max: 1, labels: [0, 0.5, 1], minor: 0.125, redFrom: 0, redTo: 0.12, labelFmt: (v) => (v === 0 ? "E" : v === 1 ? "F" : "½") });
     // dois motores: um relógio de temperatura e um de bateria para cada (BB = bombordo, BE = boreste: bancos separados)
     const tw = !!opts.twin;
-    const tempOpts = (t: string) => ({ title: t, min: 40, max: 120, labels: [40, 80, 120], minor: 10, redFrom: 90 });
+    const tempOpts = (t: string) => opts.electric ? { title: "MOTOR °C", min: 20, max: 140, labels: [20, 80, 140], minor: 10, redFrom: 110 } : { title: t, min: 40, max: 120, labels: [40, 80, 120], minor: 10, redFrom: 90 };
     // voltímetro na escala do sistema (24 V na turbina: 16–32 V, vermelho abaixo de 23 V)
     const vk = opts.turbine ? 2 : 1;
     this.vk = vk;
@@ -354,10 +367,15 @@ export class Hud {
           el.style.color = lit ? "#111" : "rgba(255,255,255,.35)"; el.style.background = lit ? c : "rgba(0,0,0,.25)"; el.style.borderColor = lit ? c : "rgba(255,255,255,.18)";
         }
       }
+    } else if (this.elecMode && t.hv) {
+      const hv = t.hv;
+      const st = hv.ready ? (hv.limited ? "POTÊNCIA LIMITADA" : "READY") : hv.phase === "precharge" ? "PRÉ-CARGA" : hv.phase === "on" ? "HV LIGADA" : hv.charging ? "CARREGANDO" : "DESLIGADO";
+      this.rpmG.set(Math.max(0, hv.shaftKw), `${Math.round(hv.shaftKw)}`, st, hv.limited);
     } else this.rpmG.set(t.rpm, `${Math.round(t.rpm / 10) * 10}`, `${t.engineHours.toFixed(1).padStart(6, "0")} h`, t.revLimiter);
     const autonomy = t.fuelLph > 0.1 ? t.fuelL / t.fuelLph : 0;
     const autTxt = t.engine === "running" && autonomy > 0 ? ` · ${Math.floor(autonomy)}h${String(Math.floor((autonomy % 1) * 60)).padStart(2, "0")}` : "";
-    this.fuelG.set(t.fuelFrac, `${t.fuelL.toFixed(1)} L`, `${t.fuelLph.toFixed(1)} L/h`, t.fuelL <= 0.05); // mostrador vermelho só sem combustível
+    if (t.hv) this.fuelG.set(t.hv.soc, `${Math.round(t.hv.soc * 100)} %`, t.hv.charging ? "carregando" : `${t.hv.kwhLeft.toFixed(0)} kWh`, t.hv.soc < 0.05);
+    else this.fuelG.set(t.fuelFrac, `${t.fuelL.toFixed(1)} L`, `${t.fuelLph.toFixed(1)} L/h`, t.fuelL <= 0.05); // mostrador vermelho só sem combustível
     this.fuelAut.textContent = autTxt ? `autonomia${autTxt.replace(" ·", "")}` : "";
     if (this.tempG2 || this.voltG2) {
       // dois motores: cada relógio lê o seu motor/banco (o alarme acende só no que está quente/descarregado)
@@ -373,11 +391,19 @@ export class Hud {
     this.ampG?.set(Math.max(-60, Math.min(30, amps)), `${amps > 0.5 ? "+" : ""}${amps.toFixed(0)} A`, amps > 0.5 ? "carga" : amps < -0.5 ? "consumo" : "", amps < -40);
     this.boostG?.set(Math.max(0, t.boostBar), `${t.boostBar.toFixed(2)}`, `${(t.boostBar * 14.5).toFixed(0)} psi`, t.boostBar > 1.2);
     if (this.balG.length) setBallastGauges(this.balG, t);
-    if (this.planeMode) {
+    if (this.elecMode && t.foil) {
+      const F = t.foil;
+      this.altG?.set(Math.max(0, Math.min(1, F.rideH)), F.foilborne ? `${F.rideH.toFixed(2)} m` : "—", `alvo ${F.target.toFixed(2)}`, F.vent);
+      if (this.wigLamp) {
+        const st = F.vent || F.grounded ? "stall" : F.foilborne ? "ge" : F.moving || F.blocked ? "high" : "water";
+        const txt = F.grounded ? "NO FUNDO" : F.vent ? "VENTILANDO" : F.foilborne ? "VOANDO" : F.moving ? (F.down ? "BAIXANDO" : "RECOLHENDO") : F.blocked === "speed" ? "TRAVADOS (PARE)" : F.deploy > 0.97 ? "BAIXADOS" : "RECOLHIDOS";
+        if (this.wigLamp.dataset.t !== txt) { this.wigLamp.dataset.s = st; this.wigLamp.dataset.t = txt; this.wigLamp.querySelector("em")!.textContent = txt; }
+      }
+    } else if (this.planeMode) {
       this.altG?.set(Math.max(0, Math.min(600, t.altitude)), t.airborne ? `${t.altitude.toFixed(0)} m` : "—", `prof. ${t.elevator > 0.005 ? "+" : ""}${Math.round(t.elevator * 100)}%`);
       this.vsiG?.set(Math.max(-6, Math.min(6, t.vsi)), `${t.vsi > 0.05 ? "+" : ""}${t.vsi.toFixed(1)}`, t.vsi > 0.3 ? "subida" : t.vsi < -0.3 ? "descida" : "nivelado", t.vsi < -3 && t.altitude < 30);
     } else if (this.altG) this.altG.set(Math.max(0, Math.min(6, t.wingH)), t.airborne ? `${t.wingH.toFixed(1)} m` : "—", `prof. ${t.elevator > 0.005 ? "+" : ""}${Math.round(t.elevator * 100)}%`, t.wingH > 3);
-    if (this.wigLamp) {
+    if (this.wigLamp && !this.elecMode) {
       const st = t.stallWarn ? "stall" : t.airborne ? (this.planeMode ? "ge" : t.wingH > 3 ? "high" : "ge") : "water";
       const txt = st === "stall" ? "ESTOL" : st === "high" ? "FORA DO SOLO" : st === "ge" ? (this.planeMode ? "VOANDO" : "EFEITO SOLO") : "NA ÁGUA";
       if (this.wigLamp.dataset.s !== st) { this.wigLamp.dataset.s = st; this.wigLamp.querySelector("em")!.textContent = txt; }
@@ -457,7 +483,7 @@ export class Hud {
     const empty = t.fuelL <= 0.05;
     this.lowFuelChip.classList.toggle("warn", t.lowFuel || empty);
     this.lowFuelChip.classList.toggle("steady", t.lowFuel && !empty);
-    if (t.lowFuel || empty) { const txt = empty ? "SEM COMBUSTÍVEL" : `RESERVA · ${t.fuelL.toFixed(1)} L`; if (this.lowFuelChip.textContent !== txt) this.lowFuelChip.textContent = txt; }
+    if (t.lowFuel || empty) { const txt = t.hv ? (t.hv.soc < 0.002 ? "BATERIA HV VAZIA" : `BATERIA HV BAIXA · ${Math.round(t.hv.soc * 100)} %`) : empty ? "SEM COMBUSTÍVEL" : `RESERVA · ${t.fuelL.toFixed(1)} L`; if (this.lowFuelChip.textContent !== txt) this.lowFuelChip.textContent = txt; }
     this.chargeChip.classList.toggle("warn", t.chargeWarn && t.engine === "running");
     // profundímetro: escala de 0 a 5 m de cima para baixo; água até o fundo; marcas do calado (casco amarelo, motor vermelho)
     const D = 5, y = (m: number) => `${Math.min(100, (m / D) * 100)}%`;

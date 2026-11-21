@@ -89,6 +89,8 @@ export interface AudioState {
   rpm2?: number;
   throttle2?: number;
   engine2?: "off" | "cranking" | "running";
+  /** motor ELÉTRICO (barco AR-E): giro, potência (kW) e READY — zumbido do motor e o apito do inversor, sem combustão */
+  electric?: { rpm: number; kw: number; ready: boolean };
   /** turbina a gás (lancha de turbina): substitui o som do motor a pistão */
   turbine?: { n1: number; n2: number; egt: number; power: number; starter: boolean; ignition: boolean; lit: boolean; fuelLph: number };
 }
@@ -164,6 +166,36 @@ export class EngineAudio {
   private pumpGain!: GainNode;
   private alarmGain!: GainNode;
   private stallGain!: GainNode;
+  /** voz do motor elétrico (criada na primeira vez que um barco elétrico aparece) */
+  private ev: { a: OscillatorNode; aG: GainNode; b: OscillatorNode; bG: GainNode; c: OscillatorNode; cG: GainNode } | null = null;
+  /**
+   * Motor elétrico: o "som" é eletromagnético — o fundamental na frequência elétrica (rpm/60 × 6 pares de polos), um
+   * harmônico, e o apito agudo da comutação do inversor (PWM, alguns kHz). Volume pela potência; parado em READY só um
+   * fio de apito do inversor.
+   */
+  private updateElectric(st: AudioState, t: number, m: number, dist: number): void {
+    const e = st.electric, ctx = this.ctx!;
+    if (!e && !this.ev) return;
+    if (!this.ev) {
+      const mk = (type: OscillatorType, f: number, bp?: number) => {
+        const o = ctx.createOscillator(); o.type = type; o.frequency.value = f; o.start();
+        const g = ctx.createGain(); g.gain.value = 0;
+        if (bp) { const b = ctx.createBiquadFilter(); b.type = "bandpass"; b.frequency.value = bp; b.Q.value = 2.5; o.connect(b).connect(g); } else o.connect(g);
+        g.connect(this.master);
+        return [o, g] as const;
+      };
+      const [a, aG] = mk("sine", 60), [b, bG] = mk("triangle", 120), [c, cG] = mk("square", 2400, 2400);
+      this.ev = { a, aG, b, bG, c, cG };
+    }
+    const v = this.ev, on = e?.ready ? 1 : 0, k = Math.min(1, Math.max(0, (e?.kw ?? 0) / 140));
+    const f = ((e?.rpm ?? 0) / 60) * 6, spin = (e?.rpm ?? 0) > 8 ? 1 : 0;
+    v.a.frequency.setTargetAtTime(Math.max(25, f), t, 0.05);
+    v.b.frequency.setTargetAtTime(Math.max(50, f * 2.02), t, 0.05);
+    v.c.frequency.setTargetAtTime(2350 + 0.6 * f - 400 * k, t, 0.08);
+    v.aG.gain.setTargetAtTime(m * dist * on * spin * (0.02 + 0.06 * k), t, 0.08);
+    v.bG.gain.setTargetAtTime(m * dist * on * spin * 0.025 * k, t, 0.08);
+    v.cG.gain.setTargetAtTime(m * dist * on * (0.004 + spin * 0.012 * (0.3 + k)), t, 0.08);
+  }
   private bilgeGain!: GainNode;
   private bilgeMotorOsc!: OscillatorNode;
   private bilgeMotorGain!: GainNode;
@@ -560,7 +592,7 @@ export class EngineAudio {
       const cut = st.revLimiter && Math.floor(t * 16) % 2 === 1;
       this.worklet.port.postMessage({ cylinders: this.cylinders, rpm: st.rpm, load: st.revLimiter ? 0.3 : load, combustion: running && !cut ? 1 : 0, wet: st.propInWater ? 1 : 0, volume: 1 });
       const twin = st.rpm2 !== undefined;
-      this.workletGain.gain.setTargetAtTime(st.turbine ? 0 : m * dist * (twin ? 0.4 : 0.55), t, 0.05);
+      this.workletGain.gain.setTargetAtTime(st.turbine || st.electric ? 0 : m * dist * (twin ? 0.4 : 0.55), t, 0.05);
       if (this.worklet2) {
         if (twin) {
           const run2 = st.engine2 === "running";
@@ -570,14 +602,15 @@ export class EngineAudio {
         this.worklet2Gain.gain.setTargetAtTime(twin ? m * dist * 0.4 : 0, t, 0.05);
       }
     }
-    const legacy = useW || !running || st.turbine ? 0 : 1; // osciladores antigos só sem worklet (e nunca na turbina)
+    const legacy = useW || !running || st.turbine || st.electric ? 0 : 1; // osciladores antigos só sem worklet (e nunca na turbina nem no elétrico)
     this.updateTurbine(st, t, m, dist);
+    this.updateElectric(st, t, m, dist);
     // arranque: volume e tom acompanham a rotação (bateria fraca = "rrr… rrr…" lento e grave);
     // travado (tensão baixa demais) só estala o solenoide
     const sRpm = st.engine === "cranking" && !st.pullStart ? st.starterRpm ?? 250 : 0;
-    this.starterGain.gain.setTargetAtTime(m * (st.engine === "cranking" && !st.turbine ? 0.09 * Math.min(1, Math.max(0, (sRpm - 20) / 200)) : 0), t, 0.03);
+    this.starterGain.gain.setTargetAtTime(m * (st.engine === "cranking" && !st.turbine && !st.electric ? 0.09 * Math.min(1, Math.max(0, (sRpm - 20) / 200)) : 0), t, 0.03);
     this.st1.frequency.setTargetAtTime(500 + 2.6 * sRpm, t, 0.05);
-    if (st.engine === "cranking" && !st.pullStart && sRpm < 40 && t > this.solenoidT) { this.solenoidT = t + 0.35; this.clunk(false); }
+    if (st.engine === "cranking" && !st.pullStart && !st.electric && sRpm < 40 && t > this.solenoidT) { this.solenoidT = t + 0.35; this.clunk(false); }
     this.buzzGain.gain.setTargetAtTime(m * (st.buzzer ? 0.05 : 0), t, 0.008);
     if ((st.trimRelay || st.anchorRelay) && t > this.solenoidT) { this.solenoidT = t + 0.45; this.clunk(false); } // relé estalando sem força
     // óleo quente: "piu-pou" de dois tons a cada 0,9 s (alarme de cautela da turbina)

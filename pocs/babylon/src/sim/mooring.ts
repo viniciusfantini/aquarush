@@ -58,7 +58,9 @@ export const berthStartPose = (pier: PierLayout, P: SpeedboatParams): { pos: Vec
 /** Pontos do píer onde os passageiros esperam em pé (mundo), ao lado da vaga, virados para o barco. */
 export const pierWaitSpots = (pier: PierLayout): { x: number; y: number; z: number; yaw: number }[] => {
   const B = pierBerth(pier);
-  return [0, 1, 2, 3].map((i) => ({ x: B.edgeX - 0.75 - (i % 2) * 0.55, y: B.deckY, z: B.z + [2.4, 1.5, -1.5, -2.4][i], yaw: Math.PI / 2 }));
+  // (os 4 primeiros como sempre; o barco de passageiros AR-E põe mais gente esperando, em pares para trás e para a frente)
+  const zs = [2.4, 1.5, -1.5, -2.4, 3.3, -3.3, 4.2, -4.2, 5.1, -5.1, 6.0, -6.0, 6.9];
+  return zs.map((z, i) => ({ x: B.edgeX - 0.75 - (i % 2) * 0.55, y: B.deckY, z: B.z + z, yaw: Math.PI / 2 }));
 };
 
 /** Amarra na vaga do píer: cabo de proa e de popa até os cunhos do píer (folga de ~10 cm). */

@@ -25,6 +25,7 @@ import { buildActivityPier, TowTubeVisual } from "./presentation/towTubeVis.ts";
 import { Parasail } from "./sim/parasail.ts";
 import { buildTowEyes } from "./presentation/ropeTube.ts";
 import { buildWakeboat } from "./presentation/wakeboatMesh.ts";
+import { buildFoiler, type FoilVisual } from "./presentation/foilMesh.ts";
 import { Wakeboard } from "./sim/wakeboard.ts";
 import { buildWakePier, buildFuelPier, WakeboardVisual } from "./presentation/wakeboardVis.ts";
 import { fuelDockState } from "./sim/fuelDock.ts";
@@ -63,7 +64,7 @@ import { Hud } from "./presentation/hud.ts";
 import { EngineAudio } from "./presentation/audio.ts";
 
 installI18n(); // inglês: traduz o DOM, as escritas futuras e os letreiros 3D (antes de montar a cena e o HUD)
-const BUILD = "poc-babylon 0.79.1";
+const BUILD = "poc-babylon 0.80.0";
 /** Escala visual da rotação da hélice (proporcional ao RPM, abaixo do limite estroboscópico). */
 const PROP_VISUAL_SCALE = 0.12;
 
@@ -86,7 +87,9 @@ const START_BATTERY = 0.6;
 // A regra de jogo (não chegar ao fim do cânion) volta com { lancha: 0.25, bote: 0.05 }.
 // A AR-9 (dois V8, ~210 L/h a pleno) começa com 20 L e a AR-10 (turbina, ~85 L/h só em marcha lenta, ~400 L/h a
 // toda) com 120 L — também temporários. A moto aquática AR-J (~72 L/h a pleno) começa com 8 L (temporário).
-const START_FUEL: Record<VesselKind, number> = { lancha: 5, bote: 5, rapida: 20, turbina: 120, jetski: 8, airboat: 10, wig: 30, anfibio: 40, wake: 15 }; // (AR-P: 10 L, AR-W: 30 L — temporários)
+const START_FUEL: Record<VesselKind, number> = { lancha: 5, bote: 5, rapida: 20, turbina: 120, jetski: 8, airboat: 10, wig: 30, anfibio: 40, wake: 15, foil: 1 /* (elétrico: sem combustível) */ };
+/** barco elétrico: carga inicial da bateria HV (a de 12 V segue START_BATTERY) */
+const START_HV = 0.6; // (AR-P: 10 L, AR-W: 30 L — temporários)
 
 /** Tudo o que pertence a uma embarcação: física, visual, comandos, pessoas. */
 interface Vessel {
@@ -99,7 +102,7 @@ interface Vessel {
   helm: { meshes: Mesh[]; wheelGrip: import("@babylonjs/core").TransformNode; leverGrip: import("@babylonjs/core").TransformNode; update: DinghyControls["update"] };
   dinghy: DinghyControls | null;
   pilot: Pilot;
-  pax: Partial<Record<Exclude<SeatId, "helm">, Pilot>>;
+  pax: Record<string, Pilot>; // (banco → pessoa; os passageiros do AR-E são p1…p12)
   presets: { label: string; seats: SeatId[] }[];
   skeg: Mesh;
   hoursKey: string;
@@ -254,13 +257,15 @@ const boot = async () => {
     const am = kind === "anfibio" ? buildAmphib(scene) : null;
     // lancha de wakeboard: casco da AR-6 com motor de centro, torre targa e lastro
     const wb = kind === "wake" ? buildWakeboat(scene) : null;
-    const vis: BoatVisual = d ?? rap ?? j ?? ab ?? wg ?? am ?? wb ?? buildBoat(scene);
+    // barco elétrico com foils: cabine com teto, piloto + 12 passageiros, foils e pod que sobem
+    const fo = kind === "foil" ? buildFoiler(scene) : null;
+    const vis: BoatVisual = d ?? rap ?? j ?? ab ?? wg ?? am ?? wb ?? fo ?? buildBoat(scene);
     vis.meshes.push(...buildTowEyes(scene, vis.root, P, "v" + kind, [...vis.meshes], kind === "bote" ? "tube" : "transom")); // olhais de reboque fixos (sempre à vista): no espelho de popa; no bote, argolas no flutuador
     // AR-9: o mesmo painel da AR-6 (volante, manete, chave), num nó deslocado para a frente do banco do piloto
     let helmRoot = vis.root;
-    if (rap) {
+    if (rap || fo) {
       helmRoot = new TransformNode("rapHelm", scene); helmRoot.parent = vis.root;
-      helmRoot.position.set(S.helm.x - HELM_X, rap.floor - 0.02, S.helm.z + 0.08);
+      helmRoot.position.set(S.helm.x - HELM_X, (rap ?? fo)!.floor - 0.02, S.helm.z + 0.08);
     }
     const helm = d ? d.controls : j ? j.controls : ab ? ab.controls : wg ? wg.controls : am ? am.controls : buildHelm(scene, helmRoot);
     const pilot = d ? buildPilot(scene, vis.root, { x: S.helm.x, zc: S.helm.z, floor: DINGHY_FLOOR })
@@ -268,8 +273,11 @@ const boot = async () => {
       : ab ? buildPilot(scene, vis.root, { x: S.helm.x, zc: S.helm.z, floor: AIR_FOOT })
       : wg ? buildPilot(scene, vis.root, { x: S.helm.x, zc: S.helm.z, floor: WIG_FLOOR })
       : am ? buildPilot(scene, vis.root, { x: S.helm.x, zc: S.helm.z, floor: AMPH_FLOOR })
-      : rap ? buildPilot(scene, vis.root, { x: S.helm.x, zc: S.helm.z, floor: rap.floor }) : buildPilot(scene, vis.root);
-    const pax: Vessel["pax"] = kind === "turbina" ? {} : j ? {
+      : rap || fo ? buildPilot(scene, vis.root, { x: S.helm.x, zc: S.helm.z, floor: (rap ?? fo)!.floor }) : buildPilot(scene, vis.root);
+    const pax: Vessel["pax"] = kind === "turbina" ? {} : fo ? Object.fromEntries(Array.from({ length: 12 }, (_, i) => {
+      const k = `p${i + 1}` as SeatId;
+      return [k, buildPassenger(scene, vis.root, S[k].x, S[k].z, "pax" + k, i, fo.floor)];
+    })) : j ? {
       passenger: buildPassenger(scene, vis.root, S.passenger.x, S.passenger.z, "paxA", 0, JET_FOOT, true),
       rearLeft: buildPassenger(scene, vis.root, S.rearLeft.x, S.rearLeft.z, "paxB", 1, JET_FOOT, true),
     } : am ? {
@@ -292,8 +300,14 @@ const boot = async () => {
     const gear = new BoatGearVis(scene, vis.root, P, kind);
     vis.meshes.push(...helm.meshes, ...pilot.meshes, ...gear.meshes);
     for (const p of Object.values(pax)) vis.meshes.push(...p.meshes);
+    const paxN = (n: number) => ["helm", ...Array.from({ length: n }, (_, i) => `p${i + 1}`)] as SeatId[];
     const presets = kind === "turbina" ? [
       { label: "piloto único", seats: ["helm"] as SeatId[] },
+    ] : fo ? [
+      { label: "só o piloto", seats: paxN(0) },
+      { label: "piloto + 4", seats: paxN(4) },
+      { label: "piloto + 8", seats: paxN(8) },
+      { label: "lotado (13)", seats: paxN(12) },
     ] : am ? [
       { label: "só o piloto", seats: ["helm"] as SeatId[] },
       { label: "piloto + passageiro (lado a lado)", seats: ["helm", "passenger"] as SeatId[] },
@@ -324,7 +338,7 @@ const boot = async () => {
     ];
     // horímetro persistente (por navegador e por barco)
     const hoursKey = kind === "lancha" ? "aquarush.engineHours" : "aquarush.engineHours." + kind;
-    try { const h = Number(localStorage.getItem(hoursKey)); boat.systems.engineHours = Number.isFinite(h) && h > 0 ? h : kind === "bote" ? 112.4 : kind === "rapida" ? 8.6 : kind === "turbina" ? 214.0 : kind === "jetski" ? 23.5 : kind === "airboat" ? 412.0 : kind === "wig" ? 86.0 : kind === "anfibio" ? 148.0 : kind === "wake" ? 64.0 : 37.2; } catch { boat.systems.engineHours = 37.2; }
+    try { const h = Number(localStorage.getItem(hoursKey)); boat.systems.engineHours = Number.isFinite(h) && h > 0 ? h : kind === "bote" ? 112.4 : kind === "rapida" ? 8.6 : kind === "turbina" ? 214.0 : kind === "jetski" ? 23.5 : kind === "airboat" ? 412.0 : kind === "wig" ? 86.0 : kind === "anfibio" ? 148.0 : kind === "wake" ? 64.0 : kind === "foil" ? 9.0 : 37.2; } catch { boat.systems.engineHours = 37.2; }
     boat.systems.fuelL = START_FUEL[kind];
     vis.root.setEnabled(false);
     // carretinha do tamanho do barco + veículo (bote: carro comum; lancha: caminhonete)
@@ -337,9 +351,9 @@ const boot = async () => {
       rig: new TowRig(trailer, TOW_SPECS[!smallTow(kind) ? "pickup" : "car"], world.groundHeight), trailerRoot: tm.root, carRoot: tv.root,
       carBody: tv.body, carWheels: tv.wheels, trailerWheels: tm.wheels };
   };
-  const vessels: Record<VesselKind, Vessel> = { lancha: makeVessel("lancha"), bote: makeVessel("bote"), rapida: makeVessel("rapida"), turbina: makeVessel("turbina"), jetski: makeVessel("jetski"), airboat: makeVessel("airboat"), wig: makeVessel("wig"), anfibio: makeVessel("anfibio"), wake: makeVessel("wake") };
+  const vessels: Record<VesselKind, Vessel> = { lancha: makeVessel("lancha"), bote: makeVessel("bote"), rapida: makeVessel("rapida"), turbina: makeVessel("turbina"), jetski: makeVessel("jetski"), airboat: makeVessel("airboat"), wig: makeVessel("wig"), anfibio: makeVessel("anfibio"), wake: makeVessel("wake"), foil: makeVessel("foil") };
   const allVessels = Object.values(vessels);
-  const isKind = (k: string | null): k is VesselKind => k === "lancha" || k === "bote" || k === "rapida" || k === "turbina" || k === "jetski" || k === "airboat" || k === "wig" || k === "anfibio" || k === "wake";
+  const isKind = (k: string | null): k is VesselKind => k === "lancha" || k === "bote" || k === "rapida" || k === "turbina" || k === "jetski" || k === "airboat" || k === "wig" || k === "anfibio" || k === "wake" || k === "foil";
   let V = vessels[isKind(urlKind) ? urlKind : "lancha"];
   const allBoatMeshes = allVessels.flatMap((x) => x.vis.meshes).filter((m) => m.name !== "propDisc");
   const staticExtras = [...rampMeshes, ...stationMeshes, ...moorVis.meshes, ...gpuCart.meshes, ...allVessels.flatMap((x) => x.trailerMeshes)];
@@ -522,6 +536,7 @@ const boot = async () => {
   const parkInLot = (X: Vessel, spot = 0) => {
     const pk = STATION.parking[spot];
     if (X.P.wing) { X.boat.wingFolded = true; X.vis.snapFold?.(true); } // (ekranoplano: asa dobrada na carretinha)
+    (X.vis as FoilVisual).snapFoils?.(0); // (hydrofoil: foils recolhidos na carretinha)
     X.rig.placeAt(pk.x, pk.z, pk.yaw);
     placeRigOf(X);
     for (const n of X.trailerNodes) n.setEnabled(true);
@@ -551,8 +566,12 @@ const boot = async () => {
   const rotInvXZ = (dx: number, dz: number) => { const r = V.boat.right; return dx * r.x + dz * r.z; };
   const setPeopleVisible = (on: boolean) => { for (const p of [V.pilot, ...Object.values(V.pax)]) p.group.setEnabled(on); };
   // ---- abastecimento no posto ----
-  let fueling = false, fuelAdded = 0;
-  const FUEL_RATE: Record<VesselKind, number> = { lancha: 1.5, bote: 0.4, rapida: 1.5, turbina: 2.0, jetski: 0.8, airboat: 1.0, wig: 1.0, anfibio: 1.0, wake: 1.5 }; // L/s (bomba de posto ~ 40 L/min; galão portátil mais devagar)
+  let fueling = false, fuelAdded = 0, rideRepT = 0, lastHvPhase = "off";
+  /** tanque cheio (barco elétrico: bateria HV cheia) */
+  const tankFull = () => V.boat.hv ? V.boat.hv.soc >= 0.995 : V.boat.systems.fuelL >= V.boat.systems.p.tankLiters - 0.05;
+  /** aviso de fim de abastecimento (elétrico: kWh carregados) */
+  const fuelMsg = (what: string) => V.boat.hv ? `${what === "Abastecimento interrompido" ? "Carga interrompida" : what}: +${fuelAdded.toFixed(1)} kWh — bateria HV em ${Math.round(V.boat.hv.soc * 100)} %` : `${what}: +${fuelAdded.toFixed(1)} L`;
+  const FUEL_RATE: Record<VesselKind, number> = { lancha: 1.5, bote: 0.4, rapida: 1.5, turbina: 2.0, jetski: 0.8, airboat: 1.0, wig: 1.0, anfibio: 1.0, wake: 1.5, foil: 0 }; // L/s (bomba de posto ~ 40 L/min; galão portátil mais devagar)
   /** Passa o comando para o veículo: o barco fica preso na carretinha (cinta + bunks) e as pessoas vão para o carro. */
   const startDriving = () => {
     const b = V.boat;
@@ -670,6 +689,7 @@ const boot = async () => {
     const isAir = kind === "airboat";
     const isWig = kind === "wig";
     const isPlane = kind === "anfibio";
+    const isFoil = kind === "foil";
     const flyer = isWig || isPlane; // comandos de avião (manche, ailerons, leme, manete que fica)
     input.ibbMode = isJet; input.ibbBraking = false; // S segurado em F = freio do iBB
     input.fixedForward = isAir || flyer; // airboat / ekranoplano: hélice de passo fixo sem câmbio — W só acelera
@@ -685,12 +705,13 @@ const boot = async () => {
       : isWig ? { speedMax: 180, temp: true, battery: true, trimPins: 0, gear: "bar", rpmMax: 6000, rpmRed: 5800, hide: ["anchor", "gear", "draft"], wig: true }
       : isPlane ? { speedMax: 220, temp: true, battery: true, trimPins: 0, gear: "bar", rpmMax: 6000, rpmRed: 5800, hide: ["anchor", "gear", "draft"], plane: true }
       : turbine ? { speedMax: 180, temp: true, battery: true, trimPins: 0, gear: "bar", turbine }
+      : isFoil ? { speedMax: 60, temp: true, battery: true, trimPins: 0, gear: "bar", electric: true, hide: ["trim"] }
       : { speedMax: twin ? 140 : 100, temp: true, battery: true, trimPins: 0, gear: "bar", twin, ballast: !!V.P.ballast });
     document.getElementById("help-twin")!.style.display = twin ? "" : "none";
     document.getElementById("help-trim")!.innerHTML = isBote
       ? "<kbd>E</kbd><kbd>Q</kbd> trim manual (pinos 1–3, depois tilt)"
       : isJet ? "<kbd>E</kbd><kbd>Q</kbd> trim do bocal (VTS)" : isAir ? "<kbd>A</kbd><kbd>D</kbd> lemes de ar (só viram com acelerador) · sem trim"
-      : flyer ? "<kbd>E</kbd><kbd>Q</kbd> compensação do profundor (fica onde deixar)" : "<kbd>E</kbd><kbd>Q</kbd> trim + / −";
+      : flyer ? "<kbd>E</kbd><kbd>Q</kbd> compensação do profundor (fica onde deixar)" : isFoil ? "<kbd>E</kbd><kbd>Q</kbd> altura de voo + / − · <kbd>5</kbd> baixa/recolhe os foils (parado)" : "<kbd>E</kbd><kbd>Q</kbd> trim + / −";
     document.getElementById("help-occ")!.innerHTML = turbine ? "piloto único (habitáculo fechado)" : "<kbd>O</kbd> embarque (só na vaga do píer)";
     document.getElementById("help-ign")!.innerHTML = isBote ? "<kbd>P</kbd> corda (em N) · <kbd>Y</kbd> sistemas (afogador)"
       : isJet ? "<kbd>P</kbd> START/STOP (em N, cordão preso) · segure <kbd>S</kbd> andando: freio iBB (toque: N) · <kbd>Y</kbd> painel (cordão, ECO)"
@@ -698,9 +719,10 @@ const boot = async () => {
       : isWig ? "<kbd>P</kbd> partida (LANE A/B, bombas, START) / desliga · <kbd>↑</kbd> manete à frente: a ~85 km/h decola · sem ré · <kbd>Y</kbd> centrais e bombas"
       : isPlane ? "<kbd>P</kbd> partida (LANE A/B, bombas, START) / desliga · <kbd>↑</kbd> manete a pleno, a ~95 km/h puxe o manche (<kbd>S</kbd>) para decolar · sem ré · <kbd>Y</kbd> centrais e bombas"
       : turbine ? "<kbd>P</kbd> partida FADEC / corte · <kbd>Y</kbd> painel de partida (manual) · <kbd>J</kbd> GPU (na doca)"
+      : isFoil ? "<kbd>P</kbd> HV (pré-carga) + READY / desliga (em N) · baixe os foils (<kbd>5</kbd>) e acelere: decola a ~29 km/h · <kbd>Y</kbd> HV, foils, altura · <kbd>F</kbd> carrega no posto náutico"
       : "<kbd>P</kbd> liga/desliga (em N) · <kbd>N</kbd>+<kbd>W</kbd> neutro · <kbd>J</kbd> jump start · <kbd>Y</kbd> sistemas";
     document.getElementById("help-lights")!.innerHTML = isBote ? "<kbd>L</kbd> lanterna" : isJet || isAir || flyer ? "sem luzes (uso diurno)" : "<kbd>L</kbd> luzes";
-    document.getElementById("help-reset")!.textContent = `píer (${START_FUEL[kind]} L)`;
+    document.getElementById("help-reset")!.textContent = isFoil ? `píer (bateria HV ${Math.round(START_HV * 100)} %)` : `píer (${START_FUEL[kind]} L)`;
     document.getElementById("h-charge")!.style.display = isBote ? "none" : "";
     const rapFloor = (V.vis as BoatVisual & { floor?: number }).floor ?? 0.02;
     cam.headLocal = isBote ? new Vector3(V.P.seats.helm.x, DINGHY_FLOOR + 1.22, V.P.seats.helm.z + 0.02)
@@ -708,8 +730,8 @@ const boot = async () => {
       : isAir ? new Vector3(0, AIR_FOOT + 1.2, V.P.seats.helm.z + 0.02)
       : isWig ? new Vector3(0, WIG_FLOOR + 1.12, V.P.seats.helm.z + 0.02)
       : isPlane ? new Vector3(V.P.seats.helm.x, AMPH_FLOOR + 1.12, V.P.seats.helm.z + 0.02)
-      : kind === "rapida" || turbine ? new Vector3(V.P.seats.helm.x, rapFloor + (turbine ? 1.12 : 1.22), V.P.seats.helm.z + 0.02) : new Vector3(0.5, 1.24, -0.06);
-    cam.distScale = isBote || isJet ? 0.62 : isAir ? 0.95 : isWig ? 1.4 : isPlane ? 1.7 : kind === "rapida" ? 1.3 : turbine ? 1.45 : 1;
+      : kind === "rapida" || turbine || isFoil ? new Vector3(V.P.seats.helm.x, rapFloor + (turbine ? 1.12 : 1.22), V.P.seats.helm.z + 0.02) : new Vector3(0.5, 1.24, -0.06);
+    cam.distScale = isBote || isJet ? 0.62 : isAir ? 0.95 : isWig ? 1.4 : isPlane ? 1.7 : kind === "rapida" ? 1.3 : turbine ? 1.45 : isFoil ? 1.45 : 1;
     if (cam.mode === "cockpit") { cam.toggle(); hud.setCamera(cam.mode); }
     setCockpitHead(false);
     audio.cylinders = V.P.cylinders;
@@ -718,12 +740,12 @@ const boot = async () => {
     document.getElementById("help-anchor")!.style.display = V.P.noAnchor ? "none" : ""; // (airboat: sem âncora)
     document.getElementById("help-horn")!.textContent = isBote || isJet ? "apito" : "buzina"; // bote e moto aquática: apito de bolinha
     spanel.configure({ title: V.P.name, banks: !V.P.electricStart ? 0 : V.boat.systems2 ? 2 : 1,
-      keys: !V.P.electricStart || V.P.turbine || V.P.startStop || V.P.aircraft || V.P.efi ? [] : V.boat.units.length > 1 ? ["IGNIÇÃO BB", "IGNIÇÃO BE"] : ["IGNIÇÃO"],
+      keys: !V.P.electricStart || V.P.turbine || V.P.startStop || V.P.aircraft || V.P.efi || V.P.electric ? [] : V.boat.units.length > 1 ? ["IGNIÇÃO BB", "IGNIÇÃO BE"] : ["IGNIÇÃO"],
       levers: isBote ? "tiller" : isJet ? "handlebar" : isAir ? "pedal" : flyer ? "throttle" : V.boat.units.length > 1 ? "twin" : "binnacle",
-      display: isBote ? "grey" : isJet || flyer ? "glass" : isAir ? "grey" : V.boat.units.length > 1 ? "vfd" : "lcd",
-      trim: isAir || flyer ? null : trimOptsFor(V.P), choke: !!V.P.carbureted, bilgePump: V.P.bilge.pumpLph > 0, lights: isBote ? "LANTERNA" : isJet || isAir || flyer ? "" : "LUZES",
-      startStop: !!V.P.startStop, batterySwitch: !V.P.startStop, fuelValve: !V.P.startStop, ecoMode: !!V.P.ecoThrottle, horn: isBote || isJet ? "apito" : "buzina",
-      annunciators: flyer ? "efi" : isAir, aircraft: !!V.P.aircraft, efi: !!V.P.efi, leveler: !!V.P.wing?.leveler, ballast: !!V.P.ballast, cruise: !!V.P.cruise });
+      display: isBote ? "grey" : isJet || flyer || isFoil ? "glass" : isAir ? "grey" : V.boat.units.length > 1 ? "vfd" : "lcd",
+      trim: isAir || flyer || isFoil ? null : trimOptsFor(V.P), choke: !!V.P.carbureted, bilgePump: V.P.bilge.pumpLph > 0, lights: isBote ? "LANTERNA" : isJet || isAir || flyer ? "" : "LUZES",
+      startStop: !!V.P.startStop, batterySwitch: !V.P.startStop, fuelValve: !V.P.startStop && !V.P.electric, ecoMode: !!V.P.ecoThrottle, horn: isBote || isJet ? "apito" : "buzina",
+      annunciators: flyer ? "efi" : isAir, aircraft: !!V.P.aircraft, efi: !!V.P.efi, leveler: !!V.P.wing?.leveler, ballast: !!V.P.ballast, cruise: !!V.P.cruise, electric: !!V.P.electric, foil: !!V.P.hydrofoil });
     lights = false; input.setLights(false);
     setNavLights(V.vis, false); V.dinghy?.setLantern(false);
     hud.setLights(false, isBote ? "LANTERNA" : "LUZES");
@@ -758,13 +780,14 @@ const boot = async () => {
     if (b.params.wing) { b.wingFolded = false; V.vis.snapFold?.(false); b.elevator = 0; b.levelerOn = true; input.resetFlight(); }
     b.coldEngines(); // (turbina parada e fria, N1 = 0)
     b.systems.fuelL = START_FUEL[V.kind];
+    if (b.hv) { b.hv.soc = START_HV; b.hv.shore = false; b.hv.motorC = 26; } // (elétrico: HV desligada, foils recolhidos — b.reset)
     for (const bk of b.banks) bk.coolantC = Math.min(bk.coolantC, 60);
     for (const p of [V.pilot, ...Object.values(V.pax)]) p.board(V.vis.root);
     if (V.dinghy) V.dinghy.pilotAboard = true;
     applyOccupants(occIdx, false);
     capsizeWarned = false; lastPin = 0; lastStall = ""; lastRighted = b.righted;
     snap(curPos, curRot); snap(prevPos, prevRot);
-    if (toast) hud.showToast(`Reposicionado no píer — ${START_FUEL[V.kind]} L no tanque`);
+    if (toast) hud.showToast(b.hv ? `Reposicionado no píer — bateria HV em ${Math.round(b.hv.soc * 100)} %, foils recolhidos` : `Reposicionado no píer — ${START_FUEL[V.kind]} L no tanque`);
   };
 
   // ---------------- painel de partida da turbina (Y) ----------------
@@ -833,6 +856,12 @@ const boot = async () => {
     V.boat.bilgeMode = mode;
     sysToast(mode === "auto" ? "Bomba de porão em AUTO (boia)" : mode === "on" ? "Bomba de porão LIGADA (manual)" : "Bomba de porão DESLIGADA — a água no porão não sai");
   };
+  /** baixa/recolhe os foils (painel Y ou tecla 5) */
+  const doFoils = (down: boolean) => {
+    const r = V.boat.setFoils(down);
+    sysToast(r === "speed" ? `Foils: PARE o barco para ${down ? "baixar" : "recolher"} (o atuador só mexe abaixo de ~7 km/h) — vão mexer quando parar`
+      : r === "power" ? "Foils: sem 12 V os atuadores não mexem" : down ? "Baixando os foils (~12 s) — depois acelere: decola a ~29 km/h" : "Recolhendo os foils (~12 s): modo casco, para água rasa e atracar");
+  };
   const spanel = new SystemsPanel({
     setBattery: (sel) => {
       V.boat.batterySel = sel;
@@ -899,6 +928,23 @@ const boot = async () => {
       sysToast(!on && was !== "off" && b.engine === "off" ? `LANE ${L} desligada e a outra também: o motor parou`
         : !on && b.engine === "running" ? `LANE ${L} desligada: o motor segue com a outra central (sem redundância)`
         : on ? `LANE ${L} ligada${b.systems.supplyV(2) > 9 ? " — autoteste da central" : " — sem tensão"}` : `LANE ${L} desligada`);
+    },
+    setHv: (on) => {
+      const b = V.boat, hv = b.hv; if (!hv) return;
+      if (on && (b.batterySel === "off" || b.systems.supplyV(5) < b.params.electric!.minV12)) { hv.setHv(true); sysToast("Chave HV ligada, mas sem 12 V o BMS não acorda: os contatores não fecham (bateria da casa / jump start, J)"); return; }
+      hv.setHv(on);
+      sysToast(on ? "HV: pré-carga do inversor… o contator principal fecha em ~1 s (READY liga o motor)" : "HV desligada: contatores abertos (o motor e o DC-DC param)");
+    },
+    ready: () => input.pushAction("ignition"),
+    setFoils: (down) => doFoils(down),
+    setFcs: (on) => {
+      V.boat.fcsOn = on;
+      sysToast(on ? "Computador de voo LIGADO: segura a altura, nivela e inclina nas curvas" : "Computador de voo DESLIGADO: flaps neutros — o barco não voa estável (só para teste)");
+    },
+    adjustRide: (d) => {
+      const H = V.boat.params.hydrofoil; if (!H) return;
+      const h = V.boat.setRide(d * H.ride.step);
+      sysToast(`Altura de voo: ${h.toFixed(2)} m (quilha sobre a água)`);
     },
     setCruise: (on) => {
       V.boat.setCruise(on);
@@ -971,7 +1017,8 @@ const boot = async () => {
     occIdx = 0;
     resetBoat(false);
     cam.resetOrbit();
-    hud.showToast(`${V.kind === "bote" ? "Bote de apoio AR-3" : V.kind === "rapida" ? "Lancha rápida AR-9" : V.kind === "turbina" ? "Lancha de turbina AR-10" : V.kind === "jetski" ? "Moto aquática AR-J" : V.kind === "airboat" ? "Lancha pantaneira AR-P" : V.kind === "wig" ? "Ekranoplano AR-W" : V.kind === "anfibio" ? "Anfíbio AR-A" : V.kind === "wake" ? "Lancha de wakeboard AR-8" : "Lancha AR-6"} atracado na vaga do píer — O escolhe quantos embarcam, M solta as amarras. O combustível não dá até o fim do cânion: abasteça no posto`);
+    if (V.kind === "foil") hud.showToast("Barco elétrico com foils AR-E atracado na vaga do píer, foils recolhidos — O escolhe quantos embarcam (até 12 passageiros), M solta as amarras. P liga a HV e o READY; longe do píer, parado, 5 baixa os foils");
+    else hud.showToast(`${V.kind === "bote" ? "Bote de apoio AR-3" : V.kind === "rapida" ? "Lancha rápida AR-9" : V.kind === "turbina" ? "Lancha de turbina AR-10" : V.kind === "jetski" ? "Moto aquática AR-J" : V.kind === "airboat" ? "Lancha pantaneira AR-P" : V.kind === "wig" ? "Ekranoplano AR-W" : V.kind === "anfibio" ? "Anfíbio AR-A" : V.kind === "wake" ? "Lancha de wakeboard AR-8" : "Lancha AR-6"} atracado na vaga do píer — O escolhe quantos embarcam, M solta as amarras. O combustível não dá até o fim do cânion: abasteça no posto`);
   };
   // ---------------- splash: marca, idioma, embarcações e esportes (sobre a cena do lago) ----------------
   const splash = document.getElementById("splash")!;
@@ -1024,24 +1071,24 @@ const boot = async () => {
     if (a === "fuel") {
       if (!driving) {
         // POSTO NÁUTICO: encostado na vaga do píer de abastecimento, parado e com o motor desligado
-        if (fueling) { fueling = false; hud.showToast(`Abastecimento interrompido: +${fuelAdded.toFixed(1)} L`); return; }
+        if (fueling) { fueling = false; if (boat.hv) boat.hv.shore = false; hud.showToast(fuelMsg("Abastecimento interrompido")); return; }
         const dock = fuelDockState(boat, world.fuelPier);
         if (!dock.near) { hud.showToast("Para abastecer: o POSTO NÁUTICO fica a oeste do píer principal (depois da rampa) — ou leve o barco na carretinha até o posto da estrada"); return; }
         if (!dock.ok) { hud.showToast(`Posto náutico: ${dock.why}`); return; }
         if (boat.engine !== "off") { hud.showToast("Desligue o motor (P) para abastecer"); return; }
-        if (boat.systems.fuelL >= boat.systems.p.tankLiters - 0.05) { hud.showToast("O tanque já está cheio"); return; }
+        if (tankFull()) { hud.showToast(boat.hv ? "A bateria HV já está cheia" : "O tanque já está cheio"); return; }
         fueling = true; fuelAtDock = true; fuelAdded = 0;
-        hud.showToast("Abastecendo no posto náutico…");
+        hud.showToast(boat.hv ? "Carregando a bateria HV no posto náutico (carregador de 60 kW; o tempo de jogo é acelerado)…" : "Abastecendo no posto náutico…");
         return;
       }
-      if (fueling) { fueling = false; hud.showToast(`Abastecimento interrompido: +${fuelAdded.toFixed(1)} L`); return; }
+      if (fueling) { fueling = false; if (boat.hv) boat.hv.shore = false; hud.showToast(fuelMsg("Abastecimento interrompido")); return; }
       const bay = fuelBayState(V.rig.carPose(), Math.abs(V.rig.v));
       if (!bay.near) { hud.showToast("Nenhuma bomba aqui — o posto fica no fim da estrada"); return; }
       if (!bay.ok) { hud.showToast(`Bomba: ${bay.why}`); return; }
       if (boat.engine !== "off") { hud.showToast("Desligue o motor do barco (P) para abastecer"); return; }
-      if (boat.systems.fuelL >= boat.systems.p.tankLiters - 0.05) { hud.showToast("O tanque já está cheio"); return; }
+      if (tankFull()) { hud.showToast(boat.hv ? "A bateria HV já está cheia" : "O tanque já está cheio"); return; }
       fueling = true; fuelAtDock = false; fuelAdded = 0;
-      hud.showToast("Abastecendo…");
+      hud.showToast(boat.hv ? "Carregando a bateria HV (carregador do posto)…" : "Abastecendo…");
       return;
     }
     if (a === "occupants" && !(boat.mooringLines.length && moorWhere === "píer")) {
@@ -1122,6 +1169,10 @@ const boot = async () => {
       else if (wkb.canHook(V.boat)) hud.showToast("Solte a corda da outra atividade antes");
       else hud.showToast("Para engatar a boia ou o parasail: chegue DEVAGAR com a popa perto da boia ou da plataforma (píeres a leste do píer principal) e aperte G");
     }
+    else if (a === "foils") {
+      if (!boat.params.hydrofoil) { sysToast("Esta embarcação não tem foils"); return; }
+      doFoils(!boat.foilDown);
+    }
     else if (a === "ballast") {
       // LASTRO (lancha de wakeboard): 4 alterna encher → parar → esvaziar → parar
       if (!boat.params.ballast) { sysToast("Esta embarcação não tem tanques de lastro"); return; }
@@ -1189,6 +1240,13 @@ const boot = async () => {
           busy: `Turbina ainda girando (N1 ${tb ? tb.n1.toFixed(0) : 0} %) — espere passar de 8 % para nova partida`, needNeutral: "Coloque em N para dar partida", lowBattery: "Bateria descarregada: o arranque não gira — atraque na doca e conecte a GPU (J)",
           noPower: "Sem energia no barramento: MAIN ligada e baterias em BOTH (ou BUS com a GPU da doca, J) — painel Y" };
         if (tm[r]) { sysToast(tm[r]); return; }
+      }
+      if (boat.hv) {
+        const hv = boat.hv;
+        const em: Record<string, string> = { stopped: hv.phase === "on" ? "READY desligado (a HV continua ligada; Y desliga a HV)" : "Pré-carga abortada: HV desligada",
+          starting: hv.phase === "on" ? "READY: inversor ligado — o acelerador comanda o motor (não há marcha lenta)" : "HV: pré-carga do inversor (contatores)… READY em ~1 s",
+          needNeutral: "Coloque em N para o READY", lowBattery: "Bateria de 12 V fraca: o BMS não acorda e a HV não liga — J conecta o jump start", noFuel: "Bateria HV VAZIA — carregue no posto náutico (F) ou R volta ao píer" };
+        if (em[r]) { sysToast(em[r]); return; }
       }
       if (boat.params.efi && r === "starting") { sysToast("Partida: LANE A e B ligadas, bombas 1 e 2 (pressão subindo) — autoteste da central e arranque…"); return; }
       if (boat.params.aircraft && r === "starting") { sysToast(`Partida: mistura RICA${boat.prime >= 2 && boat.systems.coolantC < 40 ? ", primer (3 bombadas)" : ""}, magnetos em BOTH — arranque…`); return; }
@@ -1284,6 +1342,7 @@ const boot = async () => {
     Quaternion.RotationAxisToRef(Vector3.Up(), -T.steerDeg * Math.PI / 180, qSteer);
     for (const dr of drivesOf(vis)) dr.engine.rotationQuaternion = qTilt.multiply(qSteer); // as rabetas giram juntas (barra de ligação)
     V.vis.setFolded?.(V.boat.wingFolded); // (ekranoplano: a asa anima até a posição da física)
+    (V.vis as FoilVisual).updateFoil?.(T); // (hydrofoil: foils, pod e flaps pela telemetria)
     tubeVis.update(tube, performance.now() / 1000);
     if (tube.falls !== tubeFalls) {
       tubeFalls = tube.falls;
@@ -1382,6 +1441,16 @@ const boot = async () => {
       }
     }
     V.helm.update(dtReal, T, input.state, P.maxSteerLow * 180 / Math.PI);
+    // hydrofoil: E/Q ajustam a altura de voo (um passo a cada 0,3 s segurando)
+    if (P.hydrofoil && mode === "game" && !driving) {
+      const tr = input.state.trim;
+      rideRepT -= dtReal;
+      if (Math.abs(tr) > 0.5 && rideRepT <= 0) { rideRepT = 0.3; const h = boat.setRide(Math.sign(tr) * P.hydrofoil.ride.step); hud.showToast(`Altura de voo: ${h.toFixed(2)} m`); }
+      if (Math.abs(tr) <= 0.5) rideRepT = 0;
+      // contatores da HV: o "clac" ao fechar e ao abrir
+      const ph = T.hv?.phase ?? "off";
+      if (ph !== lastHvPhase) { if (ph === "on" || lastHvPhase === "on") audio.clunk(ph === "on"); lastHvPhase = ph; }
+    }
 
     // pessoas: sentadas nos bancos, em pé na água com o colete (barco virado) ou em pé no píer esperando
     const persons: [SeatId, Pilot][] = [["helm", V.pilot], ...(Object.entries(V.pax) as [SeatId, Pilot][])];
@@ -1427,10 +1496,17 @@ const boot = async () => {
     if (!driving && !manualBoat && mode === "game" && boat.winchStrap && ld.overBunks) { strapT += dtReal; if (strapT > 1.5) startDriving(); } else if (!driving) strapT = 0;
     // posto: guia para parar ao lado da bomba e abastecimento (só com o carro parado e o motor do barco desligado)
     const bay = driving ? fuelBayState(V.rig.carPose(), Math.abs(V.rig.v)) : { near: false, ok: false, pump: null, why: "" };
-    if (fueling) {
+    if (fueling && boat.hv) {
+      // CARGA da bateria HV: o carregador do posto alimenta a HV (o barco em READY desligado); a energia entra em hv.update
+      const hv = boat.hv;
+      const okNow = fuelAtDock ? !driving && fuelDockState(boat, world.fuelPier).ok : driving && bay.ok;
+      if (!okNow || boat.engine !== "off") { fueling = false; hv.shore = false; hud.showToast(fuelMsg("Abastecimento interrompido")); }
+      else if (hv.soc >= 0.995) { fueling = false; hv.shore = false; hud.showToast(fuelMsg("Bateria cheia! Carga completa")); }
+      else { hv.shore = true; fuelAdded = Math.max(0, fuelAdded + (hv.charging ? -hv.kw * dtReal / 3600 * boat.params.electric!.chargeTimeScale : 0)); }
+    } else if (fueling) {
       const sysF = boat.systems, room = sysF.p.tankLiters - sysF.fuelL;
       const okNow = fuelAtDock ? !driving && fuelDockState(boat, world.fuelPier).ok : driving && bay.ok;
-      if (!okNow || boat.engine !== "off") { fueling = false; hud.showToast(`Abastecimento interrompido: +${fuelAdded.toFixed(1)} L`); }
+      if (!okNow || boat.engine !== "off") { fueling = false; hud.showToast(fuelMsg("Abastecimento interrompido")); }
       else if (room <= 0.01) { fueling = false; hud.showToast(`Tanque cheio! +${fuelAdded.toFixed(1)} L — ${sysF.fuelL.toFixed(0)} L no tanque`); }
       else { const d = Math.min(room, FUEL_RATE[V.kind] * dtReal); sysF.fuelL += d; fuelAdded += d; T.fuelL = sysF.fuelL; T.fuelFrac = sysF.fuelFrac; }
     }
@@ -1724,6 +1800,7 @@ const boot = async () => {
       // AR-9: o 2º V8 tem voz própria (rotação/carga/estado dele)
       ...(boat.units.length > 1 ? { rpm: T.rpms[0], throttle: T.throttles[0], rpm2: T.rpms[1], throttle2: T.throttles[1], engine2: T.engines[1], engine: T.engines[0] } : {}),
       // turbina: N1/N2, EGT (chama), arranque e velas de ignição — síntese própria (apito do compressor, rugido da combustão)
+      electric: T.hv ? { rpm: T.rpm, kw: T.hv.shaftKw, ready: T.hv.ready } : undefined,
       turbine: T.turbine ? { n1: T.turbine.n1, n2: T.turbine.n2, egt: T.turbine.egt, power: T.turbine.torque / 100 * T.turbine.n2 / 100, starter: T.turbine.starter, ignition: T.turbine.ignition, lit: T.turbine.lit, fuelLph: T.turbine.fuelLph } : undefined,
     });
     // buzina: do veículo quando você está nele; senão do barco (segurar B, ou toque no botão = 0,22 s)

@@ -96,6 +96,25 @@ A lancha é um **corpo rígido 6DOF** (massa seca de 1030 kg + gasolina, ocupant
 
 > Referência completa da lógica elétrica e dos motores: [`docs/SISTEMAS_ELETRICOS_E_MOTORES.md`](../../docs/SISTEMAS_ELETRICOS_E_MOTORES.md).
 
+## Barco elétrico com foils AR-E (v0.80.0)
+
+- 10ª embarcação (`FOILER`, `?barco=foil`): 9,5 m, seca 2700 kg, piloto + 12 passageiros (`SeatId` `p1`…`p12`).
+- `sim/electric.ts` (`ElectricDrive`): HV de 126 kWh / 400 V (108s NMC), contatores com pré-carga, BMS nos 12 V
+  (`minV12`), READY, `availKw` (motor 140 kW; tartaruga < 6 %; motor > 105 °C), temperaturas, carregador do cais
+  (60 kW × 20 no tempo de jogo). Detalhes em `docs/SISTEMAS_ELETRICOS_E_MOTORES.md` §10f.
+- `sim/hydrofoil.ts`: `foilForce` (perfil com flap, superfície livre `1 − 0,5·e^(−2d/c)`, ventilação rompendo a
+  superfície), `strutForce` (placa vertical: arrasto + força lateral; o de trás gira com o pod = leme) e `fcsStep`
+  (altura PID no flap comum da frente, rolagem coordenada φ = atan(V·r/g) no diferencial, arfagem no flap de trás;
+  integradores em altura, arfagem e rolagem com anti-windup). Foil da frente com CL maior que o de trás → ponto neutro
+  atrás do CG (estável em arfagem).
+- `boat.ts`: `applyFoils` (atuadores com trava de velocidade, 12 V e fundo; flaps; forças; contato dos foils com o
+  fundo + avaria), pod que sobe com os foils (`podLift` na hélice e no `lowerUnitTip`), potência pelo disco atuador.
+- Calibração (`node tests/debug-foil.ts 0.7 13`): decola a ~27 km/h (foils ≥ 95 % do peso), voa a 0,50 m, arfagem
+  ~0,3°, ~41 km/h com ~87 kW; a toda ~48 km/h (121 kW no eixo); curva com 14° de inclinação; com ondas a altura
+  oscila 0,3–0,6 m sem tocar a água. Modo casco (foils recolhidos) a 70 %: ~16 km/h.
+- Critérios: grupo "hydrofoil elétrico" (29). Verificado no navegador: decolagem, voo, curva inclinada, pouso,
+  recolhimento, painel Y e HUD.
+
 ## AR-8 sem rooster tail (v0.79.1)
 
 - `params.shaftDrive` (AR-8): hélice de eixo sob o casco. Em `waterInteraction.ts` o rooster tail fica em 0 e a névoa de
@@ -1094,7 +1113,7 @@ Limitação: é uma síntese aproximada, não uma gravação. Validar o timbre d
 | Lancha pantaneira AR-P (v0.69–0.69.2) | frio sem primer não pega (falha "prime"); 3 bombadas pega em 1,2 s; 9 bombadas afoga; mistura em corte não pega e apaga o motor ligado; um magneto: −103 rpm a pleno; mistura 0,8: −5,6 L/h; magnetos OFF param; trim sem ação (0°, 0 A); P frio pega; largada a 60 % pega em 2,2 s; lenta empurrando 4,5 km/h, sempre em F, borda 0,38 m; a toda 88,4 km/h a 2434 rpm, 0→40 4,4 s; sem cavitação/ventilação; pedindo R segue a 89 km/h para a frente; curva a toda derrapando 3,6 m/s, 11,1°/s, roll 3,2°, não vira; motor desligado com os lemes todos: 0,0°; partida sem N; 50 % + lemes quase parado: 20,2°/s; refrigerado a ar; barranco de lama/capim: 12,6 s no seco, avaria 2 %, 30 km/h; carretinha da caminhonete |
 | Moto aquática AR-J (v0.67–0.67.1) | compressor 1,04 bar a toda, 0,007 bar na lenta; luz do iBB: apagada em F, FREIO freando a toda, RÉ parada em R, NEUTRO em N; navegador: S segurado a 107 km/h → FREIO, 53 km/h em 1,5 s; soltar → F; toque → N; parada: CG −0,03 m da água, borda 0,25 m; a toda 108,3 km/h a 7880 rpm, 0→60 2,7 s, 0→100 7,1 s, 72 L/h; curva a toda 29,2°/s sem virar; iBB de 102 km/h a < 5 km/h em 4,2 s e depois ré; N com o guidão todo: 0,2° em 6 s; lenta + guidão 10,6°/s; N acelerado: empuxo 0, rotor a 7478 rpm; no ar: empuxo 0, giro 7951 rpm; ECO 55 % / 89,9 km/h; lotada 101,5 km/h; cordão solto não liga, puxado desliga; START pega em 1,5 s (60 %); central dorme em 30 s; casco selado 40 s lotada em ondas fortes: 0,0 L; sifão 6,1 L em 30 s (= contrato); virada: desvira em 4,5 s, piloto a bordo com o cordão, liga de novo; carretinha 3,9 m no carro |
 
-Resultado: **894/895 OK + 1 KNOWN** (v0.79.1). Na v0.10, o peso do piloto na posição real (boreste, acima do CG) aumentou o roll em curva com ondas fortes; o `bankCoef` foi para 1800 e o `rollDamping` para 15000, com 1 limitação conhecida (abaixo). Na v0.2 a hélice foi para 0,5 m atrás do espelho, como no modelo visual, e o esterço máximo em alta velocidade caiu de 13° para 11°.
+Resultado: **926/927 OK + 1 KNOWN** (v0.80.0). Na v0.10, o peso do piloto na posição real (boreste, acima do CG) aumentou o roll em curva com ondas fortes; o `bankCoef` foi para 1800 e o `rollDamping` para 15000, com 1 limitação conhecida (abaixo). Na v0.2 a hélice foi para 0,5 m atrás do espelho, como no modelo visual, e o esterço máximo em alta velocidade caiu de 13° para 11°.
 
 ### Navegador (Chrome, Windows 11, WebGL2, `q=med`, ~1370×896)
 

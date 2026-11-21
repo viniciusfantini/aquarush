@@ -45,6 +45,11 @@ export interface SystemsPanelActions {
   setBallast(cmd: "fill" | "stop" | "drain"): void; // lancha de wakeboard: bombas do lastro
   setCruise(on: boolean): void;                    // controle de velocidade: liga/desliga
   adjustCruise(dKmh: number): void;                // controle de velocidade: ajusta a velocidade escolhida
+  setHv(on: boolean): void;                        // barco elétrico: chave HV (contatores com pré-carga)
+  ready(): void;                                   // barco elétrico: botão READY (liga/desliga o inversor)
+  setFoils(down: boolean): void;                   // hydrofoil: baixar / recolher os foils
+  setFcs(on: boolean): void;                       // hydrofoil: computador de voo
+  adjustRide(dM: number): void;                    // hydrofoil: altura de voo pedida
   close(): void;
 }
 
@@ -79,6 +84,10 @@ export interface SystemsPanelCaps {
   ballast?: boolean;
   /** controle de velocidade (lancha de wakeboard): chave ON/OFF, − / + e a velocidade escolhida */
   cruise?: boolean;
+  /** propulsão elétrica: chave HV + botão READY na partida (no lugar da chave de ignição) */
+  electric?: boolean;
+  /** hydrofoil: chave dos foils (baixar/recolher), computador de voo e a altura de voo (− / +) */
+  foil?: boolean;
 }
 
 const plate = (inner: string, cls = "") => `<div class="sw-plate ${cls}"><span class="screw s1"></span><span class="screw s2"></span><span class="screw s3"></span><span class="screw s4"></span>${inner}</div>`;
@@ -131,6 +140,11 @@ export class SystemsPanel {
       else if (d.ballast) this.act.setBallast(d.ballast as "fill" | "stop" | "drain");
       else if (d.cruise) this.act.setCruise(!b.classList.contains("on"));
       else if (d.cruiseSet) this.act.adjustCruise(Number(d.cruiseSet) * 0.5);
+      else if (d.hvsw) this.act.setHv(!b.classList.contains("on"));
+      else if (d.ready) this.act.ready();
+      else if (d.foils) this.act.setFoils(!b.classList.contains("on"));
+      else if (d.fcs) this.act.setFcs(!b.classList.contains("on"));
+      else if (d.rideSet) this.act.adjustRide(Number(d.rideSet));
       else if (d.pump) this.act.setFuelPump(d.pump === "2" ? 2 : 1, !b.classList.contains("on"));
       else if (d.prime) { this.act.prime(); b.classList.remove("push"); void b.offsetWidth; b.classList.add("push"); }
     });
@@ -164,7 +178,10 @@ export class SystemsPanel {
     const cell = (ctl: string, info: string) => `<div class="sw-cell">${ctl}<div class="rd" data-info="${info}"></div></div>`;
     this.el.dataset.disp = caps.display;
     // partida: chave(s) de ignição ou a corda
-    const start = caps.efi
+    const start = caps.electric
+      ? cell(`<div class="ss">${toggle({ attr: "hvsw", val: "1", label: "HV", sub: "bateria 400 V" })}
+          <div class="rb-w"><button class="rb rb-start" data-ready="1" title="READY: liga/desliga o inversor (em N, com a HV ligada)"><span>READY</span></button></div></div>`, "hv")
+      : caps.efi
       ? cell(`<div class="ss">${toggle({ attr: "ecu", val: "a", label: "LANE A", sub: "central de injeção" })}${toggle({ attr: "ecu", val: "b", label: "LANE B", sub: "reserva" })}
           <div class="rb-w"><button class="rb rb-start" data-ss="start" title="segure: dá a partida (com uma LANE ligada e pressão de combustível)"><span>START</span></button></div></div>`, "efi")
       : caps.aircraft
@@ -194,6 +211,11 @@ export class SystemsPanel {
     // lastro: chave e, no lugar do texto, 3 relógios com o nível de cada tanque (BB, BE, PROA)
     if (caps.ballast) cells.push(`<div class="sw-cell">${tri("ballast", "LASTRO", "bombas dos 3 tanques", { v: "fill", l: "ENCHER" }, { v: "stop", l: "PARAR" }, { v: "drain", l: "ESVAZIAR" })}</div>`
       + `<div class="sw-cell"><div class="bal-g" data-bal></div></div>`);
+    if (caps.foil) {
+      cells.push(cell(toggle({ attr: "foils", val: "1", label: "FOILS", sub: "baixar / recolher", on: "BAIXO", off: "RECOLH." }), "foils"));
+      cells.push(cell(toggle({ attr: "fcs", val: "1", label: "VOO", sub: "computador de voo" })
+        + `<div class="cruise-set"><button data-ride-set="-1" aria-label="altura −">−</button><span data-ride-v>0,50 m</span><button data-ride-set="1" aria-label="altura +">+</button></div>`, "fcs"));
+    }
     if (caps.cruise) cells.push(cell(toggle({ attr: "cruise", val: "1", label: "VELOCIDADE", sub: "controle automático" })
       + `<div class="cruise-set"><button data-cruise-set="-1" aria-label="velocidade −">−</button><span data-cruise-v>30,0</span><button data-cruise-set="1" aria-label="velocidade +">+</button></div>`, "cruise"));
     // bote: lanterna de mão a pilha (manual) — não é chave de painel
@@ -330,6 +352,26 @@ export class SystemsPanel {
       info("ss", (t.driveMode === "eco" ? "ECO · " : "") + (t.engine === "running" ? `ligada · ${Math.round(t.rpm)} rpm · ${t.boostBar.toFixed(2)} bar` : t.engine === "cranking" ? `arranque · ${Math.round(t.rpm)} rpm`
         : !t.lanyard ? "cordão SOLTO: não liga" : awake ? "central acordada" : "desligada"), !t.lanyard || (t.startFail !== "" && t.engine === "off" && awake));
 
+    }
+    if (c.electric && t.hv) {
+      // HV: posição da chave; o LED acende com os contatores fechados (pisca na pré-carga). READY aceso = inversor ligado
+      const H = t.hv, blink = Math.floor(performance.now() / 300) % 2 === 0;
+      setToggle(el, "hvsw", "1", H.hvSwitch, H.phase === "on" || (H.phase === "precharge" && blink));
+      const rb = el.querySelector<HTMLElement>("button[data-ready]");
+      rb?.classList.toggle("lit", H.ready); rb?.classList.toggle("busy", H.phase === "precharge" || (H.hvSwitch && !H.ready && H.phase !== "on"));
+      info("hv", H.phase === "precharge" ? `PRÉ-CARGA ${Math.round((H.linkV / Math.max(1, H.packV)) * 100)} %` : H.fault === "12v" ? "12 V BAIXA: BMS sem energia"
+        : H.phase === "on" ? `${H.packV.toFixed(0)} V · ${Math.round(H.soc * 100)} % · ${H.kw.toFixed(1)} kW${H.ready ? "" : " · READY desligado"}` : `HV desligada · ${Math.round(H.soc * 100)} %${H.charging ? " · carregando" : ""}`,
+        H.fault !== "" || H.limited);
+    }
+    if (c.foil && t.foil) {
+      const F = t.foil;
+      setToggle(el, "foils", "1", F.down, powered && (F.moving || F.deploy > 0.97));
+      info("foils", F.blocked === "speed" ? "PARE para mexer" : F.blocked === "shallow" ? "NO FUNDO: raso" : F.blocked === "power" ? "sem 12 V" : F.moving ? `${F.down ? "baixando" : "recolhendo"} ${Math.round(F.deploy * 100)} %` : F.deploy > 0.97 ? "baixados" : "recolhidos", F.blocked !== "");
+      setToggle(el, "fcs", "1", F.fcsSw, F.fcs);
+      const rv = el.querySelector<HTMLElement>("[data-ride-v]");
+      const txt = `${F.target.toFixed(2).replace(".", ",")} m`;
+      if (rv && rv.textContent !== txt) rv.textContent = txt;
+      info("fcs", F.foilborne ? `voando · ${F.rideH.toFixed(2)} m` : F.fcs ? "pronto (acelere)" : F.deploy > 0.97 ? "desligado" : "foils recolhidos", F.vent);
     }
     if (c.cruise) {
       // chave e a velocidade escolhida; leitura: atual, acelerador que ele comanda e se a manete está limitando
