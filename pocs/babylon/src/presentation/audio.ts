@@ -91,6 +91,8 @@ export interface AudioState {
   engine2?: "off" | "cranking" | "running";
   /** TURBO DIESEL de 6 cilindros com escape aberto (long-tail): voz própria (combustão, batida, turbo, flutter) */
   diesel?: { turbo: number; cold: number };
+  /** o barco tem esguicho de refrigeração (motor de popa / moto aquática): o chiado da água caindo */
+  telltale?: boolean;
   /** motor ELÉTRICO (barco AR-E): giro, potência (kW) e READY — zumbido do motor e o apito do inversor, sem combustão */
   electric?: { rpm: number; kw: number; ready: boolean };
   /** turbina a gás (lancha de turbina): substitui o som do motor a pistão */
@@ -725,7 +727,7 @@ export class EngineAudio {
     // água, esguicho, cavitação
     this.waterGain.gain.setTargetAtTime(m * Math.min(st.speed / 22, 1) * 0.11, t, 0.15);
     this.waterFilter.frequency.setTargetAtTime(400 + st.speed * 40, t, 0.2);
-    this.telltaleGain.gain.setTargetAtTime(running && !st.turbine ? m * (0.004 + 0.009 * r) * (st.cockpit ? 0.5 : 1) : 0, t, 0.2);
+    this.telltaleGain.gain.setTargetAtTime(running && !st.turbine && st.telltale !== false ? m * (0.004 + 0.009 * r) * (st.cockpit ? 0.5 : 1) : 0, t, 0.2);
     this.cavGain.gain.setTargetAtTime(m * Math.min(st.boil, 1) * 0.14 * (0.3 + load), t, 0.05);
     this.cavLfo.frequency.setTargetAtTime(20 + rpm / 120, t, 0.1);
     // hélice de avião: as pás batem a rpm/30 Hz (2 pás); o vento da hélice cresce com o giro e a carga

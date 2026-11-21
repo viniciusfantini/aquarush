@@ -96,6 +96,26 @@ A lancha é um **corpo rígido 6DOF** (massa seca de 1030 kg + gasolina, ocupant
 
 > Referência completa da lógica elétrica e dos motores: [`docs/SISTEMAS_ELETRICOS_E_MOTORES.md`](../../docs/SISTEMAS_ELETRICOS_E_MOTORES.md).
 
+## Revisão geral dos 12 barcos (v0.83.2)
+
+Roteiro no navegador (`__aqua.play(k)`, partida pelo P, 9 s a 50 % em águas abertas, painel Y aberto): todos ligam e
+andam, nenhum vira, nenhum NaN na telemetria, nenhum erro de script (só o aviso benigno "ResizeObserver loop" ao abrir
+o painel).
+
+| Barco | Partida | 50 % | Esguicho | HUD | Y |
+|---|---|---|---|---|---|
+| AR-6 | 2,9 s | 46 km/h | 1 | trim/marcha/âncora | trim, luzes |
+| AR-3 | 3 puxadas (frio, sem afogador) | 28 km/h | 1 | pino | pino, câmbio, lanterna |
+| AR-9 | 2,2 s | 54 km/h | 0 (V8 de centro) | 2 conta-giros | trim (rabetas) |
+| AR-10 | 24 s (FADEC) | 36 km/h | 0 | turbina | painel de partida |
+| AR-J | 2,6 s | 76 km/h | 1 | VTS | VTS, sem luzes |
+| AR-P | 2,6 s | 32 km/h | 0 | sem trim/marcha/âncora | sem trim |
+| AR-W / AR-A | 2,8 / 3,1 s | 38 / 25 km/h | 0 | compensador | — |
+| AR-8 | 3,2 s | 48 km/h | 1 (costado) | **sem trim (corrigido)** | **sem trim (corrigido)** |
+| AR-E | 1,6 s (READY) | 19 km/h (casco) | **0 (corrigido)** | sem trim | — |
+| AR-T | 3,5 s | 37 km/h | **0 (corrigido)** | sem trim/marcha | **cana sem câmbio (corrigido)** |
+| AR-R | 2,6 s | 55 km/h | **2 (corrigido)** | 2 conta-giros | **trim de popa (corrigido)** |
+
 ## Bote de resgate: gaiola dos motores e controlador de sirene (v0.83.1)
 
 - `rescueMesh.ts`: engradado de inox fixo envolvendo os dois motores (aberto embaixo atrás para o tilt), adesivo
@@ -1156,7 +1176,7 @@ Limitação: é uma síntese aproximada, não uma gravação. Validar o timbre d
 | Lancha pantaneira AR-P (v0.69–0.69.2) | frio sem primer não pega (falha "prime"); 3 bombadas pega em 1,2 s; 9 bombadas afoga; mistura em corte não pega e apaga o motor ligado; um magneto: −103 rpm a pleno; mistura 0,8: −5,6 L/h; magnetos OFF param; trim sem ação (0°, 0 A); P frio pega; largada a 60 % pega em 2,2 s; lenta empurrando 4,5 km/h, sempre em F, borda 0,38 m; a toda 88,4 km/h a 2434 rpm, 0→40 4,4 s; sem cavitação/ventilação; pedindo R segue a 89 km/h para a frente; curva a toda derrapando 3,6 m/s, 11,1°/s, roll 3,2°, não vira; motor desligado com os lemes todos: 0,0°; partida sem N; 50 % + lemes quase parado: 20,2°/s; refrigerado a ar; barranco de lama/capim: 12,6 s no seco, avaria 2 %, 30 km/h; carretinha da caminhonete |
 | Moto aquática AR-J (v0.67–0.67.1) | compressor 1,04 bar a toda, 0,007 bar na lenta; luz do iBB: apagada em F, FREIO freando a toda, RÉ parada em R, NEUTRO em N; navegador: S segurado a 107 km/h → FREIO, 53 km/h em 1,5 s; soltar → F; toque → N; parada: CG −0,03 m da água, borda 0,25 m; a toda 108,3 km/h a 7880 rpm, 0→60 2,7 s, 0→100 7,1 s, 72 L/h; curva a toda 29,2°/s sem virar; iBB de 102 km/h a < 5 km/h em 4,2 s e depois ré; N com o guidão todo: 0,2° em 6 s; lenta + guidão 10,6°/s; N acelerado: empuxo 0, rotor a 7478 rpm; no ar: empuxo 0, giro 7951 rpm; ECO 55 % / 89,9 km/h; lotada 101,5 km/h; cordão solto não liga, puxado desliga; START pega em 1,5 s (60 %); central dorme em 30 s; casco selado 40 s lotada em ondas fortes: 0,0 L; sifão 6,1 L em 30 s (= contrato); virada: desvira em 4,5 s, piloto a bordo com o cordão, liga de novo; carretinha 3,9 m no carro |
 
-Resultado: **976/977 OK + 1 KNOWN** (v0.83.1). Na v0.10, o peso do piloto na posição real (boreste, acima do CG) aumentou o roll em curva com ondas fortes; o `bankCoef` foi para 1800 e o `rollDamping` para 15000, com 1 limitação conhecida (abaixo). Na v0.2 a hélice foi para 0,5 m atrás do espelho, como no modelo visual, e o esterço máximo em alta velocidade caiu de 13° para 11°.
+Resultado: **976/977 OK + 1 KNOWN** (v0.83.2). Na v0.10, o peso do piloto na posição real (boreste, acima do CG) aumentou o roll em curva com ondas fortes; o `bankCoef` foi para 1800 e o `rollDamping` para 15000, com 1 limitação conhecida (abaixo). Na v0.2 a hélice foi para 0,5 m atrás do espelho, como no modelo visual, e o esterço máximo em alta velocidade caiu de 13° para 11°.
 
 ### Navegador (Chrome, Windows 11, WebGL2, `q=med`, ~1370×896)
 

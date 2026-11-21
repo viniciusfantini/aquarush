@@ -24,6 +24,11 @@ export interface BoatVisual {
   drives?: { engine: TransformNode; propeller: TransformNode; propBlur: PBRMaterial }[];
   /** bocais do escape da turbina (−Z local = para onde o gás sai): fumaça e fogo em presentation/exhaustFx.ts */
   exhausts?: TransformNode[];
+  /**
+   * esguichos de refrigeração: um por motor que tem (nó do bico, índice do motor, lado do jato ±1 = para fora em X).
+   * Ausente = o `telltale` único no motor 0, jato para boreste; [] = o barco não tem esguicho.
+   */
+  telltales?: { node: TransformNode; drive: number; side: number }[];
   /** ekranoplano: dobrar as partes externas da asa (anima) / na hora */
   setFolded?: (on: boolean) => void;
   snapFold?: (on: boolean) => void;

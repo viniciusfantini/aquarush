@@ -18,7 +18,7 @@
 
 export type Gear = "F" | "N" | "R";
 export interface LeverCmd { gear: Gear; throttle: number; neutral?: boolean }
-export type LeverKind = "binnacle" | "twin" | "tiller" | "turbine" | "handlebar" | "pedal" | "throttle";
+export type LeverKind = "binnacle" | "twin" | "tiller" | "turbine" | "handlebar" | "pedal" | "throttle" | "longtail";
 /**
  * Trim no painel: "power" = botão basculante UP/DN (power trim/tilt da AR-6, das rabetas da AR-9 e da transmissão de
  * superfície da AR-10) com a posição do pé desenhada e uma barra (faixa de trim + faixa de tilt); "pin" = bote: não
@@ -75,6 +75,10 @@ export class LeverControls {
       el.innerHTML = `<div class="tl" title="gire o punho (arraste para os lados) · em N acelera em neutro"><div class="tl-grip" data-grip="0"><span class="tl-ridges"></span><span class="tl-mark"></span></div>
           <div class="tl-scale"><span>🐢 LENTO</span><span>RÁPIDO 🐇</span></div><em class="mt-rd">N · 0 %</em><b>PUNHO</b></div>
         <div class="tl-shift">${gearSel(0)}<b>CÂMBIO</b></div>`;
+    } else if (kind === "longtail") {
+      // long-tail: o punho do acelerador na ponta da cana — sem câmbio (transmissão direta, sem ré)
+      el.innerHTML = `<div class="tl" title="gire o punho (arraste para os lados) · sem embreagem nem ré: para parar, levante o eixo (E)"><div class="tl-grip" data-grip="0"><span class="tl-ridges"></span><span class="tl-mark"></span></div>
+          <div class="tl-scale"><span>🐢 LENTO</span><span>RÁPIDO 🐇</span></div><em class="mt-rd">0 %</em><b>PUNHO DA CANA</b></div>`;
     } else if (kind === "throttle") {
       // ekranoplano: manete de potência de avião (passo fixo, sem ré): atrás = lenta, à frente = pleno
       el.innerHTML = `<div class="pl pl-pedal" title="manete de potência · hélice de passo fixo, sem ré"><div class="pl-track" data-pl="0"><span class="pl-slot"></span>
@@ -272,13 +276,13 @@ export class LeverControls {
       u.querySelector<HTMLElement>(".mt-nbtn")!.classList.toggle("on", this.nBtn[i]);
       return;
     }
-    if (this.kind === "tiller") {
+    if (this.kind === "tiller" || this.kind === "longtail") {
       el.querySelector<HTMLElement>(".tl-ridges")!.style.backgroundPositionX = `${-c.throttle * 46}px`;
       el.querySelector<HTMLElement>(".tl-mark")!.style.left = `${8 + c.throttle * 84}%`;
     } else {
       el.querySelector<HTMLElement>(".pl-handle")!.style.bottom = `calc(${c.throttle * 100}% - ${c.throttle * 24}px)`;
     }
-    el.querySelector<HTMLElement>(".mt-rd")!.textContent = this.kind === "pedal" || this.kind === "throttle" ? pct : txt;
+    el.querySelector<HTMLElement>(".mt-rd")!.textContent = this.kind === "pedal" || this.kind === "throttle" || this.kind === "longtail" ? pct : txt;
     const gs = el.querySelector<HTMLElement>(".gs");
     if (!gs) return; // (pedal: sem câmbio)
     gs.dataset.pos = c.gear;

@@ -481,6 +481,13 @@ export const EN: Record<string, string> = {
   "6 m · motor de centro 350 hp · até 4 pessoas · tanque 200 L (começa com 15 L)": "6 m · 350 hp inboard · up to 4 people · 200 L tank (starts with 15 L)",
   "hélice sob o casco e leme (nada na popa), torre targa com o reboque no alto, 3 tanques de lastro (tecla 4: enche / esvazia) que afundam o casco e aumentam a onda para o wakeboard": "prop under the hull and a rudder (nothing at the stern), a tower with the tow point up high, 3 ballast tanks (key 4: fill / drain) that sink the hull and grow the wave for wakeboarding",
   "enchendo": "filling", "esvaziando": "draining",
+  // revisão geral (v0.83.2)
+  "sem trim (hélice de eixo sob o casco)": "no trim (shaft propeller under the hull)",
+  "<kbd>E</kbd><kbd>Q</kbd> trim + / − (os dois motores)": "<kbd>E</kbd><kbd>Q</kbd> trim + / − (both engines)",
+  "trim + / − (os dois motores)": "trim + / − (both engines)",
+  "os dois motores juntos · segure ▲▼ · no fim do curso, tilt": "both engines together · hold ▲▼ · at the end of travel, tilt",
+  "PUNHO DA CANA": "TILLER GRIP",
+  "gire o punho (arraste para os lados) · sem embreagem nem ré: para parar, levante o eixo (E)": "twist the grip (drag sideways) · no clutch and no reverse: to stop, raise the shaft (E)",
   // bote de resgate AR-R (v0.83)
   "MAN": "MAN",
   "BUZINA DE AR": "AIR HORN",

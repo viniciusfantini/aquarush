@@ -66,6 +66,8 @@ export class WaterInteraction {
   private readonly props: PropFx[] = [];
   private readonly splash: ParticleSystem;
   private readonly telltale: ParticleSystem;
+  /** 2º esguicho (barco de dois motores de popa) */
+  private readonly telltale2: ParticleSystem;
   private readonly drips: ParticleSystem;
   /** névoa/spray arrancado da água pelo colchão de ar da asa (ekranoplano rente à água) */
   private readonly airSpray: ParticleSystem;
@@ -105,6 +107,7 @@ export class WaterInteraction {
     this.bowR = mk("sprayR", p * 0.25, drops);
     this.splash = mk("splash", p * 0.1, drops);
     this.telltale = mk("telltale", 600, dot);
+    this.telltale2 = mk("telltale2", 600, dot);
     this.drips = mk("drips", 120, dot);
     this.airSpray = mk("airSpray", Math.max(300, p * 0.3), dot);
     {
@@ -161,9 +164,11 @@ export class WaterInteraction {
     this.telltale.minAngularSpeed = 0; this.telltale.maxAngularSpeed = 0;
     this.telltale.color1 = new Color4(0.9, 0.97, 1, 0.9); this.telltale.color2 = new Color4(0.8, 0.92, 0.98, 0.8);
     this.telltale.colorDead = new Color4(0.85, 0.95, 1, 0.2);
+    for (const k of ["minSize", "maxSize", "minLifeTime", "maxLifeTime", "minAngularSpeed", "maxAngularSpeed"] as const) this.telltale2[k] = this.telltale[k];
+    this.telltale2.color1 = this.telltale.color1; this.telltale2.color2 = this.telltale.color2; this.telltale2.colorDead = this.telltale.colorDead;
     // a água é uma superfície para as partículas: gota que cai nela para ali (vira respingo/bolha e some);
     // bolha que sobe estoura na superfície — nada atravessa e continua do outro lado
-    for (const ps of [this.bowL, this.bowR, this.splash, this.telltale, this.drips]) this.clipToWater(ps, "fall");
+    for (const ps of [this.bowL, this.bowR, this.splash, this.telltale, this.telltale2, this.drips]) this.clipToWater(ps, "fall");
   }
 
   /** Envolve o update da partícula: ao cruzar a superfície ela fica nela, sem velocidade vertical, e encolhe até sumir. */
@@ -195,8 +200,8 @@ export class WaterInteraction {
   }
 
   /** Esguicho: posição do bico e direção do jato (mundo), vazão ∝ rotação da bomba d'água. */
-  updateTelltale(nozzle: Vector3, dir: Vector3, rpm: number, boatVel: Vector3, pumping = true): void {
-    const ps = this.telltale;
+  updateTelltale(nozzle: Vector3, dir: Vector3, rpm: number, boatVel: Vector3, pumping = true, which = 0): void {
+    const ps = which === 0 ? this.telltale : this.telltale2;
     ps.emitter = nozzle;
     // bomba d'água acionada pelo virabrequim: em lenta é um fio fraco que cai perto do capô;
     // a pressão (e o alcance) sobe com o RPM

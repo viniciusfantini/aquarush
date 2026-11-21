@@ -63,11 +63,11 @@ import { TurbinePanel } from "./presentation/turbinePanel.ts";
 import { SystemsPanel } from "./presentation/systemsPanel.ts";
 import type { TrimOpts } from "./presentation/levers.ts";
 import { BoatCamera } from "./presentation/cameras.ts";
-import { Hud } from "./presentation/hud.ts";
+import { Hud, type HudOpts } from "./presentation/hud.ts";
 import { EngineAudio } from "./presentation/audio.ts";
 
 installI18n(); // inglês: traduz o DOM, as escritas futuras e os letreiros 3D (antes de montar a cena e o HUD)
-const BUILD = "poc-babylon 0.83.1";
+const BUILD = "poc-babylon 0.83.2";
 /** Escala visual da rotação da hélice (proporcional ao RPM, abaixo do limite estroboscópico). */
 const PROP_VISUAL_SCALE = 0.12;
 
@@ -241,6 +241,17 @@ const boot = async () => {
   const inletMeshes = buildInlet(scene); // molhes de pedra e as torres de sinalização da boca do cânion
   void inletMeshes;
 
+  /** O HUD não mostra o que o barco não tem: sem trim (trimMode "none", fora o long-tail/avião, que usam a barra), sem âncora. */
+  const withAutoHide = (P: typeof V.P, o: HudOpts): HudOpts => {
+    const hide = new Set(o.hide ?? []);
+    if (P.trimMode === "none" && !P.longTail && !P.wing) hide.add("trim");
+    if (P.noAnchor) hide.add("anchor");
+    if (P.directDrive || P.airProp) hide.add("gear");
+    return { ...o, hide: [...hide] };
+  };
+  /** Esguichos de refrigeração do barco (ver BoatVisual.telltales). */
+  const NO_TELLTALE = new Set<VesselKind>(["rapida", "turbina", "airboat", "wig", "anfibio", "foil", "longtail"]);
+  const telltalesOf = (X: { vis: BoatVisual; kind: VesselKind }) => X.vis.telltales ?? (NO_TELLTALE.has(X.kind) ? [] : [{ node: X.vis.telltale, drive: 0, side: 1 }]);
   /** Rabetas/motores visuais (a AR-9 tem duas; as outras, uma). */
   const drivesOf = (vis: BoatVisual) => vis.drives ?? [{ engine: vis.engine, propeller: vis.propeller, propBlur: vis.propBlur }];
   // ---------------- as embarcações (as duas ficam prontas; só a escolhida aparece) ----------------
@@ -720,7 +731,7 @@ const boot = async () => {
       ws.innerHTML = flyer ? "<kbd>W</kbd><kbd>S</kbd> manche: W nariz para baixo, S para cima · <kbd>↑</kbd><kbd>↓</kbd> manete (fica onde parar)" : "<kbd>W</kbd><kbd>S</kbd> manete: toque F/N/R, segure acelera";
       ad.innerHTML = flyer ? "<kbd>A</kbd><kbd>D</kbd> ailerons · <kbd>&lt;</kbd><kbd>&gt;</kbd> leme" : "<kbd>A</kbd><kbd>D</kbd> direção";
     }
-    hud.configure(isBote ? { speedMax: 60, temp: true, battery: false, trimPins: V.P.trimPins.length, gear: "dial" }
+    hud.configure(withAutoHide(V.P, isBote ? { speedMax: 60, temp: true, battery: false, trimPins: V.P.trimPins.length, gear: "dial" }
       : isJet ? { speedMax: 120, temp: true, battery: true, trimPins: 0, gear: "bar", rpmMax: 9000, rpmRed: 8000, jet: true }
       : isAir ? { speedMax: 120, temp: true, battery: true, trimPins: 0, gear: "bar", rpmMax: 3000, rpmRed: 2700, hide: ["anchor", "gear", "draft", "trim"] }
       : isWig ? { speedMax: 180, temp: true, battery: true, trimPins: 0, gear: "bar", rpmMax: 6000, rpmRed: 5800, hide: ["anchor", "gear", "draft"], wig: true }
@@ -729,12 +740,12 @@ const boot = async () => {
       : isFoil ? { speedMax: 60, temp: true, battery: true, trimPins: 0, gear: "bar", electric: true, hide: ["trim"] }
       : isRescue ? { speedMax: 100, temp: true, battery: true, trimPins: 0, gear: "bar", twin: true }
       : isLong ? { speedMax: 120, temp: true, battery: true, trimPins: 0, gear: "bar", rpmMax: 4500, rpmRed: 4000, hide: ["gear", "trim"], diesel: true }
-      : { speedMax: twin ? 140 : 100, temp: true, battery: true, trimPins: 0, gear: "bar", twin, ballast: !!V.P.ballast });
+      : { speedMax: twin ? 140 : 100, temp: true, battery: true, trimPins: 0, gear: "bar", twin, ballast: !!V.P.ballast }));
     document.getElementById("help-twin")!.style.display = twin ? "" : "none";
     document.getElementById("help-trim")!.innerHTML = isBote
       ? "<kbd>E</kbd><kbd>Q</kbd> trim manual (pinos 1–3, depois tilt)"
       : isJet ? "<kbd>E</kbd><kbd>Q</kbd> trim do bocal (VTS)" : isAir ? "<kbd>A</kbd><kbd>D</kbd> lemes de ar (só viram com acelerador) · sem trim"
-      : flyer ? "<kbd>E</kbd><kbd>Q</kbd> compensação do profundor (fica onde deixar)" : isLong ? "<kbd>E</kbd><kbd>Q</kbd> sobe / afunda o eixo da rabeta (à mão): fundo empurra mais, levantado a hélice sai d'água" : isFoil ? "<kbd>E</kbd><kbd>Q</kbd> altura de voo + / − · <kbd>5</kbd> baixa/recolhe os foils (parado)" : "<kbd>E</kbd><kbd>Q</kbd> trim + / −";
+      : flyer ? "<kbd>E</kbd><kbd>Q</kbd> compensação do profundor (fica onde deixar)" : isLong ? "<kbd>E</kbd><kbd>Q</kbd> sobe / afunda o eixo da rabeta (à mão): fundo empurra mais, levantado a hélice sai d'água" : isFoil ? "<kbd>E</kbd><kbd>Q</kbd> altura de voo + / − · <kbd>5</kbd> baixa/recolhe os foils (parado)" : V.P.trimMode === "none" ? "sem trim (hélice de eixo sob o casco)" : twin ? "<kbd>E</kbd><kbd>Q</kbd> trim + / − (os dois motores)" : "<kbd>E</kbd><kbd>Q</kbd> trim + / −";
     document.getElementById("help-occ")!.innerHTML = turbine ? "piloto único (habitáculo fechado)" : "<kbd>O</kbd> embarque (só na vaga do píer)";
     document.getElementById("help-ign")!.innerHTML = isBote ? "<kbd>P</kbd> corda (em N) · <kbd>Y</kbd> sistemas (afogador)"
       : isJet ? "<kbd>P</kbd> START/STOP (em N, cordão preso) · segure <kbd>S</kbd> andando: freio iBB (toque: N) · <kbd>Y</kbd> painel (cordão, ECO)"
@@ -766,7 +777,7 @@ const boot = async () => {
     document.getElementById("help-horn")!.textContent = isBote || isJet ? "apito" : "buzina"; // bote e moto aquática: apito de bolinha
     spanel.configure({ title: V.P.name, banks: !V.P.electricStart ? 0 : V.boat.systems2 ? 2 : 1,
       keys: !V.P.electricStart || V.P.turbine || V.P.startStop || V.P.aircraft || V.P.efi || V.P.electric ? [] : V.boat.units.length > 1 ? ["IGNIÇÃO BB", "IGNIÇÃO BE"] : ["IGNIÇÃO"],
-      levers: isBote || isLong ? "tiller" : isJet ? "handlebar" : isAir ? "pedal" : flyer ? "throttle" : V.boat.units.length > 1 ? "twin" : "binnacle",
+      levers: isBote ? "tiller" : isLong ? "longtail" : isJet ? "handlebar" : isAir ? "pedal" : flyer ? "throttle" : V.boat.units.length > 1 ? "twin" : "binnacle",
       display: isBote || isLong ? "grey" : isJet || flyer || isFoil ? "glass" : isAir ? "grey" : V.boat.units.length > 1 ? "vfd" : "lcd",
       trim: isAir || flyer || isFoil || isLong ? null : trimOptsFor(V.P), choke: !!V.P.carbureted, bilgePump: V.P.bilge.pumpLph > 0, lights: isBote ? "LANTERNA" : isJet || isAir || flyer || isLong ? "" : "LUZES",
       startStop: !!V.P.startStop, batterySwitch: !V.P.startStop, fuelValve: !V.P.startStop && !V.P.electric, ecoMode: !!V.P.ecoThrottle, horn: isBote || isJet ? "apito" : "buzina",
@@ -800,6 +811,7 @@ const boot = async () => {
     for (const x of b.units) { x.key = "off"; x.manualCrank = false; x.testT = 0; }
     b.batterySel = b.params.turbine ? "both" : "ind"; b.bilgeMode = "auto"; b.choke = false; b.systems.fuelValveOpen = true; b.driveMode = "normal";
     if (b.params.carbureted) b.systems.coolantC = 24; // bote carburado: motor frio, pede o afogador
+    if (b.params.diesel) { b.systems.coolantC = 24; b.glowT = 0; b.turboS = 0; } // diesel frio: pede o pré-aquecimento das velas
     if (b.params.aircraft) { b.systems.coolantC = 24; b.magnetos = "off"; b.mixture = 1; b.prime = 0; } // motor de avião frio: pede o primer
     if (b.params.efi) { b.systems.coolantC = 24; b.ecuA = b.ecuB = false; b.pump1 = b.pump2 = false; b.fuelPress = 0; } // injeção: tudo desligado
     if (b.params.wing) { b.wingFolded = false; V.vis.snapFold?.(false); b.elevator = 0; b.levelerOn = true; input.resetFlight(); }
@@ -1021,12 +1033,13 @@ const boot = async () => {
   });
   /** Controle de trim do painel do Y para o tipo de embarcação (power trim do popa / das rabetas / da transmissão de
    *  superfície, ou o pino do bote). */
-  const trimOptsFor = (P: typeof V.P): TrimOpts => {
+  const trimOptsFor = (P: typeof V.P): TrimOpts | null => {
     const DEGR = 180 / Math.PI;
+    if (P.trimMode === "none") return null; // (AR-8 de motor de centro, elétrico, long-tail…: não há trim)
     if (P.trimMode === "manual") return { mode: "pin", label: "PINO", sub: "solte o acelerador · ▲▼ mudam o pino", down: P.trimPins[0] * DEGR, up: P.trimPins[P.trimPins.length - 1] * DEGR, tilt: P.tiltMax * DEGR, pins: P.trimPins.length, drive: "outboard" };
-    const drive = P.waterjet ? "jet" : P.turbine ? "surface" : P.engines && P.engines.length > 1 ? "sterndrive" : "outboard";
+    const drive = P.waterjet ? "jet" : P.turbine ? "surface" : P.kind === "rapida" ? "sterndrive" : "outboard";
     return { mode: "power", label: drive === "outboard" ? "TRIM/TILT" : drive === "jet" ? "VTS" : "TRIM",
-      sub: drive === "outboard" ? "segure ▲▼ · no fim do curso, tilt" : drive === "sterndrive" ? "as duas rabetas juntas" : drive === "jet" ? "trim do bocal do jato (segure ▲▼)" : "imersão da hélice de superfície (segure ▲▼)",
+      sub: drive === "outboard" ? (P.engines && P.engines.length > 1 ? "os dois motores juntos · segure ▲▼ · no fim do curso, tilt" : "segure ▲▼ · no fim do curso, tilt") : drive === "sterndrive" ? "as duas rabetas juntas" : drive === "jet" ? "trim do bocal do jato (segure ▲▼)" : "imersão da hélice de superfície (segure ▲▼)",
       down: P.trimDown * DEGR, up: P.trimUp * DEGR, tilt: P.tiltMax * DEGR, pins: 0, drive };
   };
   /** Aviso de sistemas/motor: com o painel do Y aberto vai para o display dele; fechado, é o aviso normal do HUD. */
@@ -1837,10 +1850,17 @@ const boot = async () => {
     waterVis.update(water, cam.cam, engine.getRenderWidth(), engine.getRenderHeight());
     if (cfg.quality.shadows > 0) sun.position = rPos.add(sunDir.scale(150));
 
-    // esguicho de refrigeração: bico no capô, jato para fora (+X local do motor, levemente para trás e para baixo)
-    const ew = vis.engine.getWorldMatrix();
-    fx.updateTelltale(vis.telltale.getAbsolutePosition().clone(), Vector3.TransformNormal(new Vector3(1, -0.15, -0.35), ew), T.rpm, new Vector3(boat.vel.x, boat.vel.y, boat.vel.z),
-      T.engine === "running" && T.intakeSubmerged && V.kind !== "rapida" && V.kind !== "turbina" && V.kind !== "airboat" && V.kind !== "wig" && V.kind !== "anfibio"); // sem água na entrada do pé = sem esguicho; os V8 de centro (AR-9) não têm esguicho: a água sai com o escape
+    // esguichos de refrigeração (um por motor que tem): bico no capô, jato para fora (±X local do motor, levemente para
+    // trás e para baixo). Sem água na entrada do pé = sem esguicho. Não têm: os V8 de centro (AR-9, a água sai com o
+    // escape), a turbina, os motores de avião, o elétrico e o long-tail
+    const tts = telltalesOf(V);
+    for (let k = 0; k < 2; k++) {
+      const tt = tts[k];
+      if (!tt) { fx.updateTelltale(Vector3.Zero(), Vector3.Up(), 0, Vector3.Zero(), false, k); continue; }
+      const ew = drivesOf(vis)[tt.drive]?.engine.getWorldMatrix() ?? vis.engine.getWorldMatrix();
+      const run = (T.engines?.[tt.drive] ?? T.engine) === "running";
+      fx.updateTelltale(tt.node.getAbsolutePosition().clone(), Vector3.TransformNormal(new Vector3(tt.side, -0.15, -0.35), ew), T.rpms?.[tt.drive] ?? T.rpm, new Vector3(boat.vel.x, boat.vel.y, boat.vel.z), run && T.intakeSubmerged, k);
+    }
     if (T.tiltBlocked && !tiltWarned) { sysToast(isBote ? "Solte o acelerador para mudar a posição do motor" : "Tilt bloqueado: o empuxo da hélice segura o motor — reduza a rotação"); tiltWarned = true; }
     if (isBote && T.trimPin !== lastPin) { if (lastPin > 0) sysToast(T.trimPin > P.trimPins.length ? "Motor levantado (tilt) e travado" : `Motor no pino ${T.trimPin} de ${P.trimPins.length} (${(P.trimPins[T.trimPin - 1] * 180 / Math.PI).toFixed(0)}°)`); lastPin = T.trimPin; }
     if (!T.tiltBlocked) tiltWarned = false;
@@ -1860,6 +1880,7 @@ const boot = async () => {
       ...(boat.units.length > 1 ? { rpm: T.rpms[0], throttle: T.throttles[0], rpm2: T.rpms[1], throttle2: T.throttles[1], engine2: T.engines[1], engine: T.engines[0] } : {}),
       // turbina: N1/N2, EGT (chama), arranque e velas de ignição — síntese própria (apito do compressor, rugido da combustão)
       electric: T.hv ? { rpm: T.rpm, kw: T.hv.shaftKw, ready: T.hv.ready } : undefined,
+      telltale: telltalesOf(V).length > 0 && T.intakeSubmerged,
       diesel: T.diesel ? { turbo: T.diesel.turbo, cold: Math.max(0, Math.min(1, 1 - (T.coolantC - 26) / 30)) } : undefined,
       turbine: T.turbine ? { n1: T.turbine.n1, n2: T.turbine.n2, egt: T.turbine.egt, power: T.turbine.torque / 100 * T.turbine.n2 / 100, starter: T.turbine.starter, ignition: T.turbine.ignition, lit: T.turbine.lit, fuelLph: T.turbine.fuelLph } : undefined,
     });
@@ -1927,6 +1948,8 @@ const boot = async () => {
   (window as unknown as Record<string, unknown>).__aqua = {
     get kind() { return V.kind; }, get boat() { return V.boat; }, get boatVis() { return V.vis; }, get mode() { return mode; },
     vessels, water, waterVis, fx, audio, world, scene, engine, cam, input, loadMs, startGame, showMenu, gpuCart, tube, para, wkb,
+    /** (depuração/testes) troca para o barco `k` e começa o jogo, como escolher no menu */
+    play: (k: VesselKind) => { activate(k); startGame(); },
     checkConvention: () => {
       const f = V.boat.forward;
       const bf = V.vis.root.forward;

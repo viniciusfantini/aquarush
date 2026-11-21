@@ -171,12 +171,19 @@ export const buildRescue = (scene: Scene): RescueVisual => {
   for (let i = 0; i <= 14; i++) ckZ.push(H.z(0.09) + (H.z(0.85) - H.z(0.09)) * (i / 14));
   const cockpitLid = MeshBuilder.CreateRibbon("cockpitLid", { pathArray: ckZ.map((z) => { const sc = H.sec(H.tOf(z)); return [new Vector3(-(sc.hs - 0.05), keel + sc.s - 0.03, z), new Vector3(sc.hs - 0.05, keel + sc.s - 0.03, z)]; }) }, scene);
   cockpitLid.material = lidMat; cockpitLid.parent = root; cockpitLid.alphaIndex = 0;
-  const telltale = new TransformNode("telltale", scene); telltale.parent = ds[0].engine;
+  // esguicho de refrigeração de cada motor: bico no lado de fora do capô (o de bombordo joga para bombordo)
+  const telltales = ds.map((d, i) => {
+    const s = (P.engines ?? [])[i].x < 0 ? -1 : 1;
+    const n = K.node("telltale" + i, d.engine, s * 0.236, 0.24, -0.55);
+    const nz = K.cyl(0.03, 0.016, "x", 0, 0, 0, M.steel, n); void nz;
+    return { node: n, drive: i, side: s };
+  });
+  const telltale = telltales[0].node;
   const meshes = [...K.out, cockpitLid];
   for (const m of meshes) { m.isPickable = false; m.receiveShadows = true; }
   return {
     root, engine: ds[0].engine, propeller: ds[0].propeller, telltale, propBlur: ds[0].propBlur, lights: { port, star, stern }, cockpitLid, meshes, floor,
-    drives: ds.map((d) => ({ engine: d.engine, propeller: d.propeller, propBlur: d.propBlur })),
+    drives: ds.map((d) => ({ engine: d.engine, propeller: d.propeller, propBlur: d.propBlur })), telltales,
     updateRescue: (T, time) => {
       // padrão de giroflex: rajadas duplas alternando vermelho / azul (4 Hz) e o branco piscando no meio
       const on = !!T.rescue?.beacon;
